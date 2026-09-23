@@ -1,0 +1,76 @@
+{
+  "name": "Geometry-derived fixed-resistance loop demo",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 5400.0,
+    "Junction A": 0.0,
+    "Junction B": 0.0,
+    "Return": -5400.0
+  },
+  "edges": [
+    {
+      "name": "Supply to A",
+      "start_node": "Supply",
+      "end_node": "Junction A",
+      "duct_geometry": {
+        "length_m": 8.0,
+        "air_density_kg_m3": 1.2,
+        "friction_factor": 0.02,
+        "local_loss_coefficient": 0.8,
+        "diameter_m": 0.5
+      }
+    },
+    {
+      "name": "A to Return",
+      "start_node": "Junction A",
+      "end_node": "Return",
+      "duct_geometry": {
+        "length_m": 12.0,
+        "air_density_kg_m3": 1.2,
+        "friction_factor": 0.021,
+        "local_loss_coefficient": 1.2,
+        "diameter_m": 0.45
+      }
+    },
+    {
+      "name": "Supply to B",
+      "start_node": "Supply",
+      "end_node": "Junction B",
+      "duct_geometry": {
+        "length_m": 9.0,
+        "air_density_kg_m3": 1.2,
+        "friction_factor": 0.02,
+        "local_loss_coefficient": 0.6,
+        "width_m": 0.6,
+        "height_m": 0.4
+      }
+    },
+    {
+      "name": "B to Return",
+      "start_node": "Junction B",
+      "end_node": "Return",
+      "duct_geometry": {
+        "length_m": 11.0,
+        "air_density_kg_m3": 1.2,
+        "friction_factor": 0.022,
+        "local_loss_coefficient": 1.0,
+        "width_m": 0.5,
+        "height_m": 0.4
+      }
+    },
+    {
+      "name": "Cross-link A to B",
+      "start_node": "Junction A",
+      "end_node": "Junction B",
+      "duct_geometry": {
+        "length_m": 4.0,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 0.3,
+        "diameter_m": 0.3,
+        "absolute_roughness_m": 0.00015,
+        "kinematic_viscosity_m2_s": 1.5e-5,
+        "reference_airflow_m3_h": 900.0
+      }
+    }
+  ]
+}

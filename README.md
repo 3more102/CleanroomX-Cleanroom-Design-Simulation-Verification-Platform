@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.24 engineering core
+## v0.25 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -24,6 +24,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
+- Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
@@ -130,7 +131,11 @@ Write a Markdown report:
 
     cleanroomx-loop-flow examples/looped_network_demo.json --output looped-network-report.md
 
-The v0.23 solver handles connected steady-state meshes with arbitrary loops when every edge uses an explicit fixed quadratic law `ΔP = R·Q·|Q|` and node injections are explicitly balanced. It reports signed flow direction, relative node pressure, node-continuity residuals, and edge pressure-law residuals. It does not infer duct geometry, friction factors, fans, dampers, controls, leakage, or transient behavior. See docs/LOOPED_NETWORK_SOLVER.md.
+The v0.25 solver handles connected steady-state meshes with arbitrary loops using fixed quadratic edge laws `ΔP = R·Q·|Q|` and explicitly balanced node injections. `R` may be supplied directly or derived from explicit duct geometry, density, Darcy factor, and local K. Automatic friction may be resolved once at an explicit reference airflow, but resistance is not iterated with solved loop flow. See docs/LOOPED_NETWORK_SOLVER.md.
+
+Geometry-derived resistance demo:
+
+    cleanroomx-loop-flow examples/looped_network_geometry_demo.json
 
 ## Solve a fan/system operating point
 
@@ -359,7 +364,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are deriving looped-network resistances from explicit duct geometry, bounded fan/network coupling, closed-loop control studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are bounded fan/loop-network coupling, controlled damper studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

@@ -1237,44 +1237,6 @@ def _solver_quality_summary(
     else:
         iteration_assessment_status = "within_configured_iteration_limits"
 
-    def _maximum_invariant_error_evidence() -> dict | None:
-        if not invariant_cases:
-            return None
-        maximum = max(
-            float(invariant["absolute_width_fraction_consistency_error"])
-            for _corner_index, _corner, _evidence, invariant
-            in invariant_cases
-        )
-        sources = []
-        for corner_index, corner, evidence, invariant in invariant_cases:
-            error = float(
-                invariant["absolute_width_fraction_consistency_error"]
-            )
-            if not math.isclose(
-                error,
-                maximum,
-                rel_tol=1e-12,
-                abs_tol=1e-18,
-            ):
-                continue
-            source = _critical_case_summary(corner_index, corner)
-            source.update(
-                {
-                    "search_method": evidence["method"],
-                    "supplied_segment_index": evidence[
-                        "supplied_segment_index"
-                    ],
-                    "operating_iterations": evidence["operating_iterations"],
-                    "invariant_audit": invariant,
-                }
-            )
-            sources.append(source)
-        return {
-            "value": round(maximum, 18),
-            "unit": "1",
-            "sources": sources,
-        }
-
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -2401,6 +2363,44 @@ def _operating_point_search_resolution_summary(
         return {
             "value": round(maximum, 12),
             "unit": unit,
+            "sources": sources,
+        }
+
+    def _maximum_invariant_error_evidence() -> dict | None:
+        if not invariant_cases:
+            return None
+        maximum = max(
+            float(invariant["absolute_width_fraction_consistency_error"])
+            for _corner_index, _corner, _evidence, invariant
+            in invariant_cases
+        )
+        sources = []
+        for corner_index, corner, evidence, invariant in invariant_cases:
+            error = float(
+                invariant["absolute_width_fraction_consistency_error"]
+            )
+            if not math.isclose(
+                error,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "invariant_audit": invariant,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": "1",
             "sources": sources,
         }
 

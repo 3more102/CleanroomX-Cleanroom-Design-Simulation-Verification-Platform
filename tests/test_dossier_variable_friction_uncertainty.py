@@ -47,6 +47,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Fan / variable-friction loop uncertainty analyses" in report
     assert "Variable-friction fan-loop bounded uncertainty" in report
     assert "Air-power envelope kW" in report
+    assert "Electrical-input corner range kW" in report
+    assert "SFP corner range W/(m³/s)" in report
     assert "8" in report
 
 

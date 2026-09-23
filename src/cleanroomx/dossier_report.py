@@ -317,6 +317,23 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
             )
 
+    if result["fan_speed_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan-speed affinity-law studies",
+                "",
+                "| Study | Status | Speed cases | Unsolved cases |",
+                "|---|---|---:|---:|",
+            ]
+        )
+        for item in result["fan_speed_studies"]:
+            lines.append(
+                f"| {item['study']} | {item['status']} | "
+                f"{item['speed_case_count']} | "
+                f"{item.get('counts', {}).get('no_intersection_in_supplied_range', 0)} |"
+            )
+
     if result["fan_duct_network_studies"]:
         lines.extend(
             [

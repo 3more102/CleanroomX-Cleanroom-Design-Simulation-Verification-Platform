@@ -153,6 +153,44 @@ def _fan_operating_point_summary(results: list[dict]) -> dict:
     }
 
 
+def _fan_duct_network_summary(results: list[dict]) -> dict:
+    if not results:
+        return {"status": "not_included", "counts": {}, "study_count": 0}
+    counts = _count_statuses(item["status"] for item in results)
+    unresolved = counts.get("no_intersection_in_supplied_range", 0)
+    return {
+        "status": "attention_required" if unresolved else "screening_complete",
+        "counts": counts,
+        "study_count": len(results),
+    }
+
+
+def _fan_parallel_network_summary(results: list[dict]) -> dict:
+    if not results:
+        return {"status": "not_included", "counts": {}, "study_count": 0}
+    counts = _count_statuses(item["status"] for item in results)
+    unresolved = counts.get("no_intersection_in_supplied_range", 0)
+    return {
+        "status": "attention_required" if unresolved else "screening_complete",
+        "counts": counts,
+        "study_count": len(results),
+    }
+
+
+def _consistency_summary(result: dict | None) -> dict:
+    if result is None:
+        return {
+            "status": "not_included",
+            "shared_room_count": 0,
+            "mismatch_count": 0,
+        }
+    return {
+        "status": result["status"],
+        "shared_room_count": result["shared_room_count"],
+        "mismatch_count": result["mismatch_count"],
+    }
+
+
 def summarize_dossier_components(
     verification: dict | None = None,
     hvac: dict | None = None,
@@ -162,6 +200,9 @@ def summarize_dossier_components(
     thermal_uncertainty: list[dict] | None = None,
     psychrometric_uncertainty: list[dict] | None = None,
     fan_operating_points: list[dict] | None = None,
+    fan_duct_networks: list[dict] | None = None,
+    fan_parallel_networks: list[dict] | None = None,
+    consistency: dict | None = None,
 ) -> dict:
     recovery = recovery or []
     uncertainty = uncertainty or []
@@ -169,6 +210,8 @@ def summarize_dossier_components(
     thermal_uncertainty = thermal_uncertainty or []
     psychrometric_uncertainty = psychrometric_uncertainty or []
     fan_operating_points = fan_operating_points or []
+    fan_duct_networks = fan_duct_networks or []
+    fan_parallel_networks = fan_parallel_networks or []
 
     components = {
         "verification": _verification_summary(verification),
@@ -181,6 +224,9 @@ def summarize_dossier_components(
             psychrometric_uncertainty
         ),
         "fan_operating_points": _fan_operating_point_summary(fan_operating_points),
+        "fan_duct_networks": _fan_duct_network_summary(fan_duct_networks),
+        "fan_parallel_networks": _fan_parallel_network_summary(fan_parallel_networks),
+        "cross_module_consistency": _consistency_summary(consistency),
     }
 
     adverse = {
@@ -200,6 +246,17 @@ def summarize_dossier_components(
         "fan_operating_points_unsolved": components["fan_operating_points"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
+        "fan_duct_networks_unsolved": components["fan_duct_networks"]["counts"].get(
+            "no_intersection_in_supplied_range", 0
+        ),
+        "fan_parallel_networks_unsolved": components["fan_parallel_networks"]["counts"].get(
+            "no_intersection_in_supplied_range", 0
+        ),
+        "cross_module_consistency_failures": (
+            1
+            if components["cross_module_consistency"]["status"] == "fail"
+            else 0
+        ),
     }
     unresolved = {
         "verification_not_checked": components["verification"]["counts"].get("not_checked", 0),
@@ -212,6 +269,11 @@ def summarize_dossier_components(
         "psychrometric_uncertainty_missing_provenance": components[
             "psychrometric_uncertainty"
         ].get("missing_provenance_analyses", 0),
+        "cross_module_consistency_not_comparable": (
+            1
+            if components["cross_module_consistency"]["status"] == "not_comparable"
+            else 0
+        ),
     }
 
     adverse_count = sum(adverse.values())
@@ -264,8 +326,13 @@ def _clean_source(record: dict) -> dict:
 
 
 def build_dossier(manifest_path: str | Path) -> dict:
+    from .consistency import analyze_project_consistency
     from .fan_curve import solve_fan_operating_point
     from .fan_curve_io import load_fan_operating_point_study
+    from .fan_duct_network import analyze_fan_duct_network
+    from .fan_duct_network_io import load_fan_duct_network_study
+    from .fan_network import solve_fan_driven_parallel_network
+    from .fan_network_io import load_fan_driven_parallel_network_study
     from .hvac import analyze_hvac_project
     from .hvac_io import load_hvac_project
     from .io import load_project
@@ -291,18 +358,22 @@ def build_dossier(manifest_path: str | Path) -> dict:
     source_records: list[dict] = []
 
     verification = None
+    verification_project = None
     verification_path = data.get("verification_project")
     if verification_path is not None:
         source = _source_record("verification_project", verification_path, manifest_dir)
         source_records.append(source)
-        verification = verify_project(load_project(source["_resolved_path"])).to_dict()
+        verification_project = load_project(source["_resolved_path"])
+        verification = verify_project(verification_project).to_dict()
 
     hvac = None
+    hvac_project = None
     hvac_path = data.get("hvac_project")
     if hvac_path is not None:
         source = _source_record("hvac_project", hvac_path, manifest_dir)
         source_records.append(source)
-        hvac = analyze_hvac_project(load_hvac_project(source["_resolved_path"]))
+        hvac_project = load_hvac_project(source["_resolved_path"])
+        hvac = analyze_hvac_project(hvac_project)
 
     recovery: list[dict] = []
     for item in data.get("recovery_tests", []):
@@ -358,6 +429,58 @@ def build_dossier(manifest_path: str | Path) -> dict:
             )
         )
 
+    fan_duct_networks: list[dict] = []
+    for item in data.get("fan_duct_network_studies", []):
+        source = _source_record("fan_duct_network_study", item, manifest_dir)
+        source_records.append(source)
+        fan_duct_networks.append(
+            analyze_fan_duct_network(
+                load_fan_duct_network_study(source["_resolved_path"])
+            )
+        )
+
+    fan_parallel_networks: list[dict] = []
+    for item in data.get("fan_parallel_network_studies", []):
+        source = _source_record("fan_parallel_network_study", item, manifest_dir)
+        source_records.append(source)
+        fan_parallel_networks.append(
+            solve_fan_driven_parallel_network(
+                load_fan_driven_parallel_network_study(source["_resolved_path"])
+            )
+        )
+
+    consistency = None
+    consistency_config = data.get("cross_module_consistency")
+    if consistency_config is not None:
+        if not isinstance(consistency_config, dict):
+            raise ValueError("cross_module_consistency must be an object")
+        if verification_project is None or hvac_project is None:
+            raise ValueError(
+                "cross_module_consistency requires verification_project and hvac_project"
+            )
+        allowed_consistency_keys = {
+            "room_airflow_abs_tolerance_m3_h",
+            "require_same_room_set",
+        }
+        unknown_consistency_keys = (
+            set(consistency_config) - allowed_consistency_keys
+        )
+        if unknown_consistency_keys:
+            names = ", ".join(sorted(unknown_consistency_keys))
+            raise ValueError(
+                f"unsupported cross_module_consistency field(s): {names}"
+            )
+        consistency = analyze_project_consistency(
+            verification_project,
+            hvac_project,
+            room_airflow_abs_tolerance_m3_h=consistency_config.get(
+                "room_airflow_abs_tolerance_m3_h", 0.0
+            ),
+            require_same_room_set=consistency_config.get(
+                "require_same_room_set", False
+            ),
+        )
+
     if not source_records:
         raise ValueError("dossier must reference at least one analysis input file")
 
@@ -370,6 +493,9 @@ def build_dossier(manifest_path: str | Path) -> dict:
         thermal_uncertainty=thermal_uncertainty,
         psychrometric_uncertainty=psychrometric_uncertainty,
         fan_operating_points=fan_operating_points,
+        fan_duct_networks=fan_duct_networks,
+        fan_parallel_networks=fan_parallel_networks,
+        consistency=consistency,
     )
     return {
         "dossier": name,
@@ -389,4 +515,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "thermal_uncertainty_analyses": thermal_uncertainty,
         "psychrometric_uncertainty_analyses": psychrometric_uncertainty,
         "fan_operating_point_studies": fan_operating_points,
+        "fan_duct_network_studies": fan_duct_networks,
+        "fan_parallel_network_studies": fan_parallel_networks,
+        "cross_module_consistency": consistency,
     }

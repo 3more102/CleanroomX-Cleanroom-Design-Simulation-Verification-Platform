@@ -1,0 +1,80 @@
+{
+  "name": "Branched Supply Duct Demo",
+  "fan_system": {
+    "name": "Supply AHU",
+    "duct_pressure_drop_pa": 0.0,
+    "coil_pressure_drop_pa": 180.0,
+    "other_pressure_drop_pa": 90.0,
+    "fan_efficiency": 0.68,
+    "motor_efficiency": 0.92
+  },
+  "branched_duct_network": {
+    "root_node": "AHU",
+    "branches": [
+      {
+        "name": "Main trunk",
+        "parent_node": "AHU",
+        "child_node": "J1",
+        "length_m": 18.0,
+        "friction_factor": 0.02,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 1.8,
+        "width_m": 0.8,
+        "height_m": 0.45
+      },
+      {
+        "name": "Process branch",
+        "parent_node": "J1",
+        "child_node": "Process terminal",
+        "length_m": 12.0,
+        "friction_factor": 0.021,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 2.4,
+        "diameter_m": 0.5
+      },
+      {
+        "name": "Gowning branch",
+        "parent_node": "J1",
+        "child_node": "Gowning terminal",
+        "length_m": 10.0,
+        "friction_factor": 0.021,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 2.0,
+        "width_m": 0.4,
+        "height_m": 0.25
+      }
+    ],
+    "terminals": [
+      {
+        "room_name": "Process Bay",
+        "node": "Process terminal"
+      },
+      {
+        "room_name": "Gowning",
+        "node": "Gowning terminal"
+      }
+    ]
+  },
+  "rooms": [
+    {
+      "name": "Process Bay",
+      "cleanroom_airflow_m3_h": 3600.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    },
+    {
+      "name": "Gowning",
+      "cleanroom_airflow_m3_h": 900.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    }
+  ]
+}

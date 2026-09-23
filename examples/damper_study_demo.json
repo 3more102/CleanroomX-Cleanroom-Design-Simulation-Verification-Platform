@@ -1,0 +1,56 @@
+{
+  "name": "Loop balancing damper case demo",
+  "loop_network": {
+    "name": "Two-path supply/return loop",
+    "reference_node": "Supply",
+    "node_injections_m3_h": {
+      "Supply": 3600.0,
+      "Mid": 0.0,
+      "Return": -3600.0
+    },
+    "edges": [
+      {
+        "name": "Direct",
+        "start_node": "Supply",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 2.0
+      },
+      {
+        "name": "Upper 1",
+        "start_node": "Supply",
+        "end_node": "Mid",
+        "resistance_pa_per_m3_s_squared": 1.0
+      },
+      {
+        "name": "Upper 2",
+        "start_node": "Mid",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 1.0
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "Light direct-path throttling",
+      "settings": [
+        {
+          "edge_name": "Direct",
+          "added_resistance_pa_per_m3_s_squared": 2.0,
+          "position_percent": 75.0,
+          "setting_label": "example user case"
+        }
+      ]
+    },
+    {
+      "name": "Stronger direct-path throttling",
+      "settings": [
+        {
+          "edge_name": "Direct",
+          "added_resistance_pa_per_m3_s_squared": 6.0,
+          "position_percent": 60.0,
+          "setting_label": "example user case"
+        }
+      ]
+    }
+  ]
+}

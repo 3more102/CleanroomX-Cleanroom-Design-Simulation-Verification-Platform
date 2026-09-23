@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.22 fixed-resistance looped-network solver — 2026-09-23
+
+- Added steady-state solving for connected airflow graphs with arbitrary loops using explicit fixed quadratic edge laws `ΔP = R·Q·|Q|`.
+- Added balanced positive/negative node injections, a configurable pressure-reference node, and signed edge-flow reporting.
+- Added spanning-tree initialization followed by a damped Newton solve of the nonlinear node-continuity equations.
+- Reports per-node mass-balance residuals and per-edge pressure-law residuals so numerical closure is auditable.
+- Accepts solved flow opposite to an edge's declared sign convention and reports the resulting physical direction.
+- Rejects disconnected graphs, unbalanced injections, duplicate edge names, invalid node references, non-finite injections, and non-positive/non-finite resistances.
+- Added Markdown/JSON reporting, the `cleanroomx-loop-flow` CLI, example data, documentation, and regression coverage for symmetric, unequal, reverse-flow, and multi-loop cases.
+- Keeps edge resistance explicit and fixed: no geometry inference, variable-friction iteration, fan coupling, dampers/controls, leakage, compressibility, or transient behavior.
+- Bumped package/runtime metadata to v0.22.0.
+
 ## v0.21 automatic Darcy friction screening — 2026-09-23
 
 - Added optional roughness/kinematic-viscosity-driven Darcy friction-factor resolution for path-based duct models and fixed-demand supply trees.

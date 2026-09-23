@@ -307,3 +307,22 @@ def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
     assert "fan_curve_scenarios=2" in report
     assert "Whole fan-curve scenarios" in report
     assert "lower_envelope, upper_envelope" in report
+
+
+def test_efficiency_uncertainty_dossier_surfaces_combined_power_cases() -> None:
+    result = build_dossier(
+        "examples/dossier_variable_friction_efficiency_uncertainty_demo.json"
+    )
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+
+    assert analysis["status"] == "complete"
+    assert analysis["power_efficiency_case_count"] == 8
+    assert analysis["power_uncertainty_case_count"] == 16
+    assert analysis["power_uncertainty_ranges"]["electrical_input_kw"] is not None
+    assert analysis["traceability"]["complete"] is True
+
+    report = markdown_dossier_report(result)
+    assert "Bounded efficiency power propagation" in report
+    assert "16 combined cases" in report
+    assert "electrical input" in report
+    assert "SFP" in report

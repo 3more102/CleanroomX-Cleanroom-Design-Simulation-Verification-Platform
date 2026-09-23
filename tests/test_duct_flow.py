@@ -88,3 +88,26 @@ def test_zero_resistance_section_is_rejected() -> None:
             local_loss_coefficient=0,
             diameter_m=0.5,
         )
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_solver_rejects_nonfinite_inputs(bad: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        ParallelFlowNetwork(
+            name="Bad flow",
+            total_airflow_m3_h=bad,
+            paths=(
+                ParallelFlowPath("A", (_section("A", 0.5),)),
+                ParallelFlowPath("B", (_section("B", 0.5),)),
+            ),
+        )
+
+    with pytest.raises(ValueError, match="finite"):
+        ParallelFlowSection(
+            name="Bad density",
+            length_m=10,
+            friction_factor=0.02,
+            air_density_kg_m3=bad,
+            local_loss_coefficient=1.0,
+            diameter_m=0.5,
+        )

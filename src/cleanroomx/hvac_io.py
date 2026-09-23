@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from .duct import DuctNetwork, DuctPath, DuctSection
+from .duct_tree import DuctTreeNetwork, DuctTreeSection, TerminalAirflowDemand
 from .hvac_models import (
     AirBalanceDesign,
     AirState,
@@ -42,6 +43,16 @@ def duct_network_from_dict(data: dict) -> DuctNetwork:
     )
 
 
+def duct_tree_network_from_dict(data: dict) -> DuctTreeNetwork:
+    return DuctTreeNetwork(
+        root_node=data["root_node"],
+        sections=tuple(DuctTreeSection(**section) for section in data["sections"]),
+        terminal_demands=tuple(
+            TerminalAirflowDemand(**demand) for demand in data["terminal_demands"]
+        ),
+    )
+
+
 def hvac_project_from_dict(data: dict) -> HVACProject:
     rooms = tuple(
         HVACRoom(
@@ -60,12 +71,19 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
     duct_network = (
         duct_network_from_dict(duct_data) if duct_data is not None else None
     )
+    tree_data = data.get("duct_tree_network")
+    duct_tree_network = (
+        duct_tree_network_from_dict(tree_data)
+        if tree_data is not None
+        else None
+    )
     return HVACProject(
         name=data["name"],
         rooms=rooms,
         filter_unit=filter_unit,
         fan_system=fan_system,
         duct_network=duct_network,
+        duct_tree_network=duct_tree_network,
     )
 
 

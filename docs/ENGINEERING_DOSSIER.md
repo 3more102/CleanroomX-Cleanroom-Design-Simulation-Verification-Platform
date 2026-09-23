@@ -76,7 +76,7 @@ A `fail` contributes to dossier attention tracking. `not_comparable` is preserve
 
 Both `verification_project` and `hvac_project` are required when this consistency block is configured. The already-hashed source files are reused; no duplicate input files are introduced.
 
-The optional `hvac_fan_operating_airflow` check can compare HVAC governing airflow against solved standalone fan/system, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, fan/variable-friction-loop, standalone fan-speed, fixed-resistance fan-speed/loop, and variable-friction fan-speed/loop operating points. No-intersection and numerical non-convergence cases are preserved as not comparable in the airflow check rather than fabricated into airflow values.
+The optional `hvac_fan_operating_airflow` check can compare HVAC governing airflow against solved standalone fan/system, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, fan/variable-friction-loop, standalone fan-speed, fixed-resistance fan-speed/loop, variable-friction fan-speed/loop, and every evaluated fan/variable-friction uncertainty corner. Each uncertainty corner remains an explicit comparison record; unresolved or numerically non-converged corners are preserved as `not_comparable` rather than fabricated into airflow values.
 
 See `docs/CROSS_MODULE_CONSISTENCY.md` for the standalone checker and its engineering boundary.
 

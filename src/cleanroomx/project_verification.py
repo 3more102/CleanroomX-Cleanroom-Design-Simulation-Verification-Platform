@@ -15,6 +15,10 @@ class PressureCascadeFinding:
     lower_pressure_room: str
     actual_delta_pa: float | None = None
     limit_pa: float | None = None
+    uncertainty_pa: float | None = None
+    interval_low_pa: float | None = None
+    interval_high_pa: float | None = None
+    requirement_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -26,7 +30,7 @@ class ProjectVerificationReport:
     @property
     def passed(self) -> bool:
         return all(report.passed for report in self.room_reports) and all(
-            finding.status != "fail" for finding in self.pressure_cascade_findings
+            finding.status not in {"fail", "indeterminate"} for finding in self.pressure_cascade_findings
         )
 
     def to_dict(self) -> dict:
@@ -56,25 +60,51 @@ def verify_project(project: ProjectSpec) -> ProjectVerificationReport:
                     higher_pressure_room=higher.name,
                     lower_pressure_room=lower.name,
                     limit_pa=requirement.min_delta_pa,
+                    requirement_reference=requirement.requirement_reference,
                 )
             )
             continue
 
         actual_delta = higher.observed_pressure_pa - lower.observed_pressure_pa
-        ok = actual_delta >= requirement.min_delta_pa
+        combined_uncertainty = (
+            (higher.observed_pressure_uncertainty_pa or 0.0)
+            + (lower.observed_pressure_uncertainty_pa or 0.0)
+        )
+
+        if combined_uncertainty > 0:
+            low = actual_delta - combined_uncertainty
+            high = actual_delta + combined_uncertainty
+            if low >= requirement.min_delta_pa:
+                status: Status = "pass"
+                message = "Observed pressure cascade remains above the configured requirement across the uncertainty interval."
+            elif high < requirement.min_delta_pa:
+                status = "fail"
+                message = "Observed pressure cascade remains below the configured requirement across the uncertainty interval."
+            else:
+                status = "indeterminate"
+                message = "The pressure-cascade uncertainty interval overlaps the configured requirement."
+        else:
+            low = high = None
+            status = "pass" if actual_delta >= requirement.min_delta_pa else "fail"
+            message = (
+                "Observed room-to-room pressure cascade meets the configured project requirement."
+                if status == "pass"
+                else "Observed room-to-room pressure cascade is below the configured project requirement."
+            )
+
         findings.append(
             PressureCascadeFinding(
                 code="PRESSURE_CASCADE",
-                status="pass" if ok else "fail",
-                message=(
-                    "Observed room-to-room pressure cascade meets the configured project requirement."
-                    if ok
-                    else "Observed room-to-room pressure cascade is below the configured project requirement."
-                ),
+                status=status,
+                message=message,
                 higher_pressure_room=higher.name,
                 lower_pressure_room=lower.name,
                 actual_delta_pa=actual_delta,
                 limit_pa=requirement.min_delta_pa,
+                uncertainty_pa=combined_uncertainty if combined_uncertainty > 0 else None,
+                interval_low_pa=low,
+                interval_high_pa=high,
+                requirement_reference=requirement.requirement_reference,
             )
         )
 

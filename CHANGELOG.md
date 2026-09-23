@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.29 bounded fan-speed / loop-network study — 2026-09-23
+
+- Added explicit fan-speed sweeps over passive two-terminal fixed-resistance loop networks.
+- Reused the existing affinity-law fan-curve transform and v0.26 bounded fan/loop-network solver for every speed case rather than introducing a second operating-point implementation.
+- Re-solves the original mesh at each bounded operating airflow and reports signed edge flows, node pressures, continuity/pressure-law residuals, equivalent-network residual, and fan/system residual.
+- Preserves no-intersection cases without fan-curve extrapolation and reports the overall study as attention-required when any configured speed case is unresolved.
+- Added optional reference-rpm reporting, JSON/Markdown reporting, the `cleanroomx-fan-loop-speed` CLI, example data, documentation, CLI regression coverage, and v0.29.0 metadata.
+- Keeps variable-friction iteration, inferred VFD limits, motor/drive limits, controls, leakage, system effect, stall/surge acceptance, transients, and manufacturer selection outside scope.
+
 ## v0.28 loop-workflow dossier integration — 2026-09-23
 
 - Integrated v0.26 fan/loop-network studies into engineering dossier manifests with SHA-256 source fingerprints, executive component summaries, Markdown reporting, and unresolved-intersection attention tracking.

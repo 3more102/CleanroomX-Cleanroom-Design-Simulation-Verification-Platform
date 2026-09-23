@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleanroomx"
-version = "0.6.0"
+version = "0.7.0"
 description = "Cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,7 +18,7 @@ dev = ["pytest>=8"]
 cleanroomx = "cleanroomx.cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
 cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
-cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"
+cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"\ncleanroomx-duct-flow = "cleanroomx.duct_flow_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.6 engineering core
+## v0.7 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -26,6 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
+- Uncertainty-aware room differential-pressure checks and pressure-cascade intervals with explicit indeterminate results.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -52,7 +53,7 @@ The uncertainty workflow uses deterministic worst-case input intervals. It is no
 
     cleanroomx verify-project examples/facility_project.json
 
-A failing configured verification requirement returns exit code 2.
+A robustly failing configured verification requirement returns exit code 2. If no requirement robustly fails but an uncertainty interval overlaps a configured limit, verification returns exit code 3 for an indeterminate result.
 
 ## Run the particle screening simulation
 
@@ -105,7 +106,7 @@ Write a Markdown report:
 
     cleanroomx-uncertainty examples/uncertainty_room_demo.json --output uncertainty-report.md
 
-The uncertainty workflow propagates user-supplied absolute bounds through room volume and supply ACH using deterministic conservative intervals. A configured minimum ACH is reported as pass only when the complete interval meets it, fail only when the complete interval is below it, and indeterminate when the requirement lies inside the interval.
+The uncertainty workflow propagates user-supplied absolute bounds through room volume and supply ACH using deterministic conservative intervals. v0.7 also applies the same principle to observed differential pressure and room-to-room pressure cascades. A configured minimum is reported as pass only when the complete interval meets it, fail only when the complete interval is below it, and indeterminate when the requirement lies inside the interval.
 
 See docs/UNCERTAINTY_PROVENANCE.md.
 
@@ -146,7 +147,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, branch-flow/network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, branch-flow/network solving, uncertainty propagation into thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

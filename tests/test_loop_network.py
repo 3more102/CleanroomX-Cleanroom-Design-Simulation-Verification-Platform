@@ -126,6 +126,19 @@ def test_unbalanced_injections_are_rejected() -> None:
         )
 
 
+def test_large_flow_relative_balance_does_not_hide_absolute_mismatch() -> None:
+    with pytest.raises(ValueError, match="sum to zero"):
+        LoopedFlowNetwork(
+            name="Large-flow imbalance",
+            node_injections_m3_h={
+                "A": 1_000_000_000.0,
+                "B": -999_999_999.9,
+            },
+            edges=(QuadraticFlowEdge("AB", "A", "B", 1.0),),
+            reference_node="A",
+        )
+
+
 def test_disconnected_graph_is_rejected() -> None:
     with pytest.raises(ValueError, match="connected"):
         LoopedFlowNetwork(

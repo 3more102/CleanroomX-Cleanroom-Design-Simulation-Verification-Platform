@@ -1,0 +1,33 @@
+{
+  "name": "Process room psychrometric uncertainty",
+  "dry_bulb_c": {
+    "value": 22.0,
+    "uncertainty_abs": 0.5,
+    "provenance": {
+      "source_type": "design_input",
+      "source_name": "Room environmental design basis",
+      "reference": "HVAC-DB-001",
+      "uncertainty_basis": "Project screening tolerance"
+    }
+  },
+  "relative_humidity_percent": {
+    "value": 45.0,
+    "uncertainty_abs": 2.0,
+    "provenance": {
+      "source_type": "design_input",
+      "source_name": "Room environmental design basis",
+      "reference": "HVAC-DB-001",
+      "uncertainty_basis": "Project screening tolerance"
+    }
+  },
+  "pressure_kpa": {
+    "value": 101.325,
+    "uncertainty_abs": 0.3,
+    "provenance": {
+      "source_type": "design_input",
+      "source_name": "Site atmospheric-pressure basis",
+      "reference": "SITE-ATM-001",
+      "uncertainty_basis": "Project screening tolerance"
+    }
+  }
+}

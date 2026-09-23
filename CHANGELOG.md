@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.18 complete engineering-dossier integration — 2026-09-23
+
+- Extended the engineering dossier with v0.14 reference-flow fan/duct-network studies and v0.16 fan-driven passive parallel-network studies.
+- Added optional v0.17 verification/HVAC cross-module input consistency using the dossier's existing project inputs and an explicit user-supplied tolerance.
+- Added SHA-256 traceability for the new referenced fan-network inputs, dedicated Markdown sections, and preserved bounded no-extrapolation states.
+- Preserved cross-module `fail` as an attention item and `not_comparable` as unresolved evidence without inventing a tolerance or acceptance rule.
+- Added separate passing consistency-dossier example coverage plus end-to-end regression tests while keeping all new manifest fields optional.
+
 ## v0.17 cross-module input consistency — 2026-09-23
 
 - Added a standalone verification/HVAC consistency checker for duplicated room-airflow inputs.

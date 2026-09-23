@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4 recovery qualification — 2026-09-23
+
+- Added measured particle-recovery test records with strict sample validation.
+- Added explicit project target concentration and optional maximum recovery-time criteria.
+- Added pass/fail/incomplete/not-checked qualification states.
+- Added observed recovery windows based on discrete samples without inventing an exact crossing time.
+- Added optional traceability metadata for instrument, sample location, occupancy state, and method/protocol reference.
+- Added log-linear decay diagnostics, R², fitted target crossing, and estimated effective ACH as screening outputs only.
+- Added JSON loading, Markdown/JSON reporting, a dedicated CLI, example data, tests, and documentation.
+- Kept ISO/project acceptance thresholds external; no proprietary ISO limits are embedded.
+
 ## v0.3 airflow/fan extension — 2026-09-23
 
 - Added per-room supply/return/exhaust/transfer airflow balance.

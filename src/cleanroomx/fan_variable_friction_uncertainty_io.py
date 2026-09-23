@@ -44,6 +44,55 @@ def _uncertain_value(
     )
 
 
+def _fan_curve_pressure_uncertainty(
+    data: dict,
+    fan_curve: FanCurve,
+) -> dict[float, UncertainValue]:
+    specs = data.get("fan_curve_pressure_uncertainty", [])
+    if not isinstance(specs, list):
+        raise ValueError(
+            "fan_curve_pressure_uncertainty must be an array when provided"
+        )
+
+    points_by_airflow = {
+        float(point.airflow_m3_h): point for point in fan_curve.points
+    }
+    result: dict[float, UncertainValue] = {}
+    for spec in specs:
+        if not isinstance(spec, dict):
+            raise ValueError(
+                "fan_curve_pressure_uncertainty entries must be objects"
+            )
+        if "airflow_m3_h" not in spec:
+            raise ValueError(
+                "fan_curve_pressure_uncertainty entry requires airflow_m3_h"
+            )
+        if "value" in spec or "pressure_pa" in spec:
+            raise ValueError(
+                "fan_curve_pressure_uncertainty must not repeat the nominal "
+                "pressure_pa; the fan curve is the nominal source"
+            )
+        airflow = float(spec["airflow_m3_h"])
+        point = points_by_airflow.get(airflow)
+        if point is None:
+            raise ValueError(
+                "fan_curve_pressure_uncertainty references unknown supplied "
+                f"airflow point {airflow!r} m3/h"
+            )
+        if airflow in result:
+            raise ValueError(
+                "fan_curve_pressure_uncertainty contains duplicate airflow "
+                f"point {airflow!r} m3/h"
+            )
+        result[airflow] = UncertainValue(
+            value=point.pressure_pa,
+            unit="Pa",
+            uncertainty_abs=spec.get("uncertainty_abs", 0.0),
+            provenance=_provenance_from_dict(spec.get("provenance")),
+        )
+    return result
+
+
 def _edge_parameter_uncertainty(
     data: dict,
     edges_by_name: dict,
@@ -95,6 +144,16 @@ def fan_variable_friction_loop_uncertainty_from_dict(
     data: dict,
 ) -> FanVariableFrictionLoopUncertaintyStudy:
     fan_data = data["fan_curve"]
+    fan_curve = FanCurve(
+        name=fan_data["name"],
+        points=tuple(
+            FanCurvePoint(**point) for point in fan_data["points"]
+        ),
+    )
+    fan_curve_pressure_uncertainty = _fan_curve_pressure_uncertainty(
+        data,
+        fan_curve,
+    )
     loop_network = looped_flow_network_from_dict(data["loop_network"])
     edges_by_name = {edge.name: edge for edge in loop_network.edges}
 
@@ -175,12 +234,7 @@ def fan_variable_friction_loop_uncertainty_from_dict(
 
     return FanVariableFrictionLoopUncertaintyStudy(
         name=data["name"],
-        fan_curve=FanCurve(
-            name=fan_data["name"],
-            points=tuple(
-                FanCurvePoint(**point) for point in fan_data["points"]
-            ),
-        ),
+        fan_curve=fan_curve,
         loop_network=loop_network,
         fan_discharge_node=data["fan_discharge_node"],
         fan_suction_node=data["fan_suction_node"],
@@ -198,6 +252,7 @@ def fan_variable_friction_loop_uncertainty_from_dict(
         edge_circular_diameter_m=edge_circular_diameter_uncertainty,
         edge_rectangular_width_m=edge_rectangular_width_uncertainty,
         edge_rectangular_height_m=edge_rectangular_height_uncertainty,
+        fan_curve_pressure_pa=fan_curve_pressure_uncertainty,
         fan_curve_provenance=_provenance_from_dict(
             fan_data.get("provenance")
         ),

@@ -1,6 +1,6 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, and verification**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
 ## v0.2 engineering core
 
@@ -11,43 +11,56 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Validation for duplicate rooms, unknown cascade references, duplicate links, and impossible directed pressure cycles.
 - A transparent well-mixed first-order particle decay/recovery screening model.
 - JSON input, command-line workflows, unit tests, and GitHub Actions CI on Python 3.11–3.13.
+- Psychrometric room/outdoor air-state calculations.
+- Explicit sensible and latent heat-load inputs.
+- Makeup-air load and preliminary cooling/heating capacity calculations.
+- Governing airflow comparison between cleanroom airflow, makeup air, and sensible-load airflow.
+- Optional FFU/filter-unit count from rated airflow and explicit design utilization.
 
 ## Important engineering boundary
 
-CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration, while ISO 14644-2 addresses monitoring plans related to particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
+CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
 
-CleanroomX therefore does not embed unofficial ISO classification or pressure-cascade limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, or regulator.
+CleanroomX therefore does not embed unofficial ISO classification, ACH, or pressure-cascade limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, or regulator.
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
+The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+
 ## Install
 
-```bash
-python -m pip install -e .[dev]
-```
+    python -m pip install -e .[dev]
 
 ## Verify one room
 
-```bash
-cleanroomx verify examples/basic_room.json
-```
+    cleanroomx verify examples/basic_room.json
 
 ## Verify a multi-room project
 
-```bash
-cleanroomx verify-project examples/facility_project.json
-```
+    cleanroomx verify-project examples/facility_project.json
 
-The project verifier checks every room and every configured directed pressure-cascade edge. A link such as `Process -> Preparation` means the observed Process pressure must exceed the observed Preparation pressure by at least `min_delta_pa`.
+The project verifier checks every room and every configured directed pressure-cascade edge. A link such as Process -> Preparation means the observed Process pressure must exceed the observed Preparation pressure by at least the configured minimum delta pressure.
 
-A failing configured requirement returns exit code `2`, making both verification commands usable in automated design pipelines.
+A failing configured requirement returns exit code 2, making both verification commands usable in automated design pipelines.
 
 ## Run the screening simulation
 
-```bash
-cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 0.95
-cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
-```
+    cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 0.95
+    cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
+
+## Run the HVAC / psychrometric analysis
+
+    cleanroomx-hvac examples/semiconductor_thermal_demo.json
+
+JSON output:
+
+    cleanroomx-hvac examples/semiconductor_thermal_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-hvac examples/semiconductor_thermal_demo.json --output hvac-report.md
+
+The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. See docs/THERMAL_MODEL.md and docs/STANDARDS.md.
 
 ## Multi-room pressure-cascade JSON
 
@@ -86,11 +99,13 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are supply/return/exhaust air-balance modeling, HEPA/filter and fan sizing inputs, heat-load and psychrometric calculations, recovery-test workflows, uncertainty/provenance tracking, report generation, and later a desktop/web UI plus CFD adapters.
+Next milestones are supply/return/exhaust air-balance modeling, expanded filter/fan sizing, recovery-test workflows, uncertainty/provenance tracking, richer report generation, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
 - ISO 14644-1:2015 — classification of air cleanliness by particle concentration.
-- ISO 14644-2:2015 — monitoring to provide evidence of cleanroom performance related to air cleanliness by particle concentration.
+- ISO 14644-4:2022 — cleanroom design, construction, and start-up.
+- ASHRAE Handbook—Fundamentals — psychrometrics.
+- ASHRAE Design Guide for Cleanrooms.
 
 Always use the applicable purchased standard, local regulations, client URS/specification, and qualified engineering judgment for real projects.

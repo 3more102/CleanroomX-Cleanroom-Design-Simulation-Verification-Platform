@@ -1,0 +1,46 @@
+{
+  "duct_network": {
+    "name": "Supply Duct Network",
+    "paths": [
+      {
+        "name": "Process Bay Path",
+        "segments": [
+          {
+            "name": "Main rectangular trunk",
+            "length_m": 18.0,
+            "airflow_m3_h": 5400.0,
+            "darcy_friction_factor": 0.02,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 1.8,
+            "width_m": 0.8,
+            "height_m": 0.45
+          },
+          {
+            "name": "Process branch",
+            "length_m": 12.0,
+            "airflow_m3_h": 3600.0,
+            "darcy_friction_factor": 0.021,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.4,
+            "diameter_m": 0.5
+          }
+        ]
+      },
+      {
+        "name": "Gowning Path",
+        "segments": [
+          {
+            "name": "Gowning branch",
+            "length_m": 10.0,
+            "airflow_m3_h": 900.0,
+            "darcy_friction_factor": 0.021,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.0,
+            "width_m": 0.4,
+            "height_m": 0.25
+          }
+        ]
+      }
+    ]
+  }
+}

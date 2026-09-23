@@ -1789,3 +1789,95 @@ def test_no_intersection_endpoint_diagnostics_preserve_upper_boundary_gap() -> N
             diagnostic["fan_minus_system_pressure_pa"],
             abs=1e-9,
         )
+
+
+def test_power_metric_ranges_require_complete_corner_coverage() -> None:
+    from cleanroomx.fan_variable_friction_uncertainty import (
+        _power_metric_availability,
+        _power_metric_corner_range,
+        _power_metric_extrema_sources,
+    )
+
+    corners = [
+        {"power_evidence": {"specific_fan_power_w_per_m3_s": 825.0}},
+        {"power_evidence": {"specific_fan_power_w_per_m3_s": None}},
+    ]
+
+    availability = _power_metric_availability(
+        corners,
+        "specific_fan_power_w_per_m3_s",
+    )
+    assert availability == {
+        "status": "partial",
+        "available_corner_count": 1,
+        "total_corner_count": 2,
+        "missing_corner_indices": [1],
+    }
+    assert _power_metric_corner_range(
+        corners,
+        "specific_fan_power_w_per_m3_s",
+        "W/(m3/s)",
+    ) is None
+    assert _power_metric_extrema_sources(
+        corners,
+        "specific_fan_power_w_per_m3_s",
+        "W/(m3/s)",
+    ) is None
+
+
+def test_power_evidence_availability_is_auditable_for_complete_study() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_power_evidence"] == result["nominal_result"]["power_evidence"]
+    availability = result["power_evidence_availability"]
+    assert availability is not None
+    for metric in (
+        "fluid_air_power_kw",
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
+    ):
+        assert availability[metric]["status"] == "complete"
+        assert availability[metric]["available_corner_count"] == result["corner_count"]
+        assert availability[metric]["total_corner_count"] == result["corner_count"]
+        assert availability[metric]["missing_corner_indices"] == []
+
+
+def test_missing_efficiencies_report_unavailable_power_metric_coverage() -> None:
+    data = _example_data()
+    data.pop("power_efficiencies")
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    availability = result["power_evidence_availability"]
+    assert availability["fluid_air_power_kw"]["status"] == "complete"
+    for metric in (
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
+    ):
+        assert availability[metric]["status"] == "unavailable"
+        assert availability[metric]["available_corner_count"] == 0
+        assert availability[metric]["missing_corner_indices"] == list(
+            range(result["corner_count"])
+        )
+
+
+def test_power_report_surfaces_metric_coverage_and_withholding_rule() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Availability" in report
+    assert "complete (" in report
+    assert "partial coverage is withheld" in report

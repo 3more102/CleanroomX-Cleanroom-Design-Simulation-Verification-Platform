@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.27 engineering core
+## v0.28 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -25,6 +25,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
 - Bounded fan/loop-network operating-point coupling for passive two-terminal fixed-resistance meshes, with no fan-curve extrapolation and full operating-flow re-solve.
+- Deterministic fan/loop-network uncertainty corner analysis over user-supplied fixed-pressure and named edge-resistance bounds, with bounded no-extrapolation fan solving.
 - Explicit loop-network damper-resistance scenario studies using user-supplied per-edge resistance multipliers, with baseline/case flow redistribution and residual evidence.
 - Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
@@ -63,6 +64,8 @@ v0.21 automatic friction can resolve a Darcy factor from explicit roughness and 
 v0.26 fan/loop-network coupling reduces a passive two-terminal fixed-resistance mesh to its exact quadratic equivalent from a reference solve, intersects that equivalent with supplied fan data, and re-solves the full mesh at the bounded operating airflow. Internal external injections, variable-friction iteration, controls, leakage, and fan extrapolation remain outside this workflow.
 
 v0.27 damper studies are explicit fixed-resistance scenarios only. A configured multiplier represents a user-declared increase in one edge's quadratic resistance; CleanroomX does not infer damper position, K-value, actuator behavior, control logic, or an automatically balanced setting.
+
+v0.28 fan/loop-network uncertainty evaluates explicit lower/upper bounds on fixed pressure and named loop-edge fixed resistances around the v0.26 fan coupling. It solves every unique configured corner, withholds a complete operating-point envelope when any corner falls outside the supplied fan curve, and caps combinatorial expansion with an explicit maximum corner count.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
@@ -156,6 +159,20 @@ Write a Markdown report:
     cleanroomx-fan-loop examples/fan_loop_network_demo.json --output fan-loop-report.md
 
 The v0.26 workflow accepts a passive two-terminal v0.25 loop network, derives its equivalent fixed quadratic resistance from a reference through-flow, intersects that system law with supplied fan data without extrapolation, and re-solves the original loop at the operating airflow. See docs/FAN_LOOP_NETWORK.md.
+
+## Analyze bounded fan/loop-network uncertainty
+
+    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json --output fan-loop-uncertainty-report.md
+
+The v0.28 workflow evaluates every unique lower/upper corner of user-supplied fixed-pressure and named loop-edge resistance bounds around the passive two-terminal fan/loop model. A complete airflow/pressure envelope is reported only when the nominal case and every configured corner intersect the supplied fan curve without extrapolation. See docs/FAN_LOOP_UNCERTAINTY.md.
 
 ## Run loop damper-resistance scenarios
 
@@ -398,7 +415,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are fan/loop uncertainty integration, dossier integration for fan-loop and damper studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are dossier integration for fan-loop uncertainty and damper studies, followed by a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

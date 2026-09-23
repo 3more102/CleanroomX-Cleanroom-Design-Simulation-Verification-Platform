@@ -62,6 +62,24 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"{bracket['high_fan_minus_system_pressure_pa']} Pa**",
                 ]
             )
+            invariant = bracket.get("invariant_audit")
+            if invariant is not None:
+                lines.extend(
+                    [
+                        "- Strict sign-change bracket preserved: "
+                        f"**{invariant['strict_sign_change_preserved']}**",
+                        "- Selected airflow is bracket midpoint: "
+                        f"**{invariant['selected_airflow_is_bracket_midpoint']}**",
+                        "- Binary contraction steps before accepted midpoint: "
+                        f"**{invariant['binary_contraction_step_count']}**",
+                        "- Expected width / supplied-segment span: "
+                        f"**{invariant['expected_width_fraction_of_supplied_segment']}**",
+                        "- Actual width / supplied-segment span: "
+                        f"**{invariant['actual_width_fraction_of_supplied_segment']}**",
+                        "- Absolute binary-width consistency error: "
+                        f"**{invariant['absolute_width_fraction_consistency_error']}**",
+                    ]
+                )
         lines.extend(["", search["scope_note"]])
 
     point = result["fan_operating_point"]

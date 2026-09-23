@@ -97,6 +97,7 @@ def test_unresolved_corners_do_not_emit_complete_envelope() -> None:
     assert result["unresolved_corner_count"] == result["corner_count"]
     assert result["operating_point_envelope"] is None
     assert result["edge_airflow_corner_ranges"] is None
+    assert result["power_corner_ranges"] is None
 
 
 def test_network_nonconvergence_is_preserved_as_indeterminate() -> None:
@@ -861,3 +862,70 @@ def test_whole_fan_curve_scenarios_count_toward_corner_limit() -> None:
 
     with pytest.raises(ValueError, match="corner count 3"):
         analyze_fan_variable_friction_loop_uncertainty(study)
+
+def test_power_evidence_is_retained_for_each_solved_corner() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_power_evidence"] is not None
+    assert all(corner["power_evidence"] is not None for corner in result["corners"])
+    assert all(
+        corner["power_evidence"]["electrical_input_kw"] is not None
+        for corner in result["corners"]
+    )
+
+    ranges = result["power_corner_ranges"]
+    assert ranges is not None
+    assert ranges["evaluated_corner_count"] == result["corner_count"]
+    assert {
+        "fluid_air_power_kw",
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
+    } <= set(ranges["metrics"])
+    assert (
+        ranges["metrics"]["electrical_input_kw"]["lower"]
+        < ranges["metrics"]["electrical_input_kw"]["upper"]
+    )
+
+
+def test_power_corner_ranges_do_not_infer_missing_efficiencies() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data.pop("power_efficiencies")
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    ranges = result["power_corner_ranges"]
+    assert ranges is not None
+    assert set(ranges["metrics"]) == {"fluid_air_power_kw"}
+    assert all(
+        corner["power_evidence"]["shaft_power_kw"] is None
+        and corner["power_evidence"]["electrical_input_kw"] is None
+        for corner in result["corners"]
+    )
+
+
+def test_power_corner_report_is_explicitly_evaluated_only() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Evaluated power corner ranges" in report
+    assert "Electrical input" in report
+    assert "evaluated solved uncertainty corners only" in report
+    assert "not claimed as guaranteed continuous-box power extrema" in report
+

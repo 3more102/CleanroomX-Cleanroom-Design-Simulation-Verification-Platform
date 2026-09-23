@@ -165,46 +165,27 @@ def test_manual_geometry_friction_remains_fixed() -> None:
     ] == pytest.approx(initial_resistance)
 
 
-def test_zero_flow_automatic_cross_edge_is_explicitly_frozen() -> None:
+def test_zero_flow_automatic_spur_is_explicitly_frozen() -> None:
     network = looped_flow_network_from_dict(
         {
-            "name": "Symmetric diamond",
+            "name": "Zero-flow automatic spur",
             "reference_node": "Source",
             "node_injections_m3_h": {
                 "Source": 3600.0,
-                "Upper": 0.0,
-                "Lower": 0.0,
                 "Sink": -3600.0,
+                "DeadEnd": 0.0,
             },
             "edges": [
                 {
-                    "name": "Source upper",
+                    "name": "Main",
                     "start_node": "Source",
-                    "end_node": "Upper",
-                    "resistance_pa_per_m3_s_squared": 1.0,
-                },
-                {
-                    "name": "Upper sink",
-                    "start_node": "Upper",
                     "end_node": "Sink",
-                    "resistance_pa_per_m3_s_squared": 1.0,
-                },
-                {
-                    "name": "Source lower",
-                    "start_node": "Source",
-                    "end_node": "Lower",
-                    "resistance_pa_per_m3_s_squared": 1.0,
-                },
-                {
-                    "name": "Lower sink",
-                    "start_node": "Lower",
-                    "end_node": "Sink",
-                    "resistance_pa_per_m3_s_squared": 1.0,
+                    "resistance_pa_per_m3_s_squared": 100.0,
                 },
                 _automatic_geometry(
-                    "Cross duct",
-                    "Upper",
-                    "Lower",
+                    "Zero-flow spur",
+                    "Source",
+                    "DeadEnd",
                     diameter_m=0.3,
                     reference_airflow_m3_h=100.0,
                 ),
@@ -217,14 +198,14 @@ def test_zero_flow_automatic_cross_edge_is_explicitly_frozen() -> None:
         relaxation=1.0,
         near_zero_airflow_m3_h=1e-3,
     )
-    cross = next(
+    spur = next(
         row
         for row in result["variable_friction"]["edge_closure"]
-        if row["name"] == "Cross duct"
+        if row["name"] == "Zero-flow spur"
     )
 
-    assert abs(cross["airflow_m3_h"]) <= 1e-3
-    assert cross["state"] == "near_zero_flow_frozen"
+    assert abs(spur["airflow_m3_h"]) <= 1e-3
+    assert spur["state"] == "near_zero_flow_frozen"
     assert result["variable_friction"][
         "near_zero_frozen_edge_count"
     ] == 1

@@ -144,6 +144,10 @@ def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:
     assert result["solver_diagnostics"]["termination_reason"] == (
         "no_intersection_in_supplied_range"
     )
+    audit = result["fan_curve_supplied_point_residual_audit"]
+    assert audit["complete_supplied_point_coverage"] is True
+    assert audit["candidate_crossing_feature_count"] == 0
+    assert audit["residual_monotonic_non_increasing_with_tolerance"] is True
 
 
 def test_network_nonconvergence_is_reported_without_fake_operating_point() -> None:
@@ -166,6 +170,11 @@ def test_network_nonconvergence_is_reported_without_fake_operating_point() -> No
     assert result["solver_diagnostics"]["converged"] is False
     assert result["solver_diagnostics"]["termination_reason"] == (
         "network_solver_non_convergence"
+    )
+    audit = result["fan_curve_supplied_point_residual_audit"]
+    assert audit["complete_supplied_point_coverage"] is False
+    assert audit["evaluated_supplied_point_count"] < (
+        audit["expected_supplied_point_count"]
     )
 
 
@@ -240,3 +249,46 @@ def test_cli_json_example_succeeds(monkeypatch, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "solved"
     assert payload["solver_diagnostics"]["converged"] is True
+
+def test_supplied_point_residual_topology_audit_is_explicit() -> None:
+    result = solve_fan_variable_friction_loop(
+        load_fan_variable_friction_loop_study(
+            "examples/fan_variable_friction_loop_demo.json"
+        )
+    )
+
+    assert result["status"] == "solved"
+    audit = result["fan_curve_supplied_point_residual_audit"]
+    checks = result["fan_curve_point_checks"]
+    tolerance = result["solver_diagnostics"][
+        "operating_pressure_tolerance_pa"
+    ]
+
+    assert audit["complete_supplied_point_coverage"] is True
+    assert audit["evaluated_supplied_point_count"] == len(checks)
+    assert audit["expected_supplied_point_count"] == len(checks)
+    assert audit["residual_transition_count"] == len(checks) - 1
+    assert audit["residual_monotonic_non_increasing_with_tolerance"] is True
+    assert audit["residual_increase_transition_count"] == 0
+
+    expected_contacts = sum(
+        abs(float(check["pressure_margin_pa"])) <= tolerance
+        for check in checks
+    )
+    expected_brackets = sum(
+        float(left["pressure_margin_pa"]) > 0.0
+        and float(right["pressure_margin_pa"]) < 0.0
+        for left, right in zip(checks, checks[1:])
+    )
+    assert audit["tolerance_contact_point_count"] == expected_contacts
+    assert audit["strict_sign_change_segment_count"] == expected_brackets
+    assert audit["candidate_crossing_feature_count"] == (
+        expected_contacts + expected_brackets
+    )
+    assert audit["candidate_crossing_feature_count"] >= 1
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Supplied-point residual topology audit" in report
+    assert "Candidate crossing features" in report
+    assert "not a count or proof of continuous physical intersections" in report
+

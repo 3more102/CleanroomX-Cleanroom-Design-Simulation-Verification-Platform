@@ -81,6 +81,52 @@ def markdown_hvac_report(result: dict) -> str:
             ]
         )
 
+    if result.get("branched_duct_network") is not None:
+        network = result["branched_duct_network"]
+        lines.extend(
+            [
+                "",
+                "## Branched supply-duct network",
+                "",
+                f"Root node: **{network['root_node']}**.",
+                f"Derived root airflow: **{network['root_airflow_m3_h']} m³/h**.",
+                "",
+                "| Branch | From | To | Derived airflow m³/h | Velocity m/s | Pressure drop Pa |",
+                "|---|---|---|---:|---:|---:|",
+            ]
+        )
+        for branch in network["branches"]:
+            lines.append(
+                f"| {branch['name']} | {branch['parent_node']} | "
+                f"{branch['child_node']} | {branch['airflow_m3_h']} | "
+                f"{branch['velocity_m_s']} | {branch['total_pressure_drop_pa']} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "| Terminal room | Terminal node | Airflow m³/h | Path | Pressure drop Pa |",
+                "|---|---|---:|---|---:|",
+            ]
+        )
+        for path in network["terminal_paths"]:
+            branch_path = " → ".join(path["branch_names"])
+            lines.append(
+                f"| {path['room_name']} | {path['terminal_node']} | "
+                f"{path['airflow_m3_h']} | {branch_path} | "
+                f"{path['total_pressure_drop_pa']} |"
+            )
+        lines.extend(
+            [
+                "",
+                f"Controlling terminal: **{network['critical_terminal_room']}**.",
+                f"Critical path: **{network['critical_path']}**.",
+                f"Critical-path duct pressure drop: **{network['critical_path_pressure_drop_pa']} Pa**.",
+                "",
+                network["scope_note"],
+            ]
+        )
+
     if result["supply_fan"] is not None:
         fan = result["supply_fan"]
         lines.extend(

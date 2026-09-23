@@ -40,6 +40,12 @@ def markdown_dossier_report(result: dict) -> str:
                 f"analyses={component['analysis_count']}, "
                 f"missing_provenance={component['missing_provenance_analyses']}"
             )
+        elif name == "fan_system_uncertainty" and component["status"] != "not_included":
+            detail = (
+                f"analyses={component['analysis_count']}, "
+                f"missing_provenance={component['missing_provenance_analyses']}, "
+                f"indeterminate={component['counts'].get('indeterminate', 0)}"
+            )
         elif name == "fan_speed_studies" and component["status"] != "not_included":
             detail = (
                 f"studies={component['study_count']}, "
@@ -286,6 +292,35 @@ def markdown_dossier_report(result: dict) -> str:
             pressure = "—" if point is None else point["system_pressure_pa"]
             lines.append(
                 f"| {item['study']} | {item['status']} | {airflow} | {pressure} |"
+            )
+
+    if result.get("fan_system_uncertainty_analyses"):
+        lines.extend(
+            [
+                "",
+                "## Fan/system bounded uncertainty screening",
+                "",
+                "| Analysis | Status | Solved corners | Airflow envelope m³/h | Pressure envelope Pa | Provenance complete |",
+                "|---|---|---:|---:|---:|---|",
+            ]
+        )
+        for item in result["fan_system_uncertainty_analyses"]:
+            envelope = item["operating_point_envelope"]
+            airflow = (
+                "—"
+                if envelope is None
+                else f"{envelope['airflow_m3_h']['lower']} to {envelope['airflow_m3_h']['upper']}"
+            )
+            pressure = (
+                "—"
+                if envelope is None
+                else f"{envelope['system_pressure_pa']['lower']} to {envelope['system_pressure_pa']['upper']}"
+            )
+            lines.append(
+                f"| {item['analysis']} | {item['status']} | "
+                f"{item['solved_corner_count']}/{item['corner_count']} | "
+                f"{airflow} | {pressure} | "
+                f"{'yes' if item['traceability']['complete'] else 'no'} |"
             )
 
     if result.get("fan_speed_studies"):

@@ -2,12 +2,12 @@
 ## v0.46 uncertainty envelope witness provenance — 2026-09-23
 
 - Added exact evaluated-corner witnesses for nonlinear uncertainty operating-point minima and maxima.
-- Reports the zero-based corner index and value that produced each airflow, fan-pressure, and system-pressure envelope bound.
+- Preserves the compact zero-based first-witness corner index/value for each airflow, fan-pressure, and system-pressure envelope bound.
+- Adds tie-aware `operating_point_extrema_sources` evidence that records every evaluated corner sharing an extremum, including its fixed pressure, configured fan speed/scenario, and any active fan-point or duct physical/geometry overrides.
 - Extended every internal edge-airflow range with the exact lower/upper corner indices that produced those extrema.
-- Keeps witness evidence conditional on a complete envelope; indeterminate analyses do not fabricate extreme-case attribution.
-- Tie handling is deterministic: the first evaluated corner with the extreme value is retained.
-- Markdown uncertainty reports now surface operating-point witness corner indices, while JSON retains direct indices into the full corner evidence array.
-- Added regression coverage that resolves every operating-point and edge-flow witness back to the exact reported corner value.
+- Keeps all witness evidence conditional on a complete envelope; indeterminate analyses do not fabricate extreme-case attribution.
+- Markdown uncertainty reports now include an envelope-witness provenance table and internal edge-airflow witness table, while JSON retains direct indices into the full corner evidence array.
+- Added regression coverage that resolves every operating-point and edge-flow witness back to the exact reported corner value and verifies the richer source attribution.
 - Bumped package/runtime metadata to v0.46.0.
 
 ## v0.45 correlated whole fan-curve scenarios — 2026-09-23

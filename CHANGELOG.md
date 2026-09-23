@@ -1,4 +1,14 @@
 # Changelog
+## v0.46 evaluated nonlinear uncertainty power evidence — 2026-09-23
+
+- Retains the existing fan pressure/power evidence for every solved nonlinear uncertainty corner instead of discarding it at the uncertainty layer.
+- Adds evaluated-corner min/max ranges for fluid air power and, only when explicit efficiencies are supplied, shaft power, electrical input, and specific fan power.
+- Keeps the existing no-inference rule: missing fan/motor/VFD efficiencies never produce fabricated shaft or electrical power.
+- Labels power ranges as evaluated-corner diagnostics only; they are not claimed as guaranteed continuous-box extrema because Q×ΔP can have an interior extremum.
+- Suppresses complete power ranges whenever the nonlinear uncertainty result is indeterminate, matching the operating-point envelope boundary.
+- Added Markdown reporting and regression coverage for complete-efficiency and no-efficiency cases.
+- Bumped package/runtime metadata to v0.46.0.
+
 ## v0.45 correlated whole fan-curve scenarios — 2026-09-23
 
 - Added explicit named whole fan-curve scenarios to nonlinear fan/variable-friction uncertainty analysis so point-to-point dependence can be preserved instead of forcing independent Cartesian point perturbations.

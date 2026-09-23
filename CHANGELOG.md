@@ -1,4 +1,14 @@
 # Changelog
+## v0.52 configured solver-tolerance utilization audit — 2026-09-24
+
+- Extends nonlinear fan/variable-friction uncertainty solver-quality evidence with explicit checks against the operating-pressure, resistance-closure, and mass-balance tolerances already configured for the solver.
+- Reports each worst solved-corner metric's configured tolerance, utilization ratio, and remaining numerical margin without introducing any new acceptance threshold.
+- Adds an aggregate status that distinguishes complete within-tolerance coverage, incomplete study coverage, unavailable checks, and any detected configured-tolerance exceedance.
+- Keeps pressure-law residual and iteration counts as diagnostics only because the workflow has no configured acceptance threshold for those quantities.
+- Surfaces the configured solver-tolerance audit in standalone Markdown reports and integrated engineering-dossier tables.
+- Adds regression coverage for complete studies, zero-solved-corner studies, utilization/margin arithmetic, report output, and dossier integration.
+- Bumped package/runtime metadata to v0.52.0.
+
 ## v0.51 aggregate nonlinear solver-quality evidence — 2026-09-24
 
 - Added a compact solver-quality summary across nonlinear fan/variable-friction uncertainty corners.

@@ -245,3 +245,40 @@ def test_dossier_builds_fan_airflow_uncertainty_end_to_end(tmp_path) -> None:
     assert component["status"] == "screening_complete"
     assert component["corner_count"] == 4
     assert result["executive_summary"]["state"] == "no_adverse_findings"
+
+
+def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Whole fan-curve scenario dossier",
+                "fan_variable_friction_uncertainty_analyses": [
+                    str(
+                        Path(
+                            "examples/fan_variable_friction_curve_scenarios_demo.json"
+                        ).resolve()
+                    )
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_dossier(manifest)
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+
+    assert analysis["status"] == "complete"
+    assert analysis["corner_count"] == 3
+    assert analysis["solved_corner_count"] == 3
+    assert analysis["traceability"]["complete"] is True
+    assert {
+        corner["fan_curve_scenario"] for corner in analysis["corners"]
+    } == {"nominal", "lower_envelope", "upper_envelope"}
+
+    component = result["executive_summary"]["components"][
+        "fan_variable_friction_uncertainty"
+    ]
+    assert component["status"] == "screening_complete"
+    assert component["corner_count"] == 3
+    assert result["executive_summary"]["state"] == "no_adverse_findings"

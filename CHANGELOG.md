@@ -1,4 +1,15 @@
 # Changelog
+## v0.49 evaluated nonlinear power evidence — 2026-09-24
+
+- Retains the full pressure/power evidence for every solved nonlinear uncertainty corner and exposes the nominal power record directly.
+- Adds evaluated-corner ranges for fluid air power and, only when the explicit efficiency chain is configured, shaft power, electrical input, and specific fan power.
+- Adds tie-aware source attribution for every available power-range lower/upper value so each reported extreme resolves to the exact evaluated corner input context.
+- Preserves the no-inference rule: missing fan/motor/VFD efficiencies never fabricate shaft, electrical, or specific-fan-power evidence.
+- Keeps power ranges and their witnesses conditional on a complete study; indeterminate analyses emit no complete power-range claim.
+- Labels all power ranges as evaluated-corner diagnostics rather than guaranteed continuous-box extrema because Q*deltaP can have an interior extremum.
+- Added Markdown reporting and regression coverage for explicit-efficiency, missing-efficiency, exact witness, and indeterminate cases.
+- Bumped package/runtime metadata to v0.49.0.
+
 ## v0.48 tie-aware internal edge-flow extrema provenance — 2026-09-24
 
 - Added tie-aware source attribution for every internal edge-airflow lower/upper extremum in complete nonlinear uncertainty studies.

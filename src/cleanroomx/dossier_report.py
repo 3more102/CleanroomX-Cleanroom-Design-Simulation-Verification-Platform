@@ -81,6 +81,16 @@ def markdown_dossier_report(result: dict) -> str:
                 f"speed_cases={component['speed_case_count']}, "
                 f"{_fmt_counts(component.get('counts', {}))}"
             )
+        elif (
+            name == "fan_variable_friction_uncertainty"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"analyses={component['analysis_count']}, "
+                f"corners={component['corner_count']}, "
+                f"missing_provenance={component['missing_provenance_analyses']}, "
+                f"indeterminate={component['counts'].get('indeterminate', 0)}"
+            )
         elif name == "cross_module_consistency" and component["status"] != "not_included":
             detail = (
                 f"shared_rooms={component['shared_room_count']}, "

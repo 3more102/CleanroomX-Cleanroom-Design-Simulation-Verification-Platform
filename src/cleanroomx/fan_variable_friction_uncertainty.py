@@ -44,6 +44,9 @@ class FanVariableFrictionLoopUncertaintyStudy:
     edge_rectangular_height_m: dict[str, UncertainValue] = field(
         default_factory=dict
     )
+    fan_curve_pressure_pa: dict[float, UncertainValue] = field(
+        default_factory=dict
+    )
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256
     power_efficiencies: FanPowerEfficiencies | None = None
@@ -73,6 +76,68 @@ class FanVariableFrictionLoopUncertaintyStudy:
             or self.max_corner_cases <= 0
         ):
             raise ValueError("max_corner_cases must be an integer > 0")
+
+        fan_points_by_airflow = {
+            float(point.airflow_m3_h): point for point in self.fan_curve.points
+        }
+        normalized_fan_pressure: dict[float, UncertainValue] = {}
+        for airflow_m3_h, item in self.fan_curve_pressure_pa.items():
+            airflow = float(airflow_m3_h)
+            point = fan_points_by_airflow.get(airflow)
+            if point is None:
+                raise ValueError(
+                    "fan-curve pressure uncertainty references an unknown "
+                    f"supplied airflow point {airflow!r} m3/h"
+                )
+            if item.unit != "Pa":
+                raise ValueError(
+                    "fan-curve pressure uncertainty must use unit 'Pa'"
+                )
+            if item.lower < 0:
+                raise ValueError(
+                    "fan-curve pressure lower uncertainty bound must remain "
+                    f">= 0 at {airflow:g} m3/h"
+                )
+            if not math.isclose(
+                item.value,
+                point.pressure_pa,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    "fan-curve pressure uncertainty nominal must match the "
+                    f"supplied curve pressure at {airflow:g} m3/h"
+                )
+            normalized_fan_pressure[airflow] = item
+        object.__setattr__(
+            self,
+            "fan_curve_pressure_pa",
+            normalized_fan_pressure,
+        )
+
+        for left, right in zip(self.fan_curve.points, self.fan_curve.points[1:]):
+            left_uncertain = self.fan_curve_pressure_pa.get(
+                float(left.airflow_m3_h)
+            )
+            right_uncertain = self.fan_curve_pressure_pa.get(
+                float(right.airflow_m3_h)
+            )
+            left_lower = (
+                left_uncertain.lower
+                if left_uncertain is not None
+                else left.pressure_pa
+            )
+            right_upper = (
+                right_uncertain.upper
+                if right_uncertain is not None
+                else right.pressure_pa
+            )
+            if right_upper > left_lower:
+                raise ValueError(
+                    "fan-curve pressure uncertainty can create a pressure "
+                    "increase with airflow between supplied points "
+                    f"{left.airflow_m3_h:g} and {right.airflow_m3_h:g} m3/h"
+                )
 
         edges_by_name = {edge.name: edge for edge in self.loop_network.edges}
         normalized: dict[str, UncertainValue] = {}
@@ -575,15 +640,38 @@ def _network_at_corner(
     )
 
 
+def _fan_curve_at_corner(
+    study: FanVariableFrictionLoopUncertaintyStudy,
+    pressure_overrides: dict[float, float],
+) -> FanCurve:
+    return FanCurve(
+        name=study.fan_curve.name,
+        points=tuple(
+            type(point)(
+                airflow_m3_h=point.airflow_m3_h,
+                pressure_pa=pressure_overrides.get(
+                    float(point.airflow_m3_h),
+                    point.pressure_pa,
+                ),
+            )
+            for point in study.fan_curve.points
+        ),
+    )
+
+
 def _solve_case(
     study: FanVariableFrictionLoopUncertaintyStudy,
     fixed_pressure_pa: float,
     edge_parameter_overrides: dict[str, dict[str, float]],
+    fan_pressure_overrides: dict[float, float] | None = None,
 ) -> dict:
     return solve_fan_variable_friction_loop(
         FanVariableFrictionLoopStudy(
             name=study.name,
-            fan_curve=study.fan_curve,
+            fan_curve=_fan_curve_at_corner(
+                study,
+                fan_pressure_overrides or {},
+            ),
             loop_network=_network_at_corner(study, edge_parameter_overrides),
             fan_discharge_node=study.fan_discharge_node,
             fan_suction_node=study.fan_suction_node,
@@ -689,10 +777,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 parameter_name
             ] = item.value
 
+    nominal_fan_pressure_overrides = {
+        airflow_m3_h: item.value
+        for airflow_m3_h, item in study.fan_curve_pressure_pa.items()
+    }
     nominal = _solve_case(
         study,
         study.fixed_pressure_pa.value,
         nominal_overrides,
+        nominal_fan_pressure_overrides,
     )
 
     fixed_values = sorted(
@@ -710,8 +803,20 @@ def analyze_fan_variable_friction_loop_uncertainty(
     parameter_combinations = (
         list(product(*value_sets)) if value_sets else [()]
     )
-    corner_count = len(fixed_values) * prod(
-        len(values) for values in value_sets
+    fan_pressure_dimensions = sorted(study.fan_curve_pressure_pa.items())
+    fan_pressure_value_sets = [
+        sorted({item.lower, item.upper})
+        for _airflow_m3_h, item in fan_pressure_dimensions
+    ]
+    fan_pressure_combinations = (
+        list(product(*fan_pressure_value_sets))
+        if fan_pressure_value_sets
+        else [()]
+    )
+    corner_count = (
+        len(fixed_values)
+        * prod(len(values) for values in value_sets)
+        * prod(len(values) for values in fan_pressure_value_sets)
     )
     if corner_count > study.max_corner_cases:
         raise ValueError(
@@ -738,55 +843,72 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 corner_parameter_values[output_key][edge_name] = round(
                     value, 15
                 )
-            result = _solve_case(
-                study,
-                fixed_pressure,
-                edge_parameter_overrides,
-            )
-            point = result["fan_operating_point"]
-            network = result["operating_network_solution"]
-            edge_airflows = None
-            if result["status"] == "solved" and point is not None and network is not None:
-                solved_points.append(point)
-                solved_networks.append(network)
-                edge_airflows = {
-                    edge["name"]: edge["airflow_m3_h"]
-                    for edge in network["edges"]
+            for fan_pressure_values in fan_pressure_combinations:
+                fan_pressure_overrides = {
+                    airflow_m3_h: value
+                    for (airflow_m3_h, _item), value in zip(
+                        fan_pressure_dimensions,
+                        fan_pressure_values,
+                    )
                 }
+                result = _solve_case(
+                    study,
+                    fixed_pressure,
+                    edge_parameter_overrides,
+                    fan_pressure_overrides,
+                )
+                point = result["fan_operating_point"]
+                network = result["operating_network_solution"]
+                edge_airflows = None
+                if (
+                    result["status"] == "solved"
+                    and point is not None
+                    and network is not None
+                ):
+                    solved_points.append(point)
+                    solved_networks.append(network)
+                    edge_airflows = {
+                        edge["name"]: edge["airflow_m3_h"]
+                        for edge in network["edges"]
+                    }
 
-            corners.append(
-                {
-                    "fixed_pressure_pa": round(fixed_pressure, 6),
-                    "edge_local_loss_coefficient": corner_parameter_values[
-                        "edge_local_loss_coefficient"
-                    ],
-                    "edge_absolute_roughness_m": corner_parameter_values[
-                        "edge_absolute_roughness_m"
-                    ],
-                    "edge_kinematic_viscosity_m2_s": corner_parameter_values[
-                        "edge_kinematic_viscosity_m2_s"
-                    ],
-                    "edge_air_density_kg_m3": corner_parameter_values[
-                        "edge_air_density_kg_m3"
-                    ],
-                    "edge_length_m": corner_parameter_values[
-                        "edge_length_m"
-                    ],
-                    "edge_circular_diameter_m": corner_parameter_values[
-                        "edge_circular_diameter_m"
-                    ],
-                    "edge_rectangular_width_m": corner_parameter_values[
-                        "edge_rectangular_width_m"
-                    ],
-                    "edge_rectangular_height_m": corner_parameter_values[
-                        "edge_rectangular_height_m"
-                    ],
-                    "status": result["status"],
-                    "operating_point": point,
-                    "edge_airflows_m3_h": edge_airflows,
-                    "solver_diagnostics": result["solver_diagnostics"],
-                }
-            )
+                corners.append(
+                    {
+                        "fixed_pressure_pa": round(fixed_pressure, 6),
+                        "fan_curve_pressure_pa": {
+                            str(round(airflow_m3_h, 6)): round(value, 6)
+                            for airflow_m3_h, value in fan_pressure_overrides.items()
+                        },
+                        "edge_local_loss_coefficient": corner_parameter_values[
+                            "edge_local_loss_coefficient"
+                        ],
+                        "edge_absolute_roughness_m": corner_parameter_values[
+                            "edge_absolute_roughness_m"
+                        ],
+                        "edge_kinematic_viscosity_m2_s": corner_parameter_values[
+                            "edge_kinematic_viscosity_m2_s"
+                        ],
+                        "edge_air_density_kg_m3": corner_parameter_values[
+                            "edge_air_density_kg_m3"
+                        ],
+                        "edge_length_m": corner_parameter_values[
+                            "edge_length_m"
+                        ],
+                        "edge_circular_diameter_m": corner_parameter_values[
+                            "edge_circular_diameter_m"
+                        ],
+                        "edge_rectangular_width_m": corner_parameter_values[
+                            "edge_rectangular_width_m"
+                        ],
+                        "edge_rectangular_height_m": corner_parameter_values[
+                            "edge_rectangular_height_m"
+                        ],
+                        "status": result["status"],
+                        "operating_point": point,
+                        "edge_airflows_m3_h": edge_airflows,
+                        "solver_diagnostics": result["solver_diagnostics"],
+                    }
+                )
 
     unresolved_corner_count = sum(
         corner["status"] != "solved" for corner in corners
@@ -825,6 +947,13 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "fixed_pressure_pa",
         study.fixed_pressure_pa,
     )
+    fan_pressure_records = [
+        _input_record(
+            f"fan_curve_pressure:{airflow_m3_h:g}_m3_h",
+            item,
+        )
+        for airflow_m3_h, item in sorted(study.fan_curve_pressure_pa.items())
+    ]
     edge_records = [
         *[
             _input_record(f"edge_local_loss:{name}", item)
@@ -861,7 +990,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     ]
     missing = [
         record["name"]
-        for record in [fixed_record, *edge_records]
+        for record in [fixed_record, *fan_pressure_records, *edge_records]
         if record["provenance"] is None
     ]
     if study.fan_curve_provenance is None:
@@ -880,6 +1009,17 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "lower": study.fixed_pressure_pa.lower,
                 "upper": study.fixed_pressure_pa.upper,
                 "unit": "Pa",
+            },
+            "fan_curve_pressure_pa": {
+                str(round(airflow_m3_h, 6)): {
+                    "nominal": item.value,
+                    "lower": item.lower,
+                    "upper": item.upper,
+                    "unit": "Pa",
+                }
+                for airflow_m3_h, item in sorted(
+                    study.fan_curve_pressure_pa.items()
+                )
             },
             "edge_local_loss_coefficient": {
                 name: {
@@ -971,7 +1111,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 if study.fan_curve_provenance is not None
                 else None
             ),
-            "inputs": [fixed_record, *edge_records],
+            "inputs": [
+                fixed_record,
+                *fan_pressure_records,
+                *edge_records,
+            ],
         },
         "message": (
             "All evaluated uncertainty corners converged and intersect the "
@@ -985,17 +1129,18 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "engineering_note": (
             "This is deterministic corner analysis for user-supplied "
-            "absolute bounds on fixed pressure and selected automatic-friction "
-            "duct local-loss coefficients, absolute roughness, kinematic "
-            "viscosity, air density, duct length, circular diameter, and "
-            "rectangular width/height. Every corner rebuilds the affected "
+            "absolute bounds on fixed pressure, selected supplied fan-curve "
+            "point pressures, and selected automatic-friction duct local-loss "
+            "coefficients, absolute roughness, kinematic viscosity, air density, "
+            "duct length, circular diameter, and rectangular width/height. "
+            "Every corner rebuilds the affected "
             "geometry-edge evidence and re-solves the complete Darcy-friction "
             "network at every fan/system airflow evaluated by the bounded "
             "operating-point search. Reported min/max values are ranges across "
             "evaluated corners only and are not claimed as guaranteed extrema "
             "for all interior combinations. No probability distribution, "
-            "covariance, fan-curve uncertainty, unconfigured geometry "
-            "tolerance inference, "
+            "covariance, fan-curve airflow-coordinate uncertainty, "
+            "unconfigured geometry tolerance inference, "
             "damper/control inference, leakage, system effect, acoustics, "
             "stall/surge assessment, motor/VFD limits, compressibility, "
             "transients, or manufacturer acceptance is inferred."

@@ -225,6 +225,51 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ]
         )
 
+    power_ranges = result.get("power_corner_ranges")
+    if power_ranges is not None:
+        labels = {
+            "fluid_air_power_kw": "Fluid air power",
+            "shaft_power_kw": "Shaft power",
+            "electrical_input_kw": "Electrical input",
+            "specific_fan_power_w_per_m3_s": "Specific fan power",
+        }
+        lines.extend(["", "## Evaluated power corner ranges", ""])
+        for key, interval in power_ranges["metrics"].items():
+            lines.append(
+                f"- {labels[key]}: **{interval['lower']} to "
+                f"{interval['upper']} {interval['unit']}**"
+            )
+        lines.extend(["", power_ranges["scope_note"]])
+
+    power_sources = result.get("power_extrema_sources")
+    if power_sources:
+        labels = {
+            "fluid_air_power_kw": "Fluid air power",
+            "shaft_power_kw": "Shaft power",
+            "electrical_input_kw": "Electrical input",
+            "specific_fan_power_w_per_m3_s": "Specific fan power",
+        }
+        lines.extend(
+            [
+                "",
+                "## Power witness provenance",
+                "",
+                "| Metric | Bound | Value | Source corner input(s) |",
+                "|---|---|---:|---|",
+            ]
+        )
+        for metric, metric_sources in power_sources.items():
+            for bound in ("lower", "upper"):
+                witness = metric_sources[bound]
+                source_text = " / ".join(
+                    _fmt_extreme_source(source)
+                    for source in witness["sources"]
+                )
+                lines.append(
+                    f"| {labels[metric]} | {bound} | "
+                    f"{witness['value']} {witness['unit']} | {source_text} |"
+                )
+
     extrema_sources = result.get("operating_point_extrema_sources")
     if extrema_sources is not None:
         lines.extend(["", "## Critical evaluated cases", ""])

@@ -29,5 +29,8 @@
   ],
   "fan_parallel_network_studies": [
     "fan_parallel_network_demo.json"
+  ],
+  "fan_speed_studies": [
+    "fan_speed_dossier_demo.json"
   ]
 }

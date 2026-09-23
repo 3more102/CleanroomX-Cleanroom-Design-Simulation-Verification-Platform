@@ -24,6 +24,46 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
         f"- Operating iterations: **{diagnostics['operating_iterations']}**",
     ]
 
+    search = result.get("operating_point_search_evidence")
+    if search is not None:
+        lines.extend(
+            [
+                "",
+                "## Operating-point search evidence",
+                "",
+                f"- Search method: **{search['method']}**",
+                "- Supplied interpolation segment: "
+                f"**{search['supplied_segment_low_airflow_m3_h']}–"
+                f"{search['supplied_segment_high_airflow_m3_h']} m³/h**",
+            ]
+        )
+        if search["selected_supplied_point_index"] is not None:
+            lines.append(
+                "- Selected supplied-point index: "
+                f"**{search['selected_supplied_point_index']}**"
+            )
+        bracket = search["final_bisection_bracket"]
+        if bracket is None:
+            lines.append("- Final bisection bracket: **not applicable**")
+        else:
+            lines.extend(
+                [
+                    "- Final active bisection bracket: "
+                    f"**{bracket['low_airflow_m3_h']}–"
+                    f"{bracket['high_airflow_m3_h']} m³/h**",
+                    "- Final bisection bracket width: "
+                    f"**{bracket['width_m3_h']} m³/h**",
+                    "- Final bisection half-width: "
+                    f"**{bracket['half_width_m3_h']} m³/h**",
+                    "- Final bracket width / supplied-segment span: "
+                    f"**{bracket['width_fraction_of_supplied_segment']}**",
+                    "- Final bracket residuals: "
+                    f"**{bracket['low_fan_minus_system_pressure_pa']} Pa / "
+                    f"{bracket['high_fan_minus_system_pressure_pa']} Pa**",
+                ]
+            )
+        lines.extend(["", search["scope_note"]])
+
     point = result["fan_operating_point"]
     if point is None:
         lines.extend(["", "## Operating point", "", result["message"]])

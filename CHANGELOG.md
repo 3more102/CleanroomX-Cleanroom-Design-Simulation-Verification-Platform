@@ -1,4 +1,14 @@
 # Changelog
+## v0.45 explicit whole fan-curve scenarios — 2026-09-23
+
+- Added explicit named whole-fan-curve scenarios to nonlinear fan/variable-friction uncertainty analysis so point-to-point dependence can be preserved without independently permuting curve coordinates.
+- Evaluates the nominal supplied fan curve plus every configured scenario as discrete engineering cases, crossed with fixed-pressure, nonlinear duct-input, and optional fan-speed-ratio uncertainty dimensions.
+- Reuses the complete variable-friction fan/loop solver for every scenario and preserves strict supplied-range no-extrapolation behavior; any unresolved scenario suppresses the complete envelope.
+- Keeps whole-curve scenarios mutually exclusive with independent fan-point pressure/airflow uncertainty to avoid mixing incompatible dependence models.
+- Includes scenario count in the pre-materialization corner-limit guard, rejects duplicate or reserved scenario names, retains per-scenario provenance, and exposes named cases in JSON and Markdown evidence.
+- Added a reproducible correlated fan-curve scenario example plus regression coverage for scenario solving, speed-ratio cross-products, validation, reporting, and corner-limit enforcement.
+- Bumped package/runtime metadata to v0.45.0.
+
 ## v0.44 bounded fan-speed ratio uncertainty — 2026-09-23
 
 - Added an optional user-supplied fan speed-ratio interval to nonlinear fan/variable-friction corner analysis.

@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.11 engineering core
+## v0.12 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -216,7 +216,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan-curve integration with duct-network models, and later a desktop/web UI plus CFD adapters.
+Next milestones are tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan-curve integration with duct-network models, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

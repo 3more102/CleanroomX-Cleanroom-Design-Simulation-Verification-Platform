@@ -1,6 +1,6 @@
 # Duct critical-path pressure-loss model
 
-CleanroomX v0.6 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design. v0.6.1 hardens numeric validation so non-finite inputs are rejected before analysis.
+CleanroomX v0.6 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design. v0.6.1 hardens numeric validation so non-finite inputs are rejected before analysis. CleanroomX v0.8 adds a separate rooted branched-network mode that derives each section airflow from downstream terminal-room demand; see [BRANCHED_DUCT_NETWORK.md](BRANCHED_DUCT_NETWORK.md).
 
 ## Section calculation
 

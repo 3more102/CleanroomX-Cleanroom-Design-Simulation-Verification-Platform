@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8 rooted duct-tree airflow aggregation — 2026-09-23
+
+- Added rooted, acyclic supply-duct tree models with explicit topology validation.
+- Added fixed terminal airflow demands and deterministic upstream branch-flow aggregation by mass conservation.
+- Added section airflow calculation without duplicating airflow inputs on every shared trunk.
+- Added node-by-node flow-balance residual reporting.
+- Added unique root-to-terminal path tracing and critical terminal pressure-path selection.
+- Reused the v0.6 Darcy-Weisbach section pressure-loss engine with explicit friction factors and local loss coefficients.
+- Integrated tree critical-path pressure loss into preliminary fan sizing with an auditable pressure-source label.
+- Added a strict HVAC consistency check requiring total tree terminal demand to match total governing supply airflow.
+- Added JSON loading, Markdown reporting, example data, tests, and engineering-scope documentation.
+- Kept the method explicitly limited to fixed-demand trees; looped and pressure-driven network solving remain out of scope.
+
 ## v0.7 qualification uncertainty — 2026-09-23
 
 - Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.

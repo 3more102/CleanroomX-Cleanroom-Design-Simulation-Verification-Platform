@@ -31,6 +31,6 @@
     "fan_parallel_network_demo.json"
   ],
   "fan_speed_studies": [
-    "fan_speed_sweep_demo.json"
+    "fan_speed_dossier_demo.json"
   ]
 }

@@ -56,6 +56,48 @@ def markdown_hvac_report(result: dict) -> str:
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
             )
 
+    duct = result.get("supply_duct_network")
+    if duct is not None:
+        lines.extend(
+            [
+                "",
+                "## Supply duct pressure-loss screening",
+                "",
+                f"- Critical path: **{duct['critical_path']}**.",
+                f"- Critical-path duct loss: **{duct['critical_path_pressure_loss_pa']} Pa**.",
+                f"- Air density: **{duct['air_density_kg_m3']} kg/m³**.",
+                f"- Dynamic viscosity: **{duct['dynamic_viscosity_pa_s']} Pa·s**.",
+                "",
+                "| Path | Total pressure loss (Pa) |",
+                "|---|---:|",
+            ]
+        )
+        for path in duct["paths"]:
+            lines.append(
+                f"| {path['name']} | {path['total_pressure_loss_pa']} |"
+            )
+
+        for path in duct["paths"]:
+            lines.extend(
+                [
+                    "",
+                    f"### Duct path — {path['name']}",
+                    "",
+                    "| Section | Shape | Flow m³/h | Velocity m/s | Re | Darcy f | Friction Pa | Local Pa | Total Pa |",
+                    "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+                ]
+            )
+            for section in path["sections"]:
+                lines.append(
+                    f"| {section['name']} | {section['shape']} | "
+                    f"{section['airflow_m3_h']} | {section['velocity_m_s']} | "
+                    f"{section['reynolds_number']} | {section['darcy_friction_factor']} | "
+                    f"{section['friction_pressure_loss_pa']} | "
+                    f"{section['local_pressure_loss_pa']} | "
+                    f"{section['total_pressure_loss_pa']} |"
+                )
+        lines.extend(["", duct["engineering_note"]])
+
     if result["supply_fan"] is not None:
         fan = result["supply_fan"]
         lines.extend(
@@ -64,7 +106,8 @@ def markdown_hvac_report(result: dict) -> str:
                 "## Preliminary supply-fan duty",
                 "",
                 f"- Airflow: **{fan['airflow_m3_h']} m³/h**.",
-                f"- Total entered static pressure: **{fan['total_static_pressure_pa']} Pa**.",
+                f"- Duct-pressure source: **{fan['duct_pressure_source']}**.",
+                f"- Total entered/calculated static pressure: **{fan['total_static_pressure_pa']} Pa**.",
                 f"- Estimated electrical input: **{fan['estimated_electrical_input_kw']} kW**.",
                 f"- {fan['scope_note']}",
             ]

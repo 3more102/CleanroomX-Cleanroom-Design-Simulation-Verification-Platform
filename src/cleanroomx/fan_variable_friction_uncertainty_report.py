@@ -438,7 +438,9 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
 
     quality = result.get("solver_quality_summary")
     if quality:
-        coverage_label = "complete" if quality["complete_study_coverage"] else "incomplete"
+        coverage_label = (
+            "complete" if quality["complete_study_coverage"] else "incomplete"
+        )
         lines.extend(
             [
                 "",
@@ -449,24 +451,63 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "- Complete study coverage: "
                 f"**{coverage_label}** (nominal status: {quality['nominal_status']})",
                 "",
-                "| Metric | Worst value | Unit | Configured tolerance | Witness source corner(s) |",
-                "|---|---:|---|---:|---|",
+                "| Metric | Worst value | Unit | Configured solver limit | Budget used | Witness source corner(s) |",
+                "|---|---:|---|---:|---:|---|",
             ]
         )
         tolerances = quality["configured_tolerances"]
+        iteration_limits = quality.get("configured_iteration_limits", {})
+        utilization = quality.get("limit_utilization", {})
         metric_rows = (
-            ("absolute_operating_pressure_residual_pa", "Absolute operating pressure residual", "operating_pressure_tolerance_pa"),
-            ("network_max_relative_resistance_closure_error", "Resistance closure error", "resistance_relative_tolerance"),
-            ("max_abs_mass_balance_residual_m3_h", "Mass-balance residual", "mass_balance_tolerance_m3_h"),
-            ("max_abs_pressure_law_residual_pa", "Pressure-law residual", None),
-            ("network_outer_iterations", "Network outer iterations", None),
-            ("operating_iterations", "Operating-point iterations", None),
+            (
+                "absolute_operating_pressure_residual_pa",
+                "Absolute operating pressure residual",
+                tolerances.get("operating_pressure_tolerance_pa"),
+            ),
+            (
+                "network_max_relative_resistance_closure_error",
+                "Resistance closure error",
+                tolerances.get("resistance_relative_tolerance"),
+            ),
+            (
+                "max_abs_mass_balance_residual_m3_h",
+                "Mass-balance residual",
+                tolerances.get("mass_balance_tolerance_m3_h"),
+            ),
+            (
+                "max_abs_pressure_law_residual_pa",
+                "Pressure-law residual",
+                None,
+            ),
+            (
+                "network_outer_iterations",
+                "Network outer iterations",
+                iteration_limits.get("max_outer_iterations"),
+            ),
+            (
+                "network_newton_iterations",
+                "Network Newton iterations",
+                iteration_limits.get("max_newton_iterations"),
+            ),
+            (
+                "operating_iterations",
+                "Operating-point iterations",
+                iteration_limits.get("max_operating_iterations"),
+            ),
         )
-        for metric_key, label, tolerance_key in metric_rows:
+        for metric_key, label, configured_limit in metric_rows:
             evidence = quality["worst_metrics"].get(metric_key)
-            tolerance = "—" if tolerance_key is None else tolerances[tolerance_key]
+            limit_text = "—" if configured_limit is None else configured_limit
+            utilization_evidence = utilization.get(metric_key)
+            utilization_text = (
+                "—"
+                if utilization_evidence is None
+                else f"{utilization_evidence['percent']}%"
+            )
             if evidence is None:
-                lines.append(f"| {label} | — | — | {tolerance} | — |")
+                lines.append(
+                    f"| {label} | — | — | {limit_text} | {utilization_text} | — |"
+                )
                 continue
             source_texts = []
             for source in evidence["sources"]:
@@ -476,7 +517,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 source_texts.append(source_text)
             lines.append(
                 f"| {label} | {evidence['value']} | {evidence['unit']} | "
-                f"{tolerance} | {' / '.join(source_texts)} |"
+                f"{limit_text} | {utilization_text} | "
+                f"{' / '.join(source_texts)} |"
             )
         lines.extend(["", quality["scope_note"]])
 

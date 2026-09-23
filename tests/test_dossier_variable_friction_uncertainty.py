@@ -26,10 +26,18 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     boundary_summary = analysis["fan_curve_boundary_clearance_summary"]
     bracket_summary = analysis["fan_curve_intersection_bracket_summary"]
     conditioning_summary = analysis["fan_curve_crossing_conditioning_summary"]
+    segment_summary = analysis["fan_curve_segment_position_summary"]
     residual_summary = analysis["fan_curve_supplied_point_residual_summary"]
     assert boundary_summary["complete_study_coverage"] is True
     assert bracket_summary["complete_study_coverage"] is True
     assert conditioning_summary["complete_study_coverage"] is True
+    assert segment_summary["complete_study_coverage"] is True
+    assert segment_summary["segment_position_evidence_corner_count"] == analysis[
+        "corner_count"
+    ]
+    assert segment_summary[
+        "minimum_nearest_segment_endpoint_clearance_m3_h"
+    ]["value"] >= 0.0
     assert residual_summary["complete_study_coverage"] is True
     assert residual_summary["residual_increase_corner_count"] == 0
     assert bracket_summary["bracket_evidence_corner_count"] == analysis[
@@ -84,6 +92,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Bracket evidence" in report
     assert "Min crossing gradient Pa/(m³/h)" in report
     assert "Crossing evidence" in report
+    assert "Min segment-point clearance m³/h" in report
+    assert "Segment evidence" in report
     assert "Residual topology" in report
     assert "No-intersection boundary cases" in report
     assert "Result SHA-256" in report

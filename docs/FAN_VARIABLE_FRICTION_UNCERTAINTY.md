@@ -41,6 +41,31 @@ v0.60 derives local numerical conditioning evidence only from the already retain
 
 The aggregate result retains complete-versus-partial coverage plus tied source-corner provenance for the minimum absolute fan-minus-system gradient, maximum reciprocal airflow-per-pressure gradient, and maximum absolute/normalized secant-root disagreement. These diagnostics quantify local numerical root conditioning and endpoint-secancy only. They do not establish a dynamic fan/system stability condition, acceptable robustness margin, stall/surge boundary, manufacturer operating region, commissioning criterion, certification result, or equipment-acceptance limit.
 
+
+## Local pressure-to-airflow root-resolution evidence
+
+v0.64 combines the configured operating-pressure residual tolerance with the
+v0.60 local fan-minus-system secant slope. For each solved uncertainty corner,
+CleanroomX reports the configured pressure tolerance, the observed signed and
+absolute solved pressure residual, the existing local residual-gradient
+magnitude and reciprocal airflow-per-pressure gradient, and two local
+linearized airflow equivalents: one for the configured pressure tolerance and
+one for the observed final pressure residual. Both are also normalized by the
+active supplied-point interpolation-segment airflow span.
+
+The aggregate result preserves complete-versus-partial coverage and tied
+source-corner provenance for the maximum pressure-tolerance airflow equivalent,
+maximum observed-residual airflow equivalent, and their maximum fractions of
+the active interpolation segment. If the local fan-minus-system residual slope
+is effectively zero, the airflow-equivalent mapping is explicitly unavailable
+rather than reported as infinite.
+
+These quantities are local secant-based numerical-resolution indicators only.
+They are not rigorous root-error bounds, interpolation-error estimates,
+physical uncertainty, dynamic-stability margins, stall/surge limits,
+manufacturer operating regions, commissioning criteria, certification
+results, or equipment-acceptance limits.
+
 ## Supplied-point residual-topology evidence
 
 v0.61 propagates the base nonlinear solver's discrete fan-minus-system residual audit into the nominal case and every evaluated uncertainty corner. Each audit records expected and evaluated supplied-point counts, complete or partial point coverage, supplied points that fall within the configured operating-pressure tolerance, strict positive-to-negative sign-change segments, every adjacent supplied-point residual transition, sampled non-increasing behavior within tolerance, and any positive residual increase.
@@ -94,6 +119,7 @@ A complete result reports:
 - aggregate intersection-bracket coverage, strict sign-change/tolerance-contact counts, and tied source provenance for minimum endpoint residual-gap/span evidence;
 - per-solved-corner fan-pressure, system-pressure, and fan-minus-system secant slopes across the exact supplied-point bracket, plus reciprocal airflow-per-pressure gradient when defined;
 - secant-root airflow and absolute/normalized difference from the solved nonlinear operating airflow, with aggregate minimum residual-gradient and maximum secant-root-disagreement provenance;
+- local-linearized airflow equivalents of the configured operating-pressure tolerance and observed solved pressure residual, normalized by the active supplied-point segment span, with complete/partial coverage and tied worst-corner provenance;
 - supplied-point residual-topology evidence for every corner, including point-coverage state, tolerance contacts, strict sign-change segments, adjacent residual transitions, sampled non-increasing behavior, positive residual increases, and discrete candidate-crossing features;
 - aggregate residual-topology coverage plus exact corner indices for residual increases or multiple discrete candidate features, with tied source provenance for the largest positive residual increase when present;
 - selected discrete crossing-candidate provenance for every solved corner, including selection policy, selected feature/rank, additional-candidate count, and aggregate selected/first-priority coverage;

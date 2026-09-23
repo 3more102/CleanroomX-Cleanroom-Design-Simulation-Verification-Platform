@@ -97,6 +97,7 @@ def test_unresolved_corners_do_not_emit_complete_envelope() -> None:
     assert result["unresolved_corner_count"] == result["corner_count"]
     assert result["operating_point_envelope"] is None
     assert result["edge_airflow_corner_ranges"] is None
+    assert result["power_corner_ranges"] is None
 
 
 def test_network_nonconvergence_is_preserved_as_indeterminate() -> None:

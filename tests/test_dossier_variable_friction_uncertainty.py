@@ -296,3 +296,32 @@ def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
     assert "fan_curve_scenarios=2" in report
     assert "Whole fan-curve scenarios" in report
     assert "lower_envelope, upper_envelope" in report
+
+
+
+def test_dossier_surfaces_efficiency_uncertainty_power_ranges() -> None:
+    result = build_dossier(
+        "examples/dossier_variable_friction_efficiency_uncertainty_demo.json"
+    )
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+
+    assert analysis["status"] == "complete"
+    assert analysis["corner_count"] == 2
+    assert analysis["power_efficiency_case_count"] == 8
+    assert analysis["power_uncertainty_case_count"] == 16
+    assert analysis["power_uncertainty_ranges"] is not None
+    assert analysis["power_uncertainty_ranges"]["electrical_input_kw"] is not None
+    assert analysis["power_uncertainty_ranges"][
+        "specific_fan_power_w_per_m3_s"
+    ] is not None
+    assert analysis["solver_quality_summary"]["complete_study_coverage"] is True
+
+    report = markdown_dossier_report(result)
+    assert "Power cases" in report
+    assert "| 16 |" in report
+    electrical = analysis["power_uncertainty_ranges"]["electrical_input_kw"]
+    sfp = analysis["power_uncertainty_ranges"][
+        "specific_fan_power_w_per_m3_s"
+    ]
+    assert f"{electrical['lower']}–{electrical['upper']}" in report
+    assert f"{sfp['lower']}–{sfp['upper']}" in report

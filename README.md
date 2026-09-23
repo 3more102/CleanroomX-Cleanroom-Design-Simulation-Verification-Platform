@@ -23,6 +23,8 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
+- Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
+- Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -102,6 +104,22 @@ The v0.5 workflow propagates user-supplied absolute bounds through room volume a
 
 See docs/UNCERTAINTY_PROVENANCE.md.
 
+## Run uncertainty-aware qualification checks
+
+    cleanroomx-qualification examples/qualification_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-qualification examples/qualification_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-qualification examples/qualification_uncertainty_demo.json --output qualification-report.md
+
+The v0.6 qualification workflow evaluates user-configured minimum/maximum requirements over the complete supplied uncertainty interval. Pressure cascades use the conservative differential interval `H_low - L_high` to `H_high - L_low`. A threshold overlap is `indeterminate`, not a pass.
+
+See docs/QUALIFICATION_UNCERTAINTY.md.
+
 ## Multi-room pressure-cascade JSON
 
 \`\`\`json
@@ -148,5 +166,8 @@ Next milestones are richer engineering reports, duct/network pressure-loss model
 - ISO 14644-4:2022 — cleanroom design, construction, and start-up.
 - ASHRAE Handbook—Fundamentals — psychrometrics.
 - ASHRAE Design Guide for Cleanrooms.
+- JCGM 100:2008 — Guide to the expression of uncertainty in measurement.
+- JCGM 106:2012 — role of measurement uncertainty in conformity assessment.
+- NIST Technical Note 1297 — Guidelines for Evaluating and Expressing the Uncertainty of NIST Measurement Results.
 
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.

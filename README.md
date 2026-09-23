@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.43 engineering core
+## v0.45 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -32,6 +32,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional variable-friction loop iteration for automatic roughness/viscosity geometry edges, with Reynolds/Darcy recomputation at solved edge flow, relaxation, closure reporting, explicit near-zero-flow handling, and pre-solve validation of stored automatic-friction evidence.
 - Bounded fan/variable-friction loop coupling that re-solves the complete Darcy-friction network at every candidate fan/system airflow, with no fan-curve extrapolation, convergence diagnostics, and explicit non-converged states.
 - Deterministic bounded uncertainty for fan/variable-friction loop coupling over explicit fixed-pressure, selected supplied fan-point pressures and airflow coordinates, and selected automatic-friction local-loss, absolute-roughness, kinematic-viscosity, air-density, duct-length, circular-diameter, and rectangular width/height bounds, with full nonlinear re-solving at every corner and no envelope when any corner is unresolved.
+- Evaluated-corner fan power evidence for nonlinear uncertainty, including fluid air power and explicitly enabled shaft/electrical/SFP metrics without inventing efficiencies or claiming continuous-box power extrema.
 - Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
@@ -101,6 +102,8 @@ v0.42 extends the nonlinear uncertainty engine to pressure bounds at selected su
 v0.43 extends the same engine to airflow-coordinate bounds at selected supplied fan-curve point indices. Nominal airflow coordinates remain single-sourced in the fan curve, every possible bounded curve must retain nonnegative strictly increasing airflow coordinates, and each combined airflow/pressure/system/duct corner is solved without fan-curve extrapolation.
 
 v0.44 adds an optional bounded fan-speed ratio to the same nonlinear corner engine. Each corner first applies any configured fan-point coordinate/pressure bounds to the supplied reference curve, then reuses the existing affinity-law transform before the complete variable-friction network solve. The speed interval must remain strictly positive; CleanroomX does not infer allowable VFD range, motor speed, manufacturer limits, or operating acceptance.
+
+v0.45 retains each solved corner's existing fan pressure/power evidence and reports evaluated-corner ranges for fluid air power plus shaft, electrical-input, and specific-fan-power metrics only when the corresponding explicit efficiency chain is configured. These are diagnostic ranges across evaluated corners, not guaranteed extrema over every interior uncertainty combination.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 

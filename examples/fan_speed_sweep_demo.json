@@ -1,0 +1,19 @@
+{
+  "name": "Supply fan affinity-law speed sweep demo",
+  "reference_speed_rpm": 1500.0,
+  "speed_ratios": [1.0, 0.8, 0.6, 0.4],
+  "reference_fan_curve": {
+    "name": "Example manufacturer reference-speed fan curve",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+      {"airflow_m3_h": 3000.0, "pressure_pa": 500.0},
+      {"airflow_m3_h": 6000.0, "pressure_pa": 300.0},
+      {"airflow_m3_h": 8000.0, "pressure_pa": 100.0}
+    ]
+  },
+  "system_curve": {
+    "name": "Example duct system",
+    "fixed_pressure_pa": 80.0,
+    "resistance_pa_per_m3_s_squared": 100.0
+  }
+}

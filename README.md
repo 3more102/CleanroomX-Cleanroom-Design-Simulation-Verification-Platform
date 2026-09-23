@@ -27,7 +27,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
-- Standalone cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
+- Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -241,7 +241,11 @@ Write a Markdown dossier:
 
     cleanroomx-dossier examples/dossier_demo.json --output dossier.md
 
-The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. Recovery INDETERMINATE results are carried into dossier attention tracking, while HVAC fan-curve duty checks from v0.12 are retained automatically when present. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
+The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. Recovery INDETERMINATE results are carried into dossier attention tracking, while HVAC fan-curve duty checks from v0.12 are retained automatically when present. Dossiers can also run the v0.17 verification/HVAC duplicated-airflow consistency check and preserve its native status in the executive summary. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
+
+Consistency-integrated dossier demo:
+
+    cleanroomx-dossier examples/dossier_consistency_demo.json
 
 See docs/ENGINEERING_DOSSIER.md.
 

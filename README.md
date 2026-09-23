@@ -27,15 +27,15 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
-- Measured particle-recovery qualification records with project-configured target and maximum recovery time.
-- Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
+- Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
+- Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
-- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, and equipment-capacity screening.
+- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, room/outdoor psychrometric states, and equipment-capacity screening.
 - Deterministic psychrometric-state uncertainty envelopes for dry-bulb temperature, relative humidity, pressure, humidity ratio, enthalpy, specific volume, dew point, and moist-air specific heat.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
@@ -49,7 +49,7 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. These are bounded models rather than a general nonlinear duct-network/control solver; CleanroomX does not infer arbitrary looped-network flows, variable friction factors, damper positions, leakage, system effect, acoustics, controls, stall/surge limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. The v0.10 thermal uncertainty workflow still holds room/outdoor psychrometric states fixed. The v0.15 standalone psychrometric uncertainty workflow evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure uncertainty box, but it is not yet coupled into thermal sizing, hourly load simulation, or equipment selection.
+The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. These workflows do not model covariance, hourly weather/load behavior, or equipment selection.
 
 ## Install
 
@@ -160,7 +160,7 @@ Write a Markdown report:
 
     cleanroomx-recovery-test examples/recovery_test_demo.json --output recovery-report.md
 
-The recovery workflow uses measured time/concentration samples directly. It records the first measured sample at or below the configured target, the measurement interval in which recovery occurred, optional traceability fields, and an optional maximum-time criterion. The log-linear fit is diagnostic only and does not replace the measured qualification result.
+The recovery workflow uses measured time/concentration samples directly and optionally accepts an absolute concentration uncertainty for each sample. PASS requires a complete sample uncertainty interval at or below the target by the configured maximum time; target overlap at the deadline is INDETERMINATE. The original nominal recovery time/window remains reported for traceability. The log-linear fit uses nominal values only and remains diagnostic.
 
 See docs/RECOVERY_TEST.md.
 
@@ -240,7 +240,7 @@ Write a Markdown dossier:
 
     cleanroomx-dossier examples/dossier_demo.json --output dossier.md
 
-The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. HVAC fan-curve duty checks from v0.12 are carried into the dossier automatically when present. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
+The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. Recovery INDETERMINATE results are carried into dossier attention tracking, while HVAC fan-curve duty checks from v0.12 are retained automatically when present. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
 
 See docs/ENGINEERING_DOSSIER.md.
 
@@ -281,7 +281,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are coupling psychrometric-state uncertainty into thermal sizing, tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

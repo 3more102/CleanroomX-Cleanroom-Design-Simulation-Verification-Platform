@@ -132,6 +132,26 @@ def markdown_hvac_report(result: dict) -> str:
             ]
         )
 
+    if result.get("fan_curve_duty_check") is not None:
+        check = result["fan_curve_duty_check"]
+        lines.extend(
+            [
+                "",
+                "## Fan-curve design-duty check",
+                "",
+                f"- Status: **{check['status'].upper()}**.",
+                f"- Required duty: **{check['required_airflow_m3_h']} m³/h at {check['required_pressure_pa']} Pa**.",
+            ]
+        )
+        if check["available_fan_pressure_pa"] is not None:
+            lines.extend(
+                [
+                    f"- Interpolated fan pressure: **{check['available_fan_pressure_pa']} Pa**.",
+                    f"- Pressure margin: **{check['pressure_margin_pa']} Pa**.",
+                ]
+            )
+        lines.extend(["", check["message"], "", check["scope_note"]])
+
     lines.extend(
         [
             "",

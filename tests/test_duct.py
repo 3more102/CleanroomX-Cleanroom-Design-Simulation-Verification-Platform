@@ -141,3 +141,62 @@ def test_segment_names_are_unique_within_path() -> None:
     )
     with pytest.raises(ValueError, match="unique"):
         DuctPath(name="Bad", segments=(segment, segment))
+
+
+def test_hvac_uses_critical_path_as_fan_duct_loss() -> None:
+    from cleanroomx.hvac import analyze_hvac_project
+    from cleanroomx.hvac_io import hvac_project_from_dict
+
+    project = hvac_project_from_dict(
+        {
+            "name": "Integrated",
+            "fan_system": {
+                "name": "AHU",
+                "duct_pressure_drop_pa": 999.0,
+                "coil_pressure_drop_pa": 100.0,
+                "other_pressure_drop_pa": 50.0,
+                "fan_efficiency": 0.7,
+                "motor_efficiency": 0.9
+            },
+            "duct_network": {
+                "name": "Supply",
+                "paths": [
+                    {
+                        "name": "Critical",
+                        "segments": [
+                            {
+                                "name": "S1",
+                                "length_m": 10.0,
+                                "airflow_m3_h": 900.0,
+                                "darcy_friction_factor": 0.02,
+                                "air_density_kg_m3": 1.2,
+                                "local_loss_coefficient": 2.0,
+                                "width_m": 0.5,
+                                "height_m": 0.25
+                            }
+                        ]
+                    }
+                ]
+            },
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 900.0,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0
+                        }
+                    }
+                }
+            ]
+        }
+    )
+
+    result = analyze_hvac_project(project)
+
+    assert result["duct_network"]["critical_path_pressure_drop_pa"] == 6.24
+    assert result["supply_fan"]["pressure_components_pa"]["duct"] == 6.24
+    assert result["supply_fan"]["duct_pressure_drop_source"] == "duct_network_critical_path"
+    assert result["supply_fan"]["configured_duct_pressure_drop_pa"] == 999.0
+    assert result["supply_fan"]["total_static_pressure_pa"] == 156.24

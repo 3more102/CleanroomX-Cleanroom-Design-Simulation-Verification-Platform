@@ -35,6 +35,13 @@ def test_summary_preserves_incomplete_and_indeterminate_states() -> None:
     assert summary["adverse_items"]["uncertainty_indeterminate"] == 1
 
 
+def test_recovery_indeterminate_is_attention_item() -> None:
+    recovery = [{"criterion_status": "indeterminate"}]
+    summary = summarize_dossier_components(recovery=recovery)
+    assert summary["state"] == "attention_required"
+    assert summary["adverse_items"]["recovery_indeterminate"] == 1
+
+
 def test_qualification_indeterminate_is_attention_item() -> None:
     qualification = [{"overall_status": "indeterminate"}]
     summary = summarize_dossier_components(qualification=qualification)

@@ -1,0 +1,25 @@
+{
+  "name": "Supply AHU Operating Point Demo",
+  "fan_curve": {
+    "name": "AHU-1 static-pressure curve",
+    "points": [
+      {
+        "airflow_m3_h": 0.0,
+        "static_pressure_pa": 800.0
+      },
+      {
+        "airflow_m3_h": 3600.0,
+        "static_pressure_pa": 600.0
+      },
+      {
+        "airflow_m3_h": 7200.0,
+        "static_pressure_pa": 400.0
+      }
+    ]
+  },
+  "system_curve": {
+    "name": "Supply system",
+    "fixed_pressure_pa": 100.0,
+    "resistance_pa_per_m3_s_squared": 500.0
+  }
+}

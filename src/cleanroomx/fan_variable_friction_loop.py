@@ -303,6 +303,27 @@ def _fan_curve_supplied_point_residual_audit(
         transition["classification"] == "increase"
         for transition in residual_transitions
     )
+    candidate_features = [
+        {
+            "feature_kind": "supplied_point_tolerance_contact",
+            "point_index": contact["point_index"],
+            "airflow_m3_h": contact["airflow_m3_h"],
+            "fan_minus_system_pressure_pa": contact[
+                "fan_minus_system_pressure_pa"
+            ],
+        }
+        for contact in tolerance_contacts
+    ]
+    candidate_features.extend(
+        {
+            "feature_kind": "strict_sign_change_segment",
+            **segment,
+        }
+        for segment in strict_sign_change_segments
+    )
+    for priority_rank, feature in enumerate(candidate_features):
+        feature["solver_priority_rank"] = priority_rank
+
     return {
         "expected_supplied_point_count": expected_count,
         "evaluated_supplied_point_count": observed_count,
@@ -312,8 +333,18 @@ def _fan_curve_supplied_point_residual_audit(
         "tolerance_contact_points": tolerance_contacts,
         "strict_sign_change_segment_count": len(strict_sign_change_segments),
         "strict_sign_change_segments": strict_sign_change_segments,
-        "candidate_crossing_feature_count": (
-            len(tolerance_contacts) + len(strict_sign_change_segments)
+        "candidate_crossing_feature_count": len(candidate_features),
+        "candidate_crossing_features_in_solver_priority_order": (
+            candidate_features
+        ),
+        "selected_candidate_feature": None,
+        "selected_candidate_feature_rank": None,
+        "additional_candidate_feature_count": None,
+        "selected_candidate_is_only_discrete_feature": None,
+        "selection_policy": (
+            "first supplied-point tolerance contact in point order; otherwise "
+            "first strict positive-to-negative sign-change segment in segment "
+            "order"
         ),
         "residual_transition_count": len(residual_transitions),
         "residual_increase_transition_count": increase_count,
@@ -330,12 +361,67 @@ def _fan_curve_supplied_point_residual_audit(
             "at the supplied fan-curve points already evaluated by the solver. "
             "It reports tolerance contacts, strict sign-change segments, and "
             "whether those sampled residuals are non-increasing within the "
-            "configured pressure tolerance. Candidate crossing features are "
-            "not a count or proof of continuous physical intersections, and "
+            "configured pressure tolerance. Candidate features are ordered "
+            "using the solver's actual selection priority, while selected-"
+            "candidate provenance is added only for solved results. Candidate "
+            "crossing features are not a count or proof of continuous physical "
+            "intersections, and "
             "sampled monotonicity is not a dynamic stability, stall/surge, "
             "manufacturer-region, or equipment-acceptance criterion."
         ),
     }
+
+
+def _with_selected_crossing_feature(
+    audit: dict,
+    *,
+    termination_reason: str,
+    selected_airflow_m3_h: float,
+    selected_segment_index: int,
+) -> dict:
+    enriched = dict(audit)
+    candidates = audit["candidate_crossing_features_in_solver_priority_order"]
+    selected = None
+
+    if termination_reason == "fan_curve_point_residual":
+        for feature in candidates:
+            if feature["feature_kind"] != "supplied_point_tolerance_contact":
+                continue
+            if math.isclose(
+                float(feature["airflow_m3_h"]),
+                float(selected_airflow_m3_h),
+                rel_tol=1e-12,
+                abs_tol=1e-6,
+            ):
+                selected = feature
+                break
+    else:
+        for feature in candidates:
+            if feature["feature_kind"] != "strict_sign_change_segment":
+                continue
+            if int(feature["low_point_index"]) == int(selected_segment_index):
+                selected = feature
+                break
+
+    selected_copy = None if selected is None else dict(selected)
+    selected_rank = (
+        None if selected_copy is None else selected_copy["solver_priority_rank"]
+    )
+    enriched.update(
+        {
+            "selected_candidate_feature": selected_copy,
+            "selected_candidate_feature_rank": selected_rank,
+            "additional_candidate_feature_count": (
+                None
+                if selected_copy is None
+                else max(0, len(candidates) - 1)
+            ),
+            "selected_candidate_is_only_discrete_feature": (
+                None if selected_copy is None else len(candidates) == 1
+            ),
+        }
+    )
+    return enriched
 
 
 def _nonconverged_result(
@@ -602,6 +688,13 @@ def solve_fan_variable_friction_loop(
         - fixed_pressure_power_w
         - edge_dissipation_w
     )
+    selected_residual_audit = _with_selected_crossing_feature(
+        base["fan_curve_supplied_point_residual_audit"],
+        termination_reason=termination_reason,
+        selected_airflow_m3_h=selected_airflow,
+        selected_segment_index=selected_segment,
+    )
+
     power_evidence["system_components"] = {
         "fixed_pressure_power_w": round(fixed_pressure_power_w, 9),
         "loop_network_terminal_pressure_power_w": round(
@@ -619,6 +712,7 @@ def solve_fan_variable_friction_loop(
     return {
         **base,
         "status": "solved",
+        "fan_curve_supplied_point_residual_audit": selected_residual_audit,
         "fan_operating_point": {
             "airflow_m3_h": round(selected_airflow, 6),
             "airflow_m3_s": round(airflow_m3_s, 9),

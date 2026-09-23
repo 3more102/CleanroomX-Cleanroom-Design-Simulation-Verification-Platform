@@ -81,6 +81,42 @@ def markdown_hvac_report(result: dict) -> str:
             ]
         )
 
+    if result["branch_flow_network"] is not None:
+        network = result["branch_flow_network"]
+        lines.extend(
+            [
+                "",
+                "## Branch-flow supply network",
+                "",
+                f"- Source node: **{network['source_node']}**.",
+                f"- Solved source airflow: **{network['source_airflow_m3_h']} m³/h**.",
+                f"- Critical terminal: **{network['critical_terminal']}**.",
+                f"- Critical-path pressure drop: **{network['critical_path_pressure_drop_pa']} Pa**.",
+                "",
+                "| Branch | From | To | Solved airflow m³/h | Pressure drop Pa |",
+                "|---|---|---|---:|---:|",
+            ]
+        )
+        for item in network["branches"]:
+            lines.append(
+                f"| {item['name']} | {item['upstream_node']} | "
+                f"{item['downstream_node']} | {item['airflow_m3_h']} | "
+                f"{item['total_pressure_drop_pa']} |"
+            )
+        lines.extend(
+            [
+                "",
+                "| Terminal | Demand m³/h | Source-to-terminal pressure drop Pa |",
+                "|---|---:|---:|",
+            ]
+        )
+        for terminal in network["terminals"]:
+            lines.append(
+                f"| {terminal['node']} | {terminal['airflow_m3_h']} | "
+                f"{terminal['total_pressure_drop_pa']} |"
+            )
+        lines.extend(["", network["scope_note"]])
+
     if result["supply_fan"] is not None:
         fan = result["supply_fan"]
         lines.extend(

@@ -396,6 +396,8 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
     assert "Candidate crossing features" in report
     assert "Selected discrete candidate" in report
     assert "Selection policy" in report
+    if audit["additional_candidate_feature_count"]:
+        assert "Nearest alternative candidate interval gap" in report
     assert "not a count or proof of continuous physical intersections" in report
 
 def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candidates() -> None:
@@ -437,4 +439,23 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
     assert selected["selected_candidate_feature"]["low_point_index"] == 0
     assert selected["additional_candidate_feature_count"] == 1
     assert selected["selected_candidate_is_only_discrete_feature"] is False
+    alternatives = selected["alternative_candidate_features"]
+    assert alternatives is not None
+    assert len(alternatives) == 1
+    assert alternatives[0]["feature_kind"] == "strict_sign_change_segment"
+    assert alternatives[0]["low_point_index"] == 2
+    assert alternatives[0]["high_point_index"] == 3
+    assert alternatives[0]["airflow_interval_low_m3_h"] == pytest.approx(2000.0)
+    assert alternatives[0]["airflow_interval_high_m3_h"] == pytest.approx(3000.0)
+    assert alternatives[0][
+        "selected_airflow_to_feature_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert selected[
+        "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert len(selected["nearest_alternative_candidate_features"]) == 1
+    assert (
+        selected["selected_airflow_overlaps_alternative_candidate_interval"]
+        is False
+    )
 

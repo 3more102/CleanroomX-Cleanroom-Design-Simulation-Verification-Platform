@@ -1515,3 +1515,109 @@ def test_indeterminate_study_withholds_nominal_relative_excursions() -> None:
     assert result["status"] == "indeterminate"
     assert result["operating_point_excursions_from_nominal"] is None
     assert result["power_evidence_excursions_from_nominal"] is None
+
+
+
+def test_fan_curve_boundary_clearance_preserves_exact_corner_ranges() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    nominal = result["nominal_fan_curve_boundary_clearance"]
+    summary = result["fan_curve_boundary_clearance_summary"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["solved_corner_count"] == result["corner_count"]
+
+    clearances = []
+    for corner in result["corners"]:
+        clearance = corner["fan_curve_boundary_clearance"]
+        assert clearance is not None
+        lower, upper = corner["fan_curve_airflow_range_m3_h"]
+        airflow = corner["operating_point"]["airflow_m3_h"]
+        span = upper - lower
+
+        assert clearance["operating_airflow_m3_h"] == pytest.approx(
+            airflow, abs=1e-6
+        )
+        assert clearance["lower_boundary_headroom_m3_h"] == pytest.approx(
+            airflow - lower, abs=1e-6
+        )
+        assert clearance["upper_boundary_headroom_m3_h"] == pytest.approx(
+            upper - airflow, abs=1e-6
+        )
+        assert clearance["nearest_boundary_headroom_m3_h"] == pytest.approx(
+            min(airflow - lower, upper - airflow), abs=1e-6
+        )
+        assert clearance["normalized_airflow_position"] == pytest.approx(
+            (airflow - lower) / span, abs=1e-9
+        )
+        assert clearance[
+            "nearest_boundary_headroom_fraction"
+        ] == pytest.approx(
+            min(airflow - lower, upper - airflow) / span,
+            abs=1e-9,
+        )
+        clearances.append(clearance)
+
+    minimum_absolute = min(
+        item["nearest_boundary_headroom_m3_h"] for item in clearances
+    )
+    minimum_fraction = min(
+        item["nearest_boundary_headroom_fraction"] for item in clearances
+    )
+    absolute_evidence = summary[
+        "minimum_nearest_boundary_headroom_m3_h"
+    ]
+    normalized_evidence = summary[
+        "minimum_nearest_boundary_headroom_fraction"
+    ]
+    assert absolute_evidence["value"] == pytest.approx(
+        minimum_absolute, abs=1e-6
+    )
+    assert normalized_evidence["value"] == pytest.approx(
+        minimum_fraction, abs=1e-9
+    )
+
+    for evidence in (absolute_evidence, normalized_evidence):
+        assert evidence["sources"]
+        for source in evidence["sources"]:
+            corner = result["corners"][source["corner_index"]]
+            clearance = corner["fan_curve_boundary_clearance"]
+            assert source["operating_airflow_m3_h"] == pytest.approx(
+                clearance["operating_airflow_m3_h"], abs=1e-6
+            )
+            assert source["fan_curve_airflow_range_m3_h"] == (
+                clearance["fan_curve_airflow_range_m3_h"]
+            )
+            assert source["nearest_boundary"] == clearance[
+                "nearest_boundary"
+            ]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Supplied fan-curve boundary clearance" in report
+    assert "Nearest endpoint airflow headroom" in report
+    assert "no-extrapolation audit diagnostic only" in report
+
+
+def test_fan_curve_boundary_clearance_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["fan_curve_boundary_clearance_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_fan_curve_boundary_clearance"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["solved_corner_count"] == 0
+    assert summary["minimum_nearest_boundary_headroom_m3_h"] is None
+    assert summary["minimum_nearest_boundary_headroom_fraction"] is None
+    assert all(
+        corner["fan_curve_boundary_clearance"] is None
+        for corner in result["corners"]
+    )

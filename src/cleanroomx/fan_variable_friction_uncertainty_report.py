@@ -669,6 +669,103 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.extend(["", conditioning_summary["scope_note"]])
 
 
+    pressure_airflow_summary = result.get(
+        "pressure_residual_airflow_equivalence_summary"
+    )
+    nominal_pressure_airflow = result.get(
+        "nominal_pressure_residual_airflow_equivalence"
+    )
+    if pressure_airflow_summary:
+        coverage_label = (
+            "complete"
+            if pressure_airflow_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Pressure residual → airflow numerical equivalence",
+                "",
+                "- Corners with diagnostic evidence: "
+                f"**{pressure_airflow_summary['diagnostic_evidence_corner_count']}/"
+                f"{pressure_airflow_summary['corner_count']}**",
+                "- Corners with evaluable pressure-to-airflow mapping: "
+                f"**{pressure_airflow_summary['evaluable_corner_count']}/"
+                f"{pressure_airflow_summary['corner_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_pressure_airflow is None:
+            lines.append(
+                "- Nominal pressure-to-airflow equivalence: **not available**"
+            )
+        elif nominal_pressure_airflow["status"] != "evaluated":
+            lines.append(
+                "- Nominal pressure-to-airflow equivalence: "
+                f"**{nominal_pressure_airflow['status']}**"
+            )
+        else:
+            lines.extend(
+                [
+                    "- Nominal configured pressure tolerance: "
+                    f"**{nominal_pressure_airflow['configured_operating_pressure_tolerance_pa']} Pa**",
+                    "- Nominal solved pressure residual: "
+                    f"**{nominal_pressure_airflow['solved_pressure_residual_pa']} Pa**",
+                    "- Nominal configured-tolerance airflow equivalent: "
+                    f"**{nominal_pressure_airflow['configured_tolerance_equivalent_airflow_m3_h']} "
+                    "m³/h**",
+                    "- Nominal solved-residual airflow equivalent: "
+                    f"**{nominal_pressure_airflow['solved_residual_equivalent_airflow_m3_h']} "
+                    "m³/h**",
+                    "- Nominal signed linearized airflow correction: "
+                    f"**{nominal_pressure_airflow['signed_linearized_airflow_correction_m3_h']} "
+                    "m³/h**",
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "| Metric | Maximum | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        pressure_airflow_rows = (
+            (
+                "maximum_configured_tolerance_equivalent_airflow_m3_h",
+                "Configured pressure-tolerance airflow equivalent",
+            ),
+            (
+                "maximum_solved_residual_equivalent_airflow_m3_h",
+                "Solved pressure-residual airflow equivalent",
+            ),
+            (
+                "maximum_configured_tolerance_equivalent_fraction_of_bracket_span",
+                "Configured-tolerance equivalent / bracket span",
+            ),
+            (
+                "maximum_solved_residual_equivalent_fraction_of_bracket_span",
+                "Solved-residual equivalent / bracket span",
+            ),
+        )
+        for key, label in pressure_airflow_rows:
+            evidence = pressure_airflow_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; residual={source['solved_pressure_residual_pa']} Pa"
+                    + f"; residual-slope={source['fan_minus_system_slope_pa_per_m3_h']}"
+                    + f"; linearized-dQ={source['signed_linearized_airflow_correction_m3_h']} m³/h"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", pressure_airflow_summary["scope_note"]])
+
     segment_summary = result.get("fan_curve_segment_position_summary")
     nominal_segment = result.get("nominal_fan_curve_segment_position")
     if segment_summary:

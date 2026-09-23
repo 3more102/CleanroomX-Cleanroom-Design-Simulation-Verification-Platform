@@ -6,6 +6,7 @@ from itertools import product
 from math import prod
 
 from .fan_curve import FanCurve
+from .fan_speed import scale_fan_curve_for_speed
 from .fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
     solve_fan_variable_friction_loop,
@@ -50,6 +51,9 @@ class FanVariableFrictionLoopUncertaintyStudy:
     fan_curve_airflow_m3_h: dict[int, UncertainValue] = field(
         default_factory=dict
     )
+    fan_speed_ratio: UncertainValue = field(
+        default_factory=lambda: UncertainValue(1.0, "1")
+    )
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256
     power_efficiencies: FanPowerEfficiencies | None = None
@@ -72,6 +76,12 @@ class FanVariableFrictionLoopUncertaintyStudy:
         if self.fixed_pressure_pa.lower < 0:
             raise ValueError(
                 "fixed_pressure_pa lower uncertainty bound must remain >= 0"
+            )
+        if self.fan_speed_ratio.unit != "1":
+            raise ValueError("fan_speed_ratio unit must be '1'")
+        if self.fan_speed_ratio.lower <= 0:
+            raise ValueError(
+                "fan_speed_ratio lower uncertainty bound must remain > 0"
             )
         if (
             isinstance(self.max_corner_cases, bool)
@@ -710,8 +720,9 @@ def _fan_curve_at_corner(
     study: FanVariableFrictionLoopUncertaintyStudy,
     pressure_overrides: dict[float, float],
     airflow_overrides: dict[int, float],
+    speed_ratio: float,
 ) -> FanCurve:
-    return FanCurve(
+    bounded_reference_curve = FanCurve(
         name=study.fan_curve.name,
         points=tuple(
             type(point)(
@@ -727,6 +738,10 @@ def _fan_curve_at_corner(
             for point_index, point in enumerate(study.fan_curve.points)
         ),
     )
+    return scale_fan_curve_for_speed(
+        bounded_reference_curve,
+        speed_ratio,
+    )
 
 
 def _solve_case(
@@ -735,6 +750,7 @@ def _solve_case(
     edge_parameter_overrides: dict[str, dict[str, float]],
     fan_pressure_overrides: dict[float, float] | None = None,
     fan_airflow_overrides: dict[int, float] | None = None,
+    fan_speed_ratio: float = 1.0,
 ) -> dict:
     return solve_fan_variable_friction_loop(
         FanVariableFrictionLoopStudy(
@@ -743,6 +759,7 @@ def _solve_case(
                 study,
                 fan_pressure_overrides or {},
                 fan_airflow_overrides or {},
+                fan_speed_ratio,
             ),
             loop_network=_network_at_corner(study, edge_parameter_overrides),
             fan_discharge_node=study.fan_discharge_node,
@@ -863,6 +880,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         nominal_overrides,
         nominal_fan_pressure_overrides,
         nominal_fan_airflow_overrides,
+        study.fan_speed_ratio.value,
     )
 
     fixed_values = sorted(
@@ -887,6 +905,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         sorted({item.lower, item.upper})
         for _point_index, item in fan_airflow_dimensions
     ]
+    fan_speed_values = sorted(
+        {study.fan_speed_ratio.lower, study.fan_speed_ratio.upper}
+    )
 
     # Enforce the configured combinatorial limit before materializing any
     # Cartesian product. This keeps an invalid high-dimensional uncertainty
@@ -896,6 +917,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         * prod(len(values) for values in value_sets)
         * prod(len(values) for values in fan_pressure_value_sets)
         * prod(len(values) for values in fan_airflow_value_sets)
+        * len(fan_speed_values)
     )
     if corner_count > study.max_corner_cases:
         raise ValueError(
@@ -917,6 +939,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
         if fan_airflow_value_sets
         else [()]
     )
+    fan_airflow_speed_combinations = [
+        (fan_airflow_values, fan_speed_ratio)
+        for fan_airflow_values in fan_airflow_combinations
+        for fan_speed_ratio in fan_speed_values
+    ]
 
     corners = []
     solved_points = []
@@ -944,7 +971,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
                         fan_pressure_values,
                     )
                 }
-                for fan_airflow_values in fan_airflow_combinations:
+                for (
+                    fan_airflow_values,
+                    fan_speed_ratio,
+                ) in fan_airflow_speed_combinations:
                     fan_airflow_overrides = {
                         point_index: value
                         for (point_index, _item), value in zip(
@@ -958,6 +988,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                         edge_parameter_overrides,
                         fan_pressure_overrides,
                         fan_airflow_overrides,
+                        fan_speed_ratio,
                     )
                     point = result["fan_operating_point"]
                     network = result["operating_network_solution"]
@@ -977,6 +1008,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                     corners.append(
                         {
                             "fixed_pressure_pa": round(fixed_pressure, 6),
+                            "fan_speed_ratio": round(fan_speed_ratio, 6),
                             "fan_curve_pressure_pa": {
                                 str(round(airflow_m3_h, 6)): round(value, 6)
                                 for airflow_m3_h, value in fan_pressure_overrides.items()
@@ -1067,6 +1099,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
         )
         for point_index, item in sorted(study.fan_curve_airflow_m3_h.items())
     ]
+    fan_speed_record = _input_record(
+        "fan_speed_ratio",
+        study.fan_speed_ratio,
+    )
     edge_records = [
         *[
             _input_record(f"edge_local_loss:{name}", item)
@@ -1105,6 +1141,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         record["name"]
         for record in [
             fixed_record,
+            fan_speed_record,
             *fan_pressure_records,
             *fan_airflow_records,
             *edge_records,
@@ -1127,6 +1164,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "lower": study.fixed_pressure_pa.lower,
                 "upper": study.fixed_pressure_pa.upper,
                 "unit": "Pa",
+            },
+            "fan_speed_ratio": {
+                "nominal": study.fan_speed_ratio.value,
+                "lower": study.fan_speed_ratio.lower,
+                "upper": study.fan_speed_ratio.upper,
+                "unit": "1",
             },
             "fan_curve_pressure_pa": {
                 str(round(airflow_m3_h, 6)): {
@@ -1242,6 +1285,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
             ),
             "inputs": [
                 fixed_record,
+                fan_speed_record,
                 *fan_pressure_records,
                 *fan_airflow_records,
                 *edge_records,
@@ -1259,8 +1303,8 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "engineering_note": (
             "This is deterministic corner analysis for user-supplied "
-            "absolute bounds on fixed pressure, selected supplied fan-curve "
-            "point pressures and airflow coordinates, and selected "
+            "absolute bounds on fixed pressure, fan speed ratio, selected "
+            "supplied fan-curve point pressures and airflow coordinates, and selected "
             "automatic-friction duct local-loss "
             "coefficients, absolute roughness, kinematic viscosity, air density, "
             "duct length, circular diameter, and rectangular width/height. "

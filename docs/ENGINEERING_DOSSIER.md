@@ -14,6 +14,8 @@ A dossier manifest can reference:
 - zero or more thermal/HVAC uncertainty analyses;
 - zero or more standalone psychrometric-state uncertainty analyses;
 - zero or more fan/system operating-point studies;
+- zero or more reference-flow fan/duct-network operating-point studies;
+- zero or more fan-driven passive parallel-network operating-point studies;
 - an optional v0.17 verification/HVAC duplicated-input consistency check.
 
 Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
@@ -33,6 +35,8 @@ Example:
   "thermal_uncertainty_analyses": ["thermal_uncertainty_demo.json"],
   "psychrometric_uncertainty_analyses": ["psychrometric_uncertainty_demo.json"],
   "fan_operating_point_studies": ["fan_operating_point_demo.json"],
+  "fan_duct_network_studies": ["fan_duct_network_demo.json"],
+  "fan_parallel_network_studies": ["fan_parallel_network_demo.json"],
   "consistency_checks": {
     "verification_hvac_airflow": {
       "room_airflow_abs_tolerance_m3_h": 0.0,
@@ -65,11 +69,11 @@ Each referenced source file is hashed byte-for-byte with SHA-256. The report rec
 
 The dossier preserves component-specific states instead of turning every result into a certification verdict:
 
-- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a configured cross-module consistency check failed, or a fan/system study has no intersection inside the supplied fan-curve range;
+- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a configured cross-module consistency check failed, or any standalone/integrated fan study has no intersection inside the supplied fan-curve range;
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, or a standalone psychrometric analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. A solved fan operating point and a completed psychrometric-state envelope are reported as engineering screening, not as equipment acceptance or conformity decisions. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, and passive parallel-network operating points are reported as bounded engineering screening, not equipment acceptance. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
 
 ## CLI
 

@@ -1,8 +1,8 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.3 engineering core
+## v0.4 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -10,7 +10,6 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Directed room-to-room pressure-cascade verification using project-configured minimum pressure differences.
 - Validation for duplicate rooms, unknown cascade references, duplicate links, and impossible directed pressure cycles.
 - A transparent well-mixed first-order particle decay/recovery screening model.
-- JSON input, command-line workflows, unit tests, and GitHub Actions CI on Python 3.11–3.13.
 - Psychrometric room/outdoor air-state calculations.
 - Explicit sensible and latent heat-load inputs.
 - Makeup-air load and preliminary cooling/heating capacity calculations.
@@ -18,12 +17,16 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional FFU/filter-unit count from rated airflow and explicit design utilization.
 - Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
+- Measured particle-recovery qualification records with project-configured target and maximum recovery time.
+- Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
+- Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
+- JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
 
-CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
+CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, a fitted recovery model, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. ISO 14644-3 provides cleanroom test methods. Project, process, safety, and regulatory requirements can add other criteria.
 
-CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, or fan-sizing limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, manufacturer data, or regulator.
+CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, fan-sizing, particle-target, or recovery-time limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, qualification protocol, process design basis, manufacturer data, or regulator.
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
@@ -41,11 +44,9 @@ The HVAC module is also a preliminary engineering model. It does not replace det
 
     cleanroomx verify-project examples/facility_project.json
 
-The project verifier checks every room and every configured directed pressure-cascade edge. A link such as Process -> Preparation means the observed Process pressure must exceed the observed Preparation pressure by at least the configured minimum delta pressure.
+A failing configured verification requirement returns exit code 2.
 
-A failing configured requirement returns exit code 2, making both verification commands usable in automated design pipelines.
-
-## Run the screening simulation
+## Run the particle screening simulation
 
     cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 0.95
     cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
@@ -63,6 +64,22 @@ Write a Markdown report:
     cleanroomx-hvac examples/semiconductor_thermal_demo.json --output hvac-report.md
 
 The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data and a preliminary supply-fan model. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, and docs/STANDARDS.md.
+
+## Analyze a measured particle-recovery test
+
+    cleanroomx-recovery-test examples/recovery_test_demo.json
+
+JSON output:
+
+    cleanroomx-recovery-test examples/recovery_test_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-recovery-test examples/recovery_test_demo.json --output recovery-report.md
+
+The recovery workflow uses measured time/concentration samples directly. It records the first measured sample at or below the configured target, the measurement interval in which recovery occurred, optional traceability fields, and an optional maximum-time criterion. The log-linear fit is diagnostic only and does not replace the measured qualification result.
+
+See docs/RECOVERY_TEST.md.
 
 ## Multi-room pressure-cascade JSON
 
@@ -101,13 +118,14 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are recovery-test workflows, uncertainty/provenance tracking, richer report generation, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
+Next milestones are uncertainty/provenance tracking, richer engineering reports, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
 - ISO 14644-1:2015 — classification of air cleanliness by particle concentration.
+- ISO 14644-3:2019 — cleanroom and clean-zone test methods.
 - ISO 14644-4:2022 — cleanroom design, construction, and start-up.
 - ASHRAE Handbook—Fundamentals — psychrometrics.
 - ASHRAE Design Guide for Cleanrooms.
 
-Always use the applicable purchased standard, local regulations, client URS/specification, manufacturer data, and qualified engineering judgment for real projects.
+Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.

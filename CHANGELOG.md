@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.23.1 loop-network injection-balance hardening — 2026-09-23
+
+- Tightened loop-network global node-injection validation to a fixed absolute tolerance of 1e-6 m³/h.
+- Removed flow-magnitude-relative scaling that could admit a materially nonzero net source/sink mismatch in very large-flow inputs.
+- Added regression coverage proving a 0.1 m³/h imbalance is rejected even when opposing node flows are near 1e9 m³/h.
+- Bumped package/runtime metadata to v0.23.1.
+
 ## v0.23 fixed-resistance looped airflow networks — 2026-09-23
 
 - Added a connected steady-state pressure-node solver for airflow networks with arbitrary loops.

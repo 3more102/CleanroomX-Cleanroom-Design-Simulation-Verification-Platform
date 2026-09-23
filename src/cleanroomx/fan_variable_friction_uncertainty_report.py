@@ -26,6 +26,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         f"- Fixed pressure: **{fixed['lower']} to {fixed['upper']} Pa** "
         f"(nominal {fixed['nominal']} Pa)"
     )
+    speed = result["input_intervals"].get("fan_speed_ratio")
+    if speed is not None:
+        lines.append(
+            f"- Fan speed ratio: **{speed['lower']} to {speed['upper']}** "
+            f"(nominal {speed['nominal']})"
+        )
     for airflow, interval in result["input_intervals"].get(
         "fan_curve_pressure_pa", {}
     ).items():
@@ -147,8 +153,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             "",
             "## Corner results",
             "",
-            "| Fixed pressure Pa | Fan-point pressures Pa | Fan-point airflows m³/h | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
-            "|---:|---|---|---|---|---|---:|---:|",
+            "| Fixed pressure Pa | Speed ratio | Fan-point pressures Pa | Fan-point airflows m³/h | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
+            "|---:|---:|---|---|---|---|---|---:|---:|",
         ]
     )
     for corner in result["corners"]:
@@ -186,8 +192,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"{name} {label}={value} {unit}"
                 )
         lines.append(
-            f"| {corner['fixed_pressure_pa']} | {fan_pressures or '—'} | "
-            f"{fan_airflows or '—'} | {local_losses or '—'} | "
+            f"| {corner['fixed_pressure_pa']} | "
+            f"{corner.get('fan_speed_ratio', 1.0)} | "
+            f"{fan_pressures or '—'} | {fan_airflows or '—'} | "
+            f"{local_losses or '—'} | "
             f"{', '.join(physical_values) or '—'} | {corner['status']} | "
             f"{_fmt(None if point is None else point['airflow_m3_h'])} | "
             f"{_fmt(None if point is None else point['system_pressure_pa'])} |"

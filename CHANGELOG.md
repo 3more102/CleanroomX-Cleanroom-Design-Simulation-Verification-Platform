@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.20 fixed-resistance looped airflow networks — 2026-09-23
+
+- Added a connected pressure-node airflow solver for networks containing arbitrary loops under explicit fixed quadratic edge laws `ΔP = R·Q·|Q|`.
+- Added explicit balanced node injections/withdrawals and a configurable pressure reference node, with signed edge flows that may reverse relative to the declared edge direction.
+- Added connected-topology, endpoint, finite-input, positive-resistance, and global mass-balance validation.
+- Added spanning-tree initialization plus damped Newton iteration with backtracking for the nonlinear node-continuity equations.
+- Added per-node continuity residuals, per-edge pressure-law residuals, relative node pressures, and actual solved flow directions.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-loop-flow` CLI, a meshed-network example, engineering-scope documentation, and regression coverage.
+- Kept the workflow explicitly bounded: resistances and node injections are supplied by the user; no duct geometry, friction-factor iteration, leakage, dampers, controls, fan curves, compressibility, or transient behavior is inferred.
+- Bumped package/runtime metadata to v0.20.0.
+
 ## v0.19 bounded fan-speed affinity-law study — 2026-09-23
 
 - Added explicit user-supplied fan speed-ratio sweeps from a supplied reference fan curve.

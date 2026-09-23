@@ -1,6 +1,6 @@
 # Fan-curve integration with a reference duct network
 
-CleanroomX v0.12 links the bounded v0.11 fan-curve solver to the
+CleanroomX v0.14 links the bounded v0.11 fan-curve solver to the
 path-based duct model. It derives a quadratic system resistance from
 explicit duct geometry, Darcy friction factors, air density, local-loss
 coefficients, and a user-supplied reference flow distribution.

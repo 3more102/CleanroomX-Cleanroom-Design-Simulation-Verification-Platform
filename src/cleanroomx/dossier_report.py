@@ -106,8 +106,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Recovery qualification",
                 "",
-                "| Test | Status | Observed recovery min | Target particles/m³ |",
-                "|---|---|---:|---:|",
+                "| Test | Status | Nominal recovery min | Confirmed recovery min | Target particles/m³ |",
+                "|---|---|---:|---:|---:|",
             ]
         )
         for item in result["recovery_tests"]:
@@ -116,9 +116,13 @@ def markdown_dossier_report(result: dict) -> str:
                 if item["observed_recovery_time_minutes"] is None
                 else item["observed_recovery_time_minutes"]
             )
+            confirmed = item.get("uncertainty_assessment", {}).get(
+                "first_confirmed_recovery_sample_time_minutes"
+            )
+            confirmed = "—" if confirmed is None else confirmed
             lines.append(
                 f"| {item['test']} | {item['criterion_status']} | {observed} | "
-                f"{item['target_concentration_per_m3']} |"
+                f"{confirmed} | {item['target_concentration_per_m3']} |"
             )
 
     if result["qualification_analyses"]:

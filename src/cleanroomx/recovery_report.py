@@ -9,12 +9,30 @@ def markdown_recovery_report(result: dict) -> str:
             "",
             f"- Particle size: **{result['particle_size_um']} µm**",
             f"- Target concentration: **{result['target_concentration_per_m3']} particles/m³**",
-            f"- Target reached: **{'yes' if result['reached_target'] else 'no'}**",
-            f"- Observed recovery time: **{result['observed_recovery_time_minutes'] if result['observed_recovery_time_minutes'] is not None else 'not reached'} min**",
+            f"- Nominal target reached: **{'yes' if result['reached_target'] else 'no'}**",
+            f"- Observed nominal recovery time: **{result['observed_recovery_time_minutes'] if result['observed_recovery_time_minutes'] is not None else 'not reached'} min**",
             f"- Configured maximum recovery time: **{result['max_recovery_time_minutes'] if result['max_recovery_time_minutes'] is not None else 'not configured'}**",
             f"- Criterion status: **{result['criterion_status'].upper()}**",
             "",
             result["criterion_message"],
+            "",
+        ]
+    )
+
+    uncertainty = result["uncertainty_assessment"]
+    lines.extend(
+        [
+            "## Measurement uncertainty",
+            "",
+            f"- Uncertainty supplied: **{'yes' if uncertainty['uncertainty_present'] else 'no'}**",
+            f"- Target possibly reached: **{'yes' if uncertainty['possible_reached_target'] else 'no'}**",
+            f"- Target confirmed reached: **{'yes' if uncertainty['confirmed_reached_target'] else 'no'}**",
+            "- First possible recovery sample: "
+            f"**{uncertainty['first_possible_recovery_sample_time_minutes'] if uncertainty['first_possible_recovery_sample_time_minutes'] is not None else 'not observed'} min**",
+            "- First confirmed recovery sample: "
+            f"**{uncertainty['first_confirmed_recovery_sample_time_minutes'] if uncertainty['first_confirmed_recovery_sample_time_minutes'] is not None else 'not observed'} min**",
+            "",
+            uncertainty["decision_rule"],
             "",
         ]
     )
@@ -31,14 +49,17 @@ def markdown_recovery_report(result: dict) -> str:
         [
             "## Samples",
             "",
-            "| Time (min) | Concentration (particles/m³) | At/below target |",
-            "|---:|---:|---|",
+            "| Time (min) | Nominal concentration | ± uncertainty | Interval (particles/m³) | Target relation |",
+            "|---:|---:|---:|---:|---|",
         ]
     )
     for sample in result["samples"]:
+        interval = sample["concentration_interval_per_m3"]
         lines.append(
             f"| {sample['time_minutes']} | {sample['concentration_per_m3']} | "
-            f"{'yes' if sample['at_or_below_target'] else 'no'} |"
+            f"{sample['concentration_uncertainty_abs']} | "
+            f"{interval['lower']}–{interval['upper']} | "
+            f"{sample['target_relation']} |"
         )
 
     fit = result["log_linear_fit"]

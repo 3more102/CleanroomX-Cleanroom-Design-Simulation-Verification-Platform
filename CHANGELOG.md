@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.19 bounded fan-speed affinity-law study — 2026-09-23
+
+- Added explicit user-supplied fan speed-ratio sweeps from a supplied reference fan curve.
+- Applied classical fan affinity-law scaling to supplied points: airflow proportional to speed, pressure proportional to speed squared, and theoretical power scaling proportional to speed cubed.
+- Reused the existing bounded fan/system operating-point solver for every transformed speed case, preserving no-extrapolation and no-intersection behavior.
+- Added optional reference-rpm reporting while keeping allowed fan/VFD speed ranges external to CleanroomX.
+- Kept fluid air power (Q×pressure) separate from the cubic affinity-law power-scaling indicator; no motor/VFD efficiency or electrical-input model is inferred.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-speed` CLI, example data, documentation, and regression coverage.
+- Bumped package/runtime metadata to v0.19.0.
+
 ## v0.18 complete engineering dossier — 2026-09-23
 
 - Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.

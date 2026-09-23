@@ -60,9 +60,6 @@ def markdown_fan_system_uncertainty_report(result: dict) -> str:
                 "- System pressure: "
                 f"**{envelope['system_pressure_pa']['lower']} to "
                 f"{envelope['system_pressure_pa']['upper']} Pa**",
-                "- Air power: "
-                f"**{envelope['air_power_kw']['lower']} to "
-                f"{envelope['air_power_kw']['upper']} kW**",
             ]
         )
 

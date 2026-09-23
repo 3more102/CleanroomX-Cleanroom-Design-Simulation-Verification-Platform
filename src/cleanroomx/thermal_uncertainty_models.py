@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 
 from .hvac_models import AirState
-from .psychrometric_uncertainty_models import UncertainAirState
+from .psychrometric_uncertainty_models import UncertainAirState as SharedUncertainAirState
 from .uncertainty_models import UncertainValue
 
 
@@ -31,7 +31,28 @@ def _expect_unit(item: UncertainValue, expected: str, field_name: str) -> None:
         )
 
 
-AirStateInput = AirState | UncertainAirState
+class UncertainAirState(SharedUncertainAirState):
+    """Backward-compatible thermal wrapper around the shared air-state model."""
+
+    def __init__(
+        self,
+        dry_bulb_c: UncertainValue,
+        relative_humidity_percent: UncertainValue,
+        pressure_kpa: UncertainValue | None = None,
+    ) -> None:
+        super().__init__(
+            name="Thermal uncertainty air state",
+            dry_bulb_c=dry_bulb_c,
+            relative_humidity_percent=relative_humidity_percent,
+            pressure_kpa=(
+                pressure_kpa
+                if pressure_kpa is not None
+                else UncertainValue(101.325, "kPa")
+            ),
+        )
+
+
+AirStateInput = AirState | SharedUncertainAirState
 
 
 @dataclass(frozen=True)
@@ -92,7 +113,7 @@ class UncertainThermalDesign:
             _expect_unit(self.supply_air_temp_c, "C", "supply_air_temp_c")
             room_lower = (
                 self.room_air.dry_bulb_c.lower
-                if isinstance(self.room_air, UncertainAirState)
+                if isinstance(self.room_air, SharedUncertainAirState)
                 else self.room_air.dry_bulb_c
             )
             if (

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .duct import DuctNetwork, DuctSection
+from .duct import DuctNetwork, DuctSection, derive_duct_section_quadratic_resistance
 from .fan_curve import (
     FanCurve,
     FanOperatingPointStudy,
@@ -54,28 +54,13 @@ class FanDuctNetworkStudy:
                     )
 
 
-def _section_base_resistance(section: DuctSection) -> float:
-    friction_factor = section.friction_analysis()["friction_factor"]
-    loss_multiplier = (
-        friction_factor
-        * section.length_m
-        / section.hydraulic_diameter_m
-        + section.local_loss_coefficient
-    )
-    return (
-        0.5
-        * section.air_density_kg_m3
-        * loss_multiplier
-        / (section.area_m2**2)
-    )
-
-
 def _section_scaled_resistance(
     section: DuctSection,
     reference_system_airflow_m3_h: float,
 ) -> float:
     flow_ratio = section.airflow_m3_h / reference_system_airflow_m3_h
-    return _section_base_resistance(section) * flow_ratio**2
+    base = derive_duct_section_quadratic_resistance(section)
+    return base["quadratic_resistance_pa_per_m3_s_squared"] * flow_ratio**2
 
 
 def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:

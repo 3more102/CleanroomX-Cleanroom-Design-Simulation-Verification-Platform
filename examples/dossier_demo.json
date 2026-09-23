@@ -1,0 +1,18 @@
+{
+  "name": "CleanroomX Integrated Engineering Demo",
+  "project_reference": "CRX-DEMO-001",
+  "revision": "A",
+  "prepared_by": "CleanroomX",
+  "notes": "Demonstration manifest only; numeric limits in referenced examples are project inputs, not universal acceptance limits.",
+  "verification_project": "facility_project.json",
+  "hvac_project": "duct_network_demo.json",
+  "recovery_tests": [
+    "recovery_test_demo.json"
+  ],
+  "uncertainty_rooms": [
+    "uncertainty_room_demo.json"
+  ],
+  "qualification_analyses": [
+    "qualification_uncertainty_demo.json"
+  ]
+}

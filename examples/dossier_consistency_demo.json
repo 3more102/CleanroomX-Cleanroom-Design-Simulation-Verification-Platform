@@ -1,0 +1,13 @@
+{
+  "name": "CleanroomX Cross-Module Dossier Demo",
+  "project_reference": "CRX-CONSISTENCY-DEMO-001",
+  "revision": "A",
+  "prepared_by": "CleanroomX",
+  "notes": "Demonstration manifest only; the airflow tolerance is an explicit data-consistency setting, not a standards-derived acceptance limit.",
+  "verification_project": "facility_project.json",
+  "hvac_project": "consistency_hvac_demo.json",
+  "cross_module_consistency": {
+    "room_airflow_abs_tolerance_m3_h": 0,
+    "require_same_room_set": true
+  }
+}

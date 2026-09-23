@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.26 bounded fan / loop-network coupling — 2026-09-23
+
+- Added two-terminal coupling between supplied fan curves and connected fixed-resistance loop networks.
+- Derives an equivalent loop resistance from a reference through-flow solve, using the exact quadratic scaling of fixed `R·Q·|Q|` edges.
+- Requires equal/opposite fan discharge and suction reference injections and zero external injection at every other node.
+- Intersects `fixed_pressure + R_eq·Q²` with the supplied fan curve without extrapolation, then re-solves the original loop at the operating airflow.
+- Reports reference and operating network evidence, signed edge flows, node pressures, continuity/pressure-law residuals, equivalent-network residual, and fan/system residual.
+- Reuses v0.25 explicit or geometry-derived loop edges unchanged; geometry/reference-flow friction remains frozen at its declared basis.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-loop` CLI, example data, documentation, and focused regression tests.
+- Bumped package/runtime metadata to v0.26.0.
+
 ## v0.25 geometry-derived fixed loop resistance — 2026-09-23
 
 - Added optional derivation of loop-edge quadratic resistance from explicit circular or rectangular duct geometry.

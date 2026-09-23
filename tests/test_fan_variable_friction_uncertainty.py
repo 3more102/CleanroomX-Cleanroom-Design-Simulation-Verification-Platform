@@ -2109,6 +2109,15 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert summary["monotonic_non_increasing_corner_count"] == (
         result["corner_count"]
     )
+    assert summary["selected_candidate_feature_corner_count"] == (
+        result["solved_corner_count"]
+    )
+    assert summary["selected_first_priority_candidate_corner_count"] == (
+        result["solved_corner_count"]
+    )
+    assert summary[
+        "solved_with_additional_candidate_feature_corner_count"
+    ] >= 0
     assert summary["residual_increase_corner_count"] == 0
     assert summary["residual_increase_corner_indices"] == []
     assert summary["maximum_positive_residual_increase_pa"] is None
@@ -2124,6 +2133,7 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
     assert "Supplied-point residual topology across corners" in report
     assert "Corners monotonic non-increasing within tolerance" in report
+    assert "Solved corners with selected-candidate provenance" in report
     assert "do not prove continuous uniqueness" in report
 
 

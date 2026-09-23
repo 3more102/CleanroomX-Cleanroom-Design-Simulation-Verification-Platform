@@ -18,6 +18,8 @@ class BranchDuct:
     diameter_m: float | None = None
     width_m: float | None = None
     height_m: float | None = None
+    absolute_roughness_m: float | None = None
+    kinematic_viscosity_m2_s: float | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -38,6 +40,8 @@ class BranchDuct:
             diameter_m=self.diameter_m,
             width_m=self.width_m,
             height_m=self.height_m,
+            absolute_roughness_m=self.absolute_roughness_m,
+            kinematic_viscosity_m2_s=self.kinematic_viscosity_m2_s,
         )
 
     def section_at_flow(self, airflow_m3_h: float) -> DuctSection:
@@ -51,6 +55,8 @@ class BranchDuct:
             diameter_m=self.diameter_m,
             width_m=self.width_m,
             height_m=self.height_m,
+            absolute_roughness_m=self.absolute_roughness_m,
+            kinematic_viscosity_m2_s=self.kinematic_viscosity_m2_s,
         )
 
 
@@ -253,7 +259,8 @@ def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
         "scope_note": (
             "Branch airflows are solved by mass continuity from explicit fixed terminal "
             "demands in a directed tree. Pressure losses then use the existing "
-            "Darcy-Weisbach/local-K section model. This is not a nonlinear pressure-"
+            "Darcy-Weisbach/local-K section model, including optional Reynolds/roughness-"
+            "based friction at each solved branch flow. This is not a nonlinear pressure-"
             "balancing solver: loops, parallel feeds, pressure-driven terminal flows, "
             "damper positions, fan curves, and control interactions are not inferred."
         ),

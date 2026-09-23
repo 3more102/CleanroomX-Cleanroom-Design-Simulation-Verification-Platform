@@ -8,7 +8,7 @@ For each user-supplied speed ratio `r = N/N_ref`, CleanroomX applies the classic
 
     Q_r = Q_ref * r
     ΔP_r = ΔP_ref * r²
-    P_scale = r³
+    H_scale = r³  (homologous-point fan input-power factor only)
 
 The first two relations create a transformed fan curve at the requested speed ratio. That transformed curve is then passed to the existing CleanroomX bounded fan/system operating-point solver.
 
@@ -19,7 +19,7 @@ The solver still:
 - reports `no_intersection_in_supplied_range` instead of extrapolating;
 - calculates fluid air power as `Q × ΔP`.
 
-The reported cubic power ratio is an affinity-law scaling indicator relative to the reference fan speed. It is not motor input power and does not apply a motor, drive, or fan-efficiency model.
+The reported cubic term is a homologous-point fan input-power scaling factor from the affinity laws. It is **not** the input power of the newly solved operating point and CleanroomX does not apply a motor, drive, or fan-efficiency map. The solved `Q × ΔP` value remains fluid air power only.
 
 ## Input
 

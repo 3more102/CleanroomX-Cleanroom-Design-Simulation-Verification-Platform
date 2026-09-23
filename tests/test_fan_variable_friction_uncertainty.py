@@ -1450,9 +1450,47 @@ def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     assert "Utilization" in report
     assert "Remaining margin" in report
 
+def test_power_metric_ranges_require_complete_corner_coverage() -> None:
+    from cleanroomx.fan_variable_friction_uncertainty import (
+        _power_metric_availability,
+        _power_metric_corner_range,
+        _power_metric_extrema_sources,
+    )
+
+    corners = [
+        {"power_evidence": {"specific_fan_power_w_per_m3_s": 825.0}},
+        {"power_evidence": {"specific_fan_power_w_per_m3_s": None}},
+    ]
+
+    availability = _power_metric_availability(
+        corners,
+        "specific_fan_power_w_per_m3_s",
+    )
+    assert availability == {
+        "status": "partial",
+        "available_corner_count": 1,
+        "total_corner_count": 2,
+        "missing_corner_indices": [1],
+    }
+    assert (
+        _power_metric_corner_range(
+            corners,
+            "specific_fan_power_w_per_m3_s",
+            "W/(m3/s)",
+        )
+        is None
+    )
+    assert (
+        _power_metric_extrema_sources(
+            corners,
+            "specific_fan_power_w_per_m3_s",
+            "W/(m3/s)",
+        )
+        is None
+    )
 
 
-def test_nominal_relative_corner_excursions_are_auditable() -> None:
+def test_power_evidence_availability_is_auditable_for_complete_study() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(
         load_fan_variable_friction_loop_uncertainty(
             "examples/fan_variable_friction_uncertainty_demo.json"
@@ -1460,58 +1498,58 @@ def test_nominal_relative_corner_excursions_are_auditable() -> None:
     )
 
     assert result["status"] == "complete"
-    excursions = result["operating_point_excursions_from_nominal"]
-    assert excursions is not None
-    envelope = result["operating_point_envelope"]
-    nominal = result["nominal_operating_point"]
-
-    for key in (
-        "airflow_m3_h",
-        "fan_pressure_pa",
-        "system_pressure_pa",
-        "air_power_kw",
+    assert result["nominal_power_evidence"] == result["nominal_result"][
+        "power_evidence"
+    ]
+    availability = result["power_evidence_availability"]
+    assert availability is not None
+    for metric in (
+        "fluid_air_power_kw",
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
     ):
-        evidence = excursions[key]
-        assert evidence["nominal"] == pytest.approx(nominal[key], abs=1e-6)
-        assert evidence["lower_delta"] == pytest.approx(
-            envelope[key]["lower"] - nominal[key],
-            abs=1e-6,
-        )
-        assert evidence["upper_delta"] == pytest.approx(
-            envelope[key]["upper"] - nominal[key],
-            abs=1e-6,
-        )
-        if abs(nominal[key]) > 1e-15:
-            assert evidence["lower_percent"] == pytest.approx(
-                evidence["lower_delta"] / abs(nominal[key]) * 100.0,
-                abs=1e-6,
-            )
-            assert evidence["upper_percent"] == pytest.approx(
-                evidence["upper_delta"] / abs(nominal[key]) * 100.0,
-                abs=1e-6,
-            )
-
-    power_excursions = result["power_evidence_excursions_from_nominal"]
-    assert power_excursions is not None
-    assert power_excursions["fluid_air_power_kw"] is not None
-    assert power_excursions["shaft_power_kw"] is not None
-    assert power_excursions["electrical_input_kw"] is not None
-    assert power_excursions["specific_fan_power_w_per_m3_s"] is not None
-
-    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
-    assert "Evaluated-corner excursions from nominal" in report
-    assert "Operating airflow" in report
-    assert "Electrical input" in report
-    assert "not sensitivity coefficients" in report
+        assert availability[metric]["status"] == "complete"
+        assert availability[metric]["available_corner_count"] == result[
+            "corner_count"
+        ]
+        assert availability[metric]["total_corner_count"] == result[
+            "corner_count"
+        ]
+        assert availability[metric]["missing_corner_indices"] == []
 
 
-def test_indeterminate_study_withholds_nominal_relative_excursions() -> None:
+def test_missing_efficiencies_report_unavailable_power_metric_coverage() -> None:
     data = _example_data()
-    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    data.pop("power_efficiencies")
+
     result = analyze_fan_variable_friction_loop_uncertainty(
         fan_variable_friction_loop_uncertainty_from_dict(data)
     )
 
-    assert result["status"] == "indeterminate"
-    assert result["operating_point_excursions_from_nominal"] is None
-    assert result["power_evidence_excursions_from_nominal"] is None
+    availability = result["power_evidence_availability"]
+    assert availability["fluid_air_power_kw"]["status"] == "complete"
+    for metric in (
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
+    ):
+        assert availability[metric]["status"] == "unavailable"
+        assert availability[metric]["available_corner_count"] == 0
+        assert availability[metric]["missing_corner_indices"] == list(
+            range(result["corner_count"])
+        )
+
+
+def test_power_report_surfaces_metric_coverage_and_withholding_rule() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Availability" in report
+    assert "complete (" in report
+    assert "partial coverage is withheld" in report
+

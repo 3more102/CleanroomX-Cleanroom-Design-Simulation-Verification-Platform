@@ -291,6 +291,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
 
     power_ranges = result.get("power_evidence_corner_ranges")
     power_sources = result.get("power_evidence_extrema_sources")
+    power_availability = result.get("power_evidence_availability")
     if power_ranges is not None:
         efficiencies = result.get("power_efficiencies")
         lines.extend(
@@ -327,18 +328,36 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.extend(
             [
                 "",
-                "| Metric | Lower | Upper | Unit |",
-                "|---|---:|---:|---|",
+                "| Metric | Availability | Lower | Upper | Unit |",
+                "|---|---|---:|---:|---|",
             ]
         )
         for key, label, display_unit in metric_labels:
             evidence = power_ranges.get(key)
+            availability = (
+                None
+                if power_availability is None
+                else power_availability.get(key)
+            )
+            availability_text = (
+                "—"
+                if availability is None
+                else (
+                    f"{availability['status']} "
+                    f"({availability['available_corner_count']}/"
+                    f"{availability['total_corner_count']})"
+                )
+            )
             if evidence is None:
-                lines.append(f"| {label} | — | — | {display_unit} |")
+                lines.append(
+                    f"| {label} | {availability_text} | — | — | "
+                    f"{display_unit} |"
+                )
             else:
                 lines.append(
-                    f"| {label} | {evidence['lower']} | "
-                    f"{evidence['upper']} | {display_unit} |"
+                    f"| {label} | {availability_text} | "
+                    f"{evidence['lower']} | {evidence['upper']} | "
+                    f"{display_unit} |"
                 )
 
         if power_sources is not None:
@@ -368,8 +387,11 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             [
                 "",
                 "These are min/max values across evaluated solved corners "
-                "only. Efficiency values are fixed explicit inputs here, not "
-                "uncertain variables, and no missing efficiency is inferred.",
+                "only. A range is emitted only when that metric is available "
+                "at every solved evaluated corner; partial coverage is "
+                "withheld rather than summarized from a subset. Efficiency "
+                "values are fixed explicit inputs here, not uncertain "
+                "variables, and no missing efficiency is inferred.",
             ]
         )
 
@@ -535,80 +557,6 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 )
 
         lines.extend(["", quality["scope_note"]])
-
-    excursions = result.get("operating_point_excursions_from_nominal")
-    power_excursions = result.get("power_evidence_excursions_from_nominal")
-    if excursions:
-        lines.extend(
-            [
-                "",
-                "## Evaluated-corner excursions from nominal",
-                "",
-                "| Metric | Nominal | Lower delta | Upper delta | Lower % | Upper % | Unit |",
-                "|---|---:|---:|---:|---:|---:|---|",
-            ]
-        )
-        excursion_rows = (
-            ("airflow_m3_h", "Operating airflow"),
-            ("fan_pressure_pa", "Fan pressure"),
-            ("system_pressure_pa", "System pressure"),
-            ("air_power_kw", "Fan air power"),
-        )
-        for key, label in excursion_rows:
-            evidence = excursions[key]
-            lower_percent = (
-                "—"
-                if evidence["lower_percent"] is None
-                else evidence["lower_percent"]
-            )
-            upper_percent = (
-                "—"
-                if evidence["upper_percent"] is None
-                else evidence["upper_percent"]
-            )
-            lines.append(
-                f"| {label} | {evidence['nominal']} | "
-                f"{evidence['lower_delta']} | {evidence['upper_delta']} | "
-                f"{lower_percent} | {upper_percent} | {evidence['unit']} |"
-            )
-
-        if power_excursions:
-            power_rows = (
-                ("shaft_power_kw", "Shaft power"),
-                ("electrical_input_kw", "Electrical input"),
-                (
-                    "specific_fan_power_w_per_m3_s",
-                    "Specific fan power",
-                ),
-            )
-            for key, label in power_rows:
-                evidence = power_excursions.get(key)
-                if evidence is None:
-                    continue
-                lower_percent = (
-                    "—"
-                    if evidence["lower_percent"] is None
-                    else evidence["lower_percent"]
-                )
-                upper_percent = (
-                    "—"
-                    if evidence["upper_percent"] is None
-                    else evidence["upper_percent"]
-                )
-                lines.append(
-                    f"| {label} | {evidence['nominal']} | "
-                    f"{evidence['lower_delta']} | {evidence['upper_delta']} | "
-                    f"{lower_percent} | {upper_percent} | "
-                    f"{evidence['unit']} |"
-                )
-        lines.extend(
-            [
-                "",
-                "Excursions are relative to the solved nominal case and summarize "
-                "evaluated corners only; they are not sensitivity coefficients or "
-                "guaranteed continuous-interval extrema.",
-            ]
-        )
 
     edge_sources = result.get("edge_airflow_extrema_sources")
     if edge_sources:

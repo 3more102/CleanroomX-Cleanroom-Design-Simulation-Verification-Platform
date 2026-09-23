@@ -118,3 +118,32 @@ def test_repository_fan_airflow_consistency_demo_builds_end_to_end() -> None:
     assert "HVAC / fan operating-airflow consistency" in text
     assert "Fan and duct-network operating-point demo" in text
     assert "not establish airflow adequacy" in text
+
+def test_fan_speed_cases_participate_in_hvac_airflow_consistency() -> None:
+    result = analyze_hvac_fan_airflow_consistency(
+        _hvac(),
+        fan_speed_studies=[
+            {
+                "study": "VFD sweep",
+                "speed_cases": [
+                    {
+                        "speed_ratio": 0.8,
+                        "status": "solved",
+                        "operating_point": {"airflow_m3_h": 3601.0},
+                    },
+                    {
+                        "speed_ratio": 1.0,
+                        "status": "no_intersection_in_supplied_range",
+                        "operating_point": None,
+                    },
+                ],
+            }
+        ],
+        airflow_abs_tolerance_m3_h=5.0,
+    )
+    assert result["status"] == "pass_with_unresolved_studies"
+    assert result["study_count"] == 2
+    assert result["solved_study_count"] == 1
+    assert result["unresolved_study_count"] == 1
+    assert result["study_airflow_checks"][0]["study_kind"] == "fan_speed_case"
+

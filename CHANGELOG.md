@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.16 recovery acceptance uncertainty — 2026-09-23
+
+- Added optional absolute concentration uncertainty to measured recovery samples while preserving zero-uncertainty backward compatibility.
+- Added conservative sample states for confirmed-above, target-overlap, and confirmed-at-or-below concentration intervals.
+- Added pass/fail/indeterminate/incomplete/not-checked maximum-time decisions without inventing a between-sample crossing time.
+- Added first possible and first confirmed recovery-sample reporting plus uncertainty-aware Markdown/JSON output.
+- Kept the log-linear recovery fit nominal-only and explicitly separate from qualification acceptance.
+- Added CLI exit code 4 for indeterminate recovery acceptance, updated example data, documentation, and regression coverage.
+- Propagated recovery indeterminate states into integrated dossier attention tracking.
+- Kept all targets, time limits, and uncertainty inputs project-supplied; no ISO class or conformity threshold is embedded.
+
 ## v0.15 psychrometric state uncertainty — 2026-09-23
 
 - Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.

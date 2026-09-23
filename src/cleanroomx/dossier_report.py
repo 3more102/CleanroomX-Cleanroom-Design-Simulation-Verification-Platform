@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Nominal state | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -555,6 +555,23 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{envelope['air_power_kw']['upper']}"
                 )
             )
+            power_ranges = item.get("power_evidence_corner_ranges")
+            electrical_input = "—"
+            specific_fan_power = "—"
+            if power_ranges is not None:
+                electrical_range = power_ranges.get("electrical_input_kw")
+                if electrical_range is not None:
+                    electrical_input = (
+                        f"{electrical_range['lower']}–"
+                        f"{electrical_range['upper']}"
+                    )
+                sfp_range = power_ranges.get(
+                    "specific_fan_power_w_per_m3_s"
+                )
+                if sfp_range is not None:
+                    specific_fan_power = (
+                        f"{sfp_range['lower']}–{sfp_range['upper']}"
+                    )
             scenario_names = ", ".join(
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
@@ -563,7 +580,8 @@ def markdown_dossier_report(result: dict) -> str:
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | {scenario_names} | "
-                f"{airflow_envelope} | {air_power} | {item['nominal_status']} | "
+                f"{airflow_envelope} | {air_power} | {electrical_input} | "
+                f"{specific_fan_power} | {item['nominal_status']} | "
                 f"{item['traceability']['complete']} |"
             )
             if item["traceability"]["missing_provenance"]:

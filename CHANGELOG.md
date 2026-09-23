@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16 latest-workflow dossier integration — 2026-09-23
+
+- Extended the integrated engineering dossier to include v0.15 psychrometric-state uncertainty analyses and v0.14 fan/duct-network operating-point studies.
+- Added SHA-256 source fingerprints for both newly supported study types and rendered dedicated Markdown dossier sections.
+- Added unresolved traceability handling when psychrometric uncertainty inputs lack provenance, without converting that condition into an engineering acceptance failure.
+- Added attention tracking for fan/duct-network studies with no fan/system intersection inside the supplied fan-curve range.
+- Updated the end-to-end dossier example and regression coverage while keeping older manifests backward-compatible.
+
 ## v0.15 psychrometric state uncertainty — 2026-09-23
 
 - Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.

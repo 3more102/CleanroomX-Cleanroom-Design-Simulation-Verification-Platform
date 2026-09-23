@@ -971,6 +971,50 @@ def _corner_outcome_diagnostics(corners: list[dict]) -> dict:
     }
 
 
+def _edge_airflow_extrema_sources(
+    study: FanVariableFrictionLoopUncertaintyStudy,
+    corners: list[dict],
+) -> list[dict]:
+    rows = []
+    for edge in study.loop_network.edges:
+        values = [
+            (corner_index, float(corner["edge_airflows_m3_h"][edge.name]))
+            for corner_index, corner in enumerate(corners)
+            if corner["edge_airflows_m3_h"] is not None
+        ]
+        lower = min(value for _corner_index, value in values)
+        upper = max(value for _corner_index, value in values)
+
+        def _sources(target: float) -> list[dict]:
+            return [
+                _critical_case_summary(corner_index, corners[corner_index])
+                for corner_index, value in values
+                if math.isclose(
+                    value,
+                    target,
+                    rel_tol=1e-12,
+                    abs_tol=1e-9,
+                )
+            ]
+
+        rows.append(
+            {
+                "edge": edge.name,
+                "lower": {
+                    "value": round(lower, 6),
+                    "unit": "m3/h",
+                    "sources": _sources(lower),
+                },
+                "upper": {
+                    "value": round(upper, 6),
+                    "unit": "m3/h",
+                    "sources": _sources(upper),
+                },
+            }
+        )
+    return rows
+
+
 def analyze_fan_variable_friction_loop_uncertainty(
     study: FanVariableFrictionLoopUncertaintyStudy,
 ) -> dict:
@@ -1280,6 +1324,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     operating_point_extreme_cases = None
     operating_point_extrema_sources = None
     edge_airflow_corner_ranges = None
+    edge_airflow_extrema_sources = None
     if all_corners_solved:
         operating_point_envelope = {
             "airflow_m3_h": _metric_envelope(
@@ -1326,6 +1371,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
         edge_airflow_corner_ranges = _edge_airflow_corner_ranges(
             study,
             solved_networks,
+        )
+        edge_airflow_extrema_sources = _edge_airflow_extrema_sources(
+            study,
+            corners,
         )
 
     fixed_record = _input_record(
@@ -1566,6 +1615,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "operating_point_extreme_cases": operating_point_extreme_cases,
         "operating_point_extrema_sources": operating_point_extrema_sources,
         "edge_airflow_corner_ranges": edge_airflow_corner_ranges,
+        "edge_airflow_extrema_sources": edge_airflow_extrema_sources,
         "traceability": {
             "complete": not missing,
             "missing_provenance": missing,

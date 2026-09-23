@@ -40,6 +40,12 @@ def markdown_dossier_report(result: dict) -> str:
                 f"analyses={component['analysis_count']}, "
                 f"missing_provenance={component['missing_provenance_analyses']}"
             )
+        elif name == "fan_speed_studies" and component["status"] != "not_included":
+            detail = (
+                f"studies={component['study_count']}, "
+                f"speed_cases={component['speed_case_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
         elif name == "cross_module_consistency" and component["status"] != "not_included":
             detail = (
                 f"shared_rooms={component['shared_room_count']}, "
@@ -281,6 +287,28 @@ def markdown_dossier_report(result: dict) -> str:
             lines.append(
                 f"| {item['study']} | {item['status']} | {airflow} | {pressure} |"
             )
+
+    if result.get("fan_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan affinity-law speed studies",
+                "",
+                "| Study | Study status | Speed ratio | Speed rpm | Case status | Airflow m³/h | Pressure Pa |",
+                "|---|---|---:|---:|---|---:|---:|",
+            ]
+        )
+        for item in result["fan_speed_studies"]:
+            for case in item["speed_cases"]:
+                point = case["operating_point"]
+                speed_rpm = "—" if case["speed_rpm"] is None else case["speed_rpm"]
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = "—" if point is None else point["system_pressure_pa"]
+                lines.append(
+                    f"| {item['study']} | {item['status']} | "
+                    f"{case['speed_ratio']} | {speed_rpm} | {case['status']} | "
+                    f"{airflow} | {pressure} |"
+                )
 
     if result["fan_duct_network_studies"]:
         lines.extend(

@@ -100,7 +100,7 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
 def test_repository_demo_builds_end_to_end() -> None:
     result = build_dossier("examples/dossier_demo.json")
     assert result["dossier"] == "CleanroomX Integrated Engineering Demo"
-    assert len(result["source_files"]) == 10
+    assert len(result["source_files"]) == 11
     assert result["verification"] is not None
     assert result["hvac"] is not None
     assert len(result["recovery_tests"]) == 1
@@ -111,9 +111,11 @@ def test_repository_demo_builds_end_to_end() -> None:
     assert len(result["fan_operating_point_studies"]) == 1
     assert len(result["fan_duct_network_studies"]) == 1
     assert len(result["fan_parallel_network_studies"]) == 1
+    assert len(result["fan_speed_studies"]) == 1
     assert result["fan_operating_point_studies"][0]["status"] == "solved"
     assert result["fan_duct_network_studies"][0]["status"] == "solved"
     assert result["fan_parallel_network_studies"][0]["status"] == "solved"
+    assert result["fan_speed_studies"][0]["status"] == "screening_complete"
     assert all(len(item["sha256"]) == 64 for item in result["source_files"])
 
 
@@ -125,6 +127,7 @@ def test_markdown_report_includes_new_v013_sections() -> None:
     assert "Fan/system operating-point studies" in text
     assert "Fan/duct-network operating-point studies" in text
     assert "Fan-driven parallel-network studies" in text
+    assert "Fan affinity-law speed studies" in text
     assert "Source-file fingerprints" in text
     assert "Confirmed recovery min" in text
     confirmed = result["recovery_tests"][0]["uncertainty_assessment"][
@@ -142,3 +145,20 @@ def test_unsolved_integrated_fan_networks_are_attention_items() -> None:
     assert summary["state"] == "attention_required"
     assert summary["adverse_items"]["fan_duct_networks_unsolved"] == 1
     assert summary["adverse_items"]["fan_parallel_networks_unsolved"] == 1
+
+
+def test_unsolved_fan_speed_case_is_attention_item() -> None:
+    summary = summarize_dossier_components(
+        fan_speed_studies=[
+            {
+                "speed_cases": [
+                    {"status": "solved"},
+                    {"status": "no_intersection_in_supplied_range"},
+                ]
+            }
+        ]
+    )
+    assert summary["state"] == "attention_required"
+    assert summary["components"]["fan_speed_studies"]["study_count"] == 1
+    assert summary["components"]["fan_speed_studies"]["speed_case_count"] == 2
+    assert summary["adverse_items"]["fan_speed_studies_unsolved"] == 1

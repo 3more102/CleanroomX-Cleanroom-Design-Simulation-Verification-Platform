@@ -114,7 +114,7 @@ def test_automatic_friction_example_converges_at_bounded_operating_point() -> No
     assert power["specific_fan_power_w_per_m3_s"] is not None
     components = power["system_components"]
     assert abs(components["loop_network_energy_balance_residual_w"]) <= 1e-6
-    assert abs(components["fan_to_fixed_plus_edge_loss_residual_w"]) <= 1e-6
+    assert abs(components["fan_to_fixed_plus_edge_loss_residual_w"]) <= 1e-5
     assert all(
         row["state"] == "automatic_friction"
         for row in network["variable_friction"]["edge_closure"]

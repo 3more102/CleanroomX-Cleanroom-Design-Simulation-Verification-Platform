@@ -1093,3 +1093,90 @@ def test_indeterminate_analysis_surfaces_unresolved_corner_diagnostics() -> None
     assert "Unresolved evaluated corners" in report
     assert "no_intersection_in_supplied_range" in report
 
+
+
+def test_edge_airflow_extrema_sources_reference_exact_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    sources = result["edge_airflow_extrema_sources"]
+    assert sources is not None
+    assert {item["edge"] for item in sources} == {
+        edge["edge"] for edge in result["edge_airflow_corner_ranges"]
+    }
+    for edge_source in sources:
+        edge = edge_source["edge"]
+        for bound in ("lower", "upper"):
+            evidence = edge_source[bound]
+            assert evidence["unit"] == "m3/h"
+            assert evidence["sources"]
+            for source in evidence["sources"]:
+                corner = result["corners"][source["corner_index"]]
+                assert corner["edge_airflows_m3_h"][edge] == pytest.approx(
+                    evidence["value"],
+                    abs=1e-6,
+                )
+                assert source["fixed_pressure_pa"] == corner["fixed_pressure_pa"]
+                assert source.get("fan_curve_scenario") == corner.get(
+                    "fan_curve_scenario"
+                )
+                assert source.get("fan_speed_ratio") == corner.get(
+                    "fan_speed_ratio"
+                )
+
+
+def test_edge_airflow_extrema_sources_preserve_all_tied_scenarios() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    nominal_points = data["fan_curve"]["points"]
+    for scenario in data["fan_curve_scenarios"]:
+        scenario["points"] = [dict(point) for point in nominal_points]
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "complete"
+    assert result["corner_count"] == 3
+    for edge_source in result["edge_airflow_extrema_sources"]:
+        for bound in ("lower", "upper"):
+            sources = edge_source[bound]["sources"]
+            assert len(sources) == 3
+            assert {
+                source["fan_curve_scenario"] for source in sources
+            } == {"nominal", "lower_envelope", "upper_envelope"}
+
+
+def test_indeterminate_analysis_withholds_edge_extrema_sources() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {
+        "value": 900.0,
+        "uncertainty_abs": 0.0,
+    }
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["edge_airflow_corner_ranges"] is None
+    assert result["edge_airflow_extrema_sources"] is None
+
+
+def test_report_surfaces_edge_airflow_witness_provenance() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Internal edge-airflow witness provenance" in report
+    assert "Source corner input(s)" in report
+    assert "scenario=" in report

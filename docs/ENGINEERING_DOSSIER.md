@@ -23,7 +23,7 @@ A dossier manifest can reference:
 - zero or more fan affinity-law speed studies;
 - zero or more fan-speed/fixed-resistance-loop studies;
 - zero or more fan/variable-friction-loop operating-point studies;
-- zero or more fan-speed/variable-friction-loop studies;
+- zero or more fan-speed/variable-friction-loop studies;\n- zero or more bounded fan/variable-friction-loop uncertainty analyses;
 - an optional v0.17 verification/HVAC duplicated-input consistency check;
 - an optional v0.22 HVAC/fan operating-airflow consistency check with project-supplied absolute tolerance.
 
@@ -53,7 +53,7 @@ Example:
   "fan_speed_studies": ["fan_speed_dossier_demo.json"],
   "fan_loop_speed_studies": ["fan_loop_speed_demo.json"],
   "fan_variable_friction_loop_studies": ["fan_variable_friction_loop_demo.json"],
-  "fan_variable_friction_speed_studies": ["fan_variable_friction_speed_demo.json"],
+  "fan_variable_friction_speed_studies": ["fan_variable_friction_speed_demo.json"],\n  "fan_variable_friction_uncertainty_analyses": ["fan_variable_friction_uncertainty_demo.json"],
   "consistency_checks": {
     "verification_hvac_airflow": {
       "room_airflow_abs_tolerance_m3_h": 0.0,
@@ -92,7 +92,7 @@ The dossier preserves component-specific states instead of turning every result 
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, an HVAC/fan airflow comparison has unresolved fan cases, or a standalone psychrometric/fan-system uncertainty analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. Damper scenarios remain explicit resistance sensitivity studies and do not infer damper position or balancing acceptance. A complete fan/system uncertainty airflow/pressure envelope is reported only when every bounded system corner intersects the supplied fan curve; otherwise the analysis remains indeterminate. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric, fan-system, or fan/loop uncertainty provenance is tracked as unresolved traceability rather than a numerical failure. Fan/loop uncertainty becomes an attention item when one or more configured corners are unresolved; fan-speed/loop studies become attention items when any transformed curve has no bounded intersection. The nonlinear v0.33/v0.34 fan/variable-friction workflows additionally make every `non_converged` result an attention item, preserve termination/residual evidence, and never promote numerical failure to PASS. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. Damper scenarios remain explicit resistance sensitivity studies and do not infer damper position or balancing acceptance. A complete fan/system uncertainty airflow/pressure envelope is reported only when every bounded system corner intersects the supplied fan curve; otherwise the analysis remains indeterminate. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric, fan-system, or fan/loop uncertainty provenance is tracked as unresolved traceability rather than a numerical failure. Fan/loop uncertainty becomes an attention item when one or more configured corners are unresolved; fan-speed/loop studies become attention items when any transformed curve has no bounded intersection. The nonlinear v0.33/v0.34 fan/variable-friction workflows additionally make every `non_converged` result an attention item, preserve termination/residual evidence, and never promote numerical failure to PASS. The v0.37 nonlinear uncertainty workflow is dossier-integrated in v0.38: an `indeterminate` uncertainty analysis is an attention item, while incomplete fan-curve/fixed-pressure/local-loss provenance is tracked separately as unresolved traceability. Complete corner envelopes are preserved only when the nominal case and every configured corner solve. HVAC calculations remain preliminary screening.
 
 ## CLI
 

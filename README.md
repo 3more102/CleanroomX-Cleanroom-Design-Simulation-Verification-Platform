@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.21 engineering core
+## v0.22 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -30,6 +30,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, fan-speed affinity-law studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
+- Dossier-integrated HVAC-to-fan operating-airflow consistency across standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed cases, using an explicit user-supplied absolute tolerance and preserving unsolved studies as unresolved.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -268,6 +269,12 @@ The v0.20 dossier hashes every referenced input with SHA-256 and covers verifica
 Consistency-integrated dossier demo:
 
     cleanroomx-dossier examples/dossier_consistency_demo.json
+
+HVAC/fan operating-airflow consistency demo:
+
+    cleanroomx-dossier examples/dossier_fan_airflow_consistency_demo.json
+
+The v0.22 check compares the analyzed HVAC total governing airflow with every included solved fan operating point, including individual fan-speed cases. Unsolved cases remain `not_comparable`; they are not converted into failures. The absolute tolerance is a project input, not a built-in engineering or standards limit. See docs/HVAC_FAN_AIRFLOW_CONSISTENCY.md.
 
 See docs/ENGINEERING_DOSSIER.md.
 

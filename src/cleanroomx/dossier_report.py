@@ -52,6 +52,16 @@ def markdown_dossier_report(result: dict) -> str:
                 f"mismatches={component['mismatch_count']}, "
                 f"room_set_mismatch={component['room_set_mismatch']}"
             )
+        elif (
+            name == "hvac_fan_operating_airflow_consistency"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"studies={component['study_count']}, "
+                f"solved={component['solved_study_count']}, "
+                f"mismatches={component['mismatch_count']}, "
+                f"unresolved={component['unresolved_study_count']}"
+            )
         lines.append(f"| {name} | {component['status']} | {detail} |")
 
     verification = result["verification"]
@@ -353,6 +363,53 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{item['equivalent_network_resistance_pa_per_m3_s_squared']} | "
                 f"{airflow} | {pressure} |"
             )
+
+    fan_airflow_consistency = result.get("consistency_checks", {}).get(
+        "hvac_fan_operating_airflow"
+    )
+    if fan_airflow_consistency is not None:
+        lines.extend(
+            [
+                "",
+                "## HVAC / fan operating-airflow consistency",
+                "",
+                f"- Status: **{fan_airflow_consistency['status']}**",
+                (
+                    "- HVAC governing airflow: "
+                    f"**{fan_airflow_consistency['hvac_governing_airflow_m3_h']} m³/h**"
+                ),
+                (
+                    "- Absolute consistency tolerance: "
+                    f"**{fan_airflow_consistency['airflow_abs_tolerance_m3_h']} m³/h**"
+                ),
+                f"- Fan operating points/cases: **{fan_airflow_consistency['study_count']}**",
+                f"- Mismatches: **{fan_airflow_consistency['mismatch_count']}**",
+                f"- Unresolved: **{fan_airflow_consistency['unresolved_study_count']}**",
+                "",
+                (
+                    "| Study type | Study | HVAC airflow m³/h | Fan operating airflow m³/h | "
+                    "Absolute difference m³/h | Status |"
+                ),
+                "|---|---|---:|---:|---:|---|",
+            ]
+        )
+        for item in fan_airflow_consistency["study_airflow_checks"]:
+            fan_airflow = (
+                "—"
+                if item["fan_operating_airflow_m3_h"] is None
+                else item["fan_operating_airflow_m3_h"]
+            )
+            absolute_difference = (
+                "—"
+                if item["absolute_difference_m3_h"] is None
+                else item["absolute_difference_m3_h"]
+            )
+            lines.append(
+                f"| {item['study_kind']} | {item['study']} | "
+                f"{item['hvac_governing_airflow_m3_h']} | {fan_airflow} | "
+                f"{absolute_difference} | {item['status']} |"
+            )
+        lines.extend(["", fan_airflow_consistency["scope_note"]])
 
     lines.extend(
         [

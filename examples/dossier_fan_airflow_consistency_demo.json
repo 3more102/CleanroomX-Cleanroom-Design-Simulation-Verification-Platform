@@ -1,0 +1,15 @@
+{
+  "name": "CleanroomX HVAC Fan-Airflow Consistency Demo",
+  "project_reference": "CRX-FAN-CONSISTENCY-001",
+  "revision": "A",
+  "notes": "Demonstration only. The airflow consistency tolerance is a project input and not a universal acceptance limit.",
+  "hvac_project": "duct_network_demo.json",
+  "fan_duct_network_studies": [
+    "fan_duct_network_demo.json"
+  ],
+  "consistency_checks": {
+    "hvac_fan_operating_airflow": {
+      "airflow_abs_tolerance_m3_h": 1500.0
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "Fan-driven cleanroom loop demo",
+  "source_node": "Supply",
+  "sink_node": "Return",
+  "network_reference_airflow_m3_h": 5400.0,
+  "fixed_pressure_pa": 50.0,
+  "fan_curve": {
+    "name": "Demo supply fan",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 800.0},
+      {"airflow_m3_h": 6000.0, "pressure_pa": 400.0},
+      {"airflow_m3_h": 12000.0, "pressure_pa": 0.0}
+    ]
+  },
+  "loop_network": {
+    "name": "Supply-return passive mesh",
+    "reference_node": "Return",
+    "edges": [
+      {
+        "name": "Supply to A",
+        "start_node": "Supply",
+        "end_node": "Junction A",
+        "resistance_pa_per_m3_s_squared": 80.0
+      },
+      {
+        "name": "A to Return",
+        "start_node": "Junction A",
+        "end_node": "Return",
+        "duct_geometry": {
+          "length_m": 12.0,
+          "air_density_kg_m3": 1.2,
+          "friction_factor": 0.02,
+          "local_loss_coefficient": 1.0,
+          "diameter_m": 0.55
+        }
+      },
+      {
+        "name": "Supply to B",
+        "start_node": "Supply",
+        "end_node": "Junction B",
+        "resistance_pa_per_m3_s_squared": 100.0
+      },
+      {
+        "name": "B to Return",
+        "start_node": "Junction B",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 120.0
+      },
+      {
+        "name": "A to B cross-link",
+        "start_node": "Junction A",
+        "end_node": "Junction B",
+        "resistance_pa_per_m3_s_squared": 300.0
+      }
+    ]
+  }
+}

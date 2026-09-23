@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — engineering dossier
+
+- Added a manifest-driven combined engineering dossier for project verification, HVAC/duct screening, recovery qualification, and uncertainty/provenance results.
+- Added component-aware executive states that preserve fail, incomplete, indeterminate, and not-checked conditions rather than collapsing them into a certification verdict.
+- Added SHA-256 fingerprints for every referenced input file to improve report traceability.
+- Added Markdown/JSON dossier output, a dedicated CLI, example manifest, tests, and documentation.
+- Kept the dossier explicitly scoped as a reporting/traceability layer; it does not create acceptance limits or claim cleanroom certification.
+
 ## v0.6.1 duct-input hardening — 2026-09-23
 
 - Rejected non-finite duct inputs (NaN and positive/negative infinity) before pressure-loss analysis.

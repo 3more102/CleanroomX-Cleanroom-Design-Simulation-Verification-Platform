@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.28 variable-friction loop solving — 2026-09-23
+
+- Added an optional outer iteration around the validated fixed-resistance loop solver for geometry-derived edges configured with automatic Darcy friction.
+- Recomputes Reynolds number and Darcy friction from each automatic edge's absolute solved airflow, then rebuilds the Darcy-Weisbach plus local-K quadratic resistance.
+- Supports configurable resistance-closure tolerance, friction-factor update relaxation, outer-iteration limits, and inner mass-balance/Newton tolerances.
+- Preserves direct resistance inputs and geometry edges with user-supplied friction factors as fixed.
+- Explicitly freezes automatic-friction edges at configured near-zero airflow instead of inventing Reynolds or friction values at zero velocity.
+- Preserves the existing circular laminar 64/Re and turbulent Colebrook model; noncircular automatic laminar flow remains rejected explicitly.
+- Added edge-level target/used resistance closure evidence, iteration history, Markdown/JSON reporting, the cleanroomx-loop-friction CLI, example data, documentation, and regression tests.
+- Bumped package/runtime metadata to v0.28.0 while leaving v0.26 fan/loop coupling and v0.27 damper scenarios fixed-resistance.
+
 ## v0.27 explicit loop damper-resistance scenarios — 2026-09-23
 
 - Added deterministic loop-network scenario studies for explicit user-supplied edge resistance multipliers.

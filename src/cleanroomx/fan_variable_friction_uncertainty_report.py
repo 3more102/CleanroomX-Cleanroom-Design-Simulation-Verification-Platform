@@ -893,6 +893,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             + ", ".join(traceability["missing_provenance"])
         )
 
+    integrity = result.get("result_integrity")
+    if integrity:
+        lines.extend(
+            [
+                "",
+                "### Result integrity",
+                "",
+                f"- Algorithm: **{integrity['algorithm']}**",
+                f"- Canonicalization: `{integrity['canonicalization']}`",
+                f"- Scope: `{integrity['scope']}`",
+                f"- SHA-256: `{integrity['sha256']}`",
+            ]
+        )
+
     lines.extend(
         [
             "",

@@ -26,7 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal uncertainty, standalone psychrometric uncertainty, and fan/system studies.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -35,7 +35,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
-- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, and equipment-capacity screening.
+- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, room/outdoor psychrometric states, and equipment-capacity screening.
 - Deterministic psychrometric-state uncertainty envelopes for dry-bulb temperature, relative humidity, pressure, humidity ratio, enthalpy, specific volume, dew point, and moist-air specific heat.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
@@ -49,7 +49,7 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. These are bounded models rather than a general nonlinear duct-network/control solver; CleanroomX does not infer arbitrary looped-network flows, variable friction factors, damper positions, leakage, system effect, acoustics, controls, stall/surge limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. The v0.10 thermal uncertainty workflow still holds room/outdoor psychrometric states fixed. The v0.15 standalone psychrometric uncertainty workflow evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure uncertainty box, but it is not yet coupled into thermal sizing, hourly load simulation, or equipment selection.
+The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. The v0.15 standalone psychrometric uncertainty workflow evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure uncertainty box. The thermal uncertainty workflow can now propagate user-supplied room/outdoor psychrometric bounds into makeup-air load and sensible-load airflow by endpoint-corner enumeration; it does not model input correlation, hourly load/weather behavior, or equipment selection.
 
 ## Install
 
@@ -208,7 +208,7 @@ Write a Markdown report:
 
     cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --output thermal-uncertainty-report.md
 
-The v0.10 workflow propagates user-supplied absolute bounds through explicit sensible/latent loads, cleanroom and makeup airflow, and optional supply-air temperature. It reports conservative cooling/heating capacity and governing-airflow intervals, plus optional available-capacity pass/fail/indeterminate checks.
+The thermal uncertainty workflow propagates user-supplied absolute bounds through explicit sensible/latent loads, cleanroom and makeup airflow, optional supply-air temperature, and optional room/outdoor dry-bulb temperature, relative humidity, and pressure. It reports psychrometric intervals plus conservative cooling/heating-capacity and governing-airflow intervals, with optional available-capacity pass/fail/indeterminate checks.
 
 See docs/THERMAL_UNCERTAINTY.md.
 
@@ -281,7 +281,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are coupling psychrometric-state uncertainty into thermal sizing, tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

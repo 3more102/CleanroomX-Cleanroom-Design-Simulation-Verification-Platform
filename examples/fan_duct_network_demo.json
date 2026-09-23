@@ -1,0 +1,48 @@
+{
+  "name": "Fan and duct-network operating-point demo",
+  "reference_system_airflow_m3_h": 900.0,
+  "fixed_pressure_pa": 80.0,
+  "fan_curve": {
+    "name": "Example manufacturer fan curve",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+      {"airflow_m3_h": 3000.0, "pressure_pa": 500.0},
+      {"airflow_m3_h": 6000.0, "pressure_pa": 300.0},
+      {"airflow_m3_h": 8000.0, "pressure_pa": 100.0}
+    ]
+  },
+  "duct_network": {
+    "paths": [
+      {
+        "name": "Process path",
+        "sections": [
+          {
+            "name": "Process supply",
+            "length_m": 10.0,
+            "airflow_m3_h": 900.0,
+            "friction_factor": 0.02,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.0,
+            "width_m": 0.5,
+            "height_m": 0.25
+          }
+        ]
+      },
+      {
+        "name": "Remote path",
+        "sections": [
+          {
+            "name": "Remote supply",
+            "length_m": 20.0,
+            "airflow_m3_h": 900.0,
+            "friction_factor": 0.02,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 3.0,
+            "width_m": 0.5,
+            "height_m": 0.25
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,15 +1,16 @@
 # Changelog
 
-## v0.16 recovery uncertainty qualification — 2026-09-23
+## v0.16 fan-driven passive parallel-network integration — 2026-09-23
 
-- Added optional absolute concentration uncertainty to measured recovery samples while preserving zero-uncertainty backward compatibility.
-- Added conservative concentration-interval states for confirmed-above, overlaps-target, and confirmed-at-or-below samples.
-- Added pass/fail/indeterminate/incomplete/not-checked maximum-time decisions without inventing a between-sample crossing time or a project conformity rule.
-- Added first possible and first confirmed recovery-sample reporting while preserving nominal observed recovery timing and recovery windows for traceability.
-- Kept the log-linear recovery fit nominal-only and explicitly separate from qualification acceptance.
-- Added uncertainty-aware Markdown/JSON reporting, CLI exit code 4 for indeterminate results, updated example data, finite-input validation, documentation, and regression coverage.
-- Propagated recovery-indeterminate states into integrated dossier attention tracking while preserving v0.15 psychrometric dossier support.
-- Kept all targets, time limits, and uncertainty inputs project-supplied; no ISO class or statistical conformity threshold is embedded.
+- Coupled the bounded fan/system operating-point solver to the passive common-pressure-node parallel-path model.
+- Added analytical equivalent network resistance for pressure-balanced paths following fixed R·Q² behavior.
+- Added fan/system operating-point solving followed by redistribution of the solved total airflow across the original branches.
+- Added fixed-pressure plus network-pressure decomposition, fan/system residual, mass-balance residual, equal-pressure residual, and per-section flow/loss reporting.
+- Preserved no-extrapolation behavior when the operating point lies outside supplied fan data.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-network` CLI, example data, tests, and engineering-scope documentation.
+- Kept this distinct from v0.14 reference-flow fan/duct integration: v0.16 solves the passive branch split from common pressure instead of holding reference flow fractions fixed.
+- Kept the workflow explicitly bounded: no arbitrary looped-network solution, variable friction-factor iteration, dampers/controls, leakage, system effect, acoustics, fan-law scaling, stall/surge acceptance, or manufacturer selection.
+
 
 ## v0.15 psychrometric state uncertainty — 2026-09-23
 

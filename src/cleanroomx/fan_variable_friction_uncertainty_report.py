@@ -669,6 +669,103 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.extend(["", conditioning_summary["scope_note"]])
 
 
+    root_resolution_summary = result.get(
+        "fan_curve_root_resolution_summary"
+    )
+    nominal_root_resolution = result.get(
+        "nominal_fan_curve_root_resolution"
+    )
+    if root_resolution_summary:
+        coverage_label = (
+            "complete"
+            if root_resolution_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Fan/system local pressure-to-airflow resolution",
+                "",
+                "- Evaluated corners with root-resolution evidence: "
+                f"**{root_resolution_summary['root_resolution_evidence_corner_count']}/"
+                f"{root_resolution_summary['corner_count']}**",
+                "- Evaluated corners with finite local airflow-equivalent mapping: "
+                f"**{root_resolution_summary['linearized_airflow_equivalent_corner_count']}/"
+                f"{root_resolution_summary['corner_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_root_resolution is None:
+            lines.append("- Nominal root-resolution evidence: **not available**")
+        else:
+            lines.extend(
+                [
+                    "- Nominal configured operating-pressure tolerance: "
+                    f"**{nominal_root_resolution['configured_operating_pressure_tolerance_pa']} Pa**",
+                    "- Nominal observed pressure residual: "
+                    f"**{nominal_root_resolution['observed_pressure_residual_pa']} Pa**",
+                    "- Nominal local-linearized pressure-tolerance airflow equivalent: "
+                    f"**{nominal_root_resolution['local_linearized_pressure_tolerance_airflow_equivalent_m3_h']} m³/h**",
+                    "- Nominal local-linearized observed-residual airflow equivalent: "
+                    f"**{nominal_root_resolution['local_linearized_pressure_residual_airflow_equivalent_m3_h']} m³/h**",
+                ]
+            )
+        unavailable = root_resolution_summary[
+            "unavailable_linearization_corner_indices"
+        ]
+        if unavailable:
+            lines.append(
+                "- Corner indices with unavailable local airflow-equivalent "
+                "mapping: "
+                + ", ".join(str(index) for index in unavailable)
+            )
+
+        lines.extend(
+            [
+                "",
+                "| Metric | Extreme | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        root_resolution_rows = (
+            (
+                "maximum_local_linearized_pressure_tolerance_airflow_equivalent_m3_h",
+                "Maximum pressure-tolerance airflow equivalent",
+            ),
+            (
+                "maximum_local_linearized_pressure_tolerance_fraction_of_segment",
+                "Maximum pressure-tolerance fraction of active segment",
+            ),
+            (
+                "maximum_local_linearized_pressure_residual_airflow_equivalent_m3_h",
+                "Maximum observed-residual airflow equivalent",
+            ),
+            (
+                "maximum_local_linearized_pressure_residual_fraction_of_segment",
+                "Maximum observed-residual fraction of active segment",
+            ),
+        )
+        for key, label in root_resolution_rows:
+            evidence = root_resolution_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; tolerance={source['configured_operating_pressure_tolerance_pa']} Pa"
+                    + f"; residual={source['observed_pressure_residual_pa']} Pa"
+                    + f"; |residual-slope|={source['local_absolute_fan_minus_system_slope_pa_per_m3_h']} Pa/(m³/h)"
+                    + f"; airflow/Pa={source['local_airflow_change_per_pa_m3_h_per_pa']} (m³/h)/Pa"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", root_resolution_summary["scope_note"]])
+
+
     segment_summary = result.get("fan_curve_segment_position_summary")
     nominal_segment = result.get("nominal_fan_curve_segment_position")
     if segment_summary:

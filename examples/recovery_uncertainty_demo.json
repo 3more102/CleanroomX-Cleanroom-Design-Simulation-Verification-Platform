@@ -1,0 +1,32 @@
+{
+  "name": "Uncertainty-aware Particle Recovery",
+  "particle_size_um": 0.5,
+  "target_concentration_per_m3": 100000.0,
+  "max_recovery_time_minutes": 10.0,
+  "instrument_id": "ParticleCounter-PC-02",
+  "sample_location": "Process Bay - center working height",
+  "occupancy_state": "at-rest",
+  "method_reference": "Project qualification protocol QP-CR-002",
+  "samples": [
+    {
+      "time_minutes": 0.0,
+      "concentration_per_m3": 1000000.0,
+      "concentration_uncertainty_per_m3": 30000.0
+    },
+    {
+      "time_minutes": 6.0,
+      "concentration_per_m3": 180000.0,
+      "concentration_uncertainty_per_m3": 15000.0
+    },
+    {
+      "time_minutes": 9.0,
+      "concentration_per_m3": 105000.0,
+      "concentration_uncertainty_per_m3": 10000.0
+    },
+    {
+      "time_minutes": 12.0,
+      "concentration_per_m3": 82000.0,
+      "concentration_uncertainty_per_m3": 7000.0
+    }
+  ]
+}

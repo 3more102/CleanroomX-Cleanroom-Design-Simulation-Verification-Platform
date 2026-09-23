@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.6 engineering core
+## v0.7 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -20,6 +20,10 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Path-based duct pressure-loss analysis using Darcy-Weisbach friction plus explicit local loss coefficients.
 - Circular and rectangular duct geometry with hydraulic-diameter reporting.
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
+- Rooted supply-network modeling with deterministic downstream branch-flow aggregation.
+- Room-to-supply-node mapping plus explicit fixed auxiliary airflow demand.
+- Optional duct-section mapping to solved supply branches so branch airflow drives velocity and pressure loss.
+- Preliminary fan airflow driven by solved source demand when a supply network is configured.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -36,7 +40,7 @@ CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. The duct calculation compares explicitly defined paths; it is not a nonlinear airflow-network solver and does not infer branch flows, fitting coefficients, friction factors, fan curves, system effect, leakage, acoustics, balancing, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. A configured rooted supply network can aggregate downstream room demand and fixed auxiliary airflow, but it does not solve pressure-driven flow distribution. The duct calculation compares explicitly defined paths and does not infer fitting coefficients, friction factors, fan curves, system effect, leakage, acoustics, balancing, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
 The uncertainty workflow uses deterministic worst-case input intervals. It is not a statistical measurement-uncertainty budget, does not invent tolerances, and does not replace calibration records or a project qualification procedure.
 
@@ -67,6 +71,10 @@ Duct critical-path demo:
 
     cleanroomx-hvac examples/duct_network_demo.json
 
+Supply branch-flow demo:
+
+    cleanroomx-hvac examples/supply_branch_flow_demo.json
+
 JSON output:
 
     cleanroomx-hvac examples/duct_network_demo.json --format json
@@ -75,7 +83,7 @@ Write a Markdown report:
 
     cleanroomx-hvac examples/duct_network_demo.json --output hvac-report.md
 
-The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data, a preliminary supply-fan model, and an optional path-based duct network. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, docs/DUCT_NETWORK_MODEL.md, and docs/STANDARDS.md.
+The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data, a preliminary supply-fan model, an optional rooted supply branch network, and an optional path-based duct pressure-loss network. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, docs/SUPPLY_NETWORK_MODEL.md, docs/DUCT_NETWORK_MODEL.md, and docs/STANDARDS.md.
 
 ## Analyze a measured particle-recovery test
 
@@ -146,7 +154,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, branch-flow/network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are pressure-balanced nonlinear airflow-network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, richer engineering reports, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

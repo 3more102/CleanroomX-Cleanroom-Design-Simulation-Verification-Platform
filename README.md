@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.49 engineering core
+## v0.50 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -111,6 +111,8 @@ v0.47 adds deterministic corner-outcome diagnostics for the same nonlinear uncer
 v0.48 extends the same auditability to internal edge-airflow extrema. For every edge lower/upper bound in a complete study, CleanroomX records all evaluated corners tied at that extreme together with their active uncertainty inputs, while retaining the compact first-witness corner indices. Indeterminate studies still emit no complete edge-flow extrema provenance.
 
 v0.49 adds fan air-power min/max across the evaluated corners of a complete nonlinear fan/variable-friction uncertainty study. Air-power extrema use the same compact first-witness and tie-aware source provenance as airflow and pressure, and engineering dossiers surface the evaluated-corner range. These values are corner-study evidence only; they are not claimed as guaranteed extrema for every interior continuous input combination.
+
+v0.50 extends that evidence through the explicit fan-power efficiency chain already used by the nonlinear solver. Complete uncertainty studies retain evaluated-corner ranges and tie-aware source provenance for fluid air power, shaft power, electrical input, and specific fan power. Shaft/electrical metrics appear only when their required user-supplied efficiencies exist; no efficiency is inferred, and the configured efficiency values are treated as fixed rather than uncertain in this workflow.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The nonlinear fan/variable-friction workflow additionally reports fan air-power min/max across evaluated corners when the study is complete; those air-power values are not claimed as guaranteed continuous-interval extrema. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 

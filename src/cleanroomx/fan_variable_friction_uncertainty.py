@@ -1092,6 +1092,7 @@ def _solver_quality_summary(
                 "configured_tolerance": tolerance,
                 "utilization_ratio": None,
                 "remaining_margin": None,
+                "sources": [],
             }
             continue
 
@@ -1109,6 +1110,7 @@ def _solver_quality_summary(
                 None if tolerance == 0.0 else round(observed / tolerance, 9)
             ),
             "remaining_margin": round(tolerance - observed, 9),
+            "sources": evidence["sources"],
         }
 
     within_tolerance_count = sum(
@@ -1135,6 +1137,30 @@ def _solver_quality_summary(
     else:
         tolerance_assessment_status = "within_configured_tolerances"
 
+    utilizable_checks = [
+        (metric_key, check)
+        for metric_key, check in configured_tolerance_checks.items()
+        if check["utilization_ratio"] is not None
+    ]
+    if utilizable_checks:
+        max_utilization_ratio = max(
+            check["utilization_ratio"]
+            for _metric_key, check in utilizable_checks
+        )
+        critical_metric_keys = [
+            metric_key
+            for metric_key, check in utilizable_checks
+            if math.isclose(
+                check["utilization_ratio"],
+                max_utilization_ratio,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            )
+        ]
+    else:
+        max_utilization_ratio = None
+        critical_metric_keys = []
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -1152,6 +1178,8 @@ def _solver_quality_summary(
             "exceeded_tolerance_count": exceeded_tolerance_count,
             "not_evaluable_count": not_evaluable_count,
             "complete_study_coverage": complete_study_coverage,
+            "max_utilization_ratio": max_utilization_ratio,
+            "critical_metric_keys": critical_metric_keys,
         },
         "scope_note": (
             "Worst metrics aggregate solved evaluated corners only. "
@@ -1159,6 +1187,8 @@ def _solver_quality_summary(
             "evaluated corner is unresolved. Configured-tolerance utilization "
             "and remaining margin are numerical solver-audit evidence only, "
             "using the solver tolerances already supplied to this study. "
+            "The maximum utilization and critical metric keys retain exact "
+            "tie-aware worst-corner provenance through each configured check. "
             "Pressure-law residual and iteration maxima are reported as "
             "diagnostics without inventing an acceptance threshold."
         ),

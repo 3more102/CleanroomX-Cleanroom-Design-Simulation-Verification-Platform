@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9 passive parallel-path flow solver — 2026-09-23
+
+- Added analytical airflow distribution across two or more passive duct paths sharing common pressure nodes.
+- Added fixed-resistance R·Q² path modeling from explicit Darcy friction, geometry, air density, and local-loss coefficients.
+- Added solved per-path airflow, common pressure drop, per-section losses, mass-balance residual, and equal-pressure residual reporting.
+- Added circular/rectangular geometry support, finite-input validation, JSON loading, Markdown reporting, and the `cleanroomx-duct-flow` CLI.
+- Added regression coverage for equal and unequal resistances, rectangular sections, zero-resistance rejection, non-finite inputs, mass continuity, and equal-pressure verification.
+- Kept the solver standalone and explicitly bounded: it does not yet combine the v0.8 supply tree with arbitrary loops, fan curves, dampers, leakage, or variable-friction-factor iteration.
+
 ## v0.8 branch-flow supply-tree solver — 2026-09-23
 
 - Added directed supply-tree topology with explicit source, branches, and fixed leaf-terminal airflow demands.

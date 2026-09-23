@@ -632,6 +632,12 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{boundary_coverage} | "
                 f"{item['traceability']['complete']} |"
             )
+            integrity = item.get("result_integrity")
+            if integrity:
+                lines.append(
+                    f"- Result SHA-256 for **{item['analysis']}**: "
+                    f"`{integrity['sha256']}`"
+                )
             if item["traceability"]["missing_provenance"]:
                 lines.append(
                     "- Missing uncertainty provenance for "

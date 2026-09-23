@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.38 engineering core
+## v0.39 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -32,7 +32,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional variable-friction loop iteration for automatic roughness/viscosity geometry edges, with Reynolds/Darcy recomputation at solved edge flow, relaxation, closure reporting, explicit near-zero-flow handling, and pre-solve validation of stored automatic-friction evidence.
 - Bounded fan/variable-friction loop coupling that re-solves the complete Darcy-friction network at every candidate fan/system airflow, with no fan-curve extrapolation, convergence diagnostics, and explicit non-converged states.
 - Deterministic bounded uncertainty for fan/variable-friction loop coupling over explicit fixed-pressure and selected automatic-friction local-loss-coefficient bounds, with full nonlinear re-solving at every corner and no envelope when any corner is unresolved.
-- Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
+- Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.\n- Fan-speed × bounded nonlinear uncertainty sweeps that apply the v0.37 fixed-pressure/local-loss corner model independently at each transformed fan speed, with complete envelopes withheld for any unresolved speed/corner case.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
@@ -84,7 +84,7 @@ v0.34 applies the existing affinity-law fan-curve transform to each explicit spe
 
 v0.35 integrates the v0.33 and v0.34 nonlinear fan/loop workflows into engineering dossiers. Inputs are SHA-256 fingerprinted, solver diagnostics and convergence evidence are preserved in JSON and Markdown, HVAC operating-airflow consistency includes solved nonlinear cases, and `non_converged` cases always propagate as dossier attention rather than PASS.
 
-v0.36 hardens automatic-friction evidence validation before any network iteration. Geometry-derived edges that claim automatic roughness/viscosity friction must carry complete finite stored geometry, reference-flow, and friction evidence; malformed evidence is rejected even when the solved branch flow is near zero.\n\nv0.37 adds deterministic bounded uncertainty around the nonlinear fan/variable-friction loop workflow. It varies explicit fixed pressure and selected automatic-friction duct local-loss coefficients, rebuilds affected geometry evidence, and re-solves Darcy friction and the bounded fan/system intersection at every corner. Complete operating-point and branch-flow corner ranges are reported only when the nominal case and every corner solve; corner ranges are evidence over evaluated combinations, not statistical or guaranteed continuous-box extrema.\n\nv0.38 integrates the v0.37 nonlinear uncertainty workflow into engineering dossiers. Referenced uncertainty inputs are SHA-256 fingerprinted, complete corner evidence remains available in JSON, Markdown surfaces corner counts and bounded airflow envelopes, indeterminate analyses become dossier attention items, and missing provenance remains a separate unresolved traceability condition.
+v0.36 hardens automatic-friction evidence validation before any network iteration. Geometry-derived edges that claim automatic roughness/viscosity friction must carry complete finite stored geometry, reference-flow, and friction evidence; malformed evidence is rejected even when the solved branch flow is near zero.\n\nv0.37 adds deterministic bounded uncertainty around the nonlinear fan/variable-friction loop workflow. It varies explicit fixed pressure and selected automatic-friction duct local-loss coefficients, rebuilds affected geometry evidence, and re-solves Darcy friction and the bounded fan/system intersection at every corner. Complete operating-point and branch-flow corner ranges are reported only when the nominal case and every corner solve; corner ranges are evidence over evaluated combinations, not statistical or guaranteed continuous-box extrema.\n\nv0.38 integrates the v0.37 nonlinear uncertainty workflow into engineering dossiers. Referenced uncertainty inputs are SHA-256 fingerprinted, complete corner evidence remains available in JSON, Markdown surfaces corner counts and bounded airflow envelopes, indeterminate analyses become dossier attention items, and missing provenance remains a separate unresolved traceability condition.\n\nv0.39 composes explicit fan-speed scenarios with the v0.37 nonlinear uncertainty solver. Each transformed supplied fan curve is evaluated against the full user-supplied fixed-pressure/local-loss corner set, the complete Darcy-friction loop is re-solved at every bounded operating-point evaluation, and no per-speed envelope is emitted unless its nominal case and every corner solve. A separate total speed × corner guard prevents silent combinatorial growth.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
@@ -192,7 +192,19 @@ Write a Markdown report:
 
     cleanroomx-fan-loop-friction examples/fan_variable_friction_loop_demo.json --output fan-variable-loop-report.md
 
-The v0.33 workflow searches only inside the supplied fan curve. At every fan/system evaluation it scales the two-terminal through-flow, solves the complete loop, recomputes automatic Darcy friction from solved branch airflow, and iterates resistance closure before comparing fan and system pressure. Fixed-resistance networks remain compatible with the existing v0.26 result. See docs/FAN_VARIABLE_FRICTION_LOOP.md.
+The v0.33 workflow searches only inside the supplied fan curve. At every fan/system evaluation it scales the two-terminal through-flow, solves the complete loop, recomputes automatic Darcy friction from solved branch airflow, and iterates resistance closure before comparing fan and system pressure. Fixed-resistance networks remain compatible with the existing v0.26 result. See docs/FAN_VARIABLE_FRICTION_LOOP.md.\n\n## Sweep fan speed with bounded nonlinear uncertainty
+
+    cleanroomx-fan-loop-friction-speed-uncertainty examples/fan_variable_friction_speed_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-fan-loop-friction-speed-uncertainty examples/fan_variable_friction_speed_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-fan-loop-friction-speed-uncertainty examples/fan_variable_friction_speed_uncertainty_demo.json --output fan-speed-variable-friction-uncertainty.md
+
+The v0.39 workflow applies explicit affinity-law fan-speed ratios and then runs the complete v0.37 bounded nonlinear uncertainty analysis independently at each transformed speed. Each speed retains its own complete/indeterminate state; no transformed fan curve is extrapolated. See docs/FAN_VARIABLE_FRICTION_SPEED_UNCERTAINTY.md.
 
 ## Solve a fan-driven looped network
 
@@ -477,7 +489,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are dossier integration for fan/loop uncertainty and fan-speed loop studies, followed by desktop/web UI work and CFD adapters.
+Next milestones are dossier integration for the v0.39 speed × nonlinear-uncertainty study, broader physical-input uncertainty where evidence supports it, followed by desktop/web UI work and CFD adapters.
 
 ## Standards references
 

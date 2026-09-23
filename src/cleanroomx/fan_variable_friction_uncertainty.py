@@ -1372,12 +1372,19 @@ def analyze_fan_variable_friction_loop_uncertainty(
         * fan_curve_case_count
         * len(fan_speed_values)
     )
-    efficiency_case_count = prod(
-        len(sorted({item.lower, item.upper}))
-        for item in study.power_efficiency_uncertainty.values()
+    efficiency_case_count = (
+        prod(
+            len(sorted({item.lower, item.upper}))
+            for item in study.power_efficiency_uncertainty.values()
+        )
+        if study.power_efficiency_uncertainty
+        else 0
     )
     combined_power_case_count = corner_count * efficiency_case_count
-    if combined_power_case_count > study.max_power_cases:
+    if (
+        study.power_efficiency_uncertainty
+        and combined_power_case_count > study.max_power_cases
+    ):
         raise ValueError(
             "fan/variable-friction power uncertainty case count "
             f"{combined_power_case_count} is exceeding "

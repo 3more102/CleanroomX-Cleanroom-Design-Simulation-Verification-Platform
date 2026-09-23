@@ -1,0 +1,71 @@
+{
+  "name": "Reference-geometry loop demo",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 5400.0,
+    "Junction": 0.0,
+    "Return": -5400.0
+  },
+  "edges": [
+    {
+      "name": "Direct branch",
+      "start_node": "Supply",
+      "end_node": "Return",
+      "reference_airflow_m3_h": 3000.0,
+      "sections": [
+        {
+          "name": "Direct circular",
+          "length_m": 18.0,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 2.0,
+          "diameter_m": 0.55,
+          "absolute_roughness_m": 0.00009,
+          "kinematic_viscosity_m2_s": 0.000015
+        }
+      ]
+    },
+    {
+      "name": "Upper branch",
+      "start_node": "Supply",
+      "end_node": "Junction",
+      "reference_airflow_m3_h": 2400.0,
+      "sections": [
+        {
+          "name": "Upper rectangular 1",
+          "length_m": 7.0,
+          "air_density_kg_m3": 1.2,
+          "friction_factor": 0.021,
+          "local_loss_coefficient": 0.8,
+          "width_m": 0.6,
+          "height_m": 0.4
+        },
+        {
+          "name": "Upper rectangular 2",
+          "length_m": 5.0,
+          "air_density_kg_m3": 1.2,
+          "friction_factor": 0.021,
+          "local_loss_coefficient": 0.7,
+          "width_m": 0.6,
+          "height_m": 0.4
+        }
+      ]
+    },
+    {
+      "name": "Return branch",
+      "start_node": "Junction",
+      "end_node": "Return",
+      "reference_airflow_m3_h": 2400.0,
+      "sections": [
+        {
+          "name": "Return rectangular",
+          "length_m": 10.0,
+          "air_density_kg_m3": 1.2,
+          "friction_factor": 0.021,
+          "local_loss_coefficient": 1.2,
+          "width_m": 0.6,
+          "height_m": 0.4
+        }
+      ]
+    }
+  ]
+}

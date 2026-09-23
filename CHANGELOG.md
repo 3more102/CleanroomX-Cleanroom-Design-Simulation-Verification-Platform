@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8 branch-flow supply-tree solver — 2026-09-23
+
+- Added directed supply-tree topology with explicit source, branches, and fixed leaf-terminal airflow demands.
+- Added automatic upstream branch-flow propagation by steady-state mass continuity.
+- Reused the hardened v0.6.1 Darcy-Weisbach/local-K section model at each solved branch airflow.
+- Added source-to-terminal accumulated pressure losses, critical-terminal selection, and node continuity residual reporting.
+- Added topology validation for multiple feeds, unreachable nodes, missing leaf demands, and invalid terminal placement.
+- Integrated branch-flow critical-path pressure loss into preliminary fan duty with an HVAC airflow-consistency guard.
+- Kept the solver explicitly limited to fixed-demand trees rather than looped or pressure-balanced networks.
+- Added JSON loading, Markdown reporting, tests, example data, and documentation.
+
+
 ## v0.7 qualification uncertainty — 2026-09-23
 
 - Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.

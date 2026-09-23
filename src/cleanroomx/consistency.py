@@ -116,6 +116,7 @@ def analyze_hvac_fan_airflow_consistency(
     fan_parallel_networks: list[dict] | None = None,
     fan_loop_networks: list[dict] | None = None,
     fan_speed_studies: list[dict] | None = None,
+    fan_loop_speed_studies: list[dict] | None = None,
     airflow_abs_tolerance_m3_h: float = 0.0,
 ) -> dict:
     """Compare solved fan-study airflow against the HVAC governing airflow."""
@@ -189,6 +190,19 @@ def analyze_hvac_fan_airflow_consistency(
                     "operating_point": case.get("operating_point"),
                 },
                 "operating_point",
+            )
+    for study in fan_loop_speed_studies or []:
+        study_name = str(study.get("study", "")).strip() or "unnamed"
+        for case in study.get("speed_cases", []):
+            ratio = case.get("speed_ratio")
+            add_check(
+                "fan_loop_speed_case",
+                {
+                    "study": f"{study_name} @ {ratio}x",
+                    "status": case.get("status"),
+                    "fan_operating_point": case.get("fan_operating_point"),
+                },
+                "fan_operating_point",
             )
 
     if not checks:

@@ -826,6 +826,41 @@ def _metric_envelope(points: list[dict], key: str, unit: str) -> dict:
     }
 
 
+def _power_evidence_ranges(solved_power_evidence: list[dict]) -> dict | None:
+    if not solved_power_evidence:
+        return None
+
+    metric_units = (
+        ("fluid_air_power_kw", "kW"),
+        ("shaft_power_kw", "kW"),
+        ("electrical_input_kw", "kW"),
+        ("specific_fan_power_w_per_m3_s", "W/(m3/s)"),
+    )
+    metrics = {}
+    for key, unit in metric_units:
+        values = [item.get(key) for item in solved_power_evidence]
+        if any(value is None for value in values):
+            continue
+        numeric = [float(value) for value in values]
+        metrics[key] = {
+            "lower": round(min(numeric), 9),
+            "upper": round(max(numeric), 9),
+            "unit": unit,
+        }
+
+    return {
+        "evaluated_corner_count": len(solved_power_evidence),
+        "metrics": metrics,
+        "scope_note": (
+            "These are min/max values across evaluated solved uncertainty "
+            "corners only. They are not claimed as guaranteed continuous-box "
+            "power extrema; Q*deltaP may have an interior extremum. Shaft, "
+            "electrical-input, and specific-fan-power metrics are reported only "
+            "when the corresponding explicit efficiency chain is configured."
+        ),
+    }
+
+
 def _metric_extreme_case_witnesses(points: list[dict], key: str) -> dict:
     values = [float(point[key]) for point in points]
     lower_index = min(range(len(values)), key=values.__getitem__)
@@ -868,6 +903,57 @@ def _critical_case_summary(corner_index: int, corner: dict) -> dict:
         if values:
             summary[key] = values
     return summary
+
+
+def _power_extrema_sources(corners: list[dict]) -> dict:
+    metric_units = (
+        ("fluid_air_power_kw", "kW"),
+        ("shaft_power_kw", "kW"),
+        ("electrical_input_kw", "kW"),
+        ("specific_fan_power_w_per_m3_s", "W/(m3/s)"),
+    )
+    evidence_by_metric = {}
+    for key, unit in metric_units:
+        values = []
+        complete = True
+        for corner_index, corner in enumerate(corners):
+            power_evidence = corner.get("power_evidence")
+            value = None if power_evidence is None else power_evidence.get(key)
+            if value is None:
+                complete = False
+                break
+            values.append((corner_index, float(value)))
+        if not complete or not values:
+            continue
+
+        lower = min(value for _corner_index, value in values)
+        upper = max(value for _corner_index, value in values)
+
+        def _sources(target: float) -> list[dict]:
+            return [
+                _critical_case_summary(corner_index, corners[corner_index])
+                for corner_index, value in values
+                if math.isclose(
+                    value,
+                    target,
+                    rel_tol=1e-12,
+                    abs_tol=1e-12,
+                )
+            ]
+
+        evidence_by_metric[key] = {
+            "lower": {
+                "value": round(lower, 9),
+                "unit": unit,
+                "sources": _sources(lower),
+            },
+            "upper": {
+                "value": round(upper, 9),
+                "unit": unit,
+                "sources": _sources(upper),
+            },
+        }
+    return evidence_by_metric
 
 
 def _metric_extrema_sources(
@@ -1203,6 +1289,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     corners = []
     solved_points = []
     solved_networks = []
+    solved_power_evidence = []
     for fixed_pressure in fixed_values:
         for values in parameter_combinations:
             edge_parameter_overrides: dict[str, dict[str, float]] = {}
@@ -1245,6 +1332,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                     ):
                         solved_points.append(point)
                         solved_networks.append(network)
+                        solved_power_evidence.append(result["power_evidence"])
                         edge_airflows = {
                             edge["name"]: edge["airflow_m3_h"]
                             for edge in network["edges"]
@@ -1306,6 +1394,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             ],
                             "status": result["status"],
                             "operating_point": point,
+                            "power_evidence": result["power_evidence"],
                             "edge_airflows_m3_h": edge_airflows,
                             "solver_diagnostics": result["solver_diagnostics"],
                         }
@@ -1325,6 +1414,8 @@ def analyze_fan_variable_friction_loop_uncertainty(
     operating_point_extrema_sources = None
     edge_airflow_corner_ranges = None
     edge_airflow_extrema_sources = None
+    power_evidence_ranges = None
+    power_extrema_sources = None
     if all_corners_solved:
         operating_point_envelope = {
             "airflow_m3_h": _metric_envelope(
@@ -1387,6 +1478,8 @@ def analyze_fan_variable_friction_loop_uncertainty(
             study,
             corners,
         )
+        power_evidence_ranges = _power_evidence_ranges(solved_power_evidence)
+        power_extrema_sources = _power_extrema_sources(corners)
 
     fixed_record = _input_record(
         "fixed_pressure_pa",
@@ -1616,6 +1709,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         },
         "nominal_status": nominal["status"],
         "nominal_operating_point": nominal["fan_operating_point"],
+        "nominal_power_evidence": nominal["power_evidence"],
         "nominal_result": nominal,
         "corner_count": len(corners),
         "solved_corner_count": len(solved_points),
@@ -1627,6 +1721,8 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "operating_point_extrema_sources": operating_point_extrema_sources,
         "edge_airflow_corner_ranges": edge_airflow_corner_ranges,
         "edge_airflow_extrema_sources": edge_airflow_extrema_sources,
+        "power_evidence_ranges": power_evidence_ranges,
+        "power_extrema_sources": power_extrema_sources,
         "traceability": {
             "complete": not missing,
             "missing_provenance": missing,
@@ -1668,7 +1764,13 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "min/max values are ranges across evaluated corners only; when complete, "
             "their source corner indices "
             "and fan scenario/speed/fixed-pressure context are retained for "
-            "auditability. Corner outcome diagnostics separately retain "
+            "auditability. Solved cases also retain the fan solver's full "
+            "power-evidence chain; complete studies summarize evaluated-corner "
+            "fluid, shaft, electrical-input, and specific-fan-power ranges only "
+            "where explicit efficiencies make those metrics available, with "
+            "tie-aware source-corner provenance. These power-chain ranges are "
+            "not claimed as guaranteed continuous-box extrema. Corner outcome "
+            "diagnostics separately retain "
             "status and solver termination-reason counts plus the exact input "
             "context of every unresolved evaluated corner without converting "
             "partial solved cases into a complete envelope. These are not "

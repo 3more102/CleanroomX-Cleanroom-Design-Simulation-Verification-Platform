@@ -13,6 +13,7 @@ def markdown_geometry_derived_loop_report(result: dict) -> str:
         f"- Mass-balance tolerance: **{result['mass_balance_tolerance_m3_h']} m³/h**",
         f"- Maximum node continuity residual: **{result['max_abs_mass_balance_residual_m3_h']} m³/h**",
         f"- Maximum edge pressure-law residual: **{result['max_abs_pressure_law_residual_pa']} Pa**",
+        f"- Maximum geometry pressure-law residual: **{result['max_abs_geometry_pressure_law_residual_pa']} Pa**",
         "",
         "## Nodes",
         "",
@@ -49,8 +50,8 @@ def markdown_geometry_derived_loop_report(result: dict) -> str:
             "",
             "## Resistance derivation evidence",
             "",
-            "| Edge | Section | Shape | Darcy f | Method | Reynolds number | Section R [Pa/(m³/s)²] | Reference ΔP (Pa) |",
-            "|---|---|---|---:|---|---:|---:|---:|",
+            "| Edge | Section | Shape | Darcy f | Method | Reynolds number | Section R [Pa/(m³/s)²] | Reference ΔP (Pa) | Solved velocity (m/s) | Solved ΔP (Pa) |",
+            "|---|---|---|---:|---|---:|---:|---:|---:|---:|",
         ]
     )
     for edge in result["edges"]:
@@ -61,7 +62,9 @@ def markdown_geometry_derived_loop_report(result: dict) -> str:
                 f"{section['friction_factor']} | {section['friction_factor_method']} | "
                 f"{section['reynolds_number']} | "
                 f"{section['quadratic_resistance_pa_per_m3_s_squared']} | "
-                f"{section['reference_pressure_drop_pa']} |"
+                f"{section['reference_pressure_drop_pa']} | "
+                f"{section['solved_velocity_m_s']} | "
+                f"{section['solved_pressure_difference_pa']} |"
             )
 
     lines.extend(["", "## Engineering note", "", result["scope_note"], ""])

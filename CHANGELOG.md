@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15 psychrometric and thermal uncertainty — 2026-09-23
+
+- Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.
+- Added deterministic psychrometric envelopes by evaluating every unique rectangular input-box corner with the existing CleanroomX psychrometric equations.
+- Added propagation of uncertain room/outdoor psychrometric states through thermal sizing, including makeup-air load and sensible-airflow interval evaluation.
+- Preserved backward compatibility for scalar fixed air-state inputs and kept provenance completeness separate from engineering acceptance.
+- Added the `cleanroomx-psychrometric-uncertainty` CLI, JSON/Markdown reporting, examples, documentation, and regression coverage.
+- Kept the method explicitly bounded as deterministic interval screening without probability distributions, covariance assumptions, hourly weather/load simulation, or equipment selection.
+
 ## v0.14 fan/duct-network operating-point integration — 2026-09-23
 
 - Added a reference-flow fan/duct-network study that derives path quadratic resistance from explicit duct geometry, Darcy friction factors, air density, local-loss coefficients, and section reference airflow fractions.

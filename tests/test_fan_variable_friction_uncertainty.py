@@ -1337,6 +1337,7 @@ def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
         "max_abs_mass_balance_residual_m3_h",
         "max_abs_pressure_law_residual_pa",
         "network_outer_iterations",
+        "network_newton_iterations",
         "operating_iterations",
     }
     assert set(quality["worst_metrics"]) == expected_metrics
@@ -1367,6 +1368,37 @@ def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
         "max_abs_mass_balance_residual_m3_h"
     ]["value"] <= tolerances["mass_balance_tolerance_m3_h"] + 1e-9
 
+    iteration_limits = quality["configured_iteration_limits"]
+    assert iteration_limits == {
+        "max_outer_iterations": 50,
+        "max_newton_iterations": 100,
+        "max_operating_iterations": 80,
+    }
+
+    utilization = quality["limit_utilization"]
+    expected_utilized_metrics = expected_metrics - {
+        "max_abs_pressure_law_residual_pa"
+    }
+    assert set(utilization) == expected_utilized_metrics
+    for metric in expected_utilized_metrics:
+        evidence = utilization[metric]
+        assert evidence is not None
+        assert evidence["ratio"] == pytest.approx(
+            evidence["metric_value"] / evidence["configured_limit"],
+            abs=1e-9,
+        )
+        assert evidence["percent"] == pytest.approx(
+            100.0 * evidence["ratio"],
+            abs=1e-6,
+        )
+        assert evidence["ratio"] <= 1.0 + 1e-9
+        assert [
+            source["corner_index"] for source in evidence["sources"]
+        ] == [
+            source["corner_index"]
+            for source in quality["worst_metrics"][metric]["sources"]
+        ]
+
 
 def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
     data = _example_data()
@@ -1383,6 +1415,9 @@ def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
     assert quality["complete_study_coverage"] is False
     assert quality["nominal_status"] == "no_intersection_in_supplied_range"
     assert all(evidence is None for evidence in quality["worst_metrics"].values())
+    assert all(
+        evidence is None for evidence in quality["limit_utilization"].values()
+    )
 
 
 def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
@@ -1398,4 +1433,7 @@ def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     assert "Absolute operating pressure residual" in report
     assert "Resistance closure error" in report
     assert "Pressure-law residual" in report
+    assert "Network Newton iterations" in report
+    assert "Configured solver limit" in report
+    assert "Budget used" in report
     assert "Witness source corner(s)" in report

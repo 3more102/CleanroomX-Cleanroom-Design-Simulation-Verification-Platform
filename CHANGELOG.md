@@ -1,4 +1,14 @@
 # Changelog
+## v0.55 no-intersection supplied-endpoint diagnostics — 2026-09-24
+
+- Adds explicit supplied-endpoint diagnostics for nonlinear uncertainty corners whose fan/system operating point does not intersect inside the available fan-curve range.
+- Identifies whether each unresolved case is bounded by the lower or upper supplied airflow endpoint and records the endpoint airflow, fan pressure, system pressure, signed fan-minus-system pressure margin, mismatch type, and absolute pressure gap.
+- Aggregates lower-boundary and upper-boundary no-intersection counts and retains tie-aware source-corner provenance for the largest evaluated endpoint pressure gap.
+- Preserves the strict no-extrapolation boundary: the diagnostic does not estimate a missing operating point, fan capacity beyond supplied data, stall/surge margin, manufacturer operating region, or equipment acceptance.
+- Surfaces no-intersection boundary evidence in standalone Markdown reports, engineering-dossier tables, and dossier executive summaries.
+- Adds regression coverage for both lower-boundary fan-pressure-deficit and upper-boundary fan-pressure-surplus cases plus dossier aggregation.
+- Bumped package/runtime metadata to v0.55.0.
+
 ## v0.54 supplied fan-curve boundary-clearance audit — 2026-09-24
 
 - Adds per-solved-corner airflow distance from the operating point to both endpoints of that corner's exact supplied or speed-transformed fan-curve airflow range.

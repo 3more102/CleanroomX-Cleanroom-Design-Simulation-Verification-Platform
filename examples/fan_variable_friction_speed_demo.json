@@ -1,25 +1,38 @@
 {
   "name": "Variable-friction fan-speed loop sweep",
-  "reference_speed_rpm": 1800.0,
-  "speed_ratios": [0.5, 0.75, 1.0],
+  "reference_speed_rpm": 1800,
+  "speed_ratios": [
+    0.5,
+    0.75,
+    1
+  ],
   "fan_discharge_node": "Supply",
   "fan_suction_node": "Return",
-  "fixed_pressure_pa": 20.0,
+  "fixed_pressure_pa": 20,
   "reference_fan_curve": {
     "name": "Variable-friction reference fan",
     "points": [
-      {"airflow_m3_h": 0.0, "pressure_pa": 800.0},
-      {"airflow_m3_h": 5400.0, "pressure_pa": 350.0},
-      {"airflow_m3_h": 9000.0, "pressure_pa": 0.0}
+      {
+        "airflow_m3_h": 0,
+        "pressure_pa": 800
+      },
+      {
+        "airflow_m3_h": 5400,
+        "pressure_pa": 350
+      },
+      {
+        "airflow_m3_h": 9000,
+        "pressure_pa": 0
+      }
     ]
   },
   "loop_network": {
     "name": "Variable-friction two-path loop",
     "reference_node": "Supply",
     "node_injections_m3_h": {
-      "Supply": 5400.0,
-      "Mid": 0.0,
-      "Return": -5400.0
+      "Supply": 5400,
+      "Mid": 0,
+      "Return": -5400
     },
     "edges": [
       {
@@ -27,13 +40,13 @@
         "start_node": "Supply",
         "end_node": "Return",
         "duct_geometry": {
-          "length_m": 18.0,
+          "length_m": 18,
           "air_density_kg_m3": 1.2,
           "local_loss_coefficient": 1.3,
           "diameter_m": 0.45,
           "absolute_roughness_m": 0.00015,
           "kinematic_viscosity_m2_s": 0.000015,
-          "reference_airflow_m3_h": 2700.0
+          "reference_airflow_m3_h": 2700
         }
       },
       {
@@ -41,13 +54,13 @@
         "start_node": "Supply",
         "end_node": "Mid",
         "duct_geometry": {
-          "length_m": 10.0,
+          "length_m": 10,
           "air_density_kg_m3": 1.2,
           "local_loss_coefficient": 0.6,
           "diameter_m": 0.35,
           "absolute_roughness_m": 0.00015,
           "kinematic_viscosity_m2_s": 0.000015,
-          "reference_airflow_m3_h": 2700.0
+          "reference_airflow_m3_h": 2700
         }
       },
       {
@@ -55,13 +68,13 @@
         "start_node": "Mid",
         "end_node": "Return",
         "duct_geometry": {
-          "length_m": 10.0,
+          "length_m": 10,
           "air_density_kg_m3": 1.2,
           "local_loss_coefficient": 0.6,
           "diameter_m": 0.35,
           "absolute_roughness_m": 0.00015,
           "kinematic_viscosity_m2_s": 0.000015,
-          "reference_airflow_m3_h": 2700.0
+          "reference_airflow_m3_h": 2700
         }
       }
     ]
@@ -75,5 +88,10 @@
     "max_newton_iterations": 100,
     "operating_pressure_tolerance_pa": 0.000001,
     "max_operating_iterations": 80
+  },
+  "power_efficiencies": {
+    "fan_efficiency": 0.72,
+    "motor_efficiency": 0.93,
+    "vfd_efficiency": 0.97
   }
 }

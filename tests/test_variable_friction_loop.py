@@ -1,5 +1,6 @@
 import pytest
 
+from cleanroomx.loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from cleanroomx.loop_network_io import looped_flow_network_from_dict
 from cleanroomx.variable_friction_loop import (
     solve_variable_friction_looped_network,
@@ -302,3 +303,71 @@ def test_markdown_report_surfaces_variable_friction_closure() -> None:
     assert "Variable-friction convergence" in report
     assert "Edge closure" in report
     assert "automatic_friction" in report
+
+
+def test_malformed_automatic_friction_evidence_is_rejected_even_at_zero_flow() -> None:
+    edge = QuadraticFlowEdge(
+        name="Malformed automatic edge",
+        start_node="A",
+        end_node="B",
+        resistance_pa_per_m3_s_squared=10.0,
+        resistance_basis="duct_geometry",
+        resistance_evidence={
+            "absolute_roughness_m": 0.00015,
+            "kinematic_viscosity_m2_s": 1.5e-5,
+            "reference_airflow_m3_h": 1000.0,
+            "friction_factor": 0.02,
+        },
+    )
+    network = LoopedFlowNetwork(
+        name="Malformed evidence at zero flow",
+        node_injections_m3_h={"A": 0.0, "B": 0.0},
+        edges=(edge,),
+        reference_node="A",
+    )
+
+    with pytest.raises(ValueError, match="incomplete resistance evidence"):
+        solve_variable_friction_looped_network(network)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("reference_airflow_m3_h", 0.0),
+        ("reference_airflow_m3_h", float("nan")),
+        ("friction_factor", 0.0),
+        ("friction_factor", float("inf")),
+    ],
+)
+def test_invalid_stored_automatic_friction_evidence_is_rejected(
+    field: str,
+    value: float,
+) -> None:
+    loaded = looped_flow_network_from_dict(
+        {
+            "name": "Valid automatic evidence source",
+            "reference_node": "A",
+            "node_injections_m3_h": {"A": 1000.0, "B": -1000.0},
+            "edges": [_automatic_geometry("AB", "A", "B")],
+        }
+    )
+    source = loaded.edges[0]
+    evidence = dict(source.resistance_evidence)
+    evidence[field] = value
+    edge = QuadraticFlowEdge(
+        name=source.name,
+        start_node=source.start_node,
+        end_node=source.end_node,
+        resistance_pa_per_m3_s_squared=source.resistance_pa_per_m3_s_squared,
+        resistance_basis=source.resistance_basis,
+        resistance_evidence=evidence,
+    )
+    network = LoopedFlowNetwork(
+        name="Corrupted automatic evidence",
+        node_injections_m3_h={"A": 1000.0, "B": -1000.0},
+        edges=(edge,),
+        reference_node="A",
+    )
+
+    with pytest.raises(ValueError):
+        solve_variable_friction_looped_network(network)

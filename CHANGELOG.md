@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16 psychrometric dossier integration — 2026-09-23
+
+- Added optional standalone psychrometric-state uncertainty analyses to the integrated engineering dossier.
+- Added SHA-256 source fingerprints for psychrometric uncertainty inputs alongside existing dossier sources.
+- Added dossier reporting for evaluated corner count, humidity-ratio and enthalpy envelopes, and provenance completeness.
+- Treated incomplete psychrometric provenance as unresolved traceability rather than a numerical failure or conformity decision.
+- Updated the integrated demo manifest, dossier documentation, and regression coverage.
+- Preserved the v0.15 standalone psychrometric uncertainty workflow and v0.14 fan/duct operating-point integration.
+
 ## v0.15 psychrometric state uncertainty — 2026-09-23
 
 - Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.

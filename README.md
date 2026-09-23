@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.16 engineering core
+## v0.17 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -27,6 +27,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
+- Standalone cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -244,6 +245,20 @@ The v0.13 dossier hashes every referenced input with SHA-256 and preserves compo
 
 See docs/ENGINEERING_DOSSIER.md.
 
+## Check cross-module input consistency
+
+    cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json
+
+Allow an explicit absolute data-consistency tolerance:
+
+    cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json --airflow-tolerance-m3-h 5
+
+Require identical room-name sets:
+
+    cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json --require-same-room-set
+
+The v0.17 checker matches rooms by exact name and compares verification supply airflow against HVAC cleanroom airflow. Its tolerance is supplied by the user and is not a standards-derived engineering acceptance limit. See docs/CROSS_MODULE_CONSISTENCY.md.
+
 ## Multi-room pressure-cascade JSON
 
 ```json
@@ -281,7 +296,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

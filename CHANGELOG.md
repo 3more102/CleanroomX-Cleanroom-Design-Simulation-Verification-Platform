@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.17 cross-module input consistency — 2026-09-23
+
+- Added a standalone verification/HVAC consistency checker for duplicated room-airflow inputs.
+- Matched rooms by exact room name and compared verification supply airflow against HVAC cleanroom airflow.
+- Added an explicit user-supplied absolute consistency tolerance with exact agreement as the default; no engineering tolerance is invented.
+- Added optional identical-room-set enforcement while preserving unmatched-room evidence when different module scopes are intentional.
+- Added pass, pass-with-scope-difference, fail, and not-comparable states plus Markdown/JSON reporting, CLI, example data, documentation, and regression coverage.
+- Kept the workflow explicitly bounded as input consistency rather than airflow adequacy, cleanroom acceptance, certification, or standards conformity.
+
 ## v0.16 fan-driven passive parallel-network integration — 2026-09-23
 
 - Coupled the bounded fan/system operating-point solver to the passive common-pressure-node parallel-path model.

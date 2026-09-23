@@ -1,4 +1,16 @@
 # Changelog
+## v0.66 bisection implementation-invariant audit — 2026-09-24
+
+- Audits retained bounded-bisection search geometry directly from the unrounded live solver state without changing the operating-point solve.
+- Records whether the active terminal bracket still preserves the strict positive/negative residual sign change and whether the accepted airflow is exactly the active bracket midpoint within floating-point comparison tolerance.
+- Records the number of completed binary contraction steps, the iteration-implied width fraction of the original supplied segment, the actual width fraction, and their absolute floating-point consistency error.
+- Keeps the invariant audit inapplicable to direct supplied-point tolerance contacts rather than inventing bisection evidence.
+- Aggregates invariant-evidence counts, exact sign/midpoint violation corner indices, and tied source-corner provenance for the maximum raw width-fraction consistency error.
+- Surfaces invariant evidence in standalone fan-loop, nonlinear uncertainty, and engineering-dossier reports.
+- Adds solver, uncertainty, and dossier regression coverage.
+- Treats these as implementation-verification diagnostics only; no engineering acceptance threshold, physical uncertainty, interpolation-error bound, stability criterion, or equipment limit is introduced.
+- Bumped package/runtime metadata to v0.66.0.
+
 ## v0.65 bounded operating-point root-search geometry — 2026-09-24
 
 - Retains the final active signed-residual bisection interval immediately before a bounded nonlinear fan/system midpoint satisfies the configured operating-pressure tolerance.

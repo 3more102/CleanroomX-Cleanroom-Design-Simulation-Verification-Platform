@@ -933,6 +933,44 @@ def _edge_airflow_corner_ranges(
     return rows
 
 
+def _corner_outcome_diagnostics(corners: list[dict]) -> dict:
+    status_counts: dict[str, int] = {}
+    termination_reason_counts: dict[str, int] = {}
+    unresolved_cases = []
+
+    for corner_index, corner in enumerate(corners):
+        status = str(corner["status"])
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        solver_diagnostics = corner.get("solver_diagnostics") or {}
+        termination_reason = str(
+            solver_diagnostics.get("termination_reason", "unspecified")
+        )
+        termination_reason_counts[termination_reason] = (
+            termination_reason_counts.get(termination_reason, 0) + 1
+        )
+
+        if status != "solved":
+            unresolved_cases.append(
+                {
+                    **_critical_case_summary(corner_index, corner),
+                    "status": status,
+                    "termination_reason": termination_reason,
+                }
+            )
+
+    return {
+        "status_counts": dict(sorted(status_counts.items())),
+        "termination_reason_counts": dict(
+            sorted(termination_reason_counts.items())
+        ),
+        "unresolved_corner_indices": [
+            case["corner_index"] for case in unresolved_cases
+        ],
+        "unresolved_cases": unresolved_cases,
+    }
+
+
 def analyze_fan_variable_friction_loop_uncertainty(
     study: FanVariableFrictionLoopUncertaintyStudy,
 ) -> dict:
@@ -1236,6 +1274,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         nominal["status"] == "solved"
         and unresolved_corner_count == 0
     )
+    corner_outcome_diagnostics = _corner_outcome_diagnostics(corners)
 
     operating_point_envelope = None
     operating_point_extreme_cases = None
@@ -1521,6 +1560,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "corner_count": len(corners),
         "solved_corner_count": len(solved_points),
         "unresolved_corner_count": unresolved_corner_count,
+        "corner_outcome_diagnostics": corner_outcome_diagnostics,
         "corners": corners,
         "operating_point_envelope": operating_point_envelope,
         "operating_point_extreme_cases": operating_point_extreme_cases,
@@ -1566,8 +1606,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "operating-point search. Reported min/max values are ranges across "
             "evaluated corners only; when complete, their source corner indices "
             "and fan scenario/speed/fixed-pressure context are retained for "
-            "auditability. These are not claimed as guaranteed extrema "
-            "for all interior combinations. No probability distribution, "
+            "auditability. Corner outcome diagnostics separately retain "
+            "status and solver termination-reason counts plus the exact input "
+            "context of every unresolved evaluated corner without converting "
+            "partial solved cases into a complete envelope. These are not "
+            "claimed as guaranteed extrema for all interior combinations. "
+            "No probability distribution, "
             "covariance beyond explicitly supplied whole-curve scenarios, "
             "unconfigured geometry tolerance inference, "
             "damper/control inference, leakage, system effect, acoustics, "

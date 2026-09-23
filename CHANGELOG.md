@@ -1,4 +1,14 @@
 # Changelog
+## v0.57 deterministic nonlinear result integrity — 2026-09-24
+
+- Adds a canonical SHA-256 digest to every fan/variable-friction nonlinear uncertainty result.
+- Hashes the complete result before the integrity block using compact UTF-8 JSON with sorted keys, explicit canonicalization metadata, and a versioned scope identifier.
+- Keeps result-integrity evidence separate from engineering acceptance: the digest identifies exact computed content but does not authenticate source authority, calibration, certification, or equipment suitability.
+- Surfaces the full result digest in standalone uncertainty Markdown and engineering dossiers.
+- Adds dossier summary counts for present/missing nonlinear result-integrity records without changing existing engineering status decisions.
+- Adds regressions that independently recompute the digest, verify deterministic repeatability, verify input-sensitive changes, and confirm dossier propagation.
+- Bumped package/runtime metadata to v0.57.0.
+
 ## v0.56 configured solver-iteration budget audit — 2026-09-24
 
 - Exposes the selected operating network's inner Newton iteration count alongside the existing outer Darcy-friction and operating-point iteration diagnostics.

@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.57 engineering core
+## v0.58 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -129,7 +129,9 @@ v0.54 adds supplied-fan-curve boundary-clearance evidence for every solved nonli
 
 v0.56 extends the same numerical audit model to iteration budgets that were already explicit solver inputs. It records the selected network's inner Newton iteration count and compares worst solved-corner outer-Darcy, inner-Newton, and operating-point iterations with `max_outer_iterations`, `max_newton_iterations`, and `max_operating_iterations`, reporting utilization and remaining iterations with exact witness provenance. Incomplete studies remain explicitly partial. These are algorithmic convergence budgets, not engineering, equipment, commissioning, certification, or cleanroom acceptance limits.
 
-v0.57 hardens evaluated-corner power evidence. Each power metric now carries an explicit complete/partial/unavailable coverage record with available/total corner counts and exact missing corner indices. A min/max range, extrema witness set, and nominal-relative excursion are emitted only when that metric is available at every solved evaluated corner; CleanroomX does not summarize a partially populated metric as if it covered the full deterministic study. Missing fan/motor/VFD efficiencies therefore remain auditable unavailability rather than guessed values or subset ranges.
+v0.57 adds deterministic result-integrity evidence to nonlinear fan/variable-friction uncertainty results. CleanroomX canonicalizes the complete result payload before the integrity field is attached, computes a SHA-256 digest over sorted-key compact UTF-8 JSON, and surfaces that digest in standalone reports and engineering dossiers so repeated identical analyses can be compared without treating the digest as an engineering acceptance criterion.
+
+v0.58 hardens evaluated-corner power evidence. Each power metric now carries an explicit complete/partial/unavailable coverage record with available/total corner counts and exact missing corner indices. A min/max range, extrema witness set, and nominal-relative excursion are emitted only when that metric is available at every solved evaluated corner; CleanroomX does not summarize a partially populated metric as if it covered the full deterministic study. Missing fan/motor/VFD efficiencies therefore remain auditable unavailability rather than guessed values or subset ranges.
 
 v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersection_in_supplied_range`. Each such corner records whether the lower or upper supplied airflow endpoint bounds the case, the endpoint fan and system pressures, the signed fan-minus-system pressure mismatch, and the absolute boundary pressure gap. Aggregate evidence counts lower/upper boundary cases and retains the largest evaluated gap with source-corner provenance. No fan-curve extrapolation or missing operating-point estimate is performed.
 

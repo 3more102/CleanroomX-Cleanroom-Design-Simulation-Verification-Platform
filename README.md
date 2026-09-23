@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.5 engineering core
+## v0.6 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -17,6 +17,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional FFU/filter-unit count from rated airflow and explicit design utilization.
 - Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
+- Supply-duct path modeling with Darcy-Weisbach friction, entered fitting K-values, fixed component losses, and critical-path selection.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -33,7 +34,7 @@ CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. Its duct-network calculation is a pressure-loss budget from explicit project inputs, not an automatic duct-sizing or flow-distribution solver. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
 The uncertainty workflow uses deterministic worst-case input intervals. It is not a statistical measurement-uncertainty budget, does not invent tolerances, and does not replace calibration records or a project qualification procedure.
 
@@ -68,7 +69,7 @@ Write a Markdown report:
 
     cleanroomx-hvac examples/semiconductor_thermal_demo.json --output hvac-report.md
 
-The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data and a preliminary supply-fan model. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, and docs/STANDARDS.md.
+The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data, a supply-duct path network, and a preliminary supply-fan model. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, docs/DUCT_NETWORK_MODEL.md, and docs/STANDARDS.md.
 
 ## Analyze a measured particle-recovery test
 

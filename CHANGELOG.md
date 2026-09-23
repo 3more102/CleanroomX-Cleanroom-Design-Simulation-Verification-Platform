@@ -6,7 +6,7 @@
 - Uses explicit fixed quadratic edge laws `ΔP = R·Q·|Q|` and balanced user-supplied node injections.
 - Added spanning-tree initialization plus damped Newton/backtracking for nonlinear node-continuity solution.
 - Reports signed reverse flow, relative node pressures, per-node mass-balance residuals, and per-edge pressure-law residuals.
-- Validates finite positive resistances, balanced injections, unique edge names, valid node references, and graph connectivity.
+- Validates finite positive resistances, unique edge names, valid node references, graph connectivity, and absolute global injection balance within `1e-6 m³/h`.
 - Added JSON loading, Markdown/JSON reporting, the `cleanroomx-loop-flow` CLI, example data, engineering-scope documentation, and regression tests.
 - Preserves the v0.22 HVAC/fan operating-airflow consistency feature and v0.21 automatic Darcy-friction screening unchanged.
 - Keeps geometry/friction inference, leakage, dampers, controls, fan coupling, compressibility, and transient behavior outside this bounded solver.

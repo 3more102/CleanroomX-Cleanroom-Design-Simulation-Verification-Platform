@@ -851,6 +851,22 @@ def _critical_case_summary(corner_index: int, corner: dict) -> dict:
         summary["fan_speed_ratio"] = corner["fan_speed_ratio"]
     if "fan_curve_scenario" in corner:
         summary["fan_curve_scenario"] = corner["fan_curve_scenario"]
+
+    for key in (
+        "fan_curve_pressure_pa",
+        "fan_curve_airflow_m3_h",
+        "edge_local_loss_coefficient",
+        "edge_absolute_roughness_m",
+        "edge_kinematic_viscosity_m2_s",
+        "edge_air_density_kg_m3",
+        "edge_length_m",
+        "edge_circular_diameter_m",
+        "edge_rectangular_width_m",
+        "edge_rectangular_height_m",
+    ):
+        values = corner.get(key)
+        if values:
+            summary[key] = values
     return summary
 
 
@@ -1223,6 +1239,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
 
     operating_point_envelope = None
     operating_point_extreme_cases = None
+    operating_point_extrema_sources = None
     edge_airflow_corner_ranges = None
     if all_corners_solved:
         operating_point_envelope = {
@@ -1507,6 +1524,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "corners": corners,
         "operating_point_envelope": operating_point_envelope,
         "operating_point_extreme_cases": operating_point_extreme_cases,
+        "operating_point_extrema_sources": operating_point_extrema_sources,
         "edge_airflow_corner_ranges": edge_airflow_corner_ranges,
         "traceability": {
             "complete": not missing,

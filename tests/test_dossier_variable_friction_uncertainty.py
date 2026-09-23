@@ -21,6 +21,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert analysis["corner_count"] == 8
     assert analysis["solved_corner_count"] == 8
     assert analysis["traceability"]["complete"] is True
+    assert analysis["result_integrity"]["algorithm"] == "sha256"
+    assert len(analysis["result_integrity"]["sha256"]) == 64
     boundary_summary = analysis["fan_curve_boundary_clearance_summary"]
     assert boundary_summary["complete_study_coverage"] is True
     assert boundary_summary["solved_corner_count"] == analysis["corner_count"]
@@ -40,6 +42,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert component["analysis_count"] == 1
     assert component["corner_count"] == 8
     assert component["no_intersection_corner_count"] == 0
+    assert component["result_integrity_count"] == 1
+    assert component["missing_result_integrity_analyses"] == 0
     assert result["executive_summary"]["state"] == "no_adverse_findings"
 
     source = next(
@@ -64,6 +68,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Fan-curve min headroom m³/h" in report
     assert "Boundary evidence" in report
     assert "No-intersection boundary cases" in report
+    assert "Result SHA-256" in report
+    assert analysis["result_integrity"]["sha256"] in report
     assert "8" in report
 
 

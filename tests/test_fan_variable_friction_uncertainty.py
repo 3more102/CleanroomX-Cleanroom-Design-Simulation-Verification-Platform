@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sys
 
@@ -59,6 +60,42 @@ def test_example_produces_complete_bounded_corner_envelope() -> None:
         tuple(sorted(corner["edge_local_loss_coefficient"]))
         for corner in result["corners"]
     } == {("Direct", "Upper 1")}
+
+
+def test_result_integrity_sha256_is_recomputable_and_input_sensitive() -> None:
+    study = load_fan_variable_friction_loop_uncertainty(
+        "examples/fan_variable_friction_uncertainty_demo.json"
+    )
+    first = analyze_fan_variable_friction_loop_uncertainty(study)
+    second = analyze_fan_variable_friction_loop_uncertainty(study)
+
+    integrity = first["result_integrity"]
+    assert integrity["algorithm"] == "sha256"
+    assert integrity["canonicalization"] == "json-sort-keys-compact-utf8-v1"
+    assert len(integrity["sha256"]) == 64
+    assert second["result_integrity"]["sha256"] == integrity["sha256"]
+
+    payload = dict(first)
+    payload.pop("result_integrity")
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    assert hashlib.sha256(encoded).hexdigest() == integrity["sha256"]
+
+    changed_data = _example_data()
+    changed_data["fixed_pressure_pa"]["uncertainty_abs"] = 25.0
+    changed = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(changed_data)
+    )
+    assert changed["result_integrity"]["sha256"] != integrity["sha256"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(first)
+    assert "Result integrity" in report
+    assert integrity["sha256"] in report
 
 
 def test_nominal_result_matches_existing_nonlinear_solver() -> None:

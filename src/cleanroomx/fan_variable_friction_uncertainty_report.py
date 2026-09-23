@@ -289,6 +289,90 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"{source_text} |"
                 )
 
+    power_ranges = result.get("power_evidence_corner_ranges")
+    power_sources = result.get("power_evidence_extrema_sources")
+    if power_ranges is not None:
+        efficiencies = result.get("power_efficiencies")
+        lines.extend(
+            [
+                "",
+                "## Power-chain evaluated-corner ranges",
+                "",
+            ]
+        )
+        if efficiencies is None:
+            lines.append(
+                "- Explicit fan/motor/VFD efficiencies: **not supplied**; "
+                "shaft power, electrical input, and specific fan power are "
+                "therefore not reported."
+            )
+        else:
+            lines.append(
+                "- Explicit fixed efficiencies: "
+                f"fan={_fmt(efficiencies.get('fan_efficiency'))}, "
+                f"motor={_fmt(efficiencies.get('motor_efficiency'))}, "
+                f"VFD={_fmt(efficiencies.get('vfd_efficiency'))}."
+            )
+
+        metric_labels = (
+            ("fluid_air_power_kw", "Fluid air power", "kW"),
+            ("shaft_power_kw", "Shaft power", "kW"),
+            ("electrical_input_kw", "Electrical input", "kW"),
+            (
+                "specific_fan_power_w_per_m3_s",
+                "Specific fan power",
+                "W/(m³/s)",
+            ),
+        )
+        lines.extend(
+            [
+                "",
+                "| Metric | Lower | Upper | Unit |",
+                "|---|---:|---:|---|",
+            ]
+        )
+        for key, label, display_unit in metric_labels:
+            evidence = power_ranges.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | {display_unit} |")
+            else:
+                lines.append(
+                    f"| {label} | {evidence['lower']} | "
+                    f"{evidence['upper']} | {display_unit} |"
+                )
+
+        if power_sources is not None:
+            lines.extend(
+                [
+                    "",
+                    "| Metric | Bound | Value | Source corner input(s) |",
+                    "|---|---|---:|---|",
+                ]
+            )
+            for key, label, _display_unit in metric_labels:
+                metric_sources = power_sources.get(key)
+                if metric_sources is None:
+                    continue
+                for bound in ("lower", "upper"):
+                    evidence = metric_sources[bound]
+                    source_text = " / ".join(
+                        _fmt_extreme_source(source)
+                        for source in evidence["sources"]
+                    )
+                    lines.append(
+                        f"| {label} | {bound} | {evidence['value']} "
+                        f"{evidence['unit']} | {source_text} |"
+                    )
+
+        lines.extend(
+            [
+                "",
+                "These are min/max values across evaluated solved corners "
+                "only. Efficiency values are fixed explicit inputs here, not "
+                "uncertain variables, and no missing efficiency is inferred.",
+            ]
+        )
+
     edge_ranges = result.get("edge_airflow_corner_ranges")
     if edge_ranges:
         lines.extend(

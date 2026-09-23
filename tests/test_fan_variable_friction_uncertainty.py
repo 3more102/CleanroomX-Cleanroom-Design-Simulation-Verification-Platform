@@ -10,10 +10,12 @@ from cleanroomx.fan_variable_friction_loop_io import (
     load_fan_variable_friction_loop_study,
 )
 from cleanroomx.fan_variable_friction_uncertainty import (
+    FanCurveScenario,
     FanVariableFrictionLoopUncertaintyStudy,
     analyze_fan_variable_friction_loop_uncertainty,
 )
 from cleanroomx.fan_variable_friction_uncertainty_models import (
+    FanCurveScenario as CompatibilityFanCurveScenario,
     FanVariableFrictionLoopUncertaintyStudy as CompatibilityStudy,
 )
 from cleanroomx.fan_variable_friction_uncertainty_cli import (
@@ -305,6 +307,7 @@ def test_physical_uncertainty_report_surfaces_all_bounded_inputs() -> None:
 
 def test_uncertainty_model_compatibility_export_is_canonical() -> None:
     assert CompatibilityStudy is FanVariableFrictionLoopUncertaintyStudy
+    assert CompatibilityFanCurveScenario is FanCurveScenario
 
 def test_geometry_input_uncertainty_produces_complete_envelope() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(

@@ -6,11 +6,13 @@ from .airflow import analyze_air_balance
 from .duct import analyze_duct_network
 from .fan import analyze_supply_fan
 from .hvac_models import HVACProject
+from .supply_network import solve_supply_network
 from .thermal import analyze_thermal_design
 
 
 def analyze_hvac_project(project: HVACProject) -> dict:
     room_results: list[dict] = []
+    governing_airflow_by_room: dict[str, float] = {}
     total_cleanroom_airflow = 0.0
     total_governing_airflow = 0.0
     total_return_airflow = 0.0
@@ -26,6 +28,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             room.cleanroom_airflow_m3_h,
         )
         governing_airflow = thermal["governing_supply_airflow_m3_h"]
+        governing_airflow_by_room[room.name] = governing_airflow
         air_balance = analyze_air_balance(governing_airflow, room.air_balance)
         all_air_balances_pass = (
             all_air_balances_pass
@@ -69,8 +72,43 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         total_cooling_kw += thermal["preliminary_cooling_capacity_kw"]
         total_heating_kw += thermal["preliminary_heating_capacity_kw"]
 
+    supply_network = None
+    branch_airflows_m3_h: dict[str, float] | None = None
+    fan_design_airflow_m3_h = total_governing_airflow
+
+    if project.supply_network is not None:
+        defined_rooms = set(governing_airflow_by_room)
+        referenced_rooms = {
+            node.room_name
+            for node in project.supply_network.nodes
+            if node.room_name is not None
+        }
+        unknown_rooms = sorted(referenced_rooms - defined_rooms)
+        if unknown_rooms:
+            raise ValueError(
+                "supply network references unknown HVAC room(s): "
+                + ", ".join(unknown_rooms)
+            )
+        missing_rooms = sorted(defined_rooms - referenced_rooms)
+        if missing_rooms:
+            raise ValueError(
+                "every HVAC room must be mapped to exactly one supply node when "
+                "supply_network is configured; missing: "
+                + ", ".join(missing_rooms)
+            )
+
+        supply_network = solve_supply_network(
+            project.supply_network,
+            governing_airflow_by_room,
+        )
+        branch_airflows_m3_h = {
+            branch["name"]: branch["airflow_m3_h"]
+            for branch in supply_network["branches"]
+        }
+        fan_design_airflow_m3_h = supply_network["source_airflow_m3_h"]
+
     duct_network = (
-        analyze_duct_network(project.duct_network)
+        analyze_duct_network(project.duct_network, branch_airflows_m3_h)
         if project.duct_network is not None
         else None
     )
@@ -88,7 +126,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             else None
         )
         supply_fan = analyze_supply_fan(
-            total_governing_airflow,
+            fan_design_airflow_m3_h,
             project.fan_system,
             terminal_filter_pressure_drop_pa=filter_drop,
             duct_pressure_drop_override_pa=duct_override,
@@ -99,18 +137,22 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         "rooms": room_results,
         "total_cleanroom_airflow_m3_h": round(total_cleanroom_airflow, 3),
         "total_governing_airflow_m3_h": round(total_governing_airflow, 3),
+        "fan_design_airflow_m3_h": round(fan_design_airflow_m3_h, 3),
         "total_return_airflow_m3_h": round(total_return_airflow, 3),
         "total_exhaust_airflow_m3_h": round(total_exhaust_airflow, 3),
         "total_net_surplus_m3_h": round(total_net_surplus, 3),
         "all_air_balances_pass": all_air_balances_pass,
+        "supply_network": supply_network,
         "duct_network": duct_network,
         "supply_fan": supply_fan,
         "total_preliminary_cooling_capacity_kw": round(total_cooling_kw, 4),
         "total_preliminary_heating_capacity_kw": round(total_heating_kw, 4),
         "engineering_note": (
             "Thermal/HVAC results are preliminary calculations from explicit project "
-            "inputs. Cleanroom airflow is supplied independently; no ISO class is mapped "
-            "to a fixed ACH, pressure offset, airflow surplus, filter pressure drop, "
-            "duct friction factor, fitting loss coefficient, or fan duty."
+            "inputs. A configured rooted supply network aggregates downstream room "
+            "demand but does not perform pressure-driven flow balancing. Cleanroom "
+            "airflow remains requirement-driven; no ISO class is mapped to a fixed ACH, "
+            "pressure offset, airflow surplus, filter pressure drop, duct friction "
+            "factor, fitting loss coefficient, or fan duty."
         ),
     }

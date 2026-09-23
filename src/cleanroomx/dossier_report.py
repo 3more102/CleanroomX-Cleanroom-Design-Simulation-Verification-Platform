@@ -532,7 +532,7 @@ def markdown_dossier_report(result: dict) -> str:
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
                 "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -590,6 +590,32 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{solver_tolerance_audit} | "
                 f"{item['traceability']['complete']} |"
             )
+            power_uncertainty_ranges = item.get(
+                "power_uncertainty_ranges"
+            )
+            if power_uncertainty_ranges is not None:
+                electrical = power_uncertainty_ranges.get(
+                    "electrical_input_kw"
+                )
+                sfp = power_uncertainty_ranges.get(
+                    "specific_fan_power_w_per_m3_s"
+                )
+                electrical_text = (
+                    "—"
+                    if electrical is None
+                    else f"{electrical['lower']}–{electrical['upper']} kW"
+                )
+                sfp_text = (
+                    "—"
+                    if sfp is None
+                    else f"{sfp['lower']}–{sfp['upper']} W/(m³/s)"
+                )
+                lines.append(
+                    "- Bounded efficiency power propagation for "
+                    f"**{item['analysis']}**: "
+                    f"{item['power_uncertainty_case_count']} combined cases; "
+                    f"electrical input {electrical_text}; SFP {sfp_text}."
+                )
             if item["traceability"]["missing_provenance"]:
                 lines.append(
                     "- Missing uncertainty provenance for "

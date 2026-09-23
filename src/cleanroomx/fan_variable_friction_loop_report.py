@@ -24,6 +24,60 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
         f"- Operating iterations: **{diagnostics['operating_iterations']}**",
     ]
 
+    search = diagnostics.get("operating_search_interval")
+    if search is not None:
+        lines.extend(
+            [
+                "",
+                "## Operating-point root-search interval",
+                "",
+                f"- Search method: **{search['method']}**",
+                "- Bisection performed: "
+                f"**{search['bisection_performed']}**",
+                "- Selected airflow: "
+                f"**{search['selected_airflow_m3_h']} m³/h**",
+                "- Selected pressure residual: "
+                f"**{search['selected_pressure_residual_pa']} Pa**",
+            ]
+        )
+        if search["bisection_performed"]:
+            initial = search["initial_bracket"]
+            terminal = search["terminal_bracket"]
+            lines.extend(
+                [
+                    "- Initial sign-change bracket: "
+                    f"**{initial['low_airflow_m3_h']}–"
+                    f"{initial['high_airflow_m3_h']} m³/h** "
+                    f"(span {initial['span_m3_h']} m³/h)",
+                    "- Terminal retained bracket: "
+                    f"**{terminal['low_airflow_m3_h']}–"
+                    f"{terminal['high_airflow_m3_h']} m³/h** "
+                    f"(span {terminal['span_m3_h']} m³/h)",
+                    "- Terminal bracket residuals: "
+                    f"**{terminal['low_pressure_residual_pa']} / "
+                    f"{terminal['high_pressure_residual_pa']} Pa**",
+                    "- Bracket contraction ratio: "
+                    f"**{search['bracket_contraction_ratio']}**",
+                ]
+            )
+        else:
+            lines.append(
+                "- Bracket contraction: **not applicable; selected supplied "
+                "point already satisfied the configured pressure tolerance**"
+            )
+        lines.extend(
+            [
+                "",
+                "This is numerical root-search provenance only. A terminal "
+                "bisection bracket records the retained sign-changing search "
+                "interval after the accepted midpoint evaluation; a supplied-"
+                "point tolerance contact has no bisection-width evidence. "
+                "Neither case defines physical uncertainty, dynamic stability, "
+                "stall/surge margin, manufacturer operating region, or "
+                "equipment acceptance.",
+            ]
+        )
+
     point = result["fan_operating_point"]
     if point is None:
         lines.extend(["", "## Operating point", "", result["message"]])

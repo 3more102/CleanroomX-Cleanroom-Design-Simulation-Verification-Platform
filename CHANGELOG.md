@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14 fan-driven passive parallel-network integration — 2026-09-23
+
+- Coupled the bounded fan/system operating-point solver to the passive parallel-path resistance model.
+- Added analytical equivalent network resistance for common-pressure-node paths following fixed R·Q² behavior.
+- Added fan/system operating-point solving followed by redistribution of the solved total airflow across the original branches.
+- Added fixed-pressure plus network-pressure decomposition, fan/system residual, mass-balance residual, equal-pressure residual, and per-section flow/loss reporting.
+- Preserved no-extrapolation behavior when the operating point lies outside supplied fan data.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-network` CLI, example data, tests, and engineering-scope documentation.
+- Kept the workflow explicitly bounded: no arbitrary looped-network solution, variable friction-factor iteration, dampers/controls, leakage, system effect, acoustics, fan-law scaling, stall/surge acceptance, or manufacturer selection.
+
+
 ## v0.13 integrated engineering dossier — 2026-09-23
 
 - Added a manifest-driven engineering dossier that aggregates room/cascade verification, HVAC/duct screening, v0.12 HVAC fan-curve design-duty verification, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and standalone fan/system operating-point studies.

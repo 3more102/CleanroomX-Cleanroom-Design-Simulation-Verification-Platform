@@ -1,6 +1,6 @@
 # Fan / variable-friction loop uncertainty
 
-CleanroomX v0.37 introduced deterministic bounded uncertainty for the nonlinear fan/variable-friction loop workflow, v0.39 extended the same corner engine to selected physical Darcy inputs, and v0.40 adds selected duct-geometry bounds without freezing the airflow-dependent resistance model.
+CleanroomX v0.37 introduced deterministic bounded uncertainty for the nonlinear fan/variable-friction loop workflow, v0.39 extended the same corner engine to selected physical Darcy inputs, v0.40 added duct length/circular diameter, and v0.41 preserves explicit rectangular dimensions so width/height can be bounded without freezing the airflow-dependent resistance model.
 
 The analysis deliberately avoids assigning one fixed equivalent resistance to a network whose Darcy friction changes with branch airflow. Each uncertainty corner rebuilds the affected geometry evidence and then reuses the complete nonlinear fan/loop solver.
 
@@ -13,19 +13,20 @@ The workflow supports explicit absolute uncertainty for:
 - selected edge absolute roughness values;
 - selected edge kinematic-viscosity values;
 - selected edge air-density values;
-- selected automatic-friction edge duct lengths; and
-- selected automatic-friction circular-duct diameters.
+- selected automatic-friction edge duct lengths;
+- selected automatic-friction circular-duct diameters; and
+- selected automatic-friction rectangular-duct widths and heights.
 
-Each nominal edge value remains defined once in `loop_network.edges[].duct_geometry`. The uncertainty blocks supply only absolute bounds and optional provenance; repeating a second nominal value is rejected. The JSON keys are `edge_local_loss_uncertainty`, `edge_absolute_roughness_uncertainty`, `edge_kinematic_viscosity_uncertainty`, `edge_air_density_uncertainty`, `edge_length_uncertainty`, and `edge_circular_diameter_uncertainty`.
+Each nominal edge value remains defined once in `loop_network.edges[].duct_geometry`. The uncertainty blocks supply only absolute bounds and optional provenance; repeating a second nominal value is rejected. The JSON keys are `edge_local_loss_uncertainty`, `edge_absolute_roughness_uncertainty`, `edge_kinematic_viscosity_uncertainty`, `edge_air_density_uncertainty`, `edge_length_uncertainty`, `edge_circular_diameter_uncertainty`, `edge_rectangular_width_uncertainty`, and `edge_rectangular_height_uncertainty`.
 
-These edge-level uncertainty dimensions apply only to automatic-friction `duct_geometry` edges. Explicit-resistance edges and geometry edges with user-supplied friction factors are rejected because they do not participate in the same airflow-dependent Darcy closure model. Lower bounds must remain physically valid: local K and roughness cannot become negative; viscosity, density, bounded duct length, and circular diameter must remain positive; and the maximum bounded roughness must remain below the minimum bounded circular diameter. Diameter uncertainty is intentionally limited to circular ducts because the current stored rectangular evidence does not preserve an unambiguous width/height orientation.
+These edge-level uncertainty dimensions apply only to automatic-friction `duct_geometry` edges. Explicit-resistance edges and geometry edges with user-supplied friction factors are rejected because they do not participate in the same airflow-dependent Darcy closure model. Lower bounds must remain physically valid: local K and roughness cannot become negative; viscosity, density, bounded duct length, circular diameter, rectangular width, and rectangular height must remain positive; and the maximum bounded roughness must remain below the minimum hydraulic diameter implied by the configured dimensional bounds. Circular-diameter bounds apply only to circular ducts, while width/height bounds apply only to rectangular ducts.
 
 ## Corner solution
 
 For every unique lower/upper combination, CleanroomX:
 
 1. applies the bounded fixed-pressure value;
-2. rebuilds each selected geometry edge using the corner values for any configured local-loss, roughness, viscosity, density, length, and circular-diameter bounds while preserving unbounded geometry and the stored reference airflow;
+2. rebuilds each selected geometry edge using the corner values for any configured local-loss, roughness, viscosity, density, length, circular-diameter, rectangular-width, and rectangular-height bounds while preserving unbounded geometry and the stored reference airflow;
 3. re-solves the variable-friction loop at every fan-curve point used for bracketing;
 4. re-solves the complete variable-friction loop at every bisection airflow;
 5. keeps the fan/system operating-point search inside the supplied fan-curve range;
@@ -49,7 +50,7 @@ These min/max values are evaluated-corner ranges only. They are not claimed to b
 
 ## Input and CLI
 
-See `examples/fan_variable_friction_uncertainty_demo.json` for the original fixed-pressure/K workflow, `examples/fan_variable_friction_physical_uncertainty_demo.json` for v0.39 roughness/viscosity/density bounds, and `examples/fan_variable_friction_geometry_uncertainty_demo.json` for v0.40 duct-length/circular-diameter bounds.
+See `examples/fan_variable_friction_uncertainty_demo.json` for the original fixed-pressure/K workflow, `examples/fan_variable_friction_physical_uncertainty_demo.json` for v0.39 roughness/viscosity/density bounds, and `examples/fan_variable_friction_geometry_uncertainty_demo.json` for v0.40 duct-length/circular-diameter bounds. `examples/fan_variable_friction_rectangular_uncertainty_demo.json` demonstrates v0.41 rectangular width/height bounds.
 
 ```text
 cleanroomx-fan-loop-friction-uncertainty examples/fan_variable_friction_uncertainty_demo.json

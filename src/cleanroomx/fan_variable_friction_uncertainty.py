@@ -158,6 +158,18 @@ class FanVariableFrictionLoopUncertaintyStudy:
                     "must remain in (0, 1]"
                 )
             normalized_efficiency_uncertainty[key] = item
+        if (
+            "motor_efficiency" in normalized_efficiency_uncertainty
+            and (
+                self.power_efficiencies is None
+                or self.power_efficiencies.vfd_efficiency is None
+            )
+        ):
+            raise ValueError(
+                "motor_efficiency uncertainty requires an explicit "
+                "vfd_efficiency because motor efficiency affects only the "
+                "complete electrical-input/SFP chain in this model"
+            )
         object.__setattr__(
             self,
             "power_efficiency_uncertainty",

@@ -1,0 +1,40 @@
+{
+  "name": "Automatic Darcy friction demo",
+  "fan_system": {
+    "fan_static_pressure_pa": 500.0,
+    "fan_total_efficiency": 0.7,
+    "motor_efficiency": 0.9
+  },
+  "duct_network": {
+    "paths": [
+      {
+        "name": "Supply path",
+        "sections": [
+          {
+            "name": "Main rectangular duct",
+            "length_m": 10.0,
+            "airflow_m3_h": 900.0,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.0,
+            "width_m": 0.5,
+            "height_m": 0.25,
+            "absolute_roughness_m": 0.00009,
+            "kinematic_viscosity_m2_s": 1.5e-5
+          }
+        ]
+      }
+    ]
+  },
+  "rooms": [
+    {
+      "name": "Demo room",
+      "cleanroom_airflow_m3_h": 900.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    }
+  ]
+}

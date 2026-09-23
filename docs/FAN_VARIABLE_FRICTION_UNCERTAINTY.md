@@ -1,6 +1,6 @@
 # Fan / variable-friction loop uncertainty
 
-CleanroomX v0.37 introduced deterministic bounded uncertainty for the nonlinear fan/variable-friction loop workflow, v0.39 extended the same corner engine to selected physical Darcy inputs, v0.40 added duct length/circular diameter, v0.41 preserved explicit rectangular dimensions, v0.42 added selected fan-point pressure bounds, v0.43 added bounded airflow coordinates at selected supplied fan-curve points, v0.44 added bounded fan-speed ratio uncertainty, and v0.45 adds explicit correlated whole fan-curve scenarios without extrapolation or freezing the airflow-dependent resistance model.
+CleanroomX v0.37 introduced deterministic bounded uncertainty for the nonlinear fan/variable-friction loop workflow, v0.39 extended the same corner engine to selected physical Darcy inputs, v0.40 added duct length/circular diameter, v0.41 preserved explicit rectangular dimensions, v0.42 added selected fan-point pressure bounds, v0.43 added bounded airflow coordinates at selected supplied fan-curve points, v0.44 added bounded fan-speed ratio uncertainty, v0.45 added explicit correlated whole fan-curve scenarios, v0.46 added exact extrema witnesses, and v0.47 adds deterministic corner-outcome diagnostics without extrapolation or freezing the airflow-dependent resistance model.
 
 The analysis deliberately avoids assigning one fixed equivalent resistance to a network whose Darcy friction changes with branch airflow. Each uncertainty corner rebuilds the affected geometry evidence and then reuses the complete nonlinear fan/loop solver.
 
@@ -56,10 +56,11 @@ A complete result reports:
 - a compact exact zero-based first-witness corner index for each operating-point lower/upper bound;
 - tie-aware operating-point extrema-source evidence listing every matching witness corner together with its active fixed-pressure, fan-speed/scenario, fan-point, and duct uncertainty inputs;
 - internal edge-airflow ranges plus the exact lower/upper witness corner indices for each edge;
-- solver diagnostics for every corner; and
+- solver diagnostics for every corner;
+- deterministic corner status and solver termination-reason counts, plus exact unresolved-corner indices and active input context; and
 - provenance completeness for the fan curve and every bounded input.
 
-These min/max values are evaluated-corner ranges only. The v0.46 compact witness index resolves deterministically to the first matching corner for backward-compatible single-witness access, while `operating_point_extrema_sources` preserves every numerically matching tie and the bounded inputs that define those cases. The Markdown report surfaces the same operating-point source evidence plus edge-flow witness corner indices. These records are not sensitivity coefficients and are not claimed to be mathematically guaranteed continuous-interval extrema for every interior combination.
+For indeterminate studies, v0.47 retains unresolved-corner diagnostics but still emits no complete operating-point or internal edge-flow envelope. These min/max values are evaluated-corner ranges only. The v0.46 compact witness index resolves deterministically to the first matching corner for backward-compatible single-witness access, while `operating_point_extrema_sources` preserves every numerically matching tie and the bounded inputs that define those cases. The Markdown report surfaces the same operating-point source evidence plus edge-flow witness corner indices. These records are not sensitivity coefficients and are not claimed to be mathematically guaranteed continuous-interval extrema for every interior combination.
 
 ## Input and CLI
 

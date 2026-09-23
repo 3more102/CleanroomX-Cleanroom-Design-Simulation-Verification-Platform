@@ -1,4 +1,16 @@
 # Changelog
+## v0.64 local pressure-to-airflow root-resolution audit — 2026-09-24
+
+- Reuses each solved corner's exact supplied-point crossing-conditioning evidence to map the configured operating-pressure tolerance and observed solved pressure residual into local linearized airflow equivalents.
+- Reports the configured tolerance, signed/absolute pressure residual, local residual-gradient magnitude, reciprocal airflow-per-pressure gradient, active supplied interpolation-segment span, and tolerance/residual airflow equivalents.
+- Normalizes the two airflow equivalents by the active segment span so numerical resolution can be read relative to the supplied local fan-curve point spacing.
+- Aggregates complete-versus-partial coverage, exact corner indices where the local airflow-equivalent mapping is unavailable, and tied source-corner provenance for the largest tolerance/residual airflow equivalents and normalized fractions.
+- Leaves the airflow-equivalent mapping unavailable when the local fan-minus-system residual slope is effectively zero rather than reporting an infinite value.
+- Surfaces the evidence in standalone nonlinear uncertainty Markdown and engineering-dossier tables.
+- Adds regression coverage for exact arithmetic, aggregate extrema, report output, dossier propagation, and zero-solved-corner behavior.
+- Treats the new values strictly as local secant-based numerical-resolution indicators; they are not rigorous root-error bounds, interpolation-error estimates, physical uncertainty, dynamic-stability margins, stall/surge limits, manufacturer operating regions, commissioning/certification criteria, or equipment-acceptance limits.
+- Bumped package/runtime metadata to v0.64.0.
+
 ## v0.63 selected crossing-candidate provenance — 2026-09-24
 
 - Orders discrete supplied-point crossing candidates using the nonlinear solver's actual selection policy: tolerance-contact fan points first in point order, followed by strict positive-to-negative sign-change segments in segment order.

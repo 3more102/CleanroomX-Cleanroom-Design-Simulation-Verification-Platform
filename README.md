@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.8 engineering core
+## v0.9 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -21,7 +21,6 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Circular and rectangular duct geometry with hydraulic-diameter reporting.
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
 - Directed supply-tree branch-flow solving from explicit terminal demands, with continuity residuals and terminal critical-path analysis.
-- Directed supply-tree branch-flow solving from explicit terminal demands with continuity checks and terminal critical-path analysis.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -30,6 +29,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
+- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, and equipment-capacity screening.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -42,7 +42,7 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, but it is not a general nonlinear pressure-balancing solver and does not infer pressure-driven terminal flows, looped-network flows, fitting coefficients, friction factors, fan curves, system effect, leakage, acoustics, balancing-damper positions, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules.
+The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. The v0.9 thermal uncertainty workflow holds room/outdoor psychrometric states fixed and does not replace hourly load simulation or equipment selection.
 
 ## Install
 
@@ -133,6 +133,22 @@ The v0.7 qualification workflow evaluates user-configured minimum/maximum requir
 
 See docs/QUALIFICATION_UNCERTAINTY.md.
 
+## Analyze thermal/HVAC uncertainty
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --output thermal-uncertainty-report.md
+
+The v0.9 workflow propagates user-supplied absolute bounds through explicit sensible/latent loads, cleanroom and makeup airflow, and optional supply-air temperature. It reports conservative cooling/heating capacity and governing-airflow intervals, plus optional available-capacity pass/fail/indeterminate checks.
+
+See docs/THERMAL_UNCERTAINTY.md.
+
 ## Multi-room pressure-cascade JSON
 
 ```json
@@ -170,7 +186,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, uncertainty propagation into thermal and recovery acceptance workflows, looped-network/pressure-balancing research, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, uncertainty propagation into recovery acceptance workflows, looped-network/pressure-balancing research, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

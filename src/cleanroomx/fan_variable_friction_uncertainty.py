@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from itertools import product
 from math import prod
 
@@ -25,6 +25,15 @@ class FanVariableFrictionLoopUncertaintyStudy:
     fan_suction_node: str
     fixed_pressure_pa: UncertainValue
     edge_local_loss_coefficient: dict[str, UncertainValue]
+    edge_absolute_roughness_m: dict[str, UncertainValue] = field(
+        default_factory=dict
+    )
+    edge_kinematic_viscosity_m2_s: dict[str, UncertainValue] = field(
+        default_factory=dict
+    )
+    edge_air_density_kg_m3: dict[str, UncertainValue] = field(
+        default_factory=dict
+    )
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256
     power_efficiencies: FanPowerEfficiencies | None = None
@@ -99,6 +108,97 @@ class FanVariableFrictionLoopUncertaintyStudy:
             normalized[edge_name] = item
         object.__setattr__(self, "edge_local_loss_coefficient", normalized)
 
+        physical_uncertainty_specs = (
+            (
+                "edge_absolute_roughness_m",
+                self.edge_absolute_roughness_m,
+                "absolute_roughness_m",
+                "m",
+                "absolute-roughness",
+                True,
+            ),
+            (
+                "edge_kinematic_viscosity_m2_s",
+                self.edge_kinematic_viscosity_m2_s,
+                "kinematic_viscosity_m2_s",
+                "m2/s",
+                "kinematic-viscosity",
+                False,
+            ),
+            (
+                "edge_air_density_kg_m3",
+                self.edge_air_density_kg_m3,
+                "air_density_kg_m3",
+                "kg/m3",
+                "air-density",
+                False,
+            ),
+        )
+        for (
+            attribute_name,
+            items,
+            evidence_key,
+            expected_unit,
+            label,
+            allow_zero_lower,
+        ) in physical_uncertainty_specs:
+            normalized_physical: dict[str, UncertainValue] = {}
+            for edge_name, item in items.items():
+                edge = edges_by_name.get(edge_name)
+                if edge is None:
+                    raise ValueError(
+                        f"edge {label} uncertainty references unknown edge "
+                        f"{edge_name!r}"
+                    )
+                evidence = edge.resistance_evidence
+                if (
+                    edge.resistance_basis != "duct_geometry"
+                    or evidence is None
+                    or evidence.get("absolute_roughness_m") is None
+                    or evidence.get("kinematic_viscosity_m2_s") is None
+                ):
+                    raise ValueError(
+                        f"edge {label} uncertainty for {edge_name!r} requires "
+                        "an automatic-friction duct_geometry edge"
+                    )
+                if item.unit != expected_unit:
+                    raise ValueError(
+                        f"edge {label} uncertainty for {edge_name!r} must use "
+                        f"unit {expected_unit!r}"
+                    )
+                if allow_zero_lower:
+                    if item.lower < 0:
+                        raise ValueError(
+                            f"edge {label} lower uncertainty bound for "
+                            f"{edge_name!r} must remain >= 0"
+                        )
+                elif item.lower <= 0:
+                    raise ValueError(
+                        f"edge {label} lower uncertainty bound for "
+                        f"{edge_name!r} must remain > 0"
+                    )
+                nominal = float(evidence[evidence_key])
+                if not math.isclose(
+                    item.value,
+                    nominal,
+                    rel_tol=1e-12,
+                    abs_tol=1e-15,
+                ):
+                    raise ValueError(
+                        f"edge {label} uncertainty nominal for {edge_name!r} "
+                        "must match the loop-network geometry evidence"
+                    )
+                if evidence_key == "absolute_roughness_m":
+                    hydraulic_diameter = float(evidence["hydraulic_diameter_m"])
+                    if item.upper >= hydraulic_diameter:
+                        raise ValueError(
+                            f"edge {label} upper uncertainty bound for "
+                            f"{edge_name!r} must remain smaller than the "
+                            "hydraulic diameter"
+                        )
+                normalized_physical[edge_name] = item
+            object.__setattr__(self, attribute_name, normalized_physical)
+
         FanVariableFrictionLoopStudy(
             name=self.name,
             fan_curve=self.fan_curve,
@@ -155,9 +255,9 @@ def _rectangular_dimensions(
     return width, height
 
 
-def _edge_at_local_loss(
+def _edge_at_parameters(
     edge: QuadraticFlowEdge,
-    local_loss_coefficient: float,
+    parameter_overrides: dict[str, float],
 ) -> QuadraticFlowEdge:
     evidence = edge.resistance_evidence
     if evidence is None:
@@ -166,10 +266,18 @@ def _edge_at_local_loss(
         )
     common = {
         "length_m": evidence["length_m"],
-        "air_density_kg_m3": evidence["air_density_kg_m3"],
-        "local_loss_coefficient": local_loss_coefficient,
-        "absolute_roughness_m": evidence["absolute_roughness_m"],
-        "kinematic_viscosity_m2_s": evidence["kinematic_viscosity_m2_s"],
+        "air_density_kg_m3": parameter_overrides.get(
+            "air_density_kg_m3", evidence["air_density_kg_m3"]
+        ),
+        "local_loss_coefficient": parameter_overrides.get(
+            "local_loss_coefficient", evidence["local_loss_coefficient"]
+        ),
+        "absolute_roughness_m": parameter_overrides.get(
+            "absolute_roughness_m", evidence["absolute_roughness_m"]
+        ),
+        "kinematic_viscosity_m2_s": parameter_overrides.get(
+            "kinematic_viscosity_m2_s", evidence["kinematic_viscosity_m2_s"]
+        ),
         "reference_airflow_m3_h": evidence["reference_airflow_m3_h"],
     }
     shape = evidence["shape"]
@@ -188,12 +296,11 @@ def _edge_at_local_loss(
     rebuilt = derive_loop_edge_resistance(
         LoopedDuctResistanceInput(**common)
     )
-    rebuilt["uncertainty_base_local_loss_coefficient"] = evidence[
-        "local_loss_coefficient"
-    ]
-    rebuilt["uncertainty_adjusted_local_loss_coefficient"] = (
-        local_loss_coefficient
-    )
+    for parameter_name, value in parameter_overrides.items():
+        rebuilt[f"uncertainty_base_{parameter_name}"] = evidence[
+            parameter_name
+        ]
+        rebuilt[f"uncertainty_adjusted_{parameter_name}"] = value
     return QuadraticFlowEdge(
         name=edge.name,
         start_node=edge.start_node,
@@ -208,14 +315,17 @@ def _edge_at_local_loss(
 
 def _network_at_corner(
     study: FanVariableFrictionLoopUncertaintyStudy,
-    edge_local_losses: dict[str, float],
+    edge_parameter_overrides: dict[str, dict[str, float]],
 ) -> LoopedFlowNetwork:
     return LoopedFlowNetwork(
         name=study.loop_network.name,
         node_injections_m3_h=study.loop_network.node_injections_m3_h,
         edges=tuple(
-            _edge_at_local_loss(edge, edge_local_losses[edge.name])
-            if edge.name in edge_local_losses
+            _edge_at_parameters(
+                edge,
+                edge_parameter_overrides[edge.name],
+            )
+            if edge.name in edge_parameter_overrides
             else edge
             for edge in study.loop_network.edges
         ),
@@ -226,13 +336,13 @@ def _network_at_corner(
 def _solve_case(
     study: FanVariableFrictionLoopUncertaintyStudy,
     fixed_pressure_pa: float,
-    edge_local_losses: dict[str, float],
+    edge_parameter_overrides: dict[str, dict[str, float]],
 ) -> dict:
     return solve_fan_variable_friction_loop(
         FanVariableFrictionLoopStudy(
             name=study.name,
             fan_curve=study.fan_curve,
-            loop_network=_network_at_corner(study, edge_local_losses),
+            loop_network=_network_at_corner(study, edge_parameter_overrides),
             fan_discharge_node=study.fan_discharge_node,
             fan_suction_node=study.fan_suction_node,
             fixed_pressure_pa=fixed_pressure_pa,
@@ -249,7 +359,6 @@ def _solve_case(
             max_operating_iterations=study.max_operating_iterations,
         )
     )
-
 
 def _metric_envelope(points: list[dict], key: str, unit: str) -> dict:
     values = [float(point[key]) for point in points]
@@ -288,33 +397,59 @@ def _edge_airflow_corner_ranges(
 def analyze_fan_variable_friction_loop_uncertainty(
     study: FanVariableFrictionLoopUncertaintyStudy,
 ) -> dict:
+    parameter_maps = (
+        (
+            "local_loss_coefficient",
+            "edge_local_loss_coefficient",
+            study.edge_local_loss_coefficient,
+        ),
+        (
+            "absolute_roughness_m",
+            "edge_absolute_roughness_m",
+            study.edge_absolute_roughness_m,
+        ),
+        (
+            "kinematic_viscosity_m2_s",
+            "edge_kinematic_viscosity_m2_s",
+            study.edge_kinematic_viscosity_m2_s,
+        ),
+        (
+            "air_density_kg_m3",
+            "edge_air_density_kg_m3",
+            study.edge_air_density_kg_m3,
+        ),
+    )
+
+    nominal_overrides: dict[str, dict[str, float]] = {}
+    for parameter_name, _output_key, items in parameter_maps:
+        for edge_name, item in items.items():
+            nominal_overrides.setdefault(edge_name, {})[
+                parameter_name
+            ] = item.value
+
     nominal = _solve_case(
         study,
         study.fixed_pressure_pa.value,
-        {
-            name: item.value
-            for name, item in study.edge_local_loss_coefficient.items()
-        },
+        nominal_overrides,
     )
 
     fixed_values = sorted(
         {study.fixed_pressure_pa.lower, study.fixed_pressure_pa.upper}
     )
-    uncertain_edge_names = sorted(study.edge_local_loss_coefficient)
-    edge_value_sets = [
-        sorted(
-            {
-                study.edge_local_loss_coefficient[name].lower,
-                study.edge_local_loss_coefficient[name].upper,
-            }
-        )
-        for name in uncertain_edge_names
+    dimensions = [
+        (parameter_name, output_key, edge_name, item)
+        for parameter_name, output_key, items in parameter_maps
+        for edge_name, item in sorted(items.items())
     ]
-    edge_combinations = (
-        list(product(*edge_value_sets)) if edge_value_sets else [()]
+    value_sets = [
+        sorted({item.lower, item.upper})
+        for _parameter_name, _output_key, _edge_name, item in dimensions
+    ]
+    parameter_combinations = (
+        list(product(*value_sets)) if value_sets else [()]
     )
     corner_count = len(fixed_values) * prod(
-        len(values) for values in edge_value_sets
+        len(values) for values in value_sets
     )
     if corner_count > study.max_corner_cases:
         raise ValueError(
@@ -327,12 +462,24 @@ def analyze_fan_variable_friction_loop_uncertainty(
     solved_points = []
     solved_networks = []
     for fixed_pressure in fixed_values:
-        for values in edge_combinations:
-            edge_local_losses = dict(zip(uncertain_edge_names, values))
+        for values in parameter_combinations:
+            edge_parameter_overrides: dict[str, dict[str, float]] = {}
+            corner_parameter_values = {
+                output_key: {}
+                for _parameter_name, output_key, _items in parameter_maps
+            }
+            for dimension, value in zip(dimensions, values):
+                parameter_name, output_key, edge_name, _item = dimension
+                edge_parameter_overrides.setdefault(edge_name, {})[
+                    parameter_name
+                ] = value
+                corner_parameter_values[output_key][edge_name] = round(
+                    value, 15
+                )
             result = _solve_case(
                 study,
                 fixed_pressure,
-                edge_local_losses,
+                edge_parameter_overrides,
             )
             point = result["fan_operating_point"]
             network = result["operating_network_solution"]
@@ -348,10 +495,18 @@ def analyze_fan_variable_friction_loop_uncertainty(
             corners.append(
                 {
                     "fixed_pressure_pa": round(fixed_pressure, 6),
-                    "edge_local_loss_coefficient": {
-                        name: round(value, 9)
-                        for name, value in edge_local_losses.items()
-                    },
+                    "edge_local_loss_coefficient": corner_parameter_values[
+                        "edge_local_loss_coefficient"
+                    ],
+                    "edge_absolute_roughness_m": corner_parameter_values[
+                        "edge_absolute_roughness_m"
+                    ],
+                    "edge_kinematic_viscosity_m2_s": corner_parameter_values[
+                        "edge_kinematic_viscosity_m2_s"
+                    ],
+                    "edge_air_density_kg_m3": corner_parameter_values[
+                        "edge_air_density_kg_m3"
+                    ],
                     "status": result["status"],
                     "operating_point": point,
                     "edge_airflows_m3_h": edge_airflows,
@@ -397,8 +552,22 @@ def analyze_fan_variable_friction_loop_uncertainty(
         study.fixed_pressure_pa,
     )
     edge_records = [
-        _input_record(f"edge_local_loss:{name}", item)
-        for name, item in study.edge_local_loss_coefficient.items()
+        *[
+            _input_record(f"edge_local_loss:{name}", item)
+            for name, item in study.edge_local_loss_coefficient.items()
+        ],
+        *[
+            _input_record(f"edge_roughness:{name}", item)
+            for name, item in study.edge_absolute_roughness_m.items()
+        ],
+        *[
+            _input_record(f"edge_viscosity:{name}", item)
+            for name, item in study.edge_kinematic_viscosity_m2_s.items()
+        ],
+        *[
+            _input_record(f"edge_air_density:{name}", item)
+            for name, item in study.edge_air_density_kg_m3.items()
+        ],
     ]
     missing = [
         record["name"]
@@ -430,6 +599,33 @@ def analyze_fan_variable_friction_loop_uncertainty(
                     "unit": "1",
                 }
                 for name, item in study.edge_local_loss_coefficient.items()
+            },
+            "edge_absolute_roughness_m": {
+                name: {
+                    "nominal": item.value,
+                    "lower": item.lower,
+                    "upper": item.upper,
+                    "unit": "m",
+                }
+                for name, item in study.edge_absolute_roughness_m.items()
+            },
+            "edge_kinematic_viscosity_m2_s": {
+                name: {
+                    "nominal": item.value,
+                    "lower": item.lower,
+                    "upper": item.upper,
+                    "unit": "m2/s",
+                }
+                for name, item in study.edge_kinematic_viscosity_m2_s.items()
+            },
+            "edge_air_density_kg_m3": {
+                name: {
+                    "nominal": item.value,
+                    "lower": item.lower,
+                    "upper": item.upper,
+                    "unit": "kg/m3",
+                }
+                for name, item in study.edge_air_density_kg_m3.items()
             },
         },
         "nominal_status": nominal["status"],
@@ -464,13 +660,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "engineering_note": (
             "This is deterministic corner analysis for user-supplied "
             "absolute bounds on fixed pressure and selected automatic-friction "
-            "duct local-loss coefficients. Every corner rebuilds the affected "
+            "duct local-loss coefficients, absolute roughness, kinematic "
+            "viscosity, and air density. Every corner rebuilds the affected "
             "geometry-edge evidence and re-solves the complete Darcy-friction "
             "network at every fan/system airflow evaluated by the bounded "
             "operating-point search. Reported min/max values are ranges across "
             "evaluated corners only and are not claimed as guaranteed extrema "
             "for all interior combinations. No probability distribution, "
-            "covariance, fan-curve uncertainty, geometry tolerance inference, "
+            "covariance, fan-curve uncertainty, unconfigured geometry tolerance "
+            "inference, "
             "damper/control inference, leakage, system effect, acoustics, "
             "stall/surge assessment, motor/VFD limits, compressibility, "
             "transients, or manufacturer acceptance is inferred."

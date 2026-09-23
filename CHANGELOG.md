@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.28 loop-workflow dossier integration — 2026-09-23
+
+- Integrated v0.26 fan/loop-network studies into engineering dossier manifests with SHA-256 source fingerprints, executive component summaries, Markdown reporting, and unresolved-intersection attention tracking.
+- Integrated v0.27 explicit loop damper-resistance scenario studies into the same dossier workflow with case counts and baseline solver-residual evidence.
+- Extended dossier HVAC-to-fan operating-airflow consistency so solved fan/loop-network operating points participate alongside standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed cases.
+- Preserved unsolved fan/loop studies as unresolved/not-comparable in airflow consistency rather than converting them into failures.
+- Added end-to-end dossier and consistency regression coverage plus an integrated loop-workflow dossier example.
+- Bumped package/runtime metadata to v0.28.0 without changing the underlying fan, loop-network, or damper physical models.
+
 ## v0.27 explicit loop damper-resistance scenarios — 2026-09-23
 
 - Added deterministic loop-network scenario studies for explicit user-supplied edge resistance multipliers.

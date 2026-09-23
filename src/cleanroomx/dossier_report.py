@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Power cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input range kW | SFP range W/(m³/s) | Nominal state | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -555,7 +555,12 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{envelope['air_power_kw']['upper']}"
                 )
             )
-            power_ranges = item.get("power_evidence_corner_ranges")
+            power_ranges = (
+                item.get("power_uncertainty_ranges")
+                or item.get("power_evidence_corner_ranges")
+            )
+            power_case_count = item.get("power_uncertainty_case_count", 0)
+            power_cases = "—" if power_case_count == 0 else power_case_count
             electrical_input = "—"
             specific_fan_power = "—"
             if power_ranges is not None:
@@ -579,8 +584,9 @@ def markdown_dossier_report(result: dict) -> str:
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
-                f"{item['unresolved_corner_count']} | {scenario_names} | "
-                f"{airflow_envelope} | {air_power} | {electrical_input} | "
+                f"{item['unresolved_corner_count']} | {power_cases} | "
+                f"{scenario_names} | {airflow_envelope} | {air_power} | "
+                f"{electrical_input} | "
                 f"{specific_fan_power} | {item['nominal_status']} | "
                 f"{item['traceability']['complete']} |"
             )

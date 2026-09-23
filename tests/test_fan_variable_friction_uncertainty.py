@@ -1367,6 +1367,42 @@ def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
         "max_abs_mass_balance_residual_m3_h"
     ]["value"] <= tolerances["mass_balance_tolerance_m3_h"] + 1e-9
 
+    checks = quality["configured_tolerance_checks"]
+    assessment = quality["configured_tolerance_assessment"]
+    assert assessment["status"] == "within_configured_tolerances"
+    assert assessment["configured_check_count"] == 3
+    assert assessment["evaluable_check_count"] == 3
+    assert assessment["within_tolerance_count"] == 3
+    assert assessment["exceeded_tolerance_count"] == 0
+    assert assessment["not_evaluable_count"] == 0
+    assert assessment["complete_study_coverage"] is True
+
+    expected_tolerance_keys = {
+        "absolute_operating_pressure_residual_pa":
+            "operating_pressure_tolerance_pa",
+        "network_max_relative_resistance_closure_error":
+            "resistance_relative_tolerance",
+        "max_abs_mass_balance_residual_m3_h":
+            "mass_balance_tolerance_m3_h",
+    }
+    for metric_key, tolerance_key in expected_tolerance_keys.items():
+        check = checks[metric_key]
+        assert check["status"] == "within_tolerance"
+        assert check["observed_value"] == pytest.approx(
+            quality["worst_metrics"][metric_key]["value"], abs=1e-9
+        )
+        assert check["configured_tolerance"] == pytest.approx(
+            tolerances[tolerance_key]
+        )
+        assert check["utilization_ratio"] == pytest.approx(
+            check["observed_value"] / check["configured_tolerance"],
+            abs=1e-9,
+        )
+        assert check["remaining_margin"] == pytest.approx(
+            check["configured_tolerance"] - check["observed_value"],
+            abs=1e-9,
+        )
+
 
 def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
     data = _example_data()
@@ -1384,6 +1420,16 @@ def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
     assert quality["nominal_status"] == "no_intersection_in_supplied_range"
     assert all(evidence is None for evidence in quality["worst_metrics"].values())
 
+    assert quality["configured_tolerance_assessment"]["status"] == (
+        "incomplete_coverage"
+    )
+    assert quality["configured_tolerance_assessment"]["evaluable_check_count"] == 0
+    assert quality["configured_tolerance_assessment"]["not_evaluable_count"] == 3
+    assert all(
+        check["status"] == "not_evaluable"
+        for check in quality["configured_tolerance_checks"].values()
+    )
+
 
 def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(
@@ -1399,3 +1445,7 @@ def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     assert "Resistance closure error" in report
     assert "Pressure-law residual" in report
     assert "Witness source corner(s)" in report
+    assert "Configured solver-tolerance checks" in report
+    assert "within_configured_tolerances" in report
+    assert "Utilization" in report
+    assert "Remaining margin" in report

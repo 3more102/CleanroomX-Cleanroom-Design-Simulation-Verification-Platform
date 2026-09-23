@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 from .hvac_models import AirState
-from .thermal_uncertainty_models import UncertainAirState, UncertainThermalDesign
+from .psychrometric_uncertainty_models import UncertainAirState
+from .thermal_uncertainty_models import UncertainThermalDesign
 from .uncertainty_models import Provenance, UncertainValue
 
 
@@ -27,7 +28,7 @@ def _state_component(value: float | dict, unit: str) -> UncertainValue:
     return UncertainValue(value, unit)
 
 
-def _air_state_from_dict(data: dict) -> AirState | UncertainAirState:
+def _air_state_from_dict(data: dict, name: str) -> AirState | UncertainAirState:
     dry_bulb = data["dry_bulb_c"]
     relative_humidity = data["relative_humidity_percent"]
     pressure = data.get("pressure_kpa", 101.325)
@@ -37,6 +38,7 @@ def _air_state_from_dict(data: dict) -> AirState | UncertainAirState:
         for value in (dry_bulb, relative_humidity, pressure)
     ):
         return UncertainAirState(
+            name=name,
             dry_bulb_c=_state_component(dry_bulb, "C"),
             relative_humidity_percent=_state_component(
                 relative_humidity,
@@ -53,9 +55,11 @@ def thermal_uncertainty_from_dict(data: dict) -> UncertainThermalDesign:
     supply_temp = data.get("supply_air_temp_c")
     return UncertainThermalDesign(
         name=data["name"],
-        room_air=_air_state_from_dict(data["room_air"]),
+        room_air=_air_state_from_dict(data["room_air"], f"{data['name']} room air"),
         outdoor_air=(
-            _air_state_from_dict(outdoor) if outdoor is not None else None
+            _air_state_from_dict(outdoor, f"{data['name']} outdoor air")
+            if outdoor is not None
+            else None
         ),
         cleanroom_airflow_m3_h=_value_from_dict(
             data["cleanroom_airflow_m3_h"], "m3/h"

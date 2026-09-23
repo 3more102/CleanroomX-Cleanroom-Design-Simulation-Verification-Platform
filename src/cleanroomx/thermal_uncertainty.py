@@ -10,7 +10,8 @@ from .psychrometrics import (
     moist_air_enthalpy_kj_kg_da,
     moist_air_specific_volume_m3_kg_da,
 )
-from .thermal_uncertainty_models import UncertainAirState, UncertainThermalDesign
+from .psychrometric_uncertainty_models import UncertainAirState
+from .thermal_uncertainty_models import UncertainThermalDesign
 from .uncertainty_models import UncertainValue
 
 

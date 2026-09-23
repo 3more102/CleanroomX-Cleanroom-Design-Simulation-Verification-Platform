@@ -1029,3 +1029,67 @@ def test_extrema_source_report_names_exact_corner_context() -> None:
     assert "Fan pressure upper" in report
     assert "corner " in report
     assert "scenario=" in report
+
+def test_corner_outcome_diagnostics_account_for_every_evaluated_corner() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    outcome = result["corner_outcome_diagnostics"]
+    assert sum(outcome["status_counts"].values()) == result["corner_count"]
+    assert outcome["status_counts"] == {"solved": result["corner_count"]}
+    assert (
+        sum(outcome["termination_reason_counts"].values())
+        == result["corner_count"]
+    )
+    assert outcome["unresolved_corner_indices"] == []
+    assert outcome["unresolved_cases"] == []
+
+
+def test_indeterminate_analysis_surfaces_unresolved_corner_diagnostics() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_scenarios"][0]["points"] = [
+        {"airflow_m3_h": 0, "pressure_pa": 0},
+        {"airflow_m3_h": 5200, "pressure_pa": 0},
+        {"airflow_m3_h": 8650, "pressure_pa": 0},
+    ]
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["operating_point_envelope"] is None
+
+    outcome = result["corner_outcome_diagnostics"]
+    assert sum(outcome["status_counts"].values()) == result["corner_count"]
+    assert (
+        sum(outcome["termination_reason_counts"].values())
+        == result["corner_count"]
+    )
+    assert len(outcome["unresolved_corner_indices"]) == (
+        result["unresolved_corner_count"]
+    )
+    assert outcome["unresolved_cases"]
+
+    for case in outcome["unresolved_cases"]:
+        corner = result["corners"][case["corner_index"]]
+        assert corner["status"] != "solved"
+        assert case["status"] == corner["status"]
+        assert case["termination_reason"] == corner["solver_diagnostics"][
+            "termination_reason"
+        ]
+        assert case["fixed_pressure_pa"] == corner["fixed_pressure_pa"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Corner outcome diagnostics" in report
+    assert "Unresolved evaluated corners" in report
+    assert "no_intersection_in_supplied_range" in report
+

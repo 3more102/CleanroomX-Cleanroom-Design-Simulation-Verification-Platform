@@ -60,3 +60,8 @@ Rejecting `NaN` and positive/negative infinity prevents invalid pressure-loss va
 - ASHRAE Duct Fitting Database / Standard 120 resources for fitting resistance and loss-coefficient testing.
 
 Use the current applicable licensed standard, project specification, local regulations, and manufacturer data for real projects.
+
+
+## v0.8 room-linked branch-flow extension
+
+For automatic flow propagation from HVAC room governing airflow through a rooted directed supply tree, see docs/BRANCH_FLOW_NETWORK.md. The original duct_network path-comparison model remains available when path flows are already known or intentionally supplied directly.

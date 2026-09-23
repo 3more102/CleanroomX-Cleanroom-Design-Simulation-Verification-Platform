@@ -39,7 +39,7 @@ A duct path is a user-defined series of sections. CleanroomX sums section losses
 
 When a duct network is present in an HVAC project, its critical-path pressure drop replaces the manually entered duct-pressure-drop component for preliminary supply-fan power sizing. Other fan components such as coil, terminal-filter, and explicitly entered miscellaneous pressure drops remain separate.
 
-This is intentionally a **critical-path comparison**, not a full nonlinear airflow-network solver. Branch flow distribution is not inferred.
+This is intentionally a **critical-path comparison**. Branch flow distribution is not inferred by the v0.6 path model. CleanroomX v0.7 adds a separate rooted-tree workflow that aggregates fixed terminal demands upstream; see `docs/DUCT_TREE_NETWORK.md`. It still does not solve pressure-driven or looped network flow distribution.
 
 ## Input validation
 

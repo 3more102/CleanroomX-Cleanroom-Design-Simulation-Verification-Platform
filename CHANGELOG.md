@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.20 automatic Darcy friction screening — 2026-09-23
+
+- Added optional roughness/kinematic-viscosity-driven Darcy friction-factor resolution for path-based duct models and fixed-demand supply trees.
+- Computes Reynolds number from section velocity, hydraulic diameter, and explicit kinematic viscosity.
+- Uses the Darcy laminar relation `f = 64/Re` for circular ducts below `Re = 2300` and solves the Colebrook equation for `Re >= 2300`.
+- Rejects automatic laminar friction for noncircular ducts instead of applying the circular-duct relation; users can still supply an explicit friction factor.
+- Preserves the existing explicit `friction_factor` workflow and rejects ambiguous manual-plus-automatic inputs.
+- Resolves supply-tree friction after terminal-demand airflows are propagated, so each branch uses its solved airflow.
+- Resolves reference-flow fan/duct friction at the declared section reference flow, then holds that factor constant while deriving the bounded fixed-ratio quadratic system curve.
+- Leaves passive parallel-flow and fan-driven parallel-network solvers on explicit fixed resistance; v0.20 does not add nonlinear variable-friction network balancing.
+- Added focused regression coverage, documentation, an automatic-friction HVAC example, and v0.20.0 metadata.
+
+
 ## v0.19 bounded fan-speed affinity-law study — 2026-09-23
 
 - Added explicit user-supplied fan speed-ratio sweeps from a supplied reference fan curve.

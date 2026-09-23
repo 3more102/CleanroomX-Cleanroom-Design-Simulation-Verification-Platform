@@ -1,6 +1,6 @@
 # Branch-flow supply-tree model
 
-CleanroomX v0.7 extends the v0.6 path pressure-loss model with automatic airflow propagation through a directed supply tree.
+CleanroomX v0.8 extends the v0.6 path pressure-loss model with automatic airflow propagation through a directed supply tree.
 
 ## What is solved
 
@@ -22,7 +22,7 @@ After branch flows are known, each branch is evaluated with the existing v0.6 Da
 
 ## Topology validation
 
-The v0.7 solver intentionally accepts a directed tree only. It rejects:
+The v0.8 solver intentionally accepts a directed tree only. It rejects:
 
 - multiple incoming branches to one node;
 - an incoming branch to the source;
@@ -38,7 +38,7 @@ This keeps the continuity solution deterministic and auditable.
 An HVAC project may configure either:
 
 - the v0.6 explicit `duct_network` path-comparison model; or
-- the v0.7 `branch_flow_network` supply-tree model.
+- the v0.8 `branch_flow_network` supply-tree model.
 
 They are mutually exclusive. For a branch-flow network, the sum of terminal demands must match the HVAC project's total governing supply airflow within a small numerical tolerance before its critical-path pressure loss can be used for supply-fan duty.
 

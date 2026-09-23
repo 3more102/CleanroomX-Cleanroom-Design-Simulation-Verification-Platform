@@ -4,7 +4,8 @@ import argparse
 import json
 
 from .calculations import decay_concentration, recovery_time_minutes
-from .io import load_room
+from .io import load_project, load_room
+from .project_verification import verify_project
 from .verification import verify_room
 
 
@@ -14,6 +15,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify = sub.add_parser("verify", help="Verify a room JSON file against configured project requirements")
     verify.add_argument("file")
+
+    verify_project_parser = sub.add_parser(
+        "verify-project", help="Verify a multi-room project including configured pressure-cascade requirements"
+    )
+    verify_project_parser.add_argument("file")
 
     decay = sub.add_parser("decay", help="Run the well-mixed first-order concentration decay screening model")
     decay.add_argument("--initial", type=float, required=True)
@@ -33,6 +39,10 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.command == "verify":
         report = verify_room(load_room(args.file))
+        print(json.dumps(report.to_dict(), indent=2))
+        return 0 if report.passed else 2
+    if args.command == "verify-project":
+        report = verify_project(load_project(args.file))
         print(json.dumps(report.to_dict(), indent=2))
         return 0 if report.passed else 2
     if args.command == "decay":

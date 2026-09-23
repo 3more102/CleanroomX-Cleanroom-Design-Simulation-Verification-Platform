@@ -46,7 +46,19 @@ def markdown_dossier_report(result: dict) -> str:
                 f"missing_provenance={component['missing_provenance_analyses']}, "
                 f"indeterminate={component['counts'].get('indeterminate', 0)}"
             )
+        elif name == "fan_loop_uncertainty" and component["status"] != "not_included":
+            detail = (
+                f"analyses={component['analysis_count']}, "
+                f"missing_provenance={component['missing_provenance_analyses']}, "
+                f"indeterminate={component['counts'].get('indeterminate', 0)}"
+            )
         elif name == "fan_speed_studies" and component["status"] != "not_included":
+            detail = (
+                f"studies={component['study_count']}, "
+                f"speed_cases={component['speed_case_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
+        elif name == "fan_loop_speed_studies" and component["status"] != "not_included":
             detail = (
                 f"studies={component['study_count']}, "
                 f"speed_cases={component['speed_case_count']}, "
@@ -407,6 +419,66 @@ def markdown_dossier_report(result: dict) -> str:
             airflow = "—" if point is None else point["airflow_m3_h"]
             pressure = "—" if check is None else check["total_system_pressure_pa"]
             lines.append(f"| {item['study']} | {item['status']} | {item['equivalent_loop_resistance_pa_per_m3_s_squared']} | {airflow} | {pressure} |")
+
+    if result.get("fan_loop_uncertainty_analyses"):
+        lines.extend(
+            [
+                "",
+                "## Fan/loop-network uncertainty analyses",
+                "",
+                "| Analysis | Status | Corners | Solved | Unresolved | Operating airflow envelope m³/h | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|",
+            ]
+        )
+        for item in result["fan_loop_uncertainty_analyses"]:
+            envelope = item.get("operating_point_envelope")
+            airflow_envelope = (
+                "—"
+                if envelope is None
+                else (
+                    f"{envelope['airflow_m3_h']['lower']}–"
+                    f"{envelope['airflow_m3_h']['upper']}"
+                )
+            )
+            lines.append(
+                f"| {item['analysis']} | {item['status']} | {item['corner_count']} | "
+                f"{item['solved_corner_count']} | {item['unresolved_corner_count']} | "
+                f"{airflow_envelope} | {item['traceability']['complete']} |"
+            )
+
+    if result.get("fan_loop_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan-speed / loop-network studies",
+                "",
+                "| Study | Speed ratio | Speed rpm | Status | Operating airflow m³/h | System pressure Pa | Continuity residual m³/h | Fan-system residual Pa |",
+                "|---|---:|---:|---|---:|---:|---:|---:|",
+            ]
+        )
+        for study in result["fan_loop_speed_studies"]:
+            for case in study.get("speed_cases", []):
+                point = case.get("fan_operating_point")
+                network = case.get("operating_network_solution")
+                check = case.get("system_pressure_check")
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = "—" if point is None else point["system_pressure_pa"]
+                continuity = (
+                    "—"
+                    if network is None
+                    else network["max_abs_mass_balance_residual_m3_h"]
+                )
+                residual = (
+                    "—"
+                    if check is None
+                    else check["fan_minus_system_pressure_pa"]
+                )
+                rpm = "—" if case.get("speed_rpm") is None else case["speed_rpm"]
+                lines.append(
+                    f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
+                    f"{case['status']} | {airflow} | {pressure} | "
+                    f"{continuity} | {residual} |"
+                )
 
     if result.get("damper_studies"):
         lines.extend(["", "## Loop damper-resistance scenario studies", "", "| Study | Status | Cases | Baseline continuity residual m³/h | Baseline pressure-law residual Pa |", "|---|---|---:|---:|---:|"])

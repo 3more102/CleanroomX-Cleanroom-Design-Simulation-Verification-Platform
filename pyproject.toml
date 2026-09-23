@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleanroomx"
-version = "0.3.0"
-description = "Cleanroom design screening, simulation, verification, and preliminary HVAC toolkit"
+version = "0.4.0"
+description = "Cleanroom design screening, simulation, verification, recovery qualification, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "CleanroomX contributors"}]
@@ -17,6 +17,7 @@ dev = ["pytest>=8"]
 [project.scripts]
 cleanroomx = "cleanroomx.cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
+cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

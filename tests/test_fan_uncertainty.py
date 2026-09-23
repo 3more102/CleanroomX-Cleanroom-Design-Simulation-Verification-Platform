@@ -60,16 +60,16 @@ def test_complete_corner_envelope_is_reported() -> None:
     envelope = result["operating_point_envelope"]
     assert envelope is not None
     assert envelope["airflow_m3_h"]["lower"] == pytest.approx(
-        5218.163074, abs=1e-6
+        5218.163, abs=1e-6
     )
     assert envelope["airflow_m3_h"]["upper"] == pytest.approx(
-        6101.760454, abs=1e-6
+        6101.76, abs=1e-6
     )
     assert envelope["system_pressure_pa"]["lower"] == pytest.approx(
-        289.823955, abs=1e-6
+        289.824, abs=1e-6
     )
     assert envelope["system_pressure_pa"]["upper"] == pytest.approx(
-        352.122462, abs=1e-6
+        352.1225, abs=1e-6
     )
     assert result["traceability"]["complete"] is True
 

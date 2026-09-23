@@ -971,6 +971,115 @@ def _corner_outcome_diagnostics(corners: list[dict]) -> dict:
     }
 
 
+def _maximum_corner_metric_sources(
+    corners: list[dict],
+    extractor,
+    unit: str,
+    *,
+    absolute: bool = False,
+) -> dict | None:
+    values = []
+    for corner_index, corner in enumerate(corners):
+        raw_value = extractor(corner)
+        if raw_value is None:
+            continue
+        observed_value = float(raw_value)
+        score = abs(observed_value) if absolute else observed_value
+        values.append((corner_index, observed_value, score))
+
+    if not values:
+        return None
+
+    maximum = max(score for _index, _observed, score in values)
+    sources = []
+    for corner_index, observed_value, score in values:
+        if not math.isclose(score, maximum, rel_tol=1e-12, abs_tol=1e-12):
+            continue
+        source = _critical_case_summary(corner_index, corners[corner_index])
+        source["observed_value"] = round(observed_value, 9)
+        sources.append(source)
+
+    return {
+        "value": round(maximum, 9),
+        "unit": unit,
+        "sources": sources,
+    }
+
+
+def _solver_quality_summary(
+    study: FanVariableFrictionLoopUncertaintyStudy,
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    solved_corner_count = sum(corner["status"] == "solved" for corner in corners)
+
+    def _diagnostic(key: str):
+        return lambda corner: (
+            (corner.get("solver_diagnostics") or {}).get(key)
+            if corner["status"] == "solved"
+            else None
+        )
+
+    return {
+        "corner_count": len(corners),
+        "solved_corner_count": solved_corner_count,
+        "complete_evaluated_corner_coverage": solved_corner_count == len(corners),
+        "nominal_status": nominal_status,
+        "complete_study_coverage": (
+            nominal_status == "solved" and solved_corner_count == len(corners)
+        ),
+        "configured_tolerances": {
+            "operating_pressure_tolerance_pa": study.operating_pressure_tolerance_pa,
+            "resistance_relative_tolerance": study.resistance_relative_tolerance,
+            "mass_balance_tolerance_m3_h": study.mass_balance_tolerance_m3_h,
+        },
+        "worst_metrics": {
+            "absolute_operating_pressure_residual_pa": _maximum_corner_metric_sources(
+                corners,
+                lambda corner: (
+                    corner["operating_point"].get("pressure_residual_pa")
+                    if corner.get("operating_point") is not None
+                    else None
+                ),
+                "Pa",
+                absolute=True,
+            ),
+            "network_max_relative_resistance_closure_error": _maximum_corner_metric_sources(
+                corners,
+                _diagnostic("network_max_relative_resistance_closure_error"),
+                "1",
+            ),
+            "max_abs_mass_balance_residual_m3_h": _maximum_corner_metric_sources(
+                corners,
+                _diagnostic("max_abs_mass_balance_residual_m3_h"),
+                "m3/h",
+            ),
+            "max_abs_pressure_law_residual_pa": _maximum_corner_metric_sources(
+                corners,
+                _diagnostic("max_abs_pressure_law_residual_pa"),
+                "Pa",
+            ),
+            "network_outer_iterations": _maximum_corner_metric_sources(
+                corners,
+                _diagnostic("network_outer_iterations"),
+                "iterations",
+            ),
+            "operating_iterations": _maximum_corner_metric_sources(
+                corners,
+                _diagnostic("operating_iterations"),
+                "iterations",
+            ),
+        },
+        "scope_note": (
+            "Worst metrics aggregate solved evaluated corners only. "
+            "complete_study_coverage is false if the nominal case or any "
+            "evaluated corner is unresolved. Pressure-law residual and "
+            "iteration maxima are reported as diagnostics without inventing "
+            "an acceptance threshold."
+        ),
+    }
+
+
 def _edge_airflow_extrema_sources(
     study: FanVariableFrictionLoopUncertaintyStudy,
     corners: list[dict],
@@ -1378,6 +1487,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
         and unresolved_corner_count == 0
     )
     corner_outcome_diagnostics = _corner_outcome_diagnostics(corners)
+    solver_quality_summary = _solver_quality_summary(
+        study,
+        corners,
+        nominal["status"],
+    )
 
     operating_point_envelope = None
     operating_point_extreme_cases = None
@@ -1696,6 +1810,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "solved_corner_count": len(solved_points),
         "unresolved_corner_count": unresolved_corner_count,
         "corner_outcome_diagnostics": corner_outcome_diagnostics,
+        "solver_quality_summary": solver_quality_summary,
         "corners": corners,
         "operating_point_envelope": operating_point_envelope,
         "operating_point_extreme_cases": operating_point_extreme_cases,

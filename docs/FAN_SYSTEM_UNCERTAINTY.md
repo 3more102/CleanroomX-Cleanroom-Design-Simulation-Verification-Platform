@@ -1,6 +1,6 @@
 # Fan/system operating-point uncertainty
 
-CleanroomX v0.19 adds deterministic bounded uncertainty screening around the existing fan/system operating-point solver.
+CleanroomX v0.20 adds deterministic bounded uncertainty screening around the existing fan/system operating-point solver.
 
 ## Model
 

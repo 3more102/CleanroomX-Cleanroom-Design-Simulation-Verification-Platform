@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---:|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -583,6 +583,12 @@ def markdown_dossier_report(result: dict) -> str:
                     specific_fan_power = (
                         f"{sfp_range['lower']}–{sfp_range['upper']}"
                     )
+            no_intersection_summary = item.get(
+                "fan_curve_no_intersection_summary", {}
+            )
+            no_intersection_cases = no_intersection_summary.get(
+                "no_intersection_corner_count", 0
+            )
             scenario_names = ", ".join(
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
@@ -610,7 +616,8 @@ def markdown_dossier_report(result: dict) -> str:
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
-                f"{item['unresolved_corner_count']} | {scenario_names} | "
+                f"{item['unresolved_corner_count']} | "
+                f"{no_intersection_cases} | {scenario_names} | "
                 f"{airflow_envelope} | {airflow_excursion} | {air_power} | "
                 f"{electrical_input} | {specific_fan_power} | "
                 f"{item['nominal_status']} | "

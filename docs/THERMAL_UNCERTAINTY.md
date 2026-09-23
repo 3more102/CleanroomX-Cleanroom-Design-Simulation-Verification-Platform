@@ -1,6 +1,6 @@
 # Thermal uncertainty workflow
 
-CleanroomX v0.12 extends deterministic thermal/HVAC uncertainty screening to room and outdoor psychrometric states.
+CleanroomX v0.15 extends deterministic thermal/HVAC uncertainty screening to bounded room and outdoor psychrometric states.
 
 ## Scope
 

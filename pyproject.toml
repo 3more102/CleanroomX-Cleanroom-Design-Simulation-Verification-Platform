@@ -18,7 +18,7 @@ dev = ["pytest>=8"]
 cleanroomx = "cleanroomx.cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
 cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
-cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"
+cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"\ncleanroomx-dossier = "cleanroomx.dossier_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

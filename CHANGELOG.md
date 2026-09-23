@@ -1,4 +1,15 @@
 # Changelog
+## v0.64 pressure-residual airflow-equivalence audit — 2026-09-24
+
+- Maps the already configured operating-pressure solver tolerance through each solved corner's local fan-minus-system secant gradient into an equivalent airflow magnitude.
+- Maps each corner's actual signed solved pressure residual through the same local gradient into absolute airflow-equivalent residual and signed linearized airflow-correction evidence.
+- Normalizes both equivalents by the active supplied-point interpolation-bracket airflow span for scale-aware diagnostics.
+- Aggregates worst evaluated equivalents with exact tied source-corner provenance and explicit complete-versus-partial coverage.
+- Reuses existing supplied-point bracket and crossing-conditioning evidence only; no extra fan-curve evaluation, extrapolation, or new acceptance threshold is introduced.
+- Treats the values as first-order numerical solver diagnostics, not measurement uncertainty, fan-performance uncertainty, interpolation-error bounds, continuous worst-case guarantees, stability criteria, or equipment acceptance limits.
+- Surfaces the new evidence in standalone Markdown and engineering dossiers and adds complete/zero-solved-corner regression coverage.
+- Bumped package/runtime metadata to v0.64.0.
+
 ## v0.63 selected crossing-candidate provenance — 2026-09-24
 
 - Orders discrete supplied-point crossing candidates using the nonlinear solver's actual selection policy: tolerance-contact fan points first in point order, followed by strict positive-to-negative sign-change segments in segment order.

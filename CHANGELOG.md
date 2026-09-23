@@ -1,4 +1,15 @@
 # Changelog
+## v0.49 evaluated-corner air-power envelope and provenance — 2026-09-24
+
+- Added fan air-power min/max across every solved nonlinear uncertainty corner in complete studies.
+- Extends compact first-witness operating-point extrema and tie-aware source attribution to `air_power_kw`.
+- Markdown uncertainty reports now surface nominal air power, bounded evaluated-corner air-power range, critical cases, and witness provenance.
+- Engineering dossier uncertainty tables now include the complete-study air-power corner range.
+- Keeps the result explicitly bounded to evaluated corners: no continuous interior extremum, equipment efficiency, motor/VFD acceptance, or manufacturer guarantee is inferred from the corner range.
+- Indeterminate studies continue to withhold the complete operating-point envelope, including air power.
+- Added exact-corner regression coverage for air-power calculation, witnesses, reports, and dossier integration.
+- Bumped package/runtime metadata to v0.49.0.
+
 ## v0.48 tie-aware internal edge-flow extrema provenance — 2026-09-24
 
 - Added tie-aware source attribution for every internal edge-airflow lower/upper extremum in complete nonlinear uncertainty studies.

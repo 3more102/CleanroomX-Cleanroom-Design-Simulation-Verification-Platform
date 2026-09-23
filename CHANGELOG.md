@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.10 thermal input uncertainty screening — 2026-09-23
+
+- Added endpoint-scenario screening for bounded room/outdoor dry-bulb temperature, relative humidity, pressure, cleanroom airflow, makeup airflow, and supply-air temperature.
+- Reused the existing preliminary thermal/HVAC model at every lower/upper endpoint combination and reported envelopes for cooling/heating capacity, governing supply airflow, makeup-air load, net load, and sensible-load airflow.
+- Added provenance tracking for bounded thermal inputs, JSON loading, Markdown/JSON reports, a dedicated `cleanroomx-thermal-uncertainty` CLI, example data, tests, and documentation.
+- Added strict interval validation for the implemented psychrometric domain and airflow positivity/non-negativity.
+- Kept internal heat-load inputs and capacity margin deterministic in this workflow.
+- Explicitly documented that endpoint enumeration is a bounded sensitivity screen, not a guaranteed continuous global interval enclosure and not a statistical uncertainty budget.
+
 ## v0.9 passive parallel-path flow solver — 2026-09-23
 
 - Added analytical airflow distribution across two or more passive duct paths sharing common pressure nodes.

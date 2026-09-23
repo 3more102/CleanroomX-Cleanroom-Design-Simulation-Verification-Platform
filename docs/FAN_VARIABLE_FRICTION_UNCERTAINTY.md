@@ -67,4 +67,4 @@ The CLI exits with code 0 only for a `complete` result. Indeterminate analyses r
 
 ## Engineering boundary
 
-This is deterministic corner analysis over user-supplied engineering bounds. It does not infer statistical distributions, covariance, fan-curve point-to-point uncertainty dependence, unconfigured geometry manufacturing tolerances, rectangular width/height uncertainty, temperature-dependent fluid properties, coupled property covariance, damper position, controls, leakage, system effect, acoustics, stall/surge limits, motor/VFD acceptance, compressibility, transients, or manufacturer acceptance.
+This is deterministic corner analysis over user-supplied engineering bounds. It does not infer statistical distributions, covariance, fan-curve point-to-point uncertainty dependence, unconfigured geometry manufacturing tolerances, temperature-dependent fluid properties, coupled property covariance, damper position, controls, leakage, system effect, acoustics, stall/surge limits, motor/VFD acceptance, compressibility, transients, or manufacturer acceptance.

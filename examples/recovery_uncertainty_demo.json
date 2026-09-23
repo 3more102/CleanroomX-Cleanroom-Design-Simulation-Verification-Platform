@@ -1,0 +1,60 @@
+{
+  "name": "Process Bay recovery with concentration uncertainty",
+  "particle_size_um": 0.5,
+  "target_concentration_per_m3": 100000,
+  "max_recovery_time_minutes": 12,
+  "instrument_id": "PC-07",
+  "sample_location": "Room center, 1.2 m AFFL",
+  "occupancy_state": "at-rest",
+  "method_reference": "Project qualification protocol QP-CR-014",
+  "samples": [
+    {
+      "time_minutes": 0,
+      "concentration_per_m3": 980000,
+      "concentration_uncertainty_abs": 49000,
+      "provenance": {
+        "source_type": "measurement",
+        "source_name": "Particle counter PC-07",
+        "reference": "Calibration certificate CAL-2026-441",
+        "date": "2026-08-31",
+        "uncertainty_basis": "Project-provided absolute concentration bound"
+      }
+    },
+    {
+      "time_minutes": 6,
+      "concentration_per_m3": 245000,
+      "concentration_uncertainty_abs": 15000,
+      "provenance": {
+        "source_type": "measurement",
+        "source_name": "Particle counter PC-07",
+        "reference": "Calibration certificate CAL-2026-441",
+        "date": "2026-08-31",
+        "uncertainty_basis": "Project-provided absolute concentration bound"
+      }
+    },
+    {
+      "time_minutes": 10,
+      "concentration_per_m3": 106000,
+      "concentration_uncertainty_abs": 9000,
+      "provenance": {
+        "source_type": "measurement",
+        "source_name": "Particle counter PC-07",
+        "reference": "Calibration certificate CAL-2026-441",
+        "date": "2026-08-31",
+        "uncertainty_basis": "Project-provided absolute concentration bound"
+      }
+    },
+    {
+      "time_minutes": 12,
+      "concentration_per_m3": 92000,
+      "concentration_uncertainty_abs": 6000,
+      "provenance": {
+        "source_type": "measurement",
+        "source_name": "Particle counter PC-07",
+        "reference": "Calibration certificate CAL-2026-441",
+        "date": "2026-08-31",
+        "uncertainty_basis": "Project-provided absolute concentration bound"
+      }
+    }
+  ]
+}

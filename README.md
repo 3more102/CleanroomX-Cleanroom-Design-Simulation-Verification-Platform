@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.19 engineering core
+## v0.20 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -27,7 +27,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, and optional cross-module consistency.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, fan-speed affinity-law studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
@@ -256,7 +256,7 @@ Write a Markdown dossier:
 
     cleanroomx-dossier examples/dossier_demo.json --output dossier.md
 
-The v0.18 dossier hashes every referenced input with SHA-256 and covers verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct-network studies, fan-driven passive parallel-network studies, and optional v0.17 verification/HVAC consistency checks. Recovery INDETERMINATE, fan no-intersection, consistency failure, and unresolved comparability states are preserved rather than promoted to pass. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
+The v0.20 dossier hashes every referenced input with SHA-256 and covers verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct-network studies, fan-driven passive parallel-network studies, v0.19 fan-speed affinity-law studies, and optional v0.17 verification/HVAC consistency checks. Recovery INDETERMINATE, fan or fan-speed no-intersection, consistency failure, and unresolved comparability states are preserved rather than promoted to pass. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
 
 Consistency-integrated dossier demo:
 
@@ -315,7 +315,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are integrating fan-speed studies into engineering dossiers, general looped-network solving research, and later a desktop/web UI plus CFD adapters.
+Next milestones are general looped-network solving research, then a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

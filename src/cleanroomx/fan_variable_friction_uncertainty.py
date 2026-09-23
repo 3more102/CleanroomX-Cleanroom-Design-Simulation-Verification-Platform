@@ -62,9 +62,7 @@ class FanVariableFrictionLoopUncertaintyStudy:
     fan_curve_airflow_m3_h: dict[int, UncertainValue] = field(
         default_factory=dict
     )
-    fan_speed_ratio: UncertainValue = field(
-        default_factory=lambda: UncertainValue(1.0, "1")
-    )
+    fan_speed_ratio: UncertainValue | None = None
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256
     power_efficiencies: FanPowerEfficiencies | None = None
@@ -88,12 +86,13 @@ class FanVariableFrictionLoopUncertaintyStudy:
             raise ValueError(
                 "fixed_pressure_pa lower uncertainty bound must remain >= 0"
             )
-        if self.fan_speed_ratio.unit != "1":
-            raise ValueError("fan_speed_ratio unit must be '1'")
-        if self.fan_speed_ratio.lower <= 0:
-            raise ValueError(
-                "fan_speed_ratio lower uncertainty bound must remain > 0"
-            )
+        if self.fan_speed_ratio is not None:
+            if self.fan_speed_ratio.unit != "1":
+                raise ValueError("fan_speed_ratio unit must be '1'")
+            if self.fan_speed_ratio.lower <= 0:
+                raise ValueError(
+                    "fan_speed_ratio lower uncertainty bound must remain > 0"
+                )
         if (
             isinstance(self.max_corner_cases, bool)
             or not isinstance(self.max_corner_cases, int)
@@ -748,7 +747,7 @@ def _fan_curve_at_corner(
     study: FanVariableFrictionLoopUncertaintyStudy,
     pressure_overrides: dict[float, float],
     airflow_overrides: dict[int, float],
-    speed_ratio: float,
+    speed_ratio: float | None,
 ) -> FanCurve:
     bounded_reference_curve = FanCurve(
         name=study.fan_curve.name,
@@ -766,6 +765,8 @@ def _fan_curve_at_corner(
             for point_index, point in enumerate(study.fan_curve.points)
         ),
     )
+    if speed_ratio is None:
+        return bounded_reference_curve
     return scale_fan_curve_for_speed(
         bounded_reference_curve,
         speed_ratio,
@@ -778,7 +779,7 @@ def _solve_case(
     edge_parameter_overrides: dict[str, dict[str, float]],
     fan_pressure_overrides: dict[float, float] | None = None,
     fan_airflow_overrides: dict[int, float] | None = None,
-    fan_speed_ratio: float = 1.0,
+    fan_speed_ratio: float | None = None,
 ) -> dict:
     return solve_fan_variable_friction_loop(
         FanVariableFrictionLoopStudy(
@@ -908,7 +909,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
         nominal_overrides,
         nominal_fan_pressure_overrides,
         nominal_fan_airflow_overrides,
-        study.fan_speed_ratio.value,
+        (
+            study.fan_speed_ratio.value
+            if study.fan_speed_ratio is not None
+            else None
+        ),
     )
 
     fixed_values = sorted(
@@ -933,8 +938,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
         sorted({item.lower, item.upper})
         for _point_index, item in fan_airflow_dimensions
     ]
-    fan_speed_values = sorted(
-        {study.fan_speed_ratio.lower, study.fan_speed_ratio.upper}
+    fan_speed_values = (
+        sorted({study.fan_speed_ratio.lower, study.fan_speed_ratio.upper})
+        if study.fan_speed_ratio is not None
+        else [None]
     )
 
     # Enforce the configured combinatorial limit before materializing any
@@ -1036,7 +1043,16 @@ def analyze_fan_variable_friction_loop_uncertainty(
                     corners.append(
                         {
                             "fixed_pressure_pa": round(fixed_pressure, 6),
-                            "fan_speed_ratio": round(fan_speed_ratio, 6),
+                            **(
+                                {
+                                    "fan_speed_ratio": round(
+                                        fan_speed_ratio,
+                                        6,
+                                    )
+                                }
+                                if fan_speed_ratio is not None
+                                else {}
+                            ),
                             "fan_curve_pressure_pa": {
                                 str(round(airflow_m3_h, 6)): round(value, 6)
                                 for airflow_m3_h, value in fan_pressure_overrides.items()
@@ -1127,9 +1143,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
         )
         for point_index, item in sorted(study.fan_curve_airflow_m3_h.items())
     ]
-    fan_speed_record = _input_record(
-        "fan_speed_ratio",
-        study.fan_speed_ratio,
+    fan_speed_record = (
+        _input_record("fan_speed_ratio", study.fan_speed_ratio)
+        if study.fan_speed_ratio is not None
+        else None
     )
     scenario_records = [
         {
@@ -1185,7 +1202,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         record["name"]
         for record in [
             fixed_record,
-            fan_speed_record,
+            *([fan_speed_record] if fan_speed_record is not None else []),
             *fan_pressure_records,
             *fan_airflow_records,
             *scenario_records,
@@ -1229,12 +1246,16 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "upper": study.fixed_pressure_pa.upper,
                 "unit": "Pa",
             },
-            "fan_speed_ratio": {
-                "nominal": study.fan_speed_ratio.value,
-                "lower": study.fan_speed_ratio.lower,
-                "upper": study.fan_speed_ratio.upper,
-                "unit": "1",
-            },
+            "fan_speed_ratio": (
+                {
+                    "nominal": study.fan_speed_ratio.value,
+                    "lower": study.fan_speed_ratio.lower,
+                    "upper": study.fan_speed_ratio.upper,
+                    "unit": "1",
+                }
+                if study.fan_speed_ratio is not None
+                else None
+            ),
             "fan_curve_pressure_pa": {
                 str(round(airflow_m3_h, 6)): {
                     "nominal": item.value,
@@ -1349,7 +1370,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
             ),
             "inputs": [
                 fixed_record,
-                fan_speed_record,
+                *([fan_speed_record] if fan_speed_record is not None else []),
                 *fan_pressure_records,
                 *fan_airflow_records,
                 *scenario_records,

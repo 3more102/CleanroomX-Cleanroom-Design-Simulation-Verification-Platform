@@ -4,6 +4,19 @@ from __future__ import annotations
 def markdown_recovery_uncertainty_report(
     result: dict,
 ) -> str:
+    maximum = result["max_recovery_time_minutes"]
+    maximum_text = (
+        f"{maximum} min" if maximum is not None else "not configured"
+    )
+    possible = result["first_possible_recovery_time_minutes"]
+    possible_text = (
+        f"{possible} min" if possible is not None else "not observed"
+    )
+    definite = result["first_definite_recovery_time_minutes"]
+    definite_text = (
+        f"{definite} min" if definite is not None else "not observed"
+    )
+
     lines = [
         "# CleanroomX Recovery Uncertainty Report — "
         f"{result['analysis']}",
@@ -19,27 +32,18 @@ def markdown_recovery_uncertainty_report(
             f"**{result['target_concentration_per_m3']} "
             "particles/m³**"
         ),
-        (
-            "- Maximum recovery time: **"
-            f"{result['max_recovery_time_minutes'] "
-            "if result['max_recovery_time_minutes'] "
-            "is not None else 'not configured'}**"
-        ),
+        f"- Maximum recovery time: **{maximum_text}**",
         (
             "- Recovery observation: **"
             f"{result['target_recovery_status'].upper()}**"
         ),
         (
             "- First possible recovery sample: **"
-            f"{result['first_possible_recovery_time_minutes'] "
-            "if result['first_possible_recovery_time_minutes'] "
-            "is not None else 'not observed'} min**"
+            f"{possible_text}**"
         ),
         (
             "- First definite recovery sample: **"
-            f"{result['first_definite_recovery_time_minutes'] "
-            "if result['first_definite_recovery_time_minutes'] "
-            "is not None else 'not observed'} min**"
+            f"{definite_text}**"
         ),
         (
             "- Criterion status: **"

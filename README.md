@@ -491,7 +491,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are dossier integration for fan/loop uncertainty and fan-speed loop studies, followed by desktop/web UI work and CFD adapters.
+Next milestones are CI/release hardening for the nonlinear fan uncertainty stack, richer explicitly bounded fan-performance evidence and dependency handling, followed by desktop/web UI work and CFD adapters.
 
 ## Standards references
 

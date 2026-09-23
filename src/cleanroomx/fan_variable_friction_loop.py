@@ -236,6 +236,108 @@ def _point_check(
     )
 
 
+def _fan_curve_supplied_point_residual_audit(
+    study: FanVariableFrictionLoopStudy,
+    curve_checks: list[dict],
+) -> dict:
+    tolerance = float(study.operating_pressure_tolerance_pa)
+    expected_count = len(study.fan_curve.points)
+    observed_count = len(curve_checks)
+    residuals = [
+        float(check["pressure_margin_pa"]) for check in curve_checks
+    ]
+
+    tolerance_contacts = [
+        {
+            "point_index": index,
+            "airflow_m3_h": check["airflow_m3_h"],
+            "fan_minus_system_pressure_pa": check["pressure_margin_pa"],
+        }
+        for index, check in enumerate(curve_checks)
+        if abs(float(check["pressure_margin_pa"])) <= tolerance
+    ]
+
+    strict_sign_change_segments = []
+    residual_transitions = []
+    positive_increases = []
+    for index, (left, right) in enumerate(
+        zip(curve_checks, curve_checks[1:])
+    ):
+        left_residual = float(left["pressure_margin_pa"])
+        right_residual = float(right["pressure_margin_pa"])
+        delta = right_residual - left_residual
+        if delta > tolerance:
+            classification = "increase"
+            positive_increases.append(delta)
+        elif delta < -tolerance:
+            classification = "decrease"
+        else:
+            classification = "within_tolerance"
+        residual_transitions.append(
+            {
+                "low_point_index": index,
+                "high_point_index": index + 1,
+                "low_airflow_m3_h": left["airflow_m3_h"],
+                "high_airflow_m3_h": right["airflow_m3_h"],
+                "residual_change_pa": round(delta, 9),
+                "classification": classification,
+            }
+        )
+        if left_residual > 0.0 and right_residual < 0.0:
+            strict_sign_change_segments.append(
+                {
+                    "low_point_index": index,
+                    "high_point_index": index + 1,
+                    "low_airflow_m3_h": left["airflow_m3_h"],
+                    "high_airflow_m3_h": right["airflow_m3_h"],
+                    "low_fan_minus_system_pressure_pa": left[
+                        "pressure_margin_pa"
+                    ],
+                    "high_fan_minus_system_pressure_pa": right[
+                        "pressure_margin_pa"
+                    ],
+                }
+            )
+
+    increase_count = sum(
+        transition["classification"] == "increase"
+        for transition in residual_transitions
+    )
+    return {
+        "expected_supplied_point_count": expected_count,
+        "evaluated_supplied_point_count": observed_count,
+        "complete_supplied_point_coverage": observed_count == expected_count,
+        "operating_pressure_tolerance_pa": tolerance,
+        "tolerance_contact_point_count": len(tolerance_contacts),
+        "tolerance_contact_points": tolerance_contacts,
+        "strict_sign_change_segment_count": len(strict_sign_change_segments),
+        "strict_sign_change_segments": strict_sign_change_segments,
+        "candidate_crossing_feature_count": (
+            len(tolerance_contacts) + len(strict_sign_change_segments)
+        ),
+        "residual_transition_count": len(residual_transitions),
+        "residual_increase_transition_count": increase_count,
+        "residual_monotonic_non_increasing_with_tolerance": (
+            increase_count == 0
+        ),
+        "largest_positive_residual_increase_pa": round(
+            max(positive_increases, default=0.0),
+            9,
+        ),
+        "residual_transitions": residual_transitions,
+        "scope_note": (
+            "This is a discrete audit of fan-minus-system pressure residuals "
+            "at the supplied fan-curve points already evaluated by the solver. "
+            "It reports tolerance contacts, strict sign-change segments, and "
+            "whether those sampled residuals are non-increasing within the "
+            "configured pressure tolerance. Candidate crossing features are "
+            "not a count or proof of continuous physical intersections, and "
+            "sampled monotonicity is not a dynamic stability, stall/surge, "
+            "manufacturer-region, or equipment-acceptance criterion."
+        ),
+    }
+
+
 def _nonconverged_result(
     study: FanVariableFrictionLoopStudy,
     *,
@@ -254,6 +356,12 @@ def _nonconverged_result(
             round(study.fan_curve.points[-1].airflow_m3_h, 6),
         ],
         "fan_curve_point_checks": curve_checks,
+        "fan_curve_supplied_point_residual_audit": (
+            _fan_curve_supplied_point_residual_audit(
+                study,
+                curve_checks,
+            )
+        ),
         "fan_operating_point": None,
         "operating_network_solution": None,
         "system_pressure_check": None,
@@ -431,6 +539,12 @@ def solve_fan_variable_friction_loop(
             round(points[-1].airflow_m3_h, 6),
         ],
         "fan_curve_point_checks": curve_checks,
+        "fan_curve_supplied_point_residual_audit": (
+            _fan_curve_supplied_point_residual_audit(
+                study,
+                curve_checks,
+            )
+        ),
     }
 
     if selected_airflow is None:

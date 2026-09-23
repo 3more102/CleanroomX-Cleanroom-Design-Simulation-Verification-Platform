@@ -191,26 +191,68 @@ def analyze_geometry_derived_loop_network(
 
     derivation_by_name = {item["name"]: item for item in derivation}
     enriched_edges = []
+    geometry_pressure_errors: list[float] = []
     for solved_edge in result["edges"]:
         basis = derivation_by_name[solved_edge["name"]]
         reference_airflow = basis["reference_airflow_m3_h"]
         solved_airflow = solved_edge["airflow_m3_h"]
+        solved_airflow_m3_s = solved_edge["airflow_m3_s"]
+
+        operating_sections = []
+        geometry_pressure_difference_pa = 0.0
+        for section in basis["sections"]:
+            section_result = dict(section)
+            section_resistance = section[
+                "quadratic_resistance_pa_per_m3_s_squared"
+            ]
+            section_pressure_difference_pa = (
+                section_resistance
+                * solved_airflow_m3_s
+                * abs(solved_airflow_m3_s)
+            )
+            geometry_pressure_difference_pa += section_pressure_difference_pa
+            section_result["solved_velocity_m_s"] = round(
+                abs(solved_airflow_m3_s) / section["area_m2"], 9
+            )
+            section_result["solved_pressure_difference_pa"] = round(
+                section_pressure_difference_pa, 9
+            )
+            operating_sections.append(section_result)
+
+        geometry_pressure_error_pa = (
+            solved_edge["pressure_difference_pa"]
+            - geometry_pressure_difference_pa
+        )
+        geometry_pressure_errors.append(abs(geometry_pressure_error_pa))
+
         enriched = dict(solved_edge)
         enriched["reference_airflow_m3_h"] = reference_airflow
         enriched["absolute_solved_to_reference_flow_ratio"] = round(
             abs(solved_airflow) / reference_airflow, 9
         )
-        enriched["resistance_derivation"] = basis
+        enriched["geometry_pressure_difference_pa"] = round(
+            geometry_pressure_difference_pa, 9
+        )
+        enriched["geometry_pressure_law_residual_pa"] = round(
+            geometry_pressure_error_pa, 9
+        )
+        enriched["resistance_derivation"] = {
+            **basis,
+            "sections": operating_sections,
+        }
         enriched_edges.append(enriched)
 
     output = dict(result)
     output["workflow"] = "geometry_derived_fixed_resistance_loop"
     output["edges"] = enriched_edges
+    output["max_abs_geometry_pressure_law_residual_pa"] = round(
+        max(geometry_pressure_errors, default=0.0), 9
+    )
     output["scope_note"] = (
         "Loop edge resistance is derived from explicit duct geometry, air density, "
         "local-loss coefficients, and Darcy friction inputs. If automatic Darcy "
         "friction is used, it is evaluated only at the declared reference airflow "
-        "and then frozen. The pressure-node solve remains the v0.23 fixed-resistance "
+        "and then frozen. The pressure-node solve remains the hardened fixed-resistance "
         "steady-state model; it does not iterate Reynolds-dependent friction, infer "
         "dampers or leakage, couple a fan curve, or model transients."
     )

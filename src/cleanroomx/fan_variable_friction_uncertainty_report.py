@@ -296,6 +296,49 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"{'yes' if edge['direction_reversal_across_corners'] else 'no'} |"
             )
 
+    outcome = result.get("corner_outcome_diagnostics")
+    if outcome:
+        status_counts = ", ".join(
+            f"{status}={count}"
+            for status, count in outcome["status_counts"].items()
+        )
+        reason_counts = ", ".join(
+            f"{reason}={count}"
+            for reason, count in outcome[
+                "termination_reason_counts"
+            ].items()
+        )
+        lines.extend(
+            [
+                "",
+                "## Corner outcome diagnostics",
+                "",
+                f"- Status counts: **{status_counts}**",
+                f"- Solver termination reasons: **{reason_counts}**",
+            ]
+        )
+        unresolved = outcome["unresolved_cases"]
+        if not unresolved:
+            lines.append("- Unresolved evaluated corners: **none**")
+        else:
+            lines.extend(
+                [
+                    "- Unresolved evaluated corners: "
+                    f"**{len(unresolved)}**",
+                    "",
+                    "| Corner | Status | Termination reason | Scenario | Speed ratio | Fixed pressure Pa |",
+                    "|---:|---|---|---|---:|---:|",
+                ]
+            )
+            for case in unresolved:
+                lines.append(
+                    f"| {case['corner_index']} | {case['status']} | "
+                    f"{case['termination_reason']} | "
+                    f"{case.get('fan_curve_scenario', '—')} | "
+                    f"{case.get('fan_speed_ratio', '—')} | "
+                    f"{case['fixed_pressure_pa']} |"
+                )
+
     lines.extend(
         [
             "",

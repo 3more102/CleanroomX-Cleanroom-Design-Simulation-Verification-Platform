@@ -1,4 +1,22 @@
 # Changelog
+## v0.45 correlated whole-fan-curve scenarios — 2026-09-23
+
+- Added explicit whole-fan-curve scenario inputs for correlated alternatives that must move together rather than as independent point-wise uncertainty dimensions.
+- Evaluates the nominal reference fan curve plus every supplied scenario and composes each curve case with fixed-pressure, fan-speed-ratio, and duct physical/geometry uncertainty dimensions.
+- Reuses the complete nonlinear variable-friction fan/loop solver for every curve/scenario corner and preserves the no-extrapolation boundary.
+- Keeps point-wise fan pressure/airflow uncertainty mutually exclusive with whole-curve scenarios to avoid inventing cross-scenario combinations the user did not supply.
+- Includes the nominal reference curve in the scenario corner set so reported complete envelopes cannot omit the nominal operating state.
+- Adds scenario provenance, per-corner scenario identity, Markdown evidence, a reproducible scenario+speed example, and regression coverage.
+- Bumped package/runtime metadata to v0.45.0.
+
+## v0.44 bounded fan-speed-ratio uncertainty — 2026-09-23
+
+- Extended nonlinear fan/variable-friction corner analysis to an optional user-supplied absolute fan-speed-ratio bound.
+- Reuses the existing affinity-law fan-curve transform at every speed corner: airflow scales with speed ratio and pressure with speed ratio squared.
+- Composes bounded speed ratio with fixed pressure, fan-point coordinate uncertainty, and duct physical/geometry uncertainty before each complete nonlinear Darcy-friction solve.
+- Rejects nonpositive speed-ratio intervals and preserves transformed supplied-curve boundaries without extrapolation.
+- Added speed-ratio interval/provenance evidence, Markdown reporting, a reproducible example, and corner-limit accounting.
+
 ## v0.43 bounded fan-curve airflow-coordinate uncertainty — 2026-09-23
 
 - Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute airflow-coordinate bounds at selected supplied fan-curve point indices.

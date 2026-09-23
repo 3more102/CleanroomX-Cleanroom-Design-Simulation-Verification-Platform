@@ -21,6 +21,11 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert analysis["corner_count"] == 8
     assert analysis["solved_corner_count"] == 8
     assert analysis["traceability"]["complete"] is True
+    assert analysis["operating_point_envelope"]["air_power_kw"]["lower"] >= 0.0
+    assert (
+        analysis["operating_point_envelope"]["air_power_kw"]["lower"]
+        <= analysis["operating_point_envelope"]["air_power_kw"]["upper"]
+    )
 
     component = result["executive_summary"]["components"][
         "fan_variable_friction_uncertainty"
@@ -41,6 +46,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     report = markdown_dossier_report(result)
     assert "Fan / variable-friction loop uncertainty analyses" in report
     assert "Variable-friction fan-loop bounded uncertainty" in report
+    assert "Air-power envelope kW" in report
     assert "8" in report
 
 

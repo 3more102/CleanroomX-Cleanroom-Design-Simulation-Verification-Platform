@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.6 engineering core
+## v0.7 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -26,6 +26,8 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
+- Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
+- Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -38,7 +40,7 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The duct calculation compares explicitly defined paths; it is not a nonlinear airflow-network solver and does not infer branch flows, fitting coefficients, friction factors, fan curves, system effect, leakage, acoustics, balancing, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflow uses deterministic worst-case input intervals. It is not a statistical measurement-uncertainty budget, does not invent tolerances, and does not replace calibration records or a project qualification procedure.
+The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules.
 
 ## Install
 
@@ -109,6 +111,22 @@ The uncertainty workflow propagates user-supplied absolute bounds through room v
 
 See docs/UNCERTAINTY_PROVENANCE.md.
 
+## Run uncertainty-aware qualification checks
+
+    cleanroomx-qualification examples/qualification_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-qualification examples/qualification_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-qualification examples/qualification_uncertainty_demo.json --output qualification-report.md
+
+The v0.7 qualification workflow evaluates user-configured minimum/maximum requirements over the complete supplied uncertainty interval. Pressure cascades use the conservative differential interval `H_low - L_high` to `H_high - L_low`. A threshold overlap is `indeterminate`, not a pass.
+
+See docs/QUALIFICATION_UNCERTAINTY.md.
+
 ## Multi-room pressure-cascade JSON
 
 ```json
@@ -146,7 +164,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, branch-flow/network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, branch-flow/network solving, uncertainty propagation into thermal and recovery acceptance workflows, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
@@ -156,5 +174,8 @@ Next milestones are richer engineering reports, branch-flow/network solving, ext
 - ASHRAE Handbook—Fundamentals — psychrometrics and duct design.
 - ASHRAE Duct Fitting Database / Standard 120 resources — duct fitting resistance and loss coefficients.
 - ASHRAE Design Guide for Cleanrooms.
+- JCGM 100:2008 — Guide to the expression of uncertainty in measurement.
+- JCGM 106:2012 — role of measurement uncertainty in conformity assessment.
+- NIST Technical Note 1297 — Guidelines for Evaluating and Expressing the Uncertainty of NIST Measurement Results.
 
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.

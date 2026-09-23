@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Min segment-point clearance m³/h | Segment evidence | Residual topology | Provenance complete |",
-                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max tolerance airflow-equivalent m³/h | Resolution evidence | Min segment-point clearance m³/h | Segment evidence | Residual topology | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---|---:|---|---|---|",
             ]
         )
         for item in result[
@@ -671,6 +671,21 @@ def markdown_dossier_report(result: dict) -> str:
                 )
                 if crossing_evidence is not None:
                     crossing_gradient = crossing_evidence["value"]
+            root_resolution_summary = item.get(
+                "fan_curve_root_resolution_summary"
+            )
+            root_resolution_airflow = "—"
+            root_resolution_coverage = "—"
+            if root_resolution_summary is not None:
+                root_resolution_coverage = (
+                    f"{root_resolution_summary['linearized_airflow_equivalent_corner_count']}/"
+                    f"{root_resolution_summary['corner_count']}"
+                )
+                root_resolution_evidence = root_resolution_summary.get(
+                    "maximum_local_linearized_pressure_tolerance_airflow_equivalent_m3_h"
+                )
+                if root_resolution_evidence is not None:
+                    root_resolution_airflow = root_resolution_evidence["value"]
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"
             )
@@ -715,6 +730,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{boundary_coverage} | "
                 f"{bracket_gap} | {bracket_coverage} | "
                 f"{crossing_gradient} | {crossing_coverage} | "
+                f"{root_resolution_airflow} | {root_resolution_coverage} | "
                 f"{segment_clearance} | {segment_coverage} | "
                 f"{residual_topology} | "
                 f"{item['traceability']['complete']} |"

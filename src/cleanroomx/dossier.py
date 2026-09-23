@@ -964,6 +964,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
             or fan_loop_speed_studies
             or fan_variable_friction_loops
             or fan_variable_friction_speed_studies
+            or fan_variable_friction_uncertainty
         ):
             raise ValueError(
                 "hvac_fan_operating_airflow consistency requires at least one "
@@ -987,6 +988,9 @@ def build_dossier(manifest_path: str | Path) -> dict:
             fan_variable_friction_loops=fan_variable_friction_loops,
             fan_variable_friction_speed_studies=(
                 fan_variable_friction_speed_studies
+            ),
+            fan_variable_friction_uncertainty_analyses=(
+                fan_variable_friction_uncertainty
             ),
             airflow_abs_tolerance_m3_h=fan_airflow_config.get(
                 "airflow_abs_tolerance_m3_h", 0.0

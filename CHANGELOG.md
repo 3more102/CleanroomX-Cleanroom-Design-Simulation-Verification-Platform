@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.30 fan / loop-network uncertainty — 2026-09-23
+
+- Added deterministic lower/upper corner analysis around the bounded fixed-resistance fan/loop-network workflow.
+- Supports explicit absolute uncertainty on fixed system pressure and on selected named loop-edge quadratic resistances.
+- Re-derives each corner's equivalent loop resistance, intersects it with supplied fan data without extrapolation, and re-solves the full loop at bounded operating points.
+- Reports evaluated-corner airflow/system-pressure and equivalent-resistance ranges only when the nominal case and every corner solve; otherwise operating and branch-flow ranges are withheld as indeterminate.
+- Reports internal edge-flow ranges only as diagnostic min/max across evaluated corners, not as guaranteed continuous-interval extrema.
+- Deduplicates zero-width dimensions and rejects analyses exceeding the explicit max_corner_cases limit (default 256) rather than truncating the uncertainty space.
+- Tracks fan-curve, fixed-pressure, and nonzero edge-resistance uncertainty provenance separately from numerical status.
+- Added JSON loading, Markdown/JSON reporting, the cleanroomx-fan-loop-uncertainty CLI, example data, documentation, and regression tests.
+- Bumped package/runtime metadata to v0.30.0 while preserving v0.29 variable-friction loop solving and v0.28 dossier integration.
+
 ## v0.29 variable-friction loop solving — 2026-09-23
 
 - Added an optional outer iteration around the validated fixed-resistance loop solver for geometry-derived edges configured with automatic Darcy friction.

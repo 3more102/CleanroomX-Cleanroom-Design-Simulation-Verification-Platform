@@ -79,10 +79,13 @@ A solved result includes:
 - operating-point termination reason;
 - a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, strict sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features;
 - for solved cases, selected-candidate provenance containing the documented selection policy, selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate.
+- terminal operating-point root-search interval provenance: bounded-bisection cases retain initial/final sign brackets, terminal airflow span, and contraction ratio; supplied-point tolerance contacts are explicitly marked as non-bisection cases with no fabricated bracket width.
 
 The reported air power is fluid power, not shaft or electrical input.
 
 The residual-topology audit uses only supplied fan-curve points already evaluated by the bounded nonlinear solver. A candidate feature is a supplied point within the configured root tolerance or a strict positive-to-negative sign-change segment. Candidate-feature counts and sampled monotonicity are diagnostic evidence only: they do not count or prove continuous fan/system intersections, guarantee uniqueness between supplied points, establish dynamic stability, identify stall/surge boundaries, or define manufacturer/equipment acceptance. v0.63 additionally preserves the exact deterministic selection policy and selected discrete feature for solved results so the chosen bounded root is auditable when more than one sampled candidate feature exists.
+
+v0.65 additionally retains the root-search geometry used to terminate the operating-point solve. For bounded bisection, the solver records the initial supplied-point sign-change bracket and the final sign-consistent bracket after the accepted midpoint has been incorporated by residual sign. The resulting terminal span and contraction ratio are numerical convergence provenance only. A direct supplied-point tolerance contact is recorded as such and does not receive a bisection span. These records do not define physical airflow uncertainty, interpolation error, dynamic stability, stall/surge margin, manufacturer operating region, commissioning/certification status, or equipment acceptance.
 
 ## CLI
 

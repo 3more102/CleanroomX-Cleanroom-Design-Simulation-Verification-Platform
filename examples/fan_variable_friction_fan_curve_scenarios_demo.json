@@ -1,0 +1,136 @@
+{
+  "name": "Variable-friction correlated fan-curve scenario demo",
+  "fan_discharge_node": "Supply",
+  "fan_suction_node": "Return",
+  "fixed_pressure_pa": {
+    "value": 20,
+    "uncertainty_abs": 0,
+    "provenance": {
+      "source_type": "design_basis",
+      "source_name": "Demo fixed-pressure allowance",
+      "uncertainty_basis": "Fixed for whole-fan-curve scenario demonstration"
+    }
+  },
+  "fan_curve": {
+    "name": "Variable-friction demo fan",
+    "provenance": {
+      "source_type": "manufacturer_data",
+      "source_name": "Illustrative nominal supplied fan curve",
+      "reference": "Demo only"
+    },
+    "points": [
+      {"airflow_m3_h": 0, "pressure_pa": 800},
+      {"airflow_m3_h": 5400, "pressure_pa": 350},
+      {"airflow_m3_h": 9000, "pressure_pa": 0}
+    ]
+  },
+  "fan_curve_scenarios": [
+    {
+      "name": "low-performance",
+      "provenance": {
+        "source_type": "manufacturer_data",
+        "source_name": "Illustrative correlated low-performance fan curve",
+        "reference": "Demo only",
+        "uncertainty_basis": "Explicit whole-curve alternative supplied by the user"
+      },
+      "points": [
+        {"airflow_m3_h": 0, "pressure_pa": 760},
+        {"airflow_m3_h": 5200, "pressure_pa": 320},
+        {"airflow_m3_h": 8800, "pressure_pa": 0}
+      ]
+    },
+    {
+      "name": "high-performance",
+      "provenance": {
+        "source_type": "manufacturer_data",
+        "source_name": "Illustrative correlated high-performance fan curve",
+        "reference": "Demo only",
+        "uncertainty_basis": "Explicit whole-curve alternative supplied by the user"
+      },
+      "points": [
+        {"airflow_m3_h": 0, "pressure_pa": 840},
+        {"airflow_m3_h": 5600, "pressure_pa": 380},
+        {"airflow_m3_h": 9200, "pressure_pa": 0}
+      ]
+    }
+  ],
+  "fan_speed_ratio": {
+    "value": 1,
+    "uncertainty_abs": 0.05,
+    "provenance": {
+      "source_type": "design_basis",
+      "source_name": "Illustrative bounded fan-speed ratio",
+      "reference": "Demo only",
+      "uncertainty_basis": "Illustrative absolute speed-ratio bound"
+    }
+  },
+  "loop_network": {
+    "name": "Variable-friction two-path loop",
+    "reference_node": "Supply",
+    "node_injections_m3_h": {
+      "Supply": 5400,
+      "Mid": 0,
+      "Return": -5400
+    },
+    "edges": [
+      {
+        "name": "Direct",
+        "start_node": "Supply",
+        "end_node": "Return",
+        "duct_geometry": {
+          "length_m": 18,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.3,
+          "diameter_m": 0.45,
+          "absolute_roughness_m": 0.00015,
+          "kinematic_viscosity_m2_s": 0.000015,
+          "reference_airflow_m3_h": 2700
+        }
+      },
+      {
+        "name": "Upper 1",
+        "start_node": "Supply",
+        "end_node": "Mid",
+        "duct_geometry": {
+          "length_m": 10,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 0.6,
+          "diameter_m": 0.35,
+          "absolute_roughness_m": 0.00015,
+          "kinematic_viscosity_m2_s": 0.000015,
+          "reference_airflow_m3_h": 2700
+        }
+      },
+      {
+        "name": "Upper 2",
+        "start_node": "Mid",
+        "end_node": "Return",
+        "duct_geometry": {
+          "length_m": 10,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 0.6,
+          "diameter_m": 0.35,
+          "absolute_roughness_m": 0.00015,
+          "kinematic_viscosity_m2_s": 0.000015,
+          "reference_airflow_m3_h": 2700
+        }
+      }
+    ]
+  },
+  "max_corner_cases": 8,
+  "solver": {
+    "resistance_relative_tolerance": 0.000001,
+    "relaxation": 0.7,
+    "near_zero_airflow_m3_h": 0.000001,
+    "max_outer_iterations": 50,
+    "mass_balance_tolerance_m3_h": 0.000001,
+    "max_newton_iterations": 100,
+    "operating_pressure_tolerance_pa": 0.000001,
+    "max_operating_iterations": 80
+  },
+  "power_efficiencies": {
+    "fan_efficiency": 0.72,
+    "motor_efficiency": 0.93,
+    "vfd_efficiency": 0.97
+  }
+}

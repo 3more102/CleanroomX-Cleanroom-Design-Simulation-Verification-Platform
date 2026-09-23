@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9 thermal uncertainty screening — 2026-09-23
+
+- Added deterministic interval propagation for internal sensible/latent loads, cleanroom airflow, makeup airflow, and optional supply-air temperature.
+- Added conservative cooling/heating capacity requirement intervals with project-configured available-capacity pass/fail/indeterminate checks.
+- Added governing supply-airflow intervals across cleanroom, makeup-air, and sensible-load airflow candidates.
+- Added provenance completeness reporting for every uncertain thermal input.
+- Added JSON loading, Markdown/JSON reporting, a dedicated CLI, example data, tests, and documentation.
+- Kept room/outdoor psychrometric states fixed and explicitly bounded the workflow as screening rather than statistical uncertainty, hourly load simulation, or equipment selection.
+
 ## v0.8 branch-flow supply-tree solver — 2026-09-23
 
 - Added directed supply-tree topology with explicit source, branches, and fixed leaf-terminal airflow demands.

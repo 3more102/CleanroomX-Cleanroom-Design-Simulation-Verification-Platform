@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .branch_network import BranchDuct, BranchFlowNetwork, TerminalDemand
 from .duct import DuctNetwork, DuctPath, DuctSection
 from .hvac_models import (
     AirBalanceDesign,
@@ -42,6 +43,17 @@ def duct_network_from_dict(data: dict) -> DuctNetwork:
     )
 
 
+
+def branch_flow_network_from_dict(data: dict) -> BranchFlowNetwork:
+    return BranchFlowNetwork(
+        source_node=data["source_node"],
+        branches=tuple(BranchDuct(**branch) for branch in data["branches"]),
+        terminal_demands=tuple(
+            TerminalDemand(**terminal) for terminal in data["terminal_demands"]
+        ),
+    )
+
+
 def hvac_project_from_dict(data: dict) -> HVACProject:
     rooms = tuple(
         HVACRoom(
@@ -60,12 +72,19 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
     duct_network = (
         duct_network_from_dict(duct_data) if duct_data is not None else None
     )
+    branch_flow_data = data.get("branch_flow_network")
+    branch_flow_network = (
+        branch_flow_network_from_dict(branch_flow_data)
+        if branch_flow_data is not None
+        else None
+    )
     return HVACProject(
         name=data["name"],
         rooms=rooms,
         filter_unit=filter_unit,
         fan_system=fan_system,
         duct_network=duct_network,
+        branch_flow_network=branch_flow_network,
     )
 
 

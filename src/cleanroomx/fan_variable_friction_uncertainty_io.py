@@ -344,6 +344,7 @@ def fan_variable_friction_loop_uncertainty_from_dict(
         edge_rectangular_height_m=edge_rectangular_height_uncertainty,
         fan_curve_pressure_pa=fan_curve_pressure_uncertainty,
         fan_curve_airflow_m3_h=fan_curve_airflow_uncertainty,
+        fan_curve_scenarios=fan_curve_scenarios,
         fan_speed_ratio=(
             _uncertain_value(data["fan_speed_ratio"], "1")
             if "fan_speed_ratio" in data

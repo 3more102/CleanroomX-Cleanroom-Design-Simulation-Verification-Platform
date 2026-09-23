@@ -2,87 +2,146 @@
   "name": "Semiconductor Thermal Demo",
   "filter_unit": {
     "name": "Example FFU",
-    "rated_airflow_m3_h": 1200.0,
+    "rated_airflow_m3_h": 1200,
     "design_utilization": 0.9,
-    "pressure_drop_pa": 180.0
+    "pressure_drop_pa": 180
   },
   "fan_system": {
     "name": "Example Supply AHU",
-    "duct_pressure_drop_pa": 450.0,
-    "coil_pressure_drop_pa": 180.0,
-    "other_pressure_drop_pa": 90.0,
+    "duct_pressure_drop_pa": 450,
+    "coil_pressure_drop_pa": 180,
+    "other_pressure_drop_pa": 90,
     "fan_efficiency": 0.68,
     "motor_efficiency": 0.92
   },
   "rooms": [
     {
       "name": "Process Bay",
-      "cleanroom_airflow_m3_h": 5376.0,
+      "cleanroom_airflow_m3_h": 5376,
       "air_balance": {
-        "return_airflow_m3_h": 4500.0,
-        "exhaust_airflow_m3_h": 500.0,
-        "transfer_in_airflow_m3_h": 0.0,
-        "transfer_out_airflow_m3_h": 100.0,
-        "minimum_surplus_m3_h": 200.0
+        "return_airflow_m3_h": 4500,
+        "exhaust_airflow_m3_h": 500,
+        "transfer_in_airflow_m3_h": 0,
+        "transfer_out_airflow_m3_h": 100,
+        "minimum_surplus_m3_h": 200
       },
       "thermal_design": {
         "room_air": {
-          "dry_bulb_c": 22.0,
-          "relative_humidity_percent": 45.0,
+          "dry_bulb_c": 22,
+          "relative_humidity_percent": 45,
           "pressure_kpa": 101.325
         },
         "outdoor_air": {
-          "dry_bulb_c": 35.0,
-          "relative_humidity_percent": 55.0,
+          "dry_bulb_c": 35,
+          "relative_humidity_percent": 55,
           "pressure_kpa": 101.325
         },
-        "makeup_air_m3_h": 1200.0,
-        "supply_air_temp_c": 16.0,
-        "capacity_margin_percent": 10.0,
+        "makeup_air_m3_h": 1200,
+        "supply_air_temp_c": 16,
+        "capacity_margin_percent": 10,
         "loads": {
           "occupants": 6,
-          "sensible_w_per_person": 75.0,
-          "latent_w_per_person": 55.0,
-          "lighting_w": 1800.0,
-          "equipment_w": 12000.0,
-          "envelope_sensible_w": 1200.0,
-          "other_sensible_w": 500.0,
-          "process_latent_w": 1000.0,
-          "other_latent_w": 200.0
+          "sensible_w_per_person": 75,
+          "latent_w_per_person": 55,
+          "lighting_w": 1800,
+          "equipment_w": 12000,
+          "envelope_sensible_w": 1200,
+          "other_sensible_w": 500,
+          "process_latent_w": 1000,
+          "other_latent_w": 200
         }
       }
     },
     {
       "name": "Gowning",
-      "cleanroom_airflow_m3_h": 720.0,
+      "cleanroom_airflow_m3_h": 720,
       "air_balance": {
-        "return_airflow_m3_h": 600.0,
-        "exhaust_airflow_m3_h": 0.0,
-        "transfer_in_airflow_m3_h": 0.0,
-        "transfer_out_airflow_m3_h": 40.0,
-        "minimum_surplus_m3_h": 50.0
+        "return_airflow_m3_h": 600,
+        "exhaust_airflow_m3_h": 0,
+        "transfer_in_airflow_m3_h": 0,
+        "transfer_out_airflow_m3_h": 40,
+        "minimum_surplus_m3_h": 50
       },
       "thermal_design": {
         "room_air": {
-          "dry_bulb_c": 22.0,
-          "relative_humidity_percent": 45.0
+          "dry_bulb_c": 22,
+          "relative_humidity_percent": 45
         },
         "outdoor_air": {
-          "dry_bulb_c": 35.0,
-          "relative_humidity_percent": 55.0
+          "dry_bulb_c": 35,
+          "relative_humidity_percent": 55
         },
-        "makeup_air_m3_h": 300.0,
-        "supply_air_temp_c": 16.0,
-        "capacity_margin_percent": 10.0,
+        "makeup_air_m3_h": 300,
+        "supply_air_temp_c": 16,
+        "capacity_margin_percent": 10,
         "loads": {
           "occupants": 3,
-          "sensible_w_per_person": 75.0,
-          "latent_w_per_person": 55.0,
-          "lighting_w": 300.0,
-          "equipment_w": 300.0,
-          "envelope_sensible_w": 250.0
+          "sensible_w_per_person": 75,
+          "latent_w_per_person": 55,
+          "lighting_w": 300,
+          "equipment_w": 300,
+          "envelope_sensible_w": 250
         }
       }
     }
-  ]
+  ],
+  "duct_network": {
+    "name": "Example Supply Duct Network",
+    "paths": [
+      {
+        "name": "AHU to Process Bay",
+        "sections": [
+          {
+            "name": "Main trunk",
+            "length_m": 18,
+            "hydraulic_diameter_m": 0.7,
+            "cross_section_area_m2": 0.55,
+            "airflow_m3_h": 8660,
+            "darcy_friction_factor": 0.02,
+            "minor_loss_coefficient": 1.8,
+            "additional_pressure_drop_pa": 25,
+            "air_density_kg_m3": 1.2
+          },
+          {
+            "name": "Process branch",
+            "length_m": 12,
+            "hydraulic_diameter_m": 0.6,
+            "cross_section_area_m2": 0.42,
+            "airflow_m3_h": 7400,
+            "darcy_friction_factor": 0.02,
+            "minor_loss_coefficient": 2.2,
+            "additional_pressure_drop_pa": 35,
+            "air_density_kg_m3": 1.2
+          }
+        ]
+      },
+      {
+        "name": "AHU to Gowning",
+        "sections": [
+          {
+            "name": "Main trunk",
+            "length_m": 18,
+            "hydraulic_diameter_m": 0.7,
+            "cross_section_area_m2": 0.55,
+            "airflow_m3_h": 8660,
+            "darcy_friction_factor": 0.02,
+            "minor_loss_coefficient": 1.8,
+            "additional_pressure_drop_pa": 25,
+            "air_density_kg_m3": 1.2
+          },
+          {
+            "name": "Gowning branch",
+            "length_m": 9,
+            "hydraulic_diameter_m": 0.35,
+            "cross_section_area_m2": 0.18,
+            "airflow_m3_h": 1260,
+            "darcy_friction_factor": 0.02,
+            "minor_loss_coefficient": 2,
+            "additional_pressure_drop_pa": 20,
+            "air_density_kg_m3": 1.2
+          }
+        ]
+      }
+    ]
+  }
 }

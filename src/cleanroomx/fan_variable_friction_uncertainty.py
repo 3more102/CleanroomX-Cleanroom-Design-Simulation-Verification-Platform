@@ -2199,6 +2199,126 @@ def _pressure_residual_airflow_equivalence_summary(
     }
 
 
+def _operating_search_interval_diagnostic(result: dict) -> dict | None:
+    if result.get("status") != "solved":
+        return None
+    diagnostics = result.get("solver_diagnostics") or {}
+    search = diagnostics.get("operating_search_interval")
+    if search is None:
+        return None
+    return search
+
+
+def _operating_search_interval_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    cases = [
+        (corner_index, corner, corner["operating_search_interval"])
+        for corner_index, corner in enumerate(corners)
+        if corner.get("operating_search_interval") is not None
+    ]
+    bisection_cases = [
+        (corner_index, corner, search)
+        for corner_index, corner, search in cases
+        if search.get("bisection_performed") is True
+    ]
+    point_contact_cases = [
+        (corner_index, corner, search)
+        for corner_index, corner, search in cases
+        if search.get("method") == "supplied_point_tolerance_contact"
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(cases) == len(corners)
+    )
+
+    def _maximum_evidence(key: str, unit: str) -> dict | None:
+        available = [
+            (corner_index, corner, search)
+            for corner_index, corner, search in bisection_cases
+            if search.get(key) is not None
+        ]
+        if not available:
+            return None
+        maximum = max(
+            float(search[key])
+            for _corner_index, _corner, search in available
+        )
+        sources = []
+        for corner_index, corner, search in available:
+            if not math.isclose(
+                float(search[key]),
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": search["method"],
+                    "selected_airflow_m3_h": search[
+                        "selected_airflow_m3_h"
+                    ],
+                    "selected_pressure_residual_pa": search[
+                        "selected_pressure_residual_pa"
+                    ],
+                    "initial_bracket": search["initial_bracket"],
+                    "terminal_bracket": search["terminal_bracket"],
+                    "terminal_bracket_span_m3_h": search[
+                        "terminal_bracket_span_m3_h"
+                    ],
+                    "bracket_contraction_ratio": search[
+                        "bracket_contraction_ratio"
+                    ],
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "search_evidence_corner_count": len(cases),
+        "bisection_corner_count": len(bisection_cases),
+        "bisection_corner_indices": [
+            corner_index
+            for corner_index, _corner, _search in bisection_cases
+        ],
+        "supplied_point_tolerance_contact_corner_count": len(
+            point_contact_cases
+        ),
+        "supplied_point_tolerance_contact_corner_indices": [
+            corner_index
+            for corner_index, _corner, _search in point_contact_cases
+        ],
+        "complete_study_coverage": complete_study_coverage,
+        "maximum_terminal_bracket_span_m3_h": _maximum_evidence(
+            "terminal_bracket_span_m3_h",
+            "m3/h",
+        ),
+        "maximum_bracket_contraction_ratio": _maximum_evidence(
+            "bracket_contraction_ratio",
+            "1",
+        ),
+        "scope_note": (
+            "This summary preserves the operating-point solver's actual "
+            "termination search geometry. Bisection cases retain the initial "
+            "supplied-point sign-change bracket and the final sign-consistent "
+            "bracket after the accepted midpoint evaluation. Supplied-point "
+            "tolerance contacts are counted separately and intentionally do "
+            "not receive a fabricated bisection width. Terminal bracket span "
+            "and contraction are numerical search diagnostics only; they are "
+            "not measurement uncertainty, interpolation-error bounds, "
+            "dynamic-stability or stall/surge margins, manufacturer operating "
+            "regions, or equipment-acceptance criteria."
+        ),
+    }
+
+
 def _fan_curve_segment_position_diagnostic(result: dict) -> dict | None:
     bracket = _fan_curve_intersection_bracket_diagnostic(result)
     if bracket is None:
@@ -2835,6 +2955,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                     study.operating_pressure_tolerance_pa,
                                 )
                             ),
+                            "operating_search_interval": (
+                                _operating_search_interval_diagnostic(result)
+                            ),
                             "fan_curve_segment_position": (
                                 _fan_curve_segment_position_diagnostic(result)
                             ),
@@ -2891,6 +3014,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     pressure_residual_airflow_equivalence_summary = (
         _pressure_residual_airflow_equivalence_summary(
+            corners,
+            nominal["status"],
+        )
+    )
+    nominal_operating_search_interval = (
+        _operating_search_interval_diagnostic(nominal)
+    )
+    operating_search_interval_summary = (
+        _operating_search_interval_summary(
             corners,
             nominal["status"],
         )
@@ -3300,6 +3432,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "pressure_residual_airflow_equivalence_summary": (
             pressure_residual_airflow_equivalence_summary
+        ),
+        "nominal_operating_search_interval": (
+            nominal_operating_search_interval
+        ),
+        "operating_search_interval_summary": (
+            operating_search_interval_summary
         ),
         "nominal_fan_curve_segment_position": (
             nominal_fan_curve_segment_position

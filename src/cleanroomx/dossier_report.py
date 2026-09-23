@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Max tolerance utilization ratio | Critical tolerance metric(s) | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -576,11 +576,30 @@ def markdown_dossier_report(result: dict) -> str:
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
             ) or "—"
-            solver_tolerance_audit = (
+            tolerance_assessment = (
                 item.get("solver_quality_summary", {})
                 .get("configured_tolerance_assessment", {})
-                .get("status", "—")
             )
+            solver_tolerance_audit = tolerance_assessment.get("status", "—")
+            max_tolerance_utilization = tolerance_assessment.get(
+                "max_utilization_ratio"
+            )
+            max_tolerance_utilization_text = (
+                "—"
+                if max_tolerance_utilization is None
+                else f"{max_tolerance_utilization:.6f}"
+            )
+            critical_label_map = {
+                "absolute_operating_pressure_residual_pa": "operating pressure",
+                "network_max_relative_resistance_closure_error": "resistance closure",
+                "max_abs_mass_balance_residual_m3_h": "mass balance",
+            }
+            critical_tolerance_metrics = ", ".join(
+                critical_label_map.get(metric_key, metric_key)
+                for metric_key in tolerance_assessment.get(
+                    "critical_metric_keys", []
+                )
+            ) or "—"
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
@@ -588,6 +607,8 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow_envelope} | {air_power} | {electrical_input} | "
                 f"{specific_fan_power} | {item['nominal_status']} | "
                 f"{solver_tolerance_audit} | "
+                f"{max_tolerance_utilization_text} | "
+                f"{critical_tolerance_metrics} | "
                 f"{item['traceability']['complete']} |"
             )
             if item["traceability"]["missing_provenance"]:

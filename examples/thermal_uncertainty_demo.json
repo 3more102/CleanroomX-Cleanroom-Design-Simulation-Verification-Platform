@@ -1,0 +1,86 @@
+{
+  "name": "Semiconductor process bay thermal uncertainty",
+  "cleanroom_airflow_m3_h": {
+    "value": 2400,
+    "uncertainty_abs": 120,
+    "provenance": {
+      "source_type": "measurement",
+      "source_name": "TAB report",
+      "reference": "TAB-CR-017",
+      "revision": "A",
+      "uncertainty_basis": "reported instrument and balancing tolerance"
+    }
+  },
+  "thermal_design": {
+    "room_air": {
+      "dry_bulb_c": {
+        "value": 22.0,
+        "uncertainty_abs": 0.3,
+        "provenance": {
+          "source_type": "measurement",
+          "source_name": "BMS trend",
+          "reference": "TEMP-RM-01"
+        }
+      },
+      "relative_humidity_percent": {
+        "value": 45.0,
+        "uncertainty_abs": 2.0,
+        "provenance": {
+          "source_type": "measurement",
+          "source_name": "BMS trend",
+          "reference": "RH-RM-01"
+        }
+      },
+      "pressure_kpa": 101.325
+    },
+    "outdoor_air": {
+      "dry_bulb_c": {
+        "value": 36.0,
+        "uncertainty_abs": 1.0,
+        "provenance": {
+          "source_type": "weather_design",
+          "source_name": "Project weather basis",
+          "reference": "DB-OUT"
+        }
+      },
+      "relative_humidity_percent": {
+        "value": 40.0,
+        "uncertainty_abs": 3.0,
+        "provenance": {
+          "source_type": "weather_design",
+          "source_name": "Project weather basis",
+          "reference": "RH-OUT"
+        }
+      },
+      "pressure_kpa": 101.325
+    },
+    "makeup_air_m3_h": {
+      "value": 900,
+      "uncertainty_abs": 45,
+      "provenance": {
+        "source_type": "design",
+        "source_name": "Air balance schedule",
+        "reference": "HVAC-AB-04"
+      }
+    },
+    "supply_air_temp_c": {
+      "value": 16.0,
+      "uncertainty_abs": 0.5,
+      "provenance": {
+        "source_type": "design",
+        "source_name": "AHU sequence",
+        "reference": "AHU-SAT-01"
+      }
+    },
+    "capacity_margin_percent": 10,
+    "loads": {
+      "occupants": 3,
+      "sensible_w_per_person": 75,
+      "latent_w_per_person": 55,
+      "lighting_w": 700,
+      "equipment_w": 4200,
+      "envelope_sensible_w": 500,
+      "process_latent_w": 600
+    }
+  }
+}

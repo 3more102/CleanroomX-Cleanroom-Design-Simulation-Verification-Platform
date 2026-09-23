@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.20 fan-speed dossier integration — 2026-09-23
+
+- Integrated v0.19 fan-speed affinity-law studies into engineering dossier manifests.
+- Added SHA-256 source traceability and Markdown/JSON dossier reporting for every referenced fan-speed study.
+- Aggregated speed-case statuses across studies and promoted any bounded no-intersection case to dossier attention tracking.
+- Added a solved fan-speed dossier demo while preserving separate regression coverage for unresolved speed cases.
+- Moved the empty-dossier source validation after all integrated fan-study loaders so fan-only dossiers are handled consistently.
+- Bumped package/runtime metadata to v0.20.0 while keeping `fan_speed_studies` optional for backward-compatible manifests.
+
 ## v0.19 bounded fan-speed affinity-law study — 2026-09-23
 
 - Added explicit user-supplied fan speed-ratio sweeps from a supplied reference fan curve.

@@ -58,6 +58,22 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             f"**{interval['lower']} to {interval['upper']} kg/m³** "
             f"(nominal {interval['nominal']} kg/m³)"
         )
+    for name, interval in result["input_intervals"].get(
+        "edge_length_m", {}
+    ).items():
+        lines.append(
+            f"- Edge `{name}` Duct length: "
+            f"**{interval['lower']} to {interval['upper']} m** "
+            f"(nominal {interval['nominal']} m)"
+        )
+    for name, interval in result["input_intervals"].get(
+        "edge_circular_diameter_m", {}
+    ).items():
+        lines.append(
+            f"- Edge `{name}` Circular diameter: "
+            f"**{interval['lower']} to {interval['upper']} m** "
+            f"(nominal {interval['nominal']} m)"
+        )
 
     lines.extend(["", "## Nominal operating point", ""])
     nominal = result["nominal_operating_point"]
@@ -116,6 +132,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ("roughness", "edge_absolute_roughness_m", "m"),
             ("viscosity", "edge_kinematic_viscosity_m2_s", "m²/s"),
             ("density", "edge_air_density_kg_m3", "kg/m³"),
+            ("length", "edge_length_m", "m"),
+            ("diameter", "edge_circular_diameter_m", "m"),
         ):
             for name, value in corner.get(key, {}).items():
                 physical_values.append(

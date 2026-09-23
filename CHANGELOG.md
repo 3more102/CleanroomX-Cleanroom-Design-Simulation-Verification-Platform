@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7 pressure uncertainty extension — 2026-09-23
+
+- Added absolute uncertainty bounds to observed room differential-pressure inputs.
+- Added conservative lower/upper pressure intervals and pass/fail/indeterminate room-pressure decisions.
+- Propagated pressure bounds through room-to-room cascade differences using deterministic worst-case interval arithmetic.
+- Added explicit failed/indeterminate aggregate report states and CLI exit code 3 for inconclusive verification.
+- Added finite-value validation, updated examples, tests, and uncertainty documentation.
+- Preserved backward compatibility: omitted pressure uncertainty defaults to zero.
+
 ## v0.6 duct critical-path pressure loss — 2026-09-23
 
 - Added circular and rectangular duct-section models with strict input validation.

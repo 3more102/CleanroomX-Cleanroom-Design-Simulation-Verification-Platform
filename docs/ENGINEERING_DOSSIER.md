@@ -23,7 +23,8 @@ A dossier manifest can reference:
 - zero or more fan affinity-law speed studies;
 - zero or more fan-speed/fixed-resistance-loop studies;
 - zero or more fan/variable-friction-loop operating-point studies;
-- zero or more fan-speed/variable-friction-loop studies;\n- zero or more bounded fan/variable-friction-loop uncertainty analyses;
+- zero or more fan-speed/variable-friction-loop studies;
+- zero or more bounded fan/variable-friction-loop uncertainty analyses;
 - an optional v0.17 verification/HVAC duplicated-input consistency check;
 - an optional v0.22 HVAC/fan operating-airflow consistency check with project-supplied absolute tolerance.
 
@@ -53,7 +54,8 @@ Example:
   "fan_speed_studies": ["fan_speed_dossier_demo.json"],
   "fan_loop_speed_studies": ["fan_loop_speed_demo.json"],
   "fan_variable_friction_loop_studies": ["fan_variable_friction_loop_demo.json"],
-  "fan_variable_friction_speed_studies": ["fan_variable_friction_speed_demo.json"],\n  "fan_variable_friction_uncertainty_analyses": ["fan_variable_friction_uncertainty_demo.json"],
+  "fan_variable_friction_speed_studies": ["fan_variable_friction_speed_demo.json"],
+  "fan_variable_friction_uncertainty_analyses": ["fan_variable_friction_uncertainty_demo.json"],
   "consistency_checks": {
     "verification_hvac_airflow": {
       "room_airflow_abs_tolerance_m3_h": 0.0,

@@ -212,6 +212,53 @@ def _fan_loop_speed_summary(results: list[dict]) -> dict:
     }
 
 
+def _fan_variable_friction_loop_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "study_count": 0,
+        }
+    counts = _count_statuses(item["status"] for item in results)
+    non_solved = sum(
+        count for status, count in counts.items() if status != "solved"
+    )
+    return {
+        "status": (
+            "attention_required" if non_solved else "screening_complete"
+        ),
+        "counts": counts,
+        "study_count": len(results),
+    }
+
+
+def _fan_variable_friction_speed_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "study_count": 0,
+            "speed_case_count": 0,
+        }
+    statuses = [
+        case["status"]
+        for result in results
+        for case in result.get("speed_cases", [])
+    ]
+    counts = _count_statuses(statuses)
+    non_solved = sum(
+        count for status, count in counts.items() if status != "solved"
+    )
+    return {
+        "status": (
+            "attention_required" if non_solved else "screening_complete"
+        ),
+        "counts": counts,
+        "study_count": len(results),
+        "speed_case_count": len(statuses),
+    }
+
+
 def _fan_operating_point_summary(results: list[dict]) -> dict:
     if not results:
         return {"status": "not_included", "counts": {}, "study_count": 0}
@@ -351,6 +398,8 @@ def summarize_dossier_components(
     damper_studies: list[dict] | None = None,
     fan_speed_studies: list[dict] | None = None,
     fan_loop_speed_studies: list[dict] | None = None,
+    fan_variable_friction_loops: list[dict] | None = None,
+    fan_variable_friction_speed_studies: list[dict] | None = None,
     consistency: dict | None = None,
     fan_airflow_consistency: dict | None = None,
 ) -> dict:
@@ -368,6 +417,10 @@ def summarize_dossier_components(
     damper_studies = damper_studies or []
     fan_speed_studies = fan_speed_studies or []
     fan_loop_speed_studies = fan_loop_speed_studies or []
+    fan_variable_friction_loops = fan_variable_friction_loops or []
+    fan_variable_friction_speed_studies = (
+        fan_variable_friction_speed_studies or []
+    )
 
     components = {
         "verification": _verification_summary(verification),
@@ -393,6 +446,14 @@ def summarize_dossier_components(
         "fan_speed_studies": _fan_speed_summary(fan_speed_studies),
         "fan_loop_speed_studies": _fan_loop_speed_summary(
             fan_loop_speed_studies
+        ),
+        "fan_variable_friction_loops": _fan_variable_friction_loop_summary(
+            fan_variable_friction_loops
+        ),
+        "fan_variable_friction_speed_studies": (
+            _fan_variable_friction_speed_summary(
+                fan_variable_friction_speed_studies
+            )
         ),
         "cross_module_consistency": _consistency_summary(consistency),
         "hvac_fan_operating_airflow_consistency": _fan_airflow_consistency_summary(
@@ -438,6 +499,18 @@ def summarize_dossier_components(
         "fan_loop_speed_studies_unsolved": components[
             "fan_loop_speed_studies"
         ]["counts"].get("no_intersection_in_supplied_range", 0),
+        "fan_variable_friction_loops_unsolved": components[
+            "fan_variable_friction_loops"
+        ]["counts"].get("no_intersection_in_supplied_range", 0),
+        "fan_variable_friction_loops_non_converged": components[
+            "fan_variable_friction_loops"
+        ]["counts"].get("non_converged", 0),
+        "fan_variable_friction_speed_studies_unsolved": components[
+            "fan_variable_friction_speed_studies"
+        ]["counts"].get("no_intersection_in_supplied_range", 0),
+        "fan_variable_friction_speed_studies_non_converged": components[
+            "fan_variable_friction_speed_studies"
+        ]["counts"].get("non_converged", 0),
         "cross_module_consistency_failures": (
             components["cross_module_consistency"]["issue_count"]
             if components["cross_module_consistency"]["status"] == "fail"
@@ -549,6 +622,16 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .fan_loop_uncertainty_io import load_fan_loop_network_uncertainty
     from .fan_loop_speed import analyze_fan_loop_speed_study
     from .fan_loop_speed_io import load_fan_loop_speed_study
+    from .fan_variable_friction_loop import solve_fan_variable_friction_loop
+    from .fan_variable_friction_loop_io import (
+        load_fan_variable_friction_loop_study,
+    )
+    from .fan_variable_friction_speed import (
+        analyze_fan_variable_friction_speed_study,
+    )
+    from .fan_variable_friction_speed_io import (
+        load_fan_variable_friction_speed_study,
+    )
     from .damper_study import solve_loop_damper_study
     from .damper_study_io import load_loop_damper_study
     from .fan_speed import analyze_fan_speed_study
@@ -711,6 +794,34 @@ def build_dossier(manifest_path: str | Path) -> dict:
             )
         )
 
+    fan_variable_friction_loops: list[dict] = []
+    for item in data.get("fan_variable_friction_loop_studies", []):
+        source = _source_record(
+            "fan_variable_friction_loop_study", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_variable_friction_loops.append(
+            solve_fan_variable_friction_loop(
+                load_fan_variable_friction_loop_study(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
+    fan_variable_friction_speed_studies: list[dict] = []
+    for item in data.get("fan_variable_friction_speed_studies", []):
+        source = _source_record(
+            "fan_variable_friction_speed_study", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_variable_friction_speed_studies.append(
+            analyze_fan_variable_friction_speed_study(
+                load_fan_variable_friction_speed_study(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
     damper_studies: list[dict] = []
     for item in data.get("damper_studies", []):
         source = _source_record("damper_study", item, manifest_dir)
@@ -786,6 +897,8 @@ def build_dossier(manifest_path: str | Path) -> dict:
             or fan_loop_networks
             or fan_speed_studies
             or fan_loop_speed_studies
+            or fan_variable_friction_loops
+            or fan_variable_friction_speed_studies
         ):
             raise ValueError(
                 "hvac_fan_operating_airflow consistency requires at least one "
@@ -806,6 +919,10 @@ def build_dossier(manifest_path: str | Path) -> dict:
             fan_loop_networks=fan_loop_networks,
             fan_speed_studies=fan_speed_studies,
             fan_loop_speed_studies=fan_loop_speed_studies,
+            fan_variable_friction_loops=fan_variable_friction_loops,
+            fan_variable_friction_speed_studies=(
+                fan_variable_friction_speed_studies
+            ),
             airflow_abs_tolerance_m3_h=fan_airflow_config.get(
                 "airflow_abs_tolerance_m3_h", 0.0
             ),
@@ -828,6 +945,10 @@ def build_dossier(manifest_path: str | Path) -> dict:
         damper_studies=damper_studies,
         fan_speed_studies=fan_speed_studies,
         fan_loop_speed_studies=fan_loop_speed_studies,
+        fan_variable_friction_loops=fan_variable_friction_loops,
+        fan_variable_friction_speed_studies=(
+            fan_variable_friction_speed_studies
+        ),
         consistency=consistency,
         fan_airflow_consistency=fan_airflow_consistency,
     )
@@ -857,6 +978,12 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "damper_studies": damper_studies,
         "fan_speed_studies": fan_speed_studies,
         "fan_loop_speed_studies": fan_loop_speed_studies,
+        "fan_variable_friction_loop_studies": (
+            fan_variable_friction_loops
+        ),
+        "fan_variable_friction_speed_studies": (
+            fan_variable_friction_speed_studies
+        ),
         "consistency_checks": {
             "verification_hvac_airflow": consistency,
             "hvac_fan_operating_airflow": fan_airflow_consistency,

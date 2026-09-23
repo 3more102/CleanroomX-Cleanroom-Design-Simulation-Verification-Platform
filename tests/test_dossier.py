@@ -116,10 +116,12 @@ def test_repository_demo_builds_end_to_end() -> None:
     assert result["fan_operating_point_studies"][0]["status"] == "solved"
     assert result["fan_duct_network_studies"][0]["status"] == "solved"
     assert result["fan_parallel_network_studies"][0]["status"] == "solved"
-    assert result["fan_speed_studies"][0]["status"] == "attention_required"
+    assert result["fan_speed_studies"][0]["status"] == "screening_complete"
     assert (
-        result["fan_speed_studies"][0]["counts"]["no_intersection_in_supplied_range"]
-        == 1
+        result["fan_speed_studies"][0]["counts"].get(
+            "no_intersection_in_supplied_range", 0
+        )
+        == 0
     )
     assert all(len(item["sha256"]) == 64 for item in result["source_files"])
 

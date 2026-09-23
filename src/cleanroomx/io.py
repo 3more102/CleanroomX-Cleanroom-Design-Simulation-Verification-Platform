@@ -12,6 +12,9 @@ def room_from_dict(data: dict) -> RoomSpec:
             size_um=item["size_um"],
             max_concentration_per_m3=item["max_concentration_per_m3"],
             observed_concentration_per_m3=item["observed_concentration_per_m3"],
+            observed_uncertainty_abs_per_m3=item.get(
+                "observed_uncertainty_abs_per_m3", 0.0
+            ),
         )
         for item in data.get("particle_requirements", [])
     )
@@ -25,6 +28,9 @@ def room_from_dict(data: dict) -> RoomSpec:
         min_pressure_pa=data.get("min_pressure_pa"),
         observed_pressure_pa=data.get("observed_pressure_pa"),
         particle_requirements=particle_requirements,
+        observed_pressure_uncertainty_pa=data.get(
+            "observed_pressure_uncertainty_pa", 0.0
+        ),
     )
 
 
@@ -38,7 +44,11 @@ def project_from_dict(data: dict) -> ProjectSpec:
         )
         for item in data.get("pressure_cascade", [])
     )
-    return ProjectSpec(name=data["name"], rooms=rooms, pressure_cascade=pressure_cascade)
+    return ProjectSpec(
+        name=data["name"],
+        rooms=rooms,
+        pressure_cascade=pressure_cascade,
+    )
 
 
 def load_room(path: str | Path) -> RoomSpec:

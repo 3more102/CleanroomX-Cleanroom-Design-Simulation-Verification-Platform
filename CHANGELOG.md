@@ -1,4 +1,14 @@
 # Changelog
+## v0.45 correlated whole fan-curve scenarios — 2026-09-23
+
+- Added explicit named whole fan-curve scenarios to nonlinear fan/variable-friction uncertainty analysis so point-to-point dependence can be preserved instead of forcing independent Cartesian point perturbations.
+- Evaluates the nominal supplied curve plus each configured scenario as complete curves, crossed only with the configured fixed-pressure, fan-speed, and duct physical/geometry uncertainty dimensions.
+- Allows whole-curve scenarios to combine with bounded fan-speed ratio using the existing affinity-law transform before each complete nonlinear loop solve.
+- Makes whole-curve scenarios mutually exclusive with independent fan-point pressure/airflow-coordinate bounds, preventing accidental mixing of correlated and independent fan-performance models.
+- Validates scenario fan curves through the existing nonnegative, strictly increasing airflow and non-increasing pressure requirements; rejects duplicate names and reserves `nominal` for the baseline curve.
+- Includes scenario count in the pre-materialization `max_corner_cases` guard, preserves per-scenario provenance, reports scenario identity in Markdown/JSON corner evidence, and adds standalone plus dossier regression coverage.
+- Added `examples/fan_variable_friction_curve_scenarios_demo.json` and bumped package/runtime metadata to v0.45.0.
+
 ## v0.45 explicit whole fan-curve scenarios — 2026-09-23
 
 - Added explicit named whole-fan-curve scenarios to nonlinear fan/variable-friction uncertainty analysis so point-to-point dependence can be preserved without independently permuting curve coordinates.

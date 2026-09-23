@@ -1,7 +1,9 @@
 import json
+from pathlib import Path
 
 import pytest
 
+from cleanroomx.consistency import analyze_hvac_fan_airflow_consistency
 from cleanroomx.dossier import build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
 
@@ -115,4 +117,94 @@ def test_nonlinear_uncertainty_dossier_is_deterministic() -> None:
     assert json.dumps(first, sort_keys=True) == json.dumps(
         second,
         sort_keys=True,
+    )
+
+
+def test_hvac_consistency_expands_nonlinear_uncertainty_corners() -> None:
+    analysis = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )["fan_variable_friction_uncertainty_analyses"][0]
+    result = analyze_hvac_fan_airflow_consistency(
+        {"total_governing_airflow_m3_h": 5000.0},
+        fan_variable_friction_uncertainty_analyses=[analysis],
+        airflow_abs_tolerance_m3_h=10000.0,
+    )
+
+    assert result["status"] == "pass"
+    assert result["study_count"] == analysis["corner_count"] == 8
+    assert result["solved_study_count"] == 8
+    assert result["unresolved_study_count"] == 0
+    assert result["mismatch_count"] == 0
+    assert {
+        item["study_kind"] for item in result["study_airflow_checks"]
+    } == {"fan_variable_friction_uncertainty_corner"}
+
+
+def test_hvac_consistency_preserves_unresolved_uncertainty_corner() -> None:
+    result = analyze_hvac_fan_airflow_consistency(
+        {"total_governing_airflow_m3_h": 3600.0},
+        fan_variable_friction_uncertainty_analyses=[
+            {
+                "analysis": "Bounded nonlinear loop",
+                "corners": [
+                    {
+                        "status": "solved",
+                        "operating_point": {"airflow_m3_h": 3602.0},
+                    },
+                    {
+                        "status": "non_converged",
+                        "operating_point": None,
+                    },
+                ],
+            }
+        ],
+        airflow_abs_tolerance_m3_h=5.0,
+    )
+
+    assert result["status"] == "pass_with_unresolved_studies"
+    assert result["study_count"] == 2
+    assert result["solved_study_count"] == 1
+    assert result["unresolved_study_count"] == 1
+    assert result["mismatch_count"] == 0
+    assert result["study_airflow_checks"][1]["study_status"] == "non_converged"
+    assert result["study_airflow_checks"][1]["status"] == "not_comparable"
+
+
+def test_dossier_wires_nonlinear_uncertainty_into_hvac_consistency(
+    tmp_path,
+) -> None:
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Nonlinear uncertainty airflow consistency",
+                "hvac_project": str(
+                    Path("examples/semiconductor_thermal_demo.json").resolve()
+                ),
+                "fan_variable_friction_uncertainty_analyses": [
+                    str(
+                        Path(
+                            "examples/fan_variable_friction_uncertainty_demo.json"
+                        ).resolve()
+                    )
+                ],
+                "consistency_checks": {
+                    "hvac_fan_operating_airflow": {
+                        "airflow_abs_tolerance_m3_h": 1000000.0
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_dossier(manifest)
+    check = result["consistency_checks"]["hvac_fan_operating_airflow"]
+    assert check["status"] == "pass"
+    assert check["study_count"] == 8
+    assert check["solved_study_count"] == 8
+    assert check["unresolved_study_count"] == 0
+    assert all(
+        item["study_kind"] == "fan_variable_friction_uncertainty_corner"
+        for item in check["study_airflow_checks"]
     )

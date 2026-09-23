@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.32 dossier-integrated fan/loop uncertainty and speed studies — 2026-09-23
+
+- Integrated bounded fan/loop-network uncertainty analyses into engineering dossier manifests with SHA-256 source fingerprints, executive summaries, Markdown reporting, and full JSON evidence preservation.
+- Propagates indeterminate fan/loop uncertainty corners into dossier attention state while tracking missing uncertainty provenance separately as unresolved traceability.
+- Integrated fan-speed/fixed-resistance-loop studies into dossier manifests with per-speed operating points, internal-network continuity evidence, fan/system residuals, and source fingerprints.
+- Extended HVAC-to-fan operating-airflow consistency to fan-speed/loop-network cases; unresolved transformed-curve intersections remain not comparable rather than becoming failures.
+- Added an end-to-end combined dossier example, missing-source and deterministic-fingerprint regression coverage, and adverse-state summary tests.
+- Bumped package/runtime metadata to v0.32.0 without changing the underlying v0.29 or v0.31 numerical solvers.
+
+
 ## v0.31 bounded fan / loop-network uncertainty — 2026-09-23
 
 - Added deterministic lower/upper corner analysis around the v0.26 passive two-terminal fan/loop-network workflow while preserving v0.29 fan-speed loop studies and v0.30 variable-friction loop solving.

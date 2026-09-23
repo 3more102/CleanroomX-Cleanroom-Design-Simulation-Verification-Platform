@@ -2,7 +2,8 @@
 
 CleanroomX v0.14 links the bounded v0.11 fan-curve solver to the
 path-based duct model. It derives a quadratic system resistance from
-explicit duct geometry, Darcy friction factors, air density, local-loss
+explicit duct geometry, Darcy friction factors (supplied directly or resolved
+at the reference flow from explicit roughness/viscosity), air density, local-loss
 coefficients, and a user-supplied reference flow distribution.
 
 ## Reference-flow scaling
@@ -24,8 +25,9 @@ scale proportionally:
 
     Q_i = alpha_i * Q
 
-With constant air density, Darcy friction factor, geometry, and local
-loss coefficient, each section pressure drop remains quadratic in flow:
+With constant air density, the resolved reference-flow Darcy friction factor,
+geometry, and local loss coefficient, each section pressure drop remains
+quadratic in flow:
 
     delta_p_i =
         0.5 * rho_i *
@@ -81,7 +83,7 @@ It therefore does not replace:
 - the v0.8 fixed-demand branch-flow solver;
 - the v0.9 simple passive parallel-path solver;
 - a general nonlinear looped-network solver;
-- Reynolds-number/friction-factor iteration;
+- Reynolds-number/friction-factor iteration as the fan operating point moves (v0.20 may resolve the factor once at the declared reference flow);
 - balancing damper or leakage modeling;
 - system-effect corrections;
 - fan stall/surge evaluation;
@@ -89,7 +91,9 @@ It therefore does not replace:
 - manufacturer fan selection or qualified HVAC engineering review.
 
 A section reference airflow greater than the reference total system
-airflow is rejected.
+airflow is rejected. Automatic-friction sections use that supplied section
+reference airflow to calculate Reynolds number and the reference Darcy factor;
+the factor is then held constant for the fixed-ratio quadratic scaling.
 
 ## JSON input
 

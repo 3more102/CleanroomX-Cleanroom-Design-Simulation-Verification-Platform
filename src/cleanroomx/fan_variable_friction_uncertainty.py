@@ -1311,19 +1311,50 @@ def _edge_airflow_extrema_sources(
     return rows
 
 
+def _power_metric_availability(
+    corners: list[dict],
+    key: str,
+) -> dict:
+    available_corner_indices = [
+        corner_index
+        for corner_index, corner in enumerate(corners)
+        if corner.get("power_evidence") is not None
+        and corner["power_evidence"].get(key) is not None
+    ]
+    available_corner_set = set(available_corner_indices)
+    available = len(available_corner_indices)
+    total = len(corners)
+    missing_corner_indices = [
+        corner_index
+        for corner_index in range(total)
+        if corner_index not in available_corner_set
+    ]
+    if total > 0 and available == total:
+        status = "complete"
+    elif available == 0:
+        status = "unavailable"
+    else:
+        status = "partial"
+    return {
+        "status": status,
+        "available_corner_count": available,
+        "total_corner_count": total,
+        "missing_corner_indices": missing_corner_indices,
+    }
+
+
 def _power_metric_corner_range(
     corners: list[dict],
     key: str,
     unit: str,
 ) -> dict | None:
+    availability = _power_metric_availability(corners, key)
+    if availability["status"] != "complete":
+        return None
     values = [
         float(corner["power_evidence"][key])
         for corner in corners
-        if corner.get("power_evidence") is not None
-        and corner["power_evidence"].get(key) is not None
     ]
-    if not values:
-        return None
     return {
         "lower": round(min(values), 6),
         "upper": round(max(values), 6),
@@ -1336,14 +1367,13 @@ def _power_metric_extrema_sources(
     key: str,
     unit: str,
 ) -> dict | None:
+    availability = _power_metric_availability(corners, key)
+    if availability["status"] != "complete":
+        return None
     values = [
         (corner_index, float(corner["power_evidence"][key]))
         for corner_index, corner in enumerate(corners)
-        if corner.get("power_evidence") is not None
-        and corner["power_evidence"].get(key) is not None
     ]
-    if not values:
-        return None
 
     lower = min(value for _corner_index, value in values)
     upper = max(value for _corner_index, value in values)
@@ -1967,6 +1997,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     edge_airflow_extrema_sources = None
     power_evidence_corner_ranges = None
     power_evidence_extrema_sources = None
+    power_evidence_availability = None
     operating_point_excursions_from_nominal = None
     power_evidence_excursions_from_nominal = None
     if all_corners_solved:
@@ -2049,6 +2080,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
             ("electrical_input_kw", "kW"),
             ("specific_fan_power_w_per_m3_s", "W/(m3/s)"),
         )
+        power_evidence_availability = {
+            key: _power_metric_availability(corners, key)
+            for key, _unit in power_metric_specs
+        }
         power_evidence_corner_ranges = {
             key: _power_metric_corner_range(corners, key, unit)
             for key, unit in power_metric_specs
@@ -2300,6 +2335,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         },
         "nominal_status": nominal["status"],
         "nominal_operating_point": nominal["fan_operating_point"],
+        "nominal_power_evidence": nominal["power_evidence"],
         "nominal_result": nominal,
         "corner_count": len(corners),
         "solved_corner_count": len(solved_points),
@@ -2329,6 +2365,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
             if study.power_efficiencies is None
             else study.power_efficiencies.to_dict()
         ),
+        "power_evidence_availability": power_evidence_availability,
         "power_evidence_corner_ranges": power_evidence_corner_ranges,
         "power_evidence_extrema_sources": power_evidence_extrema_sources,
         "power_evidence_excursions_from_nominal": (
@@ -2387,7 +2424,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "or estimating a missing operating point. When explicit "
             "fan/motor/VFD efficiencies are supplied, solved-corner power "
             "evidence also retains fluid, shaft, electrical-input, and "
-            "specific-fan-power ranges plus their source corners. The "
+            "specific-fan-power ranges plus their source corners. Each power "
+            "metric range is emitted only when that metric is available at "
+            "every evaluated solved corner; partial metric coverage is "
+            "reported explicitly and withheld from min/max summarization. The "
             "fan-curve boundary-clearance audit also retains each solved "
             "corner's actual supplied/transformed airflow range and reports "
             "the closest evaluated operating point to a no-extrapolation "

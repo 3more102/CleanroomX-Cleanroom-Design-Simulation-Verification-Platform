@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.26 engineering core
+## v0.27 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -24,7 +24,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
-- Bounded fan/loop-network operating-point coupling for passive two-terminal fixed-resistance meshes, with no fan-curve extrapolation and full operating-flow re-solve.
+- Bounded fan/loop-network operating-point coupling for passive two-terminal fixed-resistance meshes, with no fan-curve extrapolation and full operating-flow re-solve.\n- Explicit loop-network damper-resistance scenario studies using user-supplied per-edge resistance multipliers, with baseline/case flow redistribution and residual evidence.
 - Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
@@ -59,7 +59,7 @@ The HVAC module is also a preliminary engineering model. The v0.8 branch-flow so
 
 v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
 
-v0.26 fan/loop-network coupling reduces a passive two-terminal fixed-resistance mesh to its exact quadratic equivalent from a reference solve, intersects that equivalent with supplied fan data, and re-solves the full mesh at the bounded operating airflow. Internal external injections, variable-friction iteration, controls, leakage, and fan extrapolation remain outside this workflow.
+v0.26 fan/loop-network coupling reduces a passive two-terminal fixed-resistance mesh to its exact quadratic equivalent from a reference solve, intersects that equivalent with supplied fan data, and re-solves the full mesh at the bounded operating airflow. Internal external injections, variable-friction iteration, controls, leakage, and fan extrapolation remain outside this workflow.\n\nv0.27 damper studies are explicit fixed-resistance scenarios only. A configured multiplier represents a user-declared increase in one edge's quadratic resistance; CleanroomX does not infer damper position, K-value, actuator behavior, control logic, or an automatically balanced setting.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
@@ -153,6 +153,20 @@ Write a Markdown report:
     cleanroomx-fan-loop examples/fan_loop_network_demo.json --output fan-loop-report.md
 
 The v0.26 workflow accepts a passive two-terminal v0.25 loop network, derives its equivalent fixed quadratic resistance from a reference through-flow, intersects that system law with supplied fan data without extrapolation, and re-solves the original loop at the operating airflow. See docs/FAN_LOOP_NETWORK.md.
+
+## Run loop damper-resistance scenarios
+
+    cleanroomx-damper-study examples/damper_study_demo.json
+
+JSON output:
+
+    cleanroomx-damper-study examples/damper_study_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-damper-study examples/damper_study_demo.json --output damper-study-report.md
+
+The v0.27 workflow solves the unchanged baseline loop and each explicit throttling case, where selected edge resistances are multiplied by user-supplied finite factors greater than or equal to 1. It reports the resulting edge-flow redistribution and solver residuals without inferring damper position or automatic control. See docs/DAMPER_STUDY.md.
 
 ## Solve a fan/system operating point
 
@@ -381,7 +395,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are controlled damper studies, fan/loop uncertainty integration, and later a desktop/web UI plus CFD adapters.
+Next milestones are fan/loop uncertainty integration, dossier integration for fan-loop and damper studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

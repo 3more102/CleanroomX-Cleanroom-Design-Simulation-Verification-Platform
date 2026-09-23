@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import asdict, dataclass, field
 from itertools import product
@@ -15,6 +17,17 @@ from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from .loop_resistance import LoopedDuctResistanceInput, derive_loop_edge_resistance
 from .pressure_power import FanPowerEfficiencies
 from .uncertainty_models import Provenance, UncertainValue
+
+
+def _canonical_result_sha256(payload: dict) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -2160,7 +2173,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     if study.fan_curve_provenance is None:
         missing.insert(0, "fan_curve")
 
-    return {
+    result = {
         "analysis": study.name,
         "status": "complete" if all_corners_solved else "indeterminate",
         "fan_curve": study.fan_curve.name,
@@ -2404,3 +2417,13 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "transients, or manufacturer acceptance is inferred."
         ),
     }
+    result["result_integrity"] = {
+        "algorithm": "sha256",
+        "canonicalization": "json-sort-keys-compact-utf8-v1",
+        "scope": (
+            "cleanroomx.fan_variable_friction_loop_uncertainty."
+            "result_without_result_integrity.v1"
+        ),
+        "sha256": _canonical_result_sha256(result),
+    }
+    return result

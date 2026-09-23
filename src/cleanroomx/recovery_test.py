@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from .recovery_models import RecoveryTestSpec
+from .uncertainty import upper_limit_decision
 
 
 def _log_linear_fit(spec: RecoveryTestSpec) -> dict:
@@ -63,6 +64,51 @@ def _log_linear_fit(spec: RecoveryTestSpec) -> dict:
     }
 
 
+def _uncertainty_summary(spec: RecoveryTestSpec, sample_results: list[dict]) -> dict:
+    statuses = [sample["uncertainty"]["status"] for sample in sample_results]
+    provided = sum(status != "not_available" for status in statuses)
+    coverage = (
+        "none"
+        if provided == 0
+        else "complete"
+        if provided == len(sample_results)
+        else "partial"
+    )
+    first_certain_index = next(
+        (index for index, status in enumerate(statuses) if status == "pass"),
+        None,
+    )
+    first_nominal_index = next(
+        (
+            index
+            for index, sample in enumerate(sample_results)
+            if sample["at_or_below_target"]
+        ),
+        None,
+    )
+
+    return {
+        "coverage": coverage,
+        "samples_with_uncertainty": provided,
+        "sample_count": len(sample_results),
+        "certainly_at_or_below_target_count": statuses.count("pass"),
+        "certainly_above_target_count": statuses.count("fail"),
+        "indeterminate_count": statuses.count("indeterminate"),
+        "first_certainly_at_or_below_target_time_minutes": (
+            spec.samples[first_certain_index].time_minutes
+            if first_certain_index is not None
+            else None
+        ),
+        "nominal_recovery_sample_uncertainty_status": (
+            statuses[first_nominal_index] if first_nominal_index is not None else None
+        ),
+        "note": (
+            "Uncertainty status is a measurement-interval diagnostic and does not "
+            "replace the configured recovery-test acceptance rule."
+        ),
+    }
+
+
 def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
     first_reached_index = next(
         (
@@ -114,6 +160,27 @@ def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
             "the configured maximum recovery time."
         )
 
+    sample_results = []
+    for sample in spec.samples:
+        uncertainty = upper_limit_decision(
+            sample.concentration_per_m3,
+            spec.target_concentration_per_m3,
+            uncertainty_abs=sample.uncertainty_abs_per_m3,
+            uncertainty_percent=sample.uncertainty_percent,
+            floor=0.0,
+        )
+        sample_results.append(
+            {
+                "time_minutes": sample.time_minutes,
+                "concentration_per_m3": sample.concentration_per_m3,
+                "at_or_below_target": (
+                    sample.concentration_per_m3
+                    <= spec.target_concentration_per_m3
+                ),
+                "uncertainty": uncertainty,
+            }
+        )
+
     return {
         "test": spec.name,
         "particle_size_um": round(spec.particle_size_um, 6),
@@ -135,25 +202,23 @@ def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
         "sample_count": len(spec.samples),
         "metadata": {
             "instrument_id": spec.instrument_id,
+            "instrument_serial_number": spec.instrument_serial_number,
+            "calibration_certificate_id": spec.calibration_certificate_id,
+            "calibration_date": spec.calibration_date,
+            "calibration_due_date": spec.calibration_due_date,
             "sample_location": spec.sample_location,
             "occupancy_state": spec.occupancy_state,
             "method_reference": spec.method_reference,
+            "data_source": spec.data_source,
+            "analyst": spec.analyst,
         },
-        "samples": [
-            {
-                "time_minutes": sample.time_minutes,
-                "concentration_per_m3": sample.concentration_per_m3,
-                "at_or_below_target": (
-                    sample.concentration_per_m3
-                    <= spec.target_concentration_per_m3
-                ),
-            }
-            for sample in spec.samples
-        ],
+        "samples": sample_results,
+        "uncertainty_summary": _uncertainty_summary(spec, sample_results),
         "log_linear_fit": _log_linear_fit(spec),
         "engineering_note": (
             "Acceptance is based only on the explicit target concentration and optional "
-            "maximum recovery time supplied by the project. CleanroomX does not embed "
-            "ISO class limits or a universal recovery-time criterion."
+            "maximum recovery time supplied by the project. Measurement uncertainty is "
+            "reported as a separate diagnostic. CleanroomX does not embed ISO class "
+            "limits or a universal recovery-time criterion."
         ),
     }

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 
+def _fmt(value: object) -> str:
+    return "—" if value is None else str(value)
+
+
 def markdown_recovery_report(result: dict) -> str:
     lines = [f"# CleanroomX Recovery Test Report — {result['test']}", ""]
     lines.extend(
@@ -27,18 +31,37 @@ def markdown_recovery_report(result: dict) -> str:
                 lines.append(f"- {key.replace('_', ' ').title()}: {value}")
         lines.append("")
 
+    uncertainty = result["uncertainty_summary"]
+    lines.extend(
+        [
+            "## Measurement uncertainty",
+            "",
+            f"- Coverage: **{uncertainty['coverage']}** "
+            f"({uncertainty['samples_with_uncertainty']}/{uncertainty['sample_count']} samples)",
+            f"- First certainly at/below target: **{_fmt(uncertainty['first_certainly_at_or_below_target_time_minutes'])} min**",
+            f"- Nominal recovery-sample uncertainty status: **{_fmt(uncertainty['nominal_recovery_sample_uncertainty_status'])}**",
+            f"- Indeterminate samples: **{uncertainty['indeterminate_count']}**",
+            "",
+            uncertainty["note"],
+            "",
+        ]
+    )
+
     lines.extend(
         [
             "## Samples",
             "",
-            "| Time (min) | Concentration (particles/m³) | At/below target |",
-            "|---:|---:|---|",
+            "| Time (min) | Concentration (particles/m³) | Nominal target | Uncertainty lower | Uncertainty upper | Uncertainty status |",
+            "|---:|---:|---|---:|---:|---|",
         ]
     )
     for sample in result["samples"]:
+        interval = sample["uncertainty"]
         lines.append(
             f"| {sample['time_minutes']} | {sample['concentration_per_m3']} | "
-            f"{'yes' if sample['at_or_below_target'] else 'no'} |"
+            f"{'at/below' if sample['at_or_below_target'] else 'above'} | "
+            f"{_fmt(interval['lower_bound'])} | {_fmt(interval['upper_bound'])} | "
+            f"{interval['status']} |"
         )
 
     fit = result["log_linear_fit"]

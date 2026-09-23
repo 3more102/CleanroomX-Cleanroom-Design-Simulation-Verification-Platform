@@ -63,49 +63,145 @@ def _log_linear_fit(spec: RecoveryTestSpec) -> dict:
     }
 
 
+def _sample_target_relation(
+    concentration: float,
+    uncertainty: float,
+    target: float,
+) -> tuple[str, float, float]:
+    lower = concentration - uncertainty
+    upper = concentration + uncertainty
+    if upper <= target:
+        return "at_or_below", lower, upper
+    if lower > target:
+        return "above", lower, upper
+    return "indeterminate", lower, upper
+
+
 def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
-    first_reached_index = next(
-        (
-            index
-            for index, sample in enumerate(spec.samples)
-            if sample.concentration_per_m3 <= spec.target_concentration_per_m3
-        ),
+    sample_rows: list[dict] = []
+    relations: list[str] = []
+    for sample in spec.samples:
+        relation, lower, upper = _sample_target_relation(
+            sample.concentration_per_m3,
+            sample.concentration_uncertainty_per_m3,
+            spec.target_concentration_per_m3,
+        )
+        relations.append(relation)
+        sample_rows.append(
+            {
+                "time_minutes": sample.time_minutes,
+                "concentration_per_m3": sample.concentration_per_m3,
+                "concentration_uncertainty_per_m3": (
+                    sample.concentration_uncertainty_per_m3
+                ),
+                "concentration_interval_per_m3": {
+                    "lower_bound": lower,
+                    "upper_bound": upper,
+                },
+                "target_relation": relation,
+                "at_or_below_target": relation == "at_or_below",
+            }
+        )
+
+    first_definite_index = next(
+        (index for index, relation in enumerate(relations) if relation == "at_or_below"),
+        None,
+    )
+    first_possible_index = next(
+        (index for index, relation in enumerate(relations) if relation != "above"),
         None,
     )
 
-    reached_target = first_reached_index is not None
+    reached_target = first_definite_index is not None
+    possible_target_reached = first_possible_index is not None
     observed_recovery_time = (
-        spec.samples[first_reached_index].time_minutes
-        if first_reached_index is not None
+        spec.samples[first_definite_index].time_minutes
+        if first_definite_index is not None
+        else None
+    )
+    possible_recovery_time = (
+        spec.samples[first_possible_index].time_minutes
+        if first_possible_index is not None
         else None
     )
 
-    if first_reached_index is None:
+    if first_definite_index is not None:
+        if first_possible_index is None or first_possible_index == 0:
+            lower_bound = 0.0
+        else:
+            lower_bound = spec.samples[first_possible_index - 1].time_minutes
+        upper_bound = spec.samples[first_definite_index].time_minutes
+    elif first_possible_index is not None:
+        lower_bound = (
+            0.0
+            if first_possible_index == 0
+            else spec.samples[first_possible_index - 1].time_minutes
+        )
+        upper_bound = None
+    else:
         lower_bound = spec.samples[-1].time_minutes
         upper_bound = None
-    elif first_reached_index == 0:
-        lower_bound = 0.0
-        upper_bound = spec.samples[0].time_minutes
+
+    if reached_target:
+        target_state = "reached"
+    elif possible_target_reached:
+        target_state = "indeterminate"
     else:
-        lower_bound = spec.samples[first_reached_index - 1].time_minutes
-        upper_bound = spec.samples[first_reached_index].time_minutes
+        target_state = "not_reached"
 
     if spec.max_recovery_time_minutes is None:
         criterion_status = "not_checked"
         criterion_message = "No maximum recovery-time requirement configured."
-    elif reached_target:
-        passed = observed_recovery_time <= spec.max_recovery_time_minutes
-        criterion_status = "pass" if passed else "fail"
-        criterion_message = (
-            "Observed recovery reached the configured target within the maximum time."
-            if passed
-            else "Observed recovery reached the target after the configured maximum time."
+    elif first_definite_index is not None:
+        definite_time = spec.samples[first_definite_index].time_minutes
+        possible_time = (
+            spec.samples[first_possible_index].time_minutes
+            if first_possible_index is not None
+            else definite_time
         )
+        if definite_time <= spec.max_recovery_time_minutes:
+            criterion_status = "pass"
+            criterion_message = (
+                "A measured sample is definitely at or below the configured target, "
+                "including concentration uncertainty, within the maximum time."
+            )
+        elif possible_time <= spec.max_recovery_time_minutes:
+            criterion_status = "indeterminate"
+            criterion_message = (
+                "A concentration uncertainty interval overlaps the target within the "
+                "maximum time, but definite recovery is only demonstrated later."
+            )
+        else:
+            criterion_status = "fail"
+            criterion_message = (
+                "No measured sample is at or possibly below the configured target within "
+                "the maximum recovery time."
+            )
+    elif first_possible_index is not None:
+        possible_time = spec.samples[first_possible_index].time_minutes
+        if possible_time <= spec.max_recovery_time_minutes:
+            criterion_status = "indeterminate"
+            criterion_message = (
+                "A measured concentration uncertainty interval overlaps the target within "
+                "the maximum time, so recovery cannot be robustly passed or failed."
+            )
+        elif spec.samples[-1].time_minutes >= spec.max_recovery_time_minutes:
+            criterion_status = "fail"
+            criterion_message = (
+                "No measured sample is at or possibly below the target within the "
+                "configured maximum recovery time."
+            )
+        else:
+            criterion_status = "incomplete"
+            criterion_message = (
+                "The target is not definitely reached and measurements ended before the "
+                "configured maximum recovery time."
+            )
     elif spec.samples[-1].time_minutes >= spec.max_recovery_time_minutes:
         criterion_status = "fail"
         criterion_message = (
-            "The target concentration was still not reached by or after the configured "
-            "maximum recovery time."
+            "The complete concentration intervals remain above the target by or after "
+            "the configured maximum recovery time."
         )
     else:
         criterion_status = "incomplete"
@@ -122,7 +218,10 @@ def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
         ),
         "max_recovery_time_minutes": spec.max_recovery_time_minutes,
         "reached_target": reached_target,
+        "possible_target_reached": possible_target_reached,
+        "target_state": target_state,
         "observed_recovery_time_minutes": observed_recovery_time,
+        "possible_recovery_time_minutes": possible_recovery_time,
         "recovery_time_window_minutes": {
             "lower_bound": lower_bound,
             "upper_bound": upper_bound,
@@ -133,27 +232,23 @@ def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
         "final_concentration_per_m3": spec.samples[-1].concentration_per_m3,
         "test_duration_minutes": spec.samples[-1].time_minutes,
         "sample_count": len(spec.samples),
+        "uncertainty_applied": any(
+            sample.concentration_uncertainty_per_m3 > 0
+            for sample in spec.samples
+        ),
         "metadata": {
             "instrument_id": spec.instrument_id,
             "sample_location": spec.sample_location,
             "occupancy_state": spec.occupancy_state,
             "method_reference": spec.method_reference,
         },
-        "samples": [
-            {
-                "time_minutes": sample.time_minutes,
-                "concentration_per_m3": sample.concentration_per_m3,
-                "at_or_below_target": (
-                    sample.concentration_per_m3
-                    <= spec.target_concentration_per_m3
-                ),
-            }
-            for sample in spec.samples
-        ],
+        "samples": sample_rows,
         "log_linear_fit": _log_linear_fit(spec),
         "engineering_note": (
             "Acceptance is based only on the explicit target concentration and optional "
-            "maximum recovery time supplied by the project. CleanroomX does not embed "
-            "ISO class limits or a universal recovery-time criterion."
+            "maximum recovery time supplied by the project. When sample uncertainty is "
+            "provided, CleanroomX uses conservative concentration intervals and reports "
+            "indeterminate rather than forcing a pass/fail when an interval overlaps the "
+            "target. The log-linear diagnostic still uses nominal concentrations only."
         ),
     }

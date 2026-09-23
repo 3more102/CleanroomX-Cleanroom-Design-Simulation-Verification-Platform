@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_variable_friction_uncertainty import (
+    FanCurveScenario,
     FanVariableFrictionLoopUncertaintyStudy,
 )
 from .loop_network_io import looped_flow_network_from_dict
@@ -42,6 +43,39 @@ def _uncertain_value(
         uncertainty_abs=data.get("uncertainty_abs", 0.0),
         provenance=_provenance_from_dict(data.get("provenance")),
     )
+
+
+def _fan_curve_scenarios(
+    data: dict,
+    nominal_fan_curve: FanCurve,
+) -> tuple[FanCurveScenario, ...]:
+    specs = data.get("fan_curve_scenarios", [])
+    if not isinstance(specs, list):
+        raise ValueError("fan_curve_scenarios must be an array when provided")
+
+    scenarios = []
+    for spec in specs:
+        if not isinstance(spec, dict):
+            raise ValueError("fan_curve_scenarios entries must be objects")
+        name = spec.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("fan_curve_scenarios entry requires a non-empty name")
+        points = spec.get("points")
+        if not isinstance(points, list):
+            raise ValueError(
+                f"fan_curve_scenarios entry {name!r} requires a points array"
+            )
+        scenarios.append(
+            FanCurveScenario(
+                name=name,
+                fan_curve=FanCurve(
+                    name=f"{nominal_fan_curve.name} — {name}",
+                    points=tuple(FanCurvePoint(**point) for point in points),
+                ),
+                provenance=_provenance_from_dict(spec.get("provenance")),
+            )
+        )
+    return tuple(scenarios)
 
 
 def _fan_curve_airflow_uncertainty(
@@ -201,6 +235,7 @@ def fan_variable_friction_loop_uncertainty_from_dict(
             FanCurvePoint(**point) for point in fan_data["points"]
         ),
     )
+    fan_curve_scenarios = _fan_curve_scenarios(data, fan_curve)
     fan_curve_pressure_uncertainty = _fan_curve_pressure_uncertainty(
         data,
         fan_curve,

@@ -170,6 +170,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"- Airflow: **{nominal['airflow_m3_h']} m³/h**",
                 f"- Fan pressure: **{nominal['fan_pressure_pa']} Pa**",
                 f"- System pressure: **{nominal['system_pressure_pa']} Pa**",
+                f"- Air power: **{nominal['air_power_kw']} kW**",
             ]
         )
 
@@ -211,6 +212,16 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     if "system_pressure_pa" in witnesses
                     else ""
                 ),
+                "- Air power: "
+                f"**{envelope['air_power_kw']['lower']} to "
+                f"{envelope['air_power_kw']['upper']} kW**"
+                + (
+                    " "
+                    f"(corner indices {witnesses['air_power_kw']['lower']['corner_index']} "
+                    f"to {witnesses['air_power_kw']['upper']['corner_index']})"
+                    if "air_power_kw" in witnesses
+                    else ""
+                ),
             ]
         )
 
@@ -221,6 +232,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ("airflow_m3_h", "Airflow"),
             ("fan_pressure_pa", "Fan pressure"),
             ("system_pressure_pa", "System pressure"),
+            ("air_power_kw", "Air power"),
         ):
             for bound in ("lower", "upper"):
                 evidence = extrema_sources[metric_key][bound]
@@ -251,6 +263,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             "airflow_m3_h": "Airflow m³/h",
             "fan_pressure_pa": "Fan pressure Pa",
             "system_pressure_pa": "System pressure Pa",
+            "air_power_kw": "Air power kW",
         }
         lines.extend(
             [

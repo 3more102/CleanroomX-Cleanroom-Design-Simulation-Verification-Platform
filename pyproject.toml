@@ -19,7 +19,8 @@ cleanroomx = "cleanroomx.cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
 cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
 cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"
-cleanroomx-qualification = "cleanroomx.qualification_cli:main"\ncleanroomx-thermal-uncertainty = "cleanroomx.thermal_uncertainty_cli:main"
+cleanroomx-qualification = "cleanroomx.qualification_cli:main"
+cleanroomx-thermal-uncertainty = "cleanroomx.thermal_uncertainty_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

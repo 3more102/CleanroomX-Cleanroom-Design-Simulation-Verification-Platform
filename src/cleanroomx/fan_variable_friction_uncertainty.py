@@ -1342,6 +1342,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "system_pressure_pa",
                 "Pa",
             ),
+            "air_power_kw": _metric_envelope(
+                solved_points,
+                "air_power_kw",
+                "kW",
+            ),
         }
         operating_point_extreme_cases = {
             key: _metric_extreme_case_witnesses(solved_points, key)
@@ -1349,6 +1354,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "airflow_m3_h",
                 "fan_pressure_pa",
                 "system_pressure_pa",
+                "air_power_kw",
             )
         }
         operating_point_extrema_sources = {
@@ -1366,6 +1372,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 corners,
                 "system_pressure_pa",
                 "Pa",
+            ),
+            "air_power_kw": _metric_extrema_sources(
+                corners,
+                "air_power_kw",
+                "kW",
             ),
         }
         edge_airflow_corner_ranges = _edge_airflow_corner_ranges(
@@ -1653,8 +1664,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "Every corner rebuilds the affected "
             "geometry-edge evidence and re-solves the complete Darcy-friction "
             "network at every fan/system airflow evaluated by the bounded "
-            "operating-point search. Reported min/max values are ranges across "
-            "evaluated corners only; when complete, their source corner indices "
+            "operating-point search. Reported airflow, pressure, and air-power "
+            "min/max values are ranges across evaluated corners only; when complete, "
+            "their source corner indices "
             "and fan scenario/speed/fixed-pressure context are retained for "
             "auditability. Corner outcome diagnostics separately retain "
             "status and solver termination-reason counts plus the exact input "

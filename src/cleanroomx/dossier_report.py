@@ -40,6 +40,11 @@ def markdown_dossier_report(result: dict) -> str:
                 f"analyses={component['analysis_count']}, "
                 f"missing_provenance={component['missing_provenance_analyses']}"
             )
+        elif name == "cross_module_consistency" and component["status"] != "not_included":
+            detail = (
+                f"shared_rooms={component['shared_room_count']}, "
+                f"mismatches={component['mismatch_count']}"
+            )
         lines.append(f"| {name} | {component['status']} | {detail} |")
 
     verification = result["verification"]
@@ -104,6 +109,40 @@ def markdown_dossier_report(result: dict) -> str:
                 lines.append(
                     f"- Fan-curve pressure margin: **{check['pressure_margin_pa']} Pa**"
                 )
+
+    consistency = result["cross_module_consistency"]
+    if consistency is not None:
+        lines.extend(
+            [
+                "",
+                "## Cross-module input consistency",
+                "",
+                f"- Status: **{consistency['status'].upper()}**",
+                "- Room airflow absolute consistency tolerance: "
+                f"**{consistency['room_airflow_abs_tolerance_m3_h']} m³/h**",
+                "- Require identical room sets: "
+                f"**{consistency['require_same_room_set']}**",
+                "",
+                "| Room | Verification supply m³/h | HVAC cleanroom m³/h | Absolute difference m³/h | Status |",
+                "|---|---:|---:|---:|---|",
+            ]
+        )
+        for item in consistency["room_airflow_checks"]:
+            lines.append(
+                f"| {item['room']} | "
+                f"{item['verification_supply_airflow_m3_h']} | "
+                f"{item['hvac_cleanroom_airflow_m3_h']} | "
+                f"{item['absolute_difference_m3_h']} | {item['status']} |"
+            )
+        if consistency["verification_only_rooms"]:
+            lines.append(
+                "- Verification-only rooms: "
+                + ", ".join(consistency["verification_only_rooms"])
+            )
+        if consistency["hvac_only_rooms"]:
+            lines.append(
+                "- HVAC-only rooms: " + ", ".join(consistency["hvac_only_rooms"])
+            )
 
     if result["recovery_tests"]:
         lines.extend(
@@ -220,6 +259,50 @@ def markdown_dossier_report(result: dict) -> str:
             pressure = "—" if point is None else point["system_pressure_pa"]
             lines.append(
                 f"| {item['study']} | {item['status']} | {airflow} | {pressure} |"
+            )
+
+    if result["fan_duct_network_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan/duct-network operating-point studies",
+                "",
+                "| Study | Status | Critical path | Operating airflow m³/h | System pressure Pa |",
+                "|---|---|---|---:|---:|",
+            ]
+        )
+        for item in result["fan_duct_network_studies"]:
+            point = item["operating_point"]
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = "—" if point is None else point["system_pressure_pa"]
+            lines.append(
+                f"| {item['study']} | {item['status']} | {item['critical_path']} | "
+                f"{airflow} | {pressure} |"
+            )
+
+    if result["fan_parallel_network_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan-driven parallel-network studies",
+                "",
+                "| Study | Status | Equivalent R Pa/(m³/s)² | Operating airflow m³/h | System pressure Pa |",
+                "|---|---|---:|---:|---:|",
+            ]
+        )
+        for item in result["fan_parallel_network_studies"]:
+            point = item["fan_operating_point"]
+            pressure_check = item["system_pressure_check"]
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = (
+                "—"
+                if pressure_check is None
+                else pressure_check["total_system_pressure_pa"]
+            )
+            lines.append(
+                f"| {item['study']} | {item['status']} | "
+                f"{item['equivalent_network_resistance_pa_per_m3_s_squared']} | "
+                f"{airflow} | {pressure} |"
             )
 
     lines.extend(

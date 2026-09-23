@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .duct import DuctNetwork
+from .duct_tree import DuctTreeNetwork
 
 
 def _positive(value: float, field_name: str) -> float:
@@ -238,6 +239,7 @@ class HVACProject:
     filter_unit: FilterUnit | None = None
     fan_system: FanSystem | None = None
     duct_network: DuctNetwork | None = None
+    duct_tree_network: DuctTreeNetwork | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -247,3 +249,8 @@ class HVACProject:
         names = [room.name for room in self.rooms]
         if len(names) != len(set(names)):
             raise ValueError("HVAC room names must be unique")
+        if self.duct_network is not None and self.duct_tree_network is not None:
+            raise ValueError(
+                "configure only one duct network model: duct_network or "
+                "duct_tree_network"
+            )

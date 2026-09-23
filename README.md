@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.9 engineering core
+## v0.10 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -30,6 +30,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
+- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, and equipment-capacity screening.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -42,7 +43,7 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. Neither is a general nonlinear duct-network solver; CleanroomX does not infer arbitrary looped-network flows, fan operating points, variable friction factors, damper positions, leakage, system effect, acoustics, controls, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules.
+The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. The v0.10 thermal uncertainty workflow holds room/outdoor psychrometric states fixed and does not replace hourly load simulation or equipment selection.
 
 ## Install
 
@@ -147,6 +148,22 @@ The v0.7 qualification workflow evaluates user-configured minimum/maximum requir
 
 See docs/QUALIFICATION_UNCERTAINTY.md.
 
+## Analyze thermal/HVAC uncertainty
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --output thermal-uncertainty-report.md
+
+The v0.10 workflow propagates user-supplied absolute bounds through explicit sensible/latent loads, cleanroom and makeup airflow, and optional supply-air temperature. It reports conservative cooling/heating capacity and governing-airflow intervals, plus optional available-capacity pass/fail/indeterminate checks.
+
+See docs/THERMAL_UNCERTAINTY.md.
+
 ## Multi-room pressure-cascade JSON
 
 ```json
@@ -184,7 +201,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, uncertainty propagation into thermal and recovery acceptance workflows, general looped-network and fan-curve solving research, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, uncertainty propagation into recovery acceptance workflows, general looped-network and fan-curve solving research, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

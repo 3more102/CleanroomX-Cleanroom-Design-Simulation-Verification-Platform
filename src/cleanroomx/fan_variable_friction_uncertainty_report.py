@@ -478,6 +478,62 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"| {label} | {evidence['value']} | {evidence['unit']} | "
                 f"{tolerance} | {' / '.join(source_texts)} |"
             )
+        assessment = quality.get("configured_tolerance_assessment")
+        checks = quality.get("configured_tolerance_checks", {})
+        if assessment:
+            lines.extend(
+                [
+                    "",
+                    "### Configured solver-tolerance checks",
+                    "",
+                    f"- Assessment: **{assessment['status']}**",
+                    "- Evaluable configured checks: "
+                    f"**{assessment['evaluable_check_count']}/"
+                    f"{assessment['configured_check_count']}**",
+                    "",
+                    "| Metric | Worst value | Tolerance | Utilization | Remaining margin | Result |",
+                    "|---|---:|---:|---:|---:|---|",
+                ]
+            )
+            tolerance_rows = (
+                (
+                    "absolute_operating_pressure_residual_pa",
+                    "Absolute operating pressure residual",
+                ),
+                (
+                    "network_max_relative_resistance_closure_error",
+                    "Resistance closure error",
+                ),
+                (
+                    "max_abs_mass_balance_residual_m3_h",
+                    "Mass-balance residual",
+                ),
+            )
+            for metric_key, label in tolerance_rows:
+                check = checks.get(metric_key)
+                if not check:
+                    continue
+                observed = (
+                    "—"
+                    if check["observed_value"] is None
+                    else check["observed_value"]
+                )
+                utilization = (
+                    "—"
+                    if check["utilization_ratio"] is None
+                    else check["utilization_ratio"]
+                )
+                margin = (
+                    "—"
+                    if check["remaining_margin"] is None
+                    else check["remaining_margin"]
+                )
+                lines.append(
+                    f"| {label} | {observed} | "
+                    f"{check['configured_tolerance']} | {utilization} | "
+                    f"{margin} | {check['status']} |"
+                )
+
         lines.extend(["", quality["scope_note"]])
 
     edge_sources = result.get("edge_airflow_extrema_sources")

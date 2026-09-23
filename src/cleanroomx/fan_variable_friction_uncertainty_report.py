@@ -577,6 +577,97 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             )
         lines.extend(["", bracket_summary["scope_note"]])
 
+    conditioning_summary = result.get(
+        "fan_curve_crossing_conditioning_summary"
+    )
+    nominal_conditioning = result.get(
+        "nominal_fan_curve_crossing_conditioning"
+    )
+    if conditioning_summary:
+        coverage_label = (
+            "complete"
+            if conditioning_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Fan/system local crossing conditioning",
+                "",
+                "- Evaluated corners with conditioning evidence: "
+                f"**{conditioning_summary['conditioning_evidence_corner_count']}/"
+                f"{conditioning_summary['corner_count']}**",
+                "- Evaluated corners with secant-root evidence: "
+                f"**{conditioning_summary['secant_root_evidence_corner_count']}/"
+                f"{conditioning_summary['corner_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_conditioning is None:
+            lines.append("- Nominal crossing conditioning: **not available**")
+        else:
+            lines.extend(
+                [
+                    "- Nominal fan pressure slope: "
+                    f"**{nominal_conditioning['fan_pressure_slope_pa_per_m3_h']} "
+                    "Pa/(m³/h)**",
+                    "- Nominal system secant slope: "
+                    f"**{nominal_conditioning['system_pressure_secant_slope_pa_per_m3_h']} "
+                    "Pa/(m³/h)**",
+                    "- Nominal fan-minus-system slope: "
+                    f"**{nominal_conditioning['fan_minus_system_slope_pa_per_m3_h']} "
+                    "Pa/(m³/h)**",
+                    "- Nominal secant-root airflow error: "
+                    f"**{nominal_conditioning['secant_root_absolute_error_m3_h']} "
+                    "m³/h**",
+                ]
+            )
+
+        lines.extend(
+            [
+                "",
+                "| Metric | Extreme | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        conditioning_rows = (
+            (
+                "minimum_absolute_fan_minus_system_slope_pa_per_m3_h",
+                "Minimum absolute fan-minus-system slope",
+            ),
+            (
+                "maximum_airflow_change_per_pa_m3_h_per_pa",
+                "Maximum reciprocal airflow-per-pressure gradient",
+            ),
+            (
+                "maximum_secant_root_absolute_error_m3_h",
+                "Maximum secant-root airflow error",
+            ),
+            (
+                "maximum_normalized_secant_root_error_fraction",
+                "Maximum normalized secant-root error",
+            ),
+        )
+        for key, label in conditioning_rows:
+            evidence = conditioning_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; fan-slope={source['fan_pressure_slope_pa_per_m3_h']}"
+                    + f"; system-slope={source['system_pressure_secant_slope_pa_per_m3_h']}"
+                    + f"; residual-slope={source['fan_minus_system_slope_pa_per_m3_h']}"
+                    + f"; secant-error={source['secant_root_absolute_error_m3_h']} m³/h"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", conditioning_summary["scope_note"]])
+
     quality = result.get("solver_quality_summary")
     if quality:
         coverage_label = (

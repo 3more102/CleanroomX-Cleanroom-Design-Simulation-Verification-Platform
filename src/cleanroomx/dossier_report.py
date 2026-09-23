@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---:|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -587,9 +587,15 @@ def markdown_dossier_report(result: dict) -> str:
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
             ) or "—"
+            solver_quality = item.get("solver_quality_summary", {})
             solver_tolerance_audit = (
-                item.get("solver_quality_summary", {})
+                solver_quality
                 .get("configured_tolerance_assessment", {})
+                .get("status", "—")
+            )
+            iteration_budget_audit = (
+                solver_quality
+                .get("configured_iteration_assessment", {})
                 .get("status", "—")
             )
             boundary_summary = item.get(
@@ -614,7 +620,8 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow_envelope} | {airflow_excursion} | {air_power} | "
                 f"{electrical_input} | {specific_fan_power} | "
                 f"{item['nominal_status']} | "
-                f"{solver_tolerance_audit} | {fan_curve_headroom} | "
+                f"{solver_tolerance_audit} | {iteration_budget_audit} | "
+                f"{fan_curve_headroom} | "
                 f"{boundary_coverage} | "
                 f"{item['traceability']['complete']} |"
             )

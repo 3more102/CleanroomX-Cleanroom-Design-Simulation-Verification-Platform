@@ -1,4 +1,16 @@
 # Changelog
+## v0.60 fan/system local crossing-conditioning audit — 2026-09-24
+
+- Derives fan-pressure, system-pressure, and signed fan-minus-system secant slopes from each solved corner's existing supplied-point intersection bracket.
+- Reports absolute residual-gradient magnitude plus the reciprocal local airflow-per-pressure gradient when the bracket residual slope is nonzero.
+- Computes the straight-line secant-root airflow and its absolute/normalized difference from the solved nonlinear operating airflow without any extra fan-curve evaluation or extrapolation.
+- Aggregates minimum absolute residual slope and maximum secant-root disagreement with exact tied source-corner provenance.
+- Preserves partial diagnostic evidence for indeterminate studies while keeping complete-study coverage explicit.
+- Surfaces the same evidence in standalone Markdown and engineering-dossier tables.
+- Adds regression coverage for arithmetic, provenance, report output, dossier propagation, and zero-solved-corner behavior.
+- Treats the new quantities as numerical root-conditioning diagnostics only; no dynamic stability, stall/surge, manufacturer-region, commissioning, certification, or equipment-acceptance threshold is inferred.
+- Bumped package/runtime metadata to v0.60.0.
+
 ## v0.59 fan/system intersection-bracket provenance — 2026-09-24
 
 - Retains the exact supplied fan-curve interpolation endpoints that bound every solved nonlinear uncertainty operating point.

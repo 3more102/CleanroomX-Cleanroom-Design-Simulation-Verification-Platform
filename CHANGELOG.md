@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — consistency-integrated dossier
+
+- Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.
+- Reuses the standalone checker's exact-name matching, absolute airflow tolerance, identical-room-set option, statuses, and scope boundary.
+- Propagates consistency failures into dossier attention tracking and preserves `not_comparable` as an unresolved state.
+- Adds consistency evidence to Markdown dossiers plus an end-to-end example and regression tests.
+- Requires both verification and HVAC project inputs when a dossier consistency check is configured.
+
 ## v0.17 cross-module input consistency — 2026-09-23
 
 - Added a standalone verification/HVAC consistency checker for duplicated room-airflow inputs.

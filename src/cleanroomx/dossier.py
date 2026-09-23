@@ -153,6 +153,27 @@ def _fan_operating_point_summary(results: list[dict]) -> dict:
     }
 
 
+def _consistency_summary(result: dict | None) -> dict:
+    if result is None:
+        return {
+            "status": "not_included",
+            "shared_room_count": 0,
+            "mismatch_count": 0,
+            "room_set_mismatch": False,
+            "issue_count": 0,
+        }
+    issue_count = result.get("mismatch_count", 0) + (
+        1 if result.get("room_set_mismatch", False) else 0
+    )
+    return {
+        "status": result["status"],
+        "shared_room_count": result.get("shared_room_count", 0),
+        "mismatch_count": result.get("mismatch_count", 0),
+        "room_set_mismatch": result.get("room_set_mismatch", False),
+        "issue_count": issue_count,
+    }
+
+
 def summarize_dossier_components(
     verification: dict | None = None,
     hvac: dict | None = None,
@@ -162,6 +183,7 @@ def summarize_dossier_components(
     thermal_uncertainty: list[dict] | None = None,
     psychrometric_uncertainty: list[dict] | None = None,
     fan_operating_points: list[dict] | None = None,
+    consistency: dict | None = None,
 ) -> dict:
     recovery = recovery or []
     uncertainty = uncertainty or []
@@ -181,6 +203,7 @@ def summarize_dossier_components(
             psychrometric_uncertainty
         ),
         "fan_operating_points": _fan_operating_point_summary(fan_operating_points),
+        "cross_module_consistency": _consistency_summary(consistency),
     }
 
     adverse = {
@@ -200,6 +223,11 @@ def summarize_dossier_components(
         "fan_operating_points_unsolved": components["fan_operating_points"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
+        "cross_module_consistency_failures": (
+            components["cross_module_consistency"]["issue_count"]
+            if components["cross_module_consistency"]["status"] == "fail"
+            else 0
+        ),
     }
     unresolved = {
         "verification_not_checked": components["verification"]["counts"].get("not_checked", 0),
@@ -212,6 +240,11 @@ def summarize_dossier_components(
         "psychrometric_uncertainty_missing_provenance": components[
             "psychrometric_uncertainty"
         ].get("missing_provenance_analyses", 0),
+        "cross_module_consistency_not_comparable": (
+            1
+            if components["cross_module_consistency"]["status"] == "not_comparable"
+            else 0
+        ),
     }
 
     adverse_count = sum(adverse.values())
@@ -264,6 +297,7 @@ def _clean_source(record: dict) -> dict:
 
 
 def build_dossier(manifest_path: str | Path) -> dict:
+    from .consistency import analyze_project_consistency
     from .fan_curve import solve_fan_operating_point
     from .fan_curve_io import load_fan_operating_point_study
     from .hvac import analyze_hvac_project
@@ -291,18 +325,22 @@ def build_dossier(manifest_path: str | Path) -> dict:
     source_records: list[dict] = []
 
     verification = None
+    verification_project = None
     verification_path = data.get("verification_project")
     if verification_path is not None:
         source = _source_record("verification_project", verification_path, manifest_dir)
         source_records.append(source)
-        verification = verify_project(load_project(source["_resolved_path"])).to_dict()
+        verification_project = load_project(source["_resolved_path"])
+        verification = verify_project(verification_project).to_dict()
 
     hvac = None
+    hvac_project = None
     hvac_path = data.get("hvac_project")
     if hvac_path is not None:
         source = _source_record("hvac_project", hvac_path, manifest_dir)
         source_records.append(source)
-        hvac = analyze_hvac_project(load_hvac_project(source["_resolved_path"]))
+        hvac_project = load_hvac_project(source["_resolved_path"])
+        hvac = analyze_hvac_project(hvac_project)
 
     recovery: list[dict] = []
     for item in data.get("recovery_tests", []):
@@ -361,6 +399,42 @@ def build_dossier(manifest_path: str | Path) -> dict:
     if not source_records:
         raise ValueError("dossier must reference at least one analysis input file")
 
+    consistency = None
+    consistency_block = data.get("consistency_checks", {})
+    if not isinstance(consistency_block, dict):
+        raise ValueError("consistency_checks must be an object when provided")
+    consistency_config = consistency_block.get("verification_hvac_airflow")
+    if consistency_config is not None:
+        if not isinstance(consistency_config, dict):
+            raise ValueError(
+                "verification_hvac_airflow consistency configuration must be an object"
+            )
+        if verification_project is None or hvac_project is None:
+            raise ValueError(
+                "verification_hvac_airflow consistency requires both "
+                "verification_project and hvac_project"
+            )
+        allowed_keys = {
+            "room_airflow_abs_tolerance_m3_h",
+            "require_same_room_set",
+        }
+        unknown_keys = set(consistency_config) - allowed_keys
+        if unknown_keys:
+            raise ValueError(
+                "unsupported verification_hvac_airflow option(s): "
+                + ", ".join(sorted(unknown_keys))
+            )
+        consistency = analyze_project_consistency(
+            verification_project,
+            hvac_project,
+            room_airflow_abs_tolerance_m3_h=consistency_config.get(
+                "room_airflow_abs_tolerance_m3_h", 0.0
+            ),
+            require_same_room_set=consistency_config.get(
+                "require_same_room_set", False
+            ),
+        )
+
     summary = summarize_dossier_components(
         verification=verification,
         hvac=hvac,
@@ -370,6 +444,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         thermal_uncertainty=thermal_uncertainty,
         psychrometric_uncertainty=psychrometric_uncertainty,
         fan_operating_points=fan_operating_points,
+        consistency=consistency,
     )
     return {
         "dossier": name,
@@ -389,4 +464,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "thermal_uncertainty_analyses": thermal_uncertainty,
         "psychrometric_uncertainty_analyses": psychrometric_uncertainty,
         "fan_operating_point_studies": fan_operating_points,
+        "consistency_checks": {
+            "verification_hvac_airflow": consistency,
+        },
     }

@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---:|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -567,8 +567,30 @@ def markdown_dossier_report(result: dict) -> str:
                             f"{lower_percent}–{upper_percent}"
                         )
             power_ranges = item.get("power_evidence_corner_ranges")
+            power_availability = item.get("power_evidence_availability")
             electrical_input = "—"
             specific_fan_power = "—"
+            electrical_coverage = "—"
+            sfp_coverage = "—"
+            if power_availability is not None:
+                electrical_evidence = power_availability.get(
+                    "electrical_input_kw"
+                )
+                if electrical_evidence is not None:
+                    electrical_coverage = (
+                        f"{electrical_evidence['status']} "
+                        f"({electrical_evidence['available_corner_count']}/"
+                        f"{electrical_evidence['total_corner_count']})"
+                    )
+                sfp_evidence = power_availability.get(
+                    "specific_fan_power_w_per_m3_s"
+                )
+                if sfp_evidence is not None:
+                    sfp_coverage = (
+                        f"{sfp_evidence['status']} "
+                        f"({sfp_evidence['available_corner_count']}/"
+                        f"{sfp_evidence['total_corner_count']})"
+                    )
             if power_ranges is not None:
                 electrical_range = power_ranges.get("electrical_input_kw")
                 if electrical_range is not None:
@@ -612,7 +634,8 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | {scenario_names} | "
                 f"{airflow_envelope} | {airflow_excursion} | {air_power} | "
-                f"{electrical_input} | {specific_fan_power} | "
+                f"{electrical_input} | {electrical_coverage} | "
+                f"{specific_fan_power} | {sfp_coverage} | "
                 f"{item['nominal_status']} | "
                 f"{solver_tolerance_audit} | {fan_curve_headroom} | "
                 f"{boundary_coverage} | "

@@ -42,9 +42,15 @@ class QuadraticFlowEdge:
                 "resistance_pa_per_m3_s_squared",
             ),
         )
-        if self.resistance_basis not in {"explicit", "duct_geometry"}:
+        valid_resistance_bases = {
+            "explicit",
+            "duct_geometry",
+            "damper_adjusted",
+        }
+        if self.resistance_basis not in valid_resistance_bases:
             raise ValueError(
-                "resistance_basis must be 'explicit' or 'duct_geometry'"
+                "resistance_basis must be 'explicit', 'duct_geometry', "
+                "or 'damper_adjusted'"
             )
         if self.resistance_evidence is not None:
             object.__setattr__(

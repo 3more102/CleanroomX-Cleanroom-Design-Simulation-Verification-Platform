@@ -1,0 +1,47 @@
+{
+  "name": "Loop damper balancing scenarios",
+  "loop_network": {
+    "name": "Two-path balancing mesh",
+    "reference_node": "Supply",
+    "node_injections_m3_h": {
+      "Supply": 3600.0,
+      "Mid": 0.0,
+      "Return": -3600.0
+    },
+    "edges": [
+      {
+        "name": "Direct",
+        "start_node": "Supply",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 500.0
+      },
+      {
+        "name": "Upper 1",
+        "start_node": "Supply",
+        "end_node": "Mid",
+        "resistance_pa_per_m3_s_squared": 250.0
+      },
+      {
+        "name": "Upper 2",
+        "start_node": "Mid",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 250.0
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "Throttle direct path",
+      "edge_resistance_multipliers": {
+        "Direct": 4.0
+      }
+    },
+    {
+      "name": "Throttle upper path",
+      "edge_resistance_multipliers": {
+        "Upper 1": 4.0,
+        "Upper 2": 4.0
+      }
+    }
+  ]
+}

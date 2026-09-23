@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.27 explicit loop damper-resistance scenarios — 2026-09-23
+
+- Added deterministic loop-network scenario studies for explicit user-supplied edge resistance multipliers.
+- Solves the unchanged baseline plus each named throttling case with the existing fixed-resistance loop solver.
+- Restricts configured multipliers to finite values greater than or equal to 1.0, representing added/throttled quadratic resistance rather than inferred damper position.
+- Reports per-case adjusted resistance evidence, edge-flow redistribution versus baseline, and continuity/pressure-law residuals.
+- Preserves the underlying explicit or geometry-derived resistance provenance inside each adjusted-edge evidence record.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-damper-study` CLI, example data, documentation, regression tests, and v0.27.0 metadata.
+- Keeps automatic balancing, actuator dynamics, damper K inference, control loops, leakage, and variable-friction iteration outside scope.
+
 ## v0.26 bounded fan / loop-network coupling — 2026-09-23
 
 - Added two-terminal coupling between supplied fan curves and connected fixed-resistance loop networks.

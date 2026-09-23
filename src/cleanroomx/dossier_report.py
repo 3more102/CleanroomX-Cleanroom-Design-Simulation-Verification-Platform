@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Provenance complete |",
-                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -641,6 +641,21 @@ def markdown_dossier_report(result: dict) -> str:
                 )
                 if boundary_evidence is not None:
                     fan_curve_headroom = boundary_evidence["value"]
+            bracket_summary = item.get(
+                "fan_curve_intersection_bracket_summary"
+            )
+            bracket_gap = "—"
+            bracket_coverage = "—"
+            if bracket_summary is not None:
+                bracket_coverage = (
+                    f"{bracket_summary['bracket_evidence_corner_count']}/"
+                    f"{bracket_summary['corner_count']}"
+                )
+                bracket_evidence = bracket_summary.get(
+                    "minimum_nearest_endpoint_absolute_pressure_gap_pa"
+                )
+                if bracket_evidence is not None:
+                    bracket_gap = bracket_evidence["value"]
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
@@ -653,6 +668,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{solver_tolerance_audit} | {iteration_budget_audit} | "
                 f"{fan_curve_headroom} | "
                 f"{boundary_coverage} | "
+                f"{bracket_gap} | {bracket_coverage} | "
                 f"{item['traceability']['complete']} |"
             )
             integrity = item.get("result_integrity")

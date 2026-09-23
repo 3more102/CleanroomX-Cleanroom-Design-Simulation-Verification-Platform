@@ -24,7 +24,12 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert analysis["result_integrity"]["algorithm"] == "sha256"
     assert len(analysis["result_integrity"]["sha256"]) == 64
     boundary_summary = analysis["fan_curve_boundary_clearance_summary"]
+    bracket_summary = analysis["fan_curve_intersection_bracket_summary"]
     assert boundary_summary["complete_study_coverage"] is True
+    assert bracket_summary["complete_study_coverage"] is True
+    assert bracket_summary["bracket_evidence_corner_count"] == analysis[
+        "corner_count"
+    ]
     assert boundary_summary["solved_corner_count"] == analysis["corner_count"]
     assert boundary_summary[
         "minimum_nearest_boundary_headroom_m3_h"
@@ -70,6 +75,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Airflow excursion from nominal %" in report
     assert "Fan-curve min headroom m³/h" in report
     assert "Boundary evidence" in report
+    assert "Min endpoint bracket gap Pa" in report
+    assert "Bracket evidence" in report
     assert "No-intersection boundary cases" in report
     assert "Result SHA-256" in report
     assert analysis["result_integrity"]["sha256"] in report

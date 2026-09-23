@@ -1,4 +1,17 @@
 # Changelog
+## v0.59 fan/system intersection-bracket provenance — 2026-09-24
+
+- Retains the exact supplied fan-curve interpolation endpoints that bound every solved nonlinear uncertainty operating point.
+- Preserves endpoint fan pressure, system pressure, and signed fan-minus-system residual without any new solver evaluation or fan-curve extrapolation.
+- Distinguishes strict sign-change brackets from supplied-point/root contacts that are within the configured operating-pressure tolerance.
+- Aggregates solved-corner bracket coverage plus minimum nearest-endpoint pressure-gap and endpoint-residual-span evidence with exact tied source-corner provenance.
+- Includes the new bracket evidence inside the existing canonical SHA-256 nonlinear-result integrity scope.
+- Preserves v0.58 complete per-metric power-coverage auditing and its withholding rules for partial metrics.
+- Surfaces the new evidence in standalone Markdown, engineering dossiers, and nonlinear uncertainty documentation.
+- Adds regression coverage for complete studies and zero-solved-corner/indeterminate studies.
+- Treats bracket evidence as numerical root-enclosure provenance only; it is not a stall/surge, manufacturer operating-region, commissioning, certification, or equipment-acceptance margin.
+- Bumped package/runtime metadata to v0.59.0.
+
 ## v0.58 complete per-metric power-coverage audit — 2026-09-24
 
 - Requires every evaluated solved corner to provide a power metric before CleanroomX emits that metric's min/max range, extrema provenance, or nominal-relative excursion.

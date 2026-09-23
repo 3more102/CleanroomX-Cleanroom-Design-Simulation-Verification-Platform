@@ -45,3 +45,8 @@ Write Markdown:
 This solver is for simple passive parallel paths only. It does not solve arbitrary looped graphs, shared trunk sections, fan operating points, dampers/controllers, variable friction factor with Reynolds number, leakage, pressure-dependent terminal devices, or transient behavior.
 
 ASHRAE Handbook—Fundamentals documents duct friction and dynamic-loss methods used by the underlying resistance model. Final duct sizing, balancing, fan selection, and commissioning remain qualified engineering tasks.
+
+
+## v0.10 fan operating-point extension
+
+The v0.9 parallel-path solver still requires a specified total airflow. For a separate bounded calculation that intersects explicit fan static-pressure data with an explicit quadratic system curve, see docs/FAN_OPERATING_POINT.md. CleanroomX v0.10 does not yet couple arbitrary parallel/looped networks directly to a fan curve.

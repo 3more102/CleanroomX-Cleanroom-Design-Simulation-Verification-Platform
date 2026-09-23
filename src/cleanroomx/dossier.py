@@ -209,6 +209,11 @@ def _fan_variable_friction_uncertainty_summary(results: list[dict]) -> dict:
         }
     counts = _count_statuses(item["status"] for item in results)
     missing = sum(not item["traceability"]["complete"] for item in results)
+    integrity_count = sum(
+        isinstance(item.get("result_integrity", {}).get("sha256"), str)
+        and len(item["result_integrity"]["sha256"]) == 64
+        for item in results
+    )
     if counts.get("indeterminate", 0):
         status = "attention_required"
     elif missing:

@@ -638,3 +638,26 @@ def test_fan_curve_airflow_uncertainty_rejects_repeated_nominal() -> None:
     with pytest.raises(ValueError, match="must not repeat the nominal"):
         fan_variable_friction_loop_uncertainty_from_dict(data)
 
+
+
+def test_corner_limit_rejects_before_cartesian_product_materialization(
+    monkeypatch,
+) -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_airflow_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["max_corner_cases"] = 1
+    study = fan_variable_friction_loop_uncertainty_from_dict(data)
+
+    def _unexpected_product(*args, **kwargs):
+        raise AssertionError("Cartesian product must not be materialized")
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty.product",
+        _unexpected_product,
+    )
+    with pytest.raises(ValueError, match="corner count 4.*max_corner_cases=1"):
+        analyze_fan_variable_friction_loop_uncertainty(study)

@@ -54,6 +54,10 @@ The workflow does not create project acceptance limits. Use calibrated instrumen
 
 The v0.15 workflow is standalone. The existing thermal-uncertainty workflow continues to hold room and outdoor psychrometric states fixed until those models are explicitly coupled in a later milestone.
 
+## Engineering dossier integration
+
+CleanroomX v0.16 can include this workflow in an engineering dossier through `psychrometric_uncertainty_analyses`. The dossier fingerprints the source file with SHA-256, reports the derived envelope, and treats missing provenance as unresolved traceability rather than as an acceptance failure.
+
 ## CLI
 
     cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json

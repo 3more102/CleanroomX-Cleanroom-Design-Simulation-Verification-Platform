@@ -120,6 +120,10 @@ def test_geometry_derived_loop_matches_equal_parallel_path_solution() -> None:
     assert flows["Upper 2"]["airflow_m3_h"] == pytest.approx(1800.0, abs=1e-6)
     assert flows["Direct"]["absolute_solved_to_reference_flow_ratio"] == pytest.approx(1.0)
     assert result["max_abs_mass_balance_residual_m3_h"] <= 1e-6
+    assert result["max_abs_geometry_pressure_law_residual_pa"] <= 1e-6
+    direct_section = flows["Direct"]["resistance_derivation"]["sections"][0]
+    assert direct_section["solved_velocity_m_s"] == pytest.approx(0.5)
+    assert direct_section["solved_pressure_difference_pa"] == pytest.approx(0.5)
 
 
 def test_automatic_friction_is_resolved_at_reference_airflow() -> None:

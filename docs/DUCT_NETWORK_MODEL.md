@@ -1,6 +1,6 @@
 # Duct critical-path pressure-loss model
 
-CleanroomX v0.5 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design.
+CleanroomX v0.6 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design.
 
 ## Section calculation
 
@@ -54,3 +54,8 @@ This is intentionally a **critical-path comparison**, not a full nonlinear airfl
 - ASHRAE Duct Fitting Database / Standard 120 resources for fitting resistance and loss-coefficient testing.
 
 Use the current applicable licensed standard, project specification, local regulations, and manufacturer data for real projects.
+
+
+## v0.7 branch-flow extension
+
+For automatic flow propagation through a fixed-demand directed supply tree, see `docs/BRANCH_FLOW_NETWORK.md`. The original `duct_network` path-comparison model remains available for backward compatibility and for cases where each path airflow is already known.

@@ -100,7 +100,7 @@ def test_source_record_contains_exact_sha256(tmp_path) -> None:
 def test_repository_demo_builds_end_to_end() -> None:
     result = build_dossier("examples/dossier_demo.json")
     assert result["dossier"] == "CleanroomX Integrated Engineering Demo"
-    assert len(result["source_files"]) == 11
+    assert len(result["source_files"]) == 12
     assert result["verification"] is not None
     assert result["hvac"] is not None
     assert len(result["recovery_tests"]) == 1
@@ -109,10 +109,12 @@ def test_repository_demo_builds_end_to_end() -> None:
     assert len(result["thermal_uncertainty_analyses"]) == 1
     assert len(result["psychrometric_uncertainty_analyses"]) == 1
     assert len(result["fan_operating_point_studies"]) == 1
+    assert len(result["fan_system_uncertainty_analyses"]) == 1
     assert len(result["fan_duct_network_studies"]) == 1
     assert len(result["fan_parallel_network_studies"]) == 1
     assert len(result["fan_speed_studies"]) == 1
     assert result["fan_operating_point_studies"][0]["status"] == "solved"
+    assert result["fan_system_uncertainty_analyses"][0]["status"] == "complete"
     assert result["fan_duct_network_studies"][0]["status"] == "solved"
     assert result["fan_parallel_network_studies"][0]["status"] == "solved"
     assert result["fan_speed_studies"][0]["status"] == "screening_complete"
@@ -125,6 +127,7 @@ def test_markdown_report_includes_new_v013_sections() -> None:
     assert "Thermal/HVAC uncertainty screening" in text
     assert "Psychrometric-state uncertainty screening" in text
     assert "Fan/system operating-point studies" in text
+    assert "Fan/system bounded uncertainty screening" in text
     assert "Fan/duct-network operating-point studies" in text
     assert "Fan-driven parallel-network studies" in text
     assert "Fan affinity-law speed studies" in text
@@ -135,6 +138,23 @@ def test_markdown_report_includes_new_v013_sections() -> None:
     ]
     assert confirmed is not None
     assert f"| {confirmed} |" in text
+
+
+def test_fan_system_uncertainty_dossier_states_are_preserved() -> None:
+    summary = summarize_dossier_components(
+        fan_system_uncertainty=[
+            {
+                "status": "indeterminate",
+                "traceability": {"complete": False},
+            }
+        ]
+    )
+    assert summary["state"] == "attention_required"
+    assert summary["adverse_items"]["fan_system_uncertainty_indeterminate"] == 1
+    assert (
+        summary["unresolved_items"]["fan_system_uncertainty_missing_provenance"]
+        == 1
+    )
 
 
 def test_unsolved_integrated_fan_networks_are_attention_items() -> None:

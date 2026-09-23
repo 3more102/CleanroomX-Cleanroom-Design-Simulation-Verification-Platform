@@ -20,6 +20,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Generic measurement uncertainty budgets with provenance, expanded intervals, and uncertainty-aware screening decisions.
+- Optional absolute uncertainty and requirement provenance integrated into ACH, room-pressure, particle-concentration, and pressure-cascade verification; threshold overlaps return `indeterminate` rather than a false PASS/FAIL.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
@@ -45,7 +46,7 @@ The HVAC module is also a preliminary engineering model. It does not replace det
 
     cleanroomx verify-project examples/facility_project.json
 
-A failing configured verification requirement returns exit code 2.
+A failed or indeterminate configured verification requirement returns exit code 2.
 
 ## Run the particle screening simulation
 
@@ -96,7 +97,7 @@ Write a Markdown report:
 
 The v0.5 measurement workflow combines independent standard-uncertainty components by root-sum-square, applies the configured coverage factor, preserves instrument/calibration/procedure provenance, and reports pass/fail/indeterminate/not-checked using an explicit interval screening rule. It does not infer a universal coverage probability or replace a project/regulatory decision rule.
 
-See docs/MEASUREMENT_UNCERTAINTY.md.
+See docs/MEASUREMENT_UNCERTAINTY.md and docs/UNCERTAINTY_PROVENANCE.md.
 
 ## Multi-room pressure-cascade JSON
 

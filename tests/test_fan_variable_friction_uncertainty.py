@@ -2091,6 +2091,119 @@ def test_crossing_conditioning_marks_zero_solved_corner_coverage() -> None:
         for corner in result["corners"]
     )
 
+
+def test_pressure_residual_airflow_equivalence_is_auditable() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    summary = result["pressure_residual_airflow_equivalence_summary"]
+    nominal = result["nominal_pressure_residual_airflow_equivalence"]
+    tolerance = result["solver_quality_summary"]["configured_tolerances"][
+        "operating_pressure_tolerance_pa"
+    ]
+    assert nominal is not None
+    assert nominal["status"] == "evaluated"
+    assert summary["complete_study_coverage"] is True
+    assert summary["diagnostic_evidence_corner_count"] == result["corner_count"]
+    assert summary["evaluable_corner_count"] == result["corner_count"]
+
+    tolerance_equivalents = []
+    residual_equivalents = []
+    tolerance_fractions = []
+    residual_fractions = []
+    for corner in result["corners"]:
+        diagnostic = corner["pressure_residual_airflow_equivalence"]
+        conditioning = corner["fan_curve_crossing_conditioning"]
+        assert diagnostic is not None
+        assert diagnostic["status"] == "evaluated"
+        assert conditioning is not None
+
+        residual_slope = conditioning[
+            "fan_minus_system_slope_pa_per_m3_h"
+        ]
+        airflow_per_pa = 1.0 / abs(residual_slope)
+        pressure_residual = corner["operating_point"]["pressure_residual_pa"]
+        bracket_span = conditioning["bracket_airflow_span_m3_h"]
+        expected_tolerance_equivalent = tolerance * airflow_per_pa
+        expected_residual_equivalent = abs(pressure_residual) * airflow_per_pa
+        expected_signed_correction = -pressure_residual / residual_slope
+
+        assert diagnostic[
+            "configured_tolerance_equivalent_airflow_m3_h"
+        ] == pytest.approx(expected_tolerance_equivalent, abs=1e-9)
+        assert diagnostic[
+            "solved_residual_equivalent_airflow_m3_h"
+        ] == pytest.approx(expected_residual_equivalent, abs=1e-9)
+        assert diagnostic[
+            "signed_linearized_airflow_correction_m3_h"
+        ] == pytest.approx(expected_signed_correction, abs=1e-9)
+        assert diagnostic[
+            "configured_tolerance_equivalent_fraction_of_bracket_span"
+        ] == pytest.approx(
+            expected_tolerance_equivalent / bracket_span,
+            abs=1e-12,
+        )
+        assert diagnostic[
+            "solved_residual_equivalent_fraction_of_bracket_span"
+        ] == pytest.approx(
+            expected_residual_equivalent / bracket_span,
+            abs=1e-12,
+        )
+
+        tolerance_equivalents.append(expected_tolerance_equivalent)
+        residual_equivalents.append(expected_residual_equivalent)
+        tolerance_fractions.append(expected_tolerance_equivalent / bracket_span)
+        residual_fractions.append(expected_residual_equivalent / bracket_span)
+
+    assert summary[
+        "maximum_configured_tolerance_equivalent_airflow_m3_h"
+    ]["value"] == pytest.approx(max(tolerance_equivalents), abs=1e-9)
+    assert summary[
+        "maximum_solved_residual_equivalent_airflow_m3_h"
+    ]["value"] == pytest.approx(max(residual_equivalents), abs=1e-9)
+    assert summary[
+        "maximum_configured_tolerance_equivalent_fraction_of_bracket_span"
+    ]["value"] == pytest.approx(max(tolerance_fractions), abs=1e-12)
+    assert summary[
+        "maximum_solved_residual_equivalent_fraction_of_bracket_span"
+    ]["value"] == pytest.approx(max(residual_fractions), abs=1e-12)
+    assert summary[
+        "maximum_configured_tolerance_equivalent_airflow_m3_h"
+    ]["sources"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Pressure residual → airflow numerical equivalence" in report
+    assert "Configured pressure-tolerance airflow equivalent" in report
+    assert "first-order numerical equivalents/corrections only" in report
+
+
+def test_pressure_residual_airflow_equivalence_marks_zero_solved_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["pressure_residual_airflow_equivalence_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_pressure_residual_airflow_equivalence"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["diagnostic_evidence_corner_count"] == 0
+    assert summary["evaluable_corner_count"] == 0
+    assert (
+        summary["maximum_configured_tolerance_equivalent_airflow_m3_h"]
+        is None
+    )
+    assert summary["maximum_solved_residual_equivalent_airflow_m3_h"] is None
+    assert all(
+        corner["pressure_residual_airflow_equivalence"] is None
+        for corner in result["corners"]
+    )
+
+
 def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(
         load_fan_variable_friction_loop_uncertainty(

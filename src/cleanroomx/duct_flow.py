@@ -6,15 +6,15 @@ from dataclasses import dataclass
 
 def _positive(value: float, field_name: str) -> float:
     value = float(value)
-    if value <= 0:
-        raise ValueError(f"{field_name} must be > 0")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{field_name} must be finite and > 0")
     return value
 
 
 def _nonnegative(value: float, field_name: str) -> float:
     value = float(value)
-    if value < 0:
-        raise ValueError(f"{field_name} must be >= 0")
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{field_name} must be finite and >= 0")
     return value
 
 
@@ -181,9 +181,7 @@ def solve_parallel_branch_flows(network: ParallelFlowNetwork) -> dict:
                 "resistance_pa_per_m3_s_squared": round(resistance, 6),
                 "airflow_m3_h": round(airflow_m3_s * 3600.0, 3),
                 "airflow_fraction": round(airflow_m3_s / total_airflow_m3_s, 6),
-                "pressure_drop_pa": round(
-                    sum(section["total_pressure_drop_pa"] for section in sections), 4
-                ),
+                "pressure_drop_pa": round(common_pressure_drop_pa, 4),
                 "sections": sections,
             }
         )

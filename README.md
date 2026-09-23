@@ -26,6 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
+- Fan affinity-law speed sweeps that scale an explicit reference fan curve across user-supplied speed ratios and solve each bounded operating point.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
@@ -148,6 +149,20 @@ Write a Markdown report:
     cleanroomx-fan-network examples/fan_parallel_network_demo.json --output fan-network-report.md
 
 The v0.16 workflow derives an equivalent fixed R·Q² resistance from passive branches that share common upstream/downstream pressure nodes, combines it with an explicit fixed-pressure term, solves the bounded fan/system intersection, and then redistributes the operating airflow across the original branches using equal pressure drop. It reports mass- and equal-pressure residuals and does not extrapolate supplied fan data. See docs/FAN_NETWORK_INTEGRATION.md.
+
+## Sweep fan operating points across explicit speed ratios
+
+    cleanroomx-fan-speed examples/fan_speed_sweep_demo.json
+
+JSON output:
+
+    cleanroomx-fan-speed examples/fan_speed_sweep_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-fan-speed examples/fan_speed_sweep_demo.json --output fan-speed-report.md
+
+The v0.19 workflow applies ideal same-diameter, nominal-constant-density affinity-law scaling to the supplied reference fan curve: airflow coordinates scale with speed ratio, pressure coordinates with speed ratio squared, and the reported ideal fan-law power ratio scales cubically. Every scaled curve is passed through the existing bounded operating-point solver, so no fan-curve extrapolation is introduced. It is a static screening study rather than a dynamic VFD/PID, efficiency, motor-loss, stall/surge, or manufacturer-acceptance model. See docs/FAN_SPEED_SWEEP.md.
 
 ## Analyze a measured particle-recovery test
 
@@ -300,7 +315,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are closed-loop fan/control-law studies, general looped-network solving research, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

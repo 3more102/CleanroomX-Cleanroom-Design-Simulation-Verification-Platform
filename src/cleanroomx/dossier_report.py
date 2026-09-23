@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Max solver budget used | Nominal state | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -572,6 +572,18 @@ def markdown_dossier_report(result: dict) -> str:
                     specific_fan_power = (
                         f"{sfp_range['lower']}–{sfp_range['upper']}"
                     )
+            quality = item.get("solver_quality_summary") or {}
+            utilization = quality.get("limit_utilization", {})
+            utilization_values = [
+                evidence["percent"]
+                for evidence in utilization.values()
+                if evidence is not None
+            ]
+            max_solver_budget = (
+                "—"
+                if not utilization_values
+                else f"{max(utilization_values)}%"
+            )
             scenario_names = ", ".join(
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
@@ -581,7 +593,8 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | {scenario_names} | "
                 f"{airflow_envelope} | {air_power} | {electrical_input} | "
-                f"{specific_fan_power} | {item['nominal_status']} | "
+                f"{specific_fan_power} | {max_solver_budget} | "
+                f"{item['nominal_status']} | "
                 f"{item['traceability']['complete']} |"
             )
             if item["traceability"]["missing_provenance"]:

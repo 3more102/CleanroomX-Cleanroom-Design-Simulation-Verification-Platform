@@ -85,6 +85,8 @@ def test_fixed_resistance_case_matches_existing_fan_loop_solver() -> None:
     assert new["operating_network_solution"]["variable_friction"][
         "automatic_friction_edge_count"
     ] == 0
+    assert new["power_evidence"]["shaft_power_kw"] is None
+    assert new["power_evidence"]["electrical_input_kw"] is None
 
 
 def test_automatic_friction_example_converges_at_bounded_operating_point() -> None:
@@ -106,6 +108,13 @@ def test_automatic_friction_example_converges_at_bounded_operating_point() -> No
     assert network["max_abs_mass_balance_residual_m3_h"] <= 1e-6
     assert diagnostics["network_max_relative_resistance_closure_error"] <= 1e-6
     assert network["variable_friction"]["automatic_friction_edge_count"] == 3
+    power = result["power_evidence"]
+    assert power["shaft_power_kw"] is not None
+    assert power["electrical_input_kw"] is not None
+    assert power["specific_fan_power_w_per_m3_s"] is not None
+    components = power["system_components"]
+    assert abs(components["loop_network_energy_balance_residual_w"]) <= 1e-6
+    assert abs(components["fan_to_fixed_plus_edge_loss_residual_w"]) <= 1e-6
     assert all(
         row["state"] == "automatic_friction"
         for row in network["variable_friction"]["edge_closure"]
@@ -131,6 +140,7 @@ def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:
     assert result["fan_operating_point"] is None
     assert result["operating_network_solution"] is None
     assert result["system_pressure_check"] is None
+    assert result["power_evidence"] is None
     assert result["solver_diagnostics"]["termination_reason"] == (
         "no_intersection_in_supplied_range"
     )
@@ -152,6 +162,7 @@ def test_network_nonconvergence_is_reported_without_fake_operating_point() -> No
     assert result["status"] == "non_converged"
     assert result["fan_operating_point"] is None
     assert result["operating_network_solution"] is None
+    assert result["power_evidence"] is None
     assert result["solver_diagnostics"]["converged"] is False
     assert result["solver_diagnostics"]["termination_reason"] == (
         "network_solver_non_convergence"
@@ -210,6 +221,8 @@ def test_markdown_report_surfaces_solver_and_friction_evidence() -> None:
     assert "Solver diagnostics" in report
     assert "Variable-friction edge closure" in report
     assert "Supplied fan-curve checks" in report
+    assert "Loop edge pressure-power dissipation" in report
+    assert "Electrical input" in report
 
 
 def test_cli_json_example_succeeds(monkeypatch, capsys) -> None:

@@ -1,4 +1,14 @@
 # Changelog
+## v0.39 bounded physical Darcy-input uncertainty — 2026-09-23
+
+- Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute bounds on automatic-friction edge roughness, kinematic viscosity, and air density while retaining fixed-pressure and local-loss K uncertainty.
+- Rebuilds affected duct-geometry evidence at every physical-input corner before every complete nonlinear fan/network solve; no frozen equivalent-resistance shortcut is introduced.
+- Keeps nominal physical values single-sourced in loop-network geometry and rejects repeated nominals in uncertainty blocks.
+- Rejects nonphysical bounded intervals: negative roughness/local K, nonpositive viscosity/density, and roughness reaching the hydraulic diameter.
+- Added per-corner physical-input evidence, interval/provenance reporting, Markdown output, a reproducible physical-input example, and regression coverage.
+- Replaced the stale duplicate uncertainty-model definition with a compatibility re-export of the canonical study model.
+- Bumped package/runtime metadata to v0.39.0.
+
 ## v0.38 dossier-integrated nonlinear fan / loop uncertainty — 2026-09-23
 
 - Integrated v0.37 fan/variable-friction loop uncertainty analyses into engineering dossier manifests.

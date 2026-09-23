@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.17 uncertainty-aware recovery acceptance — 2026-09-23
+
+- Added optional absolute concentration uncertainty to every measured recovery sample while preserving zero-uncertainty backward compatibility.
+- Added deterministic sample intervals with confirmed-above, overlaps-target, and confirmed-at-or-below classifications.
+- Added conservative pass/fail/indeterminate/incomplete/not-checked decisions for project-supplied maximum recovery time.
+- Preserved nominal observed recovery timing separately and added first possible/first confirmed recovery sample reporting.
+- Kept the log-linear recovery fit nominal-only and outside the acceptance decision.
+- Added CLI exit code 4 for indeterminate recovery results and propagated that state into engineering-dossier attention tracking.
+- Updated recovery Markdown/JSON reporting, example data, documentation, finite-input validation, and regression coverage.
+- Kept all target concentrations, time limits, and uncertainty values project supplied; no ISO class limit or statistical conformity rule is embedded.
+
 ## v0.16 fan-driven passive parallel-network integration — 2026-09-23
 
 - Coupled the bounded fan/system operating-point solver to the passive common-pressure-node parallel-path model.

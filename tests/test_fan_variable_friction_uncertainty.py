@@ -305,3 +305,100 @@ def test_physical_uncertainty_report_surfaces_all_bounded_inputs() -> None:
 
 def test_uncertainty_model_compatibility_export_is_canonical() -> None:
     assert CompatibilityStudy is FanVariableFrictionLoopUncertaintyStudy
+
+def test_geometry_input_uncertainty_produces_complete_envelope() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 4
+    assert result["solved_corner_count"] == 4
+    assert result["unresolved_corner_count"] == 0
+    assert result["traceability"]["complete"] is True
+    assert result["operating_point_envelope"] is not None
+    assert result["operating_point_envelope"]["airflow_m3_h"]["lower"] < (
+        result["operating_point_envelope"]["airflow_m3_h"]["upper"]
+    )
+    assert set(result["input_intervals"]["edge_length_m"]) == {"Direct"}
+    assert set(result["input_intervals"]["edge_circular_diameter_m"]) == {
+        "Direct"
+    }
+    assert all(
+        set(corner["edge_length_m"]) == {"Direct"}
+        and set(corner["edge_circular_diameter_m"]) == {"Direct"}
+        for corner in result["corners"]
+    )
+
+
+def test_geometry_uncertainty_report_surfaces_length_and_diameter() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Duct length" in report
+    assert "Circular diameter" in report
+    assert "Direct length=" in report
+    assert "Direct diameter=" in report
+
+
+def test_geometry_uncertainty_rejects_nonpositive_length_bound() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["edge_length_uncertainty"]["Direct"]["uncertainty_abs"] = 18.0
+    with pytest.raises(ValueError, match="length lower uncertainty bound"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_circular_diameter_uncertainty_rejects_rectangular_edge() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    geometry = data["loop_network"]["edges"][0]["duct_geometry"]
+    geometry.pop("diameter_m")
+    geometry["width_m"] = 0.6
+    geometry["height_m"] = 0.3
+    with pytest.raises(ValueError, match="requires circular duct geometry"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_circular_diameter_bound_must_exceed_bounded_roughness() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["edge_circular_diameter_uncertainty"]["Direct"][
+        "uncertainty_abs"
+    ] = 0.4499
+    with pytest.raises(
+        ValueError,
+        match="must remain larger than the maximum bounded absolute roughness",
+    ):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_geometry_uncertainty_rejects_repeated_nominal_value() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["edge_length_uncertainty"]["Direct"]["value"] = 18.0
+    with pytest.raises(ValueError, match="must not repeat the nominal length"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+

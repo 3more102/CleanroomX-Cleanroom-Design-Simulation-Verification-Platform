@@ -112,7 +112,7 @@ def test_three_path_solution_preserves_equivalent_pressure_relation() -> None:
         FanDrivenParallelNetworkStudy(
             "Three branches",
             _fan(),
-            150,
+            150,  # keep the operating point inside the supplied fan-curve range
             paths,
         )
     )

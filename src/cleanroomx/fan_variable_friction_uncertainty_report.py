@@ -146,17 +146,39 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
     if envelope is None:
         lines.append(result["message"])
     else:
+        witnesses = result.get("operating_point_extreme_cases") or {}
         lines.extend(
             [
                 "- Airflow: "
                 f"**{envelope['airflow_m3_h']['lower']} to "
-                f"{envelope['airflow_m3_h']['upper']} m³/h**",
+                f"{envelope['airflow_m3_h']['upper']} m³/h**"
+                + (
+                    " "
+                    f"(corner indices {witnesses['airflow_m3_h']['lower']['corner_index']} "
+                    f"to {witnesses['airflow_m3_h']['upper']['corner_index']})"
+                    if "airflow_m3_h" in witnesses
+                    else ""
+                ),
                 "- Fan pressure: "
                 f"**{envelope['fan_pressure_pa']['lower']} to "
-                f"{envelope['fan_pressure_pa']['upper']} Pa**",
+                f"{envelope['fan_pressure_pa']['upper']} Pa**"
+                + (
+                    " "
+                    f"(corner indices {witnesses['fan_pressure_pa']['lower']['corner_index']} "
+                    f"to {witnesses['fan_pressure_pa']['upper']['corner_index']})"
+                    if "fan_pressure_pa" in witnesses
+                    else ""
+                ),
                 "- System pressure: "
                 f"**{envelope['system_pressure_pa']['lower']} to "
-                f"{envelope['system_pressure_pa']['upper']} Pa**",
+                f"{envelope['system_pressure_pa']['upper']} Pa**"
+                + (
+                    " "
+                    f"(corner indices {witnesses['system_pressure_pa']['lower']['corner_index']} "
+                    f"to {witnesses['system_pressure_pa']['upper']['corner_index']})"
+                    if "system_pressure_pa" in witnesses
+                    else ""
+                ),
             ]
         )
 

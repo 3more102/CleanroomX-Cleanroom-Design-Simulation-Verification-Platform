@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 duct-network pressure loss — 2026-09-23
+
+- Added explicit supply-duct paths and sections with geometry, airflow, density, Darcy friction factor, minor-loss K, and fixed pressure-drop inputs.
+- Added Darcy-Weisbach friction loss, minor-loss, section-total, path-total, and critical-path calculations.
+- Integrated calculated critical-path loss into preliminary supply-fan static pressure and electrical-power sizing.
+- Preserved backward compatibility for the existing entered duct-pressure allowance.
+- Added JSON loading, Markdown report tables, example network data, unit/integration tests, and engineering-scope documentation.
+- Kept friction factors, fitting coefficients, density, geometry, and component losses project-supplied rather than inferred.
+
+
 ## v0.5 uncertainty/provenance foundation — 2026-09-23
 
 - Added explicit provenance records for engineering inputs, including source type/name, reference, revision, date, uncertainty basis, and notes.

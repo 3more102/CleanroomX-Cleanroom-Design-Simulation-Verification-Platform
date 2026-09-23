@@ -30,6 +30,8 @@ A dossier manifest can reference:
 
 Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
 
+For complete fan/variable-friction-loop uncertainty analyses, v0.49 dossier Markdown includes both the operating-airflow evaluated-corner envelope and the fan air-power evaluated-corner envelope. Indeterminate analyses show no complete air-power envelope.
+
 Example:
 
 ```json

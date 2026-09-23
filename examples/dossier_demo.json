@@ -20,5 +20,11 @@
   ],
   "fan_operating_point_studies": [
     "fan_operating_point_demo.json"
+  ],
+  "psychrometric_uncertainty_analyses": [
+    "psychrometric_uncertainty_demo.json"
+  ],
+  "fan_duct_network_studies": [
+    "fan_duct_network_demo.json"
   ]
 }

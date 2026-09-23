@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Nominal state | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Nominal state | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -547,6 +547,14 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{envelope['airflow_m3_h']['upper']}"
                 )
             )
+            air_power = (
+                "—"
+                if envelope is None or envelope.get("air_power_kw") is None
+                else (
+                    f"{envelope['air_power_kw']['lower']}–"
+                    f"{envelope['air_power_kw']['upper']}"
+                )
+            )
             scenario_names = ", ".join(
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
@@ -555,7 +563,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | {scenario_names} | "
-                f"{airflow_envelope} | {item['nominal_status']} | "
+                f"{airflow_envelope} | {air_power} | {item['nominal_status']} | "
                 f"{item['traceability']['complete']} |"
             )
             if item["traceability"]["missing_provenance"]:

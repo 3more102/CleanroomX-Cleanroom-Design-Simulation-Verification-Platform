@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14 psychrometric uncertainty propagation — 2026-09-23
+
+- Added uncertain room/outdoor dry-bulb temperature, relative humidity, and pressure inputs while preserving fixed legacy air-state inputs.
+- Added complete endpoint-corner enumeration for humidity ratio, enthalpy, specific volume, and dew-point intervals without assuming monotonicity.
+- Propagated psychrometric state bounds into makeup-air total-load and sensible-load airflow intervals.
+- Added stricter supply-air-temperature validation against the lowest uncertain room dry-bulb bound.
+- Extended provenance reporting to uncertain psychrometric inputs and added psychrometric interval tables to Markdown reports.
+- Updated example data, regression coverage, documentation, and package metadata to v0.14.0.
+- Kept the workflow explicitly bounded as deterministic interval screening; no correlation model, statistical uncertainty budget, hourly weather/load simulation, or equipment selection is inferred.
+
 ## v0.13 integrated engineering dossier — 2026-09-23
 
 - Added a manifest-driven engineering dossier that aggregates room/cascade verification, HVAC/duct screening, v0.12 HVAC fan-curve design-duty verification, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and standalone fan/system operating-point studies.

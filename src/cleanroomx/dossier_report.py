@@ -514,6 +514,44 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow_envelope} | {item['traceability']['complete']} |"
             )
 
+    if result.get("fan_variable_friction_uncertainty_analyses"):
+        lines.extend(
+            [
+                "",
+                "## Fan / variable-friction loop uncertainty analyses",
+                "",
+                "| Analysis | Status | Corners | Solved | Unresolved | Operating airflow envelope m³/h | Nominal state | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|",
+            ]
+        )
+        for item in result[
+            "fan_variable_friction_uncertainty_analyses"
+        ]:
+            envelope = item.get("operating_point_envelope")
+            airflow_envelope = (
+                "—"
+                if envelope is None
+                else (
+                    f"{envelope['airflow_m3_h']['lower']}–"
+                    f"{envelope['airflow_m3_h']['upper']}"
+                )
+            )
+            lines.append(
+                f"| {item['analysis']} | {item['status']} | "
+                f"{item['corner_count']} | {item['solved_corner_count']} | "
+                f"{item['unresolved_corner_count']} | {airflow_envelope} | "
+                f"{item['nominal_status']} | "
+                f"{item['traceability']['complete']} |"
+            )
+            if item["traceability"]["missing_provenance"]:
+                lines.append(
+                    "- Missing uncertainty provenance for "
+                    f"**{item['analysis']}**: "
+                    + ", ".join(
+                        item["traceability"]["missing_provenance"]
+                    )
+                )
+
     if result.get("fan_loop_speed_studies"):
         lines.extend(
             [

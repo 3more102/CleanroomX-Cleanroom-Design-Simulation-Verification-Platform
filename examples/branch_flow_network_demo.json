@@ -7,6 +7,14 @@
     "fan_efficiency": 0.7,
     "motor_efficiency": 0.92
   },
+  "fan_curve": {
+    "name": "Supply AHU performance",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 850.0},
+      {"airflow_m3_h": 2400.0, "pressure_pa": 650.0},
+      {"airflow_m3_h": 4000.0, "pressure_pa": 350.0}
+    ]
+  },
   "branch_flow_network": {
     "source_node": "AHU",
     "branches": [

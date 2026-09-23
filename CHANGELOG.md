@@ -6,6 +6,8 @@
 - Added independent-component root-sum-square uncertainty budgets with sensitivity coefficients.
 - Added configurable coverage factors, expanded uncertainty, coverage intervals, and relative expanded uncertainty.
 - Added explicit upper, lower, and range requirements with pass/fail/indeterminate/not-checked screening states.
+- Integrated optional uncertainty, requirement references, and measurement provenance into room ACH, differential-pressure, and particle-concentration verification.
+- Added conservative interval propagation for room-to-room pressure-cascade verification; overlapping acceptance thresholds are reported as indeterminate and do not pass overall verification.
 - Added JSON loading, Markdown/JSON reporting, a dedicated CLI, example data, tests, and documentation.
 - Documented the independence assumption and the boundary that project/regulatory decision rules take precedence.
 - Referenced JCGM 100, JCGM 106, and NIST TN 1297 without hard-coding acceptance limits or claiming a universal coverage probability.

@@ -219,6 +219,53 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{audit['selected_candidate_is_only_discrete_feature']}**",
                 ]
             )
+            alternative_gap = audit.get(
+                "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+            )
+            if alternative_gap is None:
+                lines.append(
+                    "- Nearest alternative candidate interval gap: "
+                    "**not available (no additional discrete candidate)**"
+                )
+            else:
+                lines.extend(
+                    [
+                        "- Nearest alternative candidate interval gap: "
+                        f"**{alternative_gap} m³/h**",
+                        "- Selected airflow overlaps an alternative candidate interval: "
+                        f"**{audit['selected_airflow_overlaps_alternative_candidate_interval']}**",
+                    ]
+                )
+                alternatives = audit.get("alternative_candidate_features") or []
+                if alternatives:
+                    lines.extend(
+                        [
+                            "",
+                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) |",
+                            "|---:|---|---|---:|",
+                        ]
+                    )
+                    for feature in alternatives:
+                        if (
+                            feature["feature_kind"]
+                            == "supplied_point_tolerance_contact"
+                        ):
+                            feature_text = (
+                                f"supplied point {feature['point_index']}"
+                            )
+                        else:
+                            feature_text = (
+                                "strict sign-change segment "
+                                f"{feature['low_point_index']}–"
+                                f"{feature['high_point_index']}"
+                            )
+                        lines.append(
+                            f"| {feature['solver_priority_rank']} | "
+                            f"{feature_text} | "
+                            f"{feature['airflow_interval_low_m3_h']}–"
+                            f"{feature['airflow_interval_high_m3_h']} | "
+                            f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} |"
+                        )
         if audit["residual_transitions"]:
             lines.extend(
                 [

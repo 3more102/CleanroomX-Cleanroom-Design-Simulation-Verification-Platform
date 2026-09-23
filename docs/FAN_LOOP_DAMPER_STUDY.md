@@ -1,1 +1,62 @@
-# Fan-driven loop damper study\n\nCleanroomX v0.27 adds discrete damper-state studies on top of the v0.26 bounded fan/loop-network coupling workflow.\n\n## Model\n\nEach damper state supplies an explicit additive quadratic resistance for one or more existing loop-network edges:\n\n    R_adjusted = R_base + R_damper_added\n\nThe adjusted network remains a fixed-resistance network using:\n\n    deltaP = R_adjusted * Q * abs(Q)\n\nFor each state CleanroomX derives the two-terminal equivalent loop resistance, intersects it with the supplied fan curve without extrapolation, and re-solves the full loop at the operating airflow.\n\n## Why resistance is explicit\n\nCleanroomX does not convert damper opening percentage, actuator command, or blade angle into a pressure-loss coefficient. That relationship depends on the specific damper geometry and manufacturer/test data. The user therefore supplies the added fixed quadratic resistance for each state from an applicable design basis or measured/manufacturer data.\n\nZero added resistance is allowed so an explicitly named baseline/open state can be included.\n\n## Input shape\n\n    {\n      "name": "Damper sweep",\n      "base_study": { "...": "same schema as cleanroomx-fan-loop" },\n      "damper_states": [\n        {\n          "name": "Open",\n          "edge_added_resistance_pa_per_m3_s_squared": {"Branch A": 0.0}\n        },\n        {\n          "name": "Throttled",\n          "edge_added_resistance_pa_per_m3_s_squared": {"Branch A": 1500.0}\n        }\n      ]\n    }\n\n## Run\n\n    cleanroomx-fan-damper examples/fan_loop_damper_demo.json\n\nJSON output:\n\n    cleanroomx-fan-damper examples/fan_loop_damper_demo.json --format json\n\nMarkdown report:\n\n    cleanroomx-fan-damper examples/fan_loop_damper_demo.json --output fan-damper-report.md\n\n## Reported evidence\n\n- explicit base, added, and adjusted edge resistance for each configured damper state;\n- equivalent loop resistance for each state;\n- bounded fan operating airflow and pressure when an intersection exists;\n- full solved edge flows and directions from the operating network;\n- inherited continuity, pressure-law, equivalent-network, and fan/system residual evidence.\n\n## Engineering boundary\n\nThis is a discrete steady-state sensitivity study. Added damper resistance is fixed inside each state. The workflow does not infer a continuous control characteristic, solve a target-flow damper position, iterate flow-dependent friction, model actuator dynamics, leakage, acoustics, system effect, compressibility, or transients. It does not replace manufacturer data, detailed HVAC design, TAB/commissioning, or qualified engineering review.\n
+# Fan-driven loop damper study
+
+CleanroomX v0.27 adds discrete damper-state studies on top of the v0.26 bounded fan/loop-network coupling workflow.
+
+## Model
+
+Each damper state supplies an explicit additive quadratic resistance for one or more existing loop-network edges:
+
+    R_adjusted = R_base + R_damper_added
+
+The adjusted network remains a fixed-resistance network using:
+
+    deltaP = R_adjusted * Q * abs(Q)
+
+For each state CleanroomX derives the two-terminal equivalent loop resistance, intersects it with the supplied fan curve without extrapolation, and re-solves the full loop at the operating airflow.
+
+## Why resistance is explicit
+
+CleanroomX does not convert damper opening percentage, actuator command, or blade angle into a pressure-loss coefficient. That relationship depends on the specific damper geometry and manufacturer/test data. The user therefore supplies the added fixed quadratic resistance for each state from an applicable design basis or measured/manufacturer data.
+
+Zero added resistance is allowed so an explicitly named baseline/open state can be included.
+
+## Input shape
+
+    {
+      "name": "Damper sweep",
+      "base_study": { "...": "same schema as cleanroomx-fan-loop" },
+      "damper_states": [
+        {
+          "name": "Open",
+          "edge_added_resistance_pa_per_m3_s_squared": {"Branch A": 0.0}
+        },
+        {
+          "name": "Throttled",
+          "edge_added_resistance_pa_per_m3_s_squared": {"Branch A": 1500.0}
+        }
+      ]
+    }
+
+## Run
+
+    cleanroomx-fan-damper examples/fan_loop_damper_demo.json
+
+JSON output:
+
+    cleanroomx-fan-damper examples/fan_loop_damper_demo.json --format json
+
+Markdown report:
+
+    cleanroomx-fan-damper examples/fan_loop_damper_demo.json --output fan-damper-report.md
+
+## Reported evidence
+
+- explicit base, added, and adjusted edge resistance for each configured damper state;
+- equivalent loop resistance for each state;
+- bounded fan operating airflow and pressure when an intersection exists;
+- full solved edge flows and directions from the operating network;
+- inherited continuity, pressure-law, equivalent-network, and fan/system residual evidence.
+
+## Engineering boundary
+
+This is a discrete steady-state sensitivity study. Added damper resistance is fixed inside each state. The workflow does not infer a continuous control characteristic, solve a target-flow damper position, iterate flow-dependent friction, model actuator dynamics, leakage, acoustics, system effect, compressibility, or transients. It does not replace manufacturer data, detailed HVAC design, TAB/commissioning, or qualified engineering review.

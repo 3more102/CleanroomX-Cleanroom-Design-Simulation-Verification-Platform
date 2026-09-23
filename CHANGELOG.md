@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.12 psychrometric uncertainty propagation — 2026-09-23
+
+- Added uncertain room/outdoor dry-bulb temperature, relative humidity, and pressure inputs while preserving fixed legacy air-state inputs.
+- Added complete endpoint-corner enumeration for humidity ratio, enthalpy, specific volume, and dew-point intervals without assuming monotonicity.
+- Propagated psychrometric state bounds into makeup-air total-load and sensible-load airflow intervals.
+- Added stricter supply-air-temperature validation against the lowest uncertain room dry-bulb bound.
+- Extended provenance reporting to uncertain psychrometric inputs and added psychrometric interval tables to Markdown reports.
+- Updated example data, regression coverage, documentation, and package metadata to v0.12.0.
+- Kept the workflow explicitly bounded as deterministic interval screening; no correlation model, statistical uncertainty budget, hourly weather/load simulation, or equipment selection is inferred.
+
 ## v0.11 fan/system operating-point solver — 2026-09-23
 
 - Added explicit fan performance curves from ordered airflow/pressure points with strict finite and monotonic validation.

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5 measurement uncertainty and provenance — 2026-09-23
+
+- Added reusable measurement records with auditable provenance and traceability metadata.
+- Added independent-component root-sum-square uncertainty budgets with sensitivity coefficients.
+- Added configurable coverage factors, expanded uncertainty, coverage intervals, and relative expanded uncertainty.
+- Added explicit upper, lower, and range requirements with pass/fail/indeterminate/not-checked screening states.
+- Added JSON loading, Markdown/JSON reporting, a dedicated CLI, example data, tests, and documentation.
+- Documented the independence assumption and the boundary that project/regulatory decision rules take precedence.
+- Referenced JCGM 100, JCGM 106, and NIST TN 1297 without hard-coding acceptance limits or claiming a universal coverage probability.
+
 ## v0.4 recovery qualification — 2026-09-23
 
 - Added measured particle-recovery test records with strict sample validation.

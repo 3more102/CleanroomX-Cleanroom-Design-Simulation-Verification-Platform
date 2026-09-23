@@ -1315,3 +1315,87 @@ def test_uncertainty_report_surfaces_power_chain_corner_evidence() -> None:
     assert "Specific fan power" in report
     assert "fixed efficiencies" in report
     assert "not uncertain variables" in report
+
+
+def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    quality = result["solver_quality_summary"]
+    assert quality["corner_count"] == result["corner_count"]
+    assert quality["solved_corner_count"] == result["solved_corner_count"]
+    assert quality["complete_evaluated_corner_coverage"] is True
+    assert quality["complete_study_coverage"] is True
+    assert quality["nominal_status"] == "solved"
+
+    expected_metrics = {
+        "absolute_operating_pressure_residual_pa",
+        "network_max_relative_resistance_closure_error",
+        "max_abs_mass_balance_residual_m3_h",
+        "max_abs_pressure_law_residual_pa",
+        "network_outer_iterations",
+        "operating_iterations",
+    }
+    assert set(quality["worst_metrics"]) == expected_metrics
+
+    for metric, evidence in quality["worst_metrics"].items():
+        assert evidence is not None
+        assert evidence["sources"]
+        for source in evidence["sources"]:
+            corner = result["corners"][source["corner_index"]]
+            assert corner["status"] == "solved"
+            if metric == "absolute_operating_pressure_residual_pa":
+                assert abs(source["observed_value"]) == pytest.approx(
+                    evidence["value"], abs=1e-9
+                )
+            else:
+                assert source["observed_value"] == pytest.approx(
+                    evidence["value"], abs=1e-9
+                )
+
+    tolerances = quality["configured_tolerances"]
+    assert quality["worst_metrics"][
+        "absolute_operating_pressure_residual_pa"
+    ]["value"] <= tolerances["operating_pressure_tolerance_pa"] + 1e-9
+    assert quality["worst_metrics"][
+        "network_max_relative_resistance_closure_error"
+    ]["value"] <= tolerances["resistance_relative_tolerance"] + 1e-9
+    assert quality["worst_metrics"][
+        "max_abs_mass_balance_residual_m3_h"
+    ]["value"] <= tolerances["mass_balance_tolerance_m3_h"] + 1e-9
+
+
+def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    quality = result["solver_quality_summary"]
+    assert result["status"] == "indeterminate"
+    assert quality["corner_count"] == result["corner_count"]
+    assert quality["solved_corner_count"] == 0
+    assert quality["complete_evaluated_corner_coverage"] is False
+    assert quality["complete_study_coverage"] is False
+    assert quality["nominal_status"] == "no_intersection_in_supplied_range"
+    assert all(evidence is None for evidence in quality["worst_metrics"].values())
+
+
+def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Aggregate solver-quality evidence" in report
+    assert "Solved evaluated corners" in report
+    assert "Absolute operating pressure residual" in report
+    assert "Resistance closure error" in report
+    assert "Pressure-law residual" in report
+    assert "Witness source corner(s)" in report

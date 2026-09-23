@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.26 engineering core
+## v0.27 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -24,6 +24,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
+- Bounded damper case studies that add explicit user-supplied fixed quadratic resistance to named loop edges and compare pressure/flow redistribution against the unchanged baseline.
 - Bounded fan/loop-network operating-point coupling for passive two-terminal fixed-resistance meshes, with no fan-curve extrapolation and full operating-flow re-solve.
 - Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
@@ -60,6 +61,8 @@ The HVAC module is also a preliminary engineering model. The v0.8 branch-flow so
 v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
 
 v0.26 fan/loop-network coupling reduces a passive two-terminal fixed-resistance mesh to its exact quadratic equivalent from a reference solve, intersects that equivalent with supplied fan data, and re-solves the full mesh at the bounded operating airflow. Internal external injections, variable-friction iteration, controls, leakage, and fan extrapolation remain outside this workflow.
+
+v0.27 damper studies compare explicit fixed-resistance cases on the loop solver. Optional damper position percentages are traceability labels only; CleanroomX does not infer a position-to-loss curve, optimize damper settings, or perform automatic balancing/control.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
@@ -139,6 +142,20 @@ The v0.25 solver handles connected steady-state meshes with arbitrary loops usin
 Geometry-derived resistance demo:
 
     cleanroomx-loop-flow examples/looped_network_geometry_demo.json
+
+## Compare explicit damper cases on a looped network
+
+    cleanroomx-damper-study examples/damper_study_demo.json
+
+JSON output:
+
+    cleanroomx-damper-study examples/damper_study_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-damper-study examples/damper_study_demo.json --output damper-study-report.md
+
+The v0.27 workflow keeps baseline node injections fixed and adds only user-supplied fixed quadratic resistance to named edges for each case. Optional position metadata is not converted into resistance. See docs/DAMPER_STUDY.md.
 
 ## Solve a fan-driven looped network
 
@@ -381,7 +398,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are controlled damper studies, fan/loop uncertainty integration, and later a desktop/web UI plus CFD adapters.
+Next milestones are fan/loop uncertainty integration, fan-plus-damper co-studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

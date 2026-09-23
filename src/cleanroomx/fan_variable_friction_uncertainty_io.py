@@ -225,6 +225,65 @@ def _edge_parameter_uncertainty(
     return result
 
 
+def _power_efficiency_uncertainty(
+    data: dict,
+    power_efficiencies,
+) -> dict[str, UncertainValue]:
+    specs = data.get("power_efficiency_uncertainty", {})
+    if not isinstance(specs, dict):
+        raise ValueError(
+            "power_efficiency_uncertainty must be an object when provided"
+        )
+    allowed = {
+        "fan_efficiency",
+        "motor_efficiency",
+        "vfd_efficiency",
+    }
+    unknown = set(specs) - allowed
+    if unknown:
+        raise ValueError(
+            "unsupported power efficiency uncertainty option(s): "
+            + ", ".join(sorted(unknown))
+        )
+    if specs and power_efficiencies is None:
+        raise ValueError(
+            "power_efficiency_uncertainty requires power_efficiencies "
+            "nominal values"
+        )
+
+    result: dict[str, UncertainValue] = {}
+    for key, spec in specs.items():
+        nominal = getattr(power_efficiencies, key)
+        if nominal is None:
+            raise ValueError(
+                f"power efficiency uncertainty for {key!r} requires "
+                "that nominal efficiency in power_efficiencies"
+            )
+        if isinstance(spec, (int, float)):
+            uncertainty_abs = float(spec)
+            provenance = None
+        elif isinstance(spec, dict):
+            if "value" in spec:
+                raise ValueError(
+                    "power_efficiency_uncertainty must not repeat nominal "
+                    "efficiency values; power_efficiencies is the nominal source"
+                )
+            uncertainty_abs = spec.get("uncertainty_abs", 0.0)
+            provenance = _provenance_from_dict(spec.get("provenance"))
+        else:
+            raise ValueError(
+                f"power efficiency uncertainty for {key!r} must be "
+                "a number or object"
+            )
+        result[key] = UncertainValue(
+            value=nominal,
+            unit="1",
+            uncertainty_abs=uncertainty_abs,
+            provenance=provenance,
+        )
+    return result
+
+
 def fan_variable_friction_loop_uncertainty_from_dict(
     data: dict,
 ) -> FanVariableFrictionLoopUncertaintyStudy:
@@ -312,6 +371,14 @@ def fan_variable_friction_loop_uncertainty_from_dict(
         label="rectangular-height",
     )
 
+    power_efficiencies = fan_power_efficiencies_from_dict(
+        data.get("power_efficiencies")
+    )
+    power_efficiency_uncertainty = _power_efficiency_uncertainty(
+        data,
+        power_efficiencies,
+    )
+
     solver = data.get("solver", {})
     if not isinstance(solver, dict):
         raise ValueError("solver must be an object when provided")
@@ -354,9 +421,9 @@ def fan_variable_friction_loop_uncertainty_from_dict(
             fan_data.get("provenance")
         ),
         max_corner_cases=data.get("max_corner_cases", 256),
-        power_efficiencies=fan_power_efficiencies_from_dict(
-            data.get("power_efficiencies")
-        ),
+        power_efficiencies=power_efficiencies,
+        power_efficiency_uncertainty=power_efficiency_uncertainty,
+        max_power_cases=data.get("max_power_cases", 2048),
         **solver,
     )
 

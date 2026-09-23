@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .branched_duct import BranchedDuctNetwork
 from .duct import DuctNetwork
 
 
@@ -238,6 +239,7 @@ class HVACProject:
     filter_unit: FilterUnit | None = None
     fan_system: FanSystem | None = None
     duct_network: DuctNetwork | None = None
+    branched_duct_network: BranchedDuctNetwork | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -247,3 +249,7 @@ class HVACProject:
         names = [room.name for room in self.rooms]
         if len(names) != len(set(names)):
             raise ValueError("HVAC room names must be unique")
+        if self.duct_network is not None and self.branched_duct_network is not None:
+            raise ValueError(
+                "provide either duct_network or branched_duct_network, not both"
+            )

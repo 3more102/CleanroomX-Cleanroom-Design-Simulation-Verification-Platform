@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+
+
+def _finite(value: float, field_name: str) -> float:
+    value = float(value)
+    if not math.isfinite(value):
+        raise ValueError(f"{field_name} must be finite")
+    return value
 
 
 @dataclass(frozen=True)
@@ -8,14 +16,35 @@ class ParticleRequirement:
     size_um: float
     max_concentration_per_m3: float
     observed_concentration_per_m3: float
+    observed_uncertainty_abs_per_m3: float = 0.0
 
     def __post_init__(self) -> None:
-        if self.size_um <= 0:
+        size = _finite(self.size_um, "size_um")
+        limit = _finite(
+            self.max_concentration_per_m3, "max_concentration_per_m3"
+        )
+        observed = _finite(
+            self.observed_concentration_per_m3,
+            "observed_concentration_per_m3",
+        )
+        uncertainty = _finite(
+            self.observed_uncertainty_abs_per_m3,
+            "observed_uncertainty_abs_per_m3",
+        )
+        if size <= 0:
             raise ValueError("particle size must be positive")
-        if self.max_concentration_per_m3 < 0:
+        if limit < 0:
             raise ValueError("particle concentration limit cannot be negative")
-        if self.observed_concentration_per_m3 < 0:
+        if observed < 0:
             raise ValueError("observed particle concentration cannot be negative")
+        if uncertainty < 0:
+            raise ValueError("observed particle uncertainty cannot be negative")
+        object.__setattr__(self, "size_um", size)
+        object.__setattr__(self, "max_concentration_per_m3", limit)
+        object.__setattr__(self, "observed_concentration_per_m3", observed)
+        object.__setattr__(
+            self, "observed_uncertainty_abs_per_m3", uncertainty
+        )
 
 
 @dataclass(frozen=True)
@@ -29,20 +58,54 @@ class RoomSpec:
     min_pressure_pa: float | None = None
     observed_pressure_pa: float | None = None
     particle_requirements: tuple[ParticleRequirement, ...] = field(default_factory=tuple)
+    observed_pressure_uncertainty_pa: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("room name cannot be empty")
-        for label, value in (
-            ("length_m", self.length_m),
-            ("width_m", self.width_m),
-            ("height_m", self.height_m),
-            ("supply_airflow_m3_h", self.supply_airflow_m3_h),
+        for label in (
+            "length_m",
+            "width_m",
+            "height_m",
+            "supply_airflow_m3_h",
         ):
+            value = _finite(getattr(self, label), label)
             if value <= 0:
                 raise ValueError(f"{label} must be positive")
-        if self.min_ach is not None and self.min_ach <= 0:
-            raise ValueError("min_ach must be positive when provided")
+            object.__setattr__(self, label, value)
+
+        if self.min_ach is not None:
+            min_ach = _finite(self.min_ach, "min_ach")
+            if min_ach <= 0:
+                raise ValueError("min_ach must be positive when provided")
+            object.__setattr__(self, "min_ach", min_ach)
+
+        if self.min_pressure_pa is not None:
+            object.__setattr__(
+                self,
+                "min_pressure_pa",
+                _finite(self.min_pressure_pa, "min_pressure_pa"),
+            )
+        if self.observed_pressure_pa is not None:
+            object.__setattr__(
+                self,
+                "observed_pressure_pa",
+                _finite(self.observed_pressure_pa, "observed_pressure_pa"),
+            )
+
+        pressure_uncertainty = _finite(
+            self.observed_pressure_uncertainty_pa,
+            "observed_pressure_uncertainty_pa",
+        )
+        if pressure_uncertainty < 0:
+            raise ValueError("observed pressure uncertainty cannot be negative")
+        if pressure_uncertainty > 0 and self.observed_pressure_pa is None:
+            raise ValueError(
+                "observed_pressure_pa is required when pressure uncertainty is supplied"
+            )
+        object.__setattr__(
+            self, "observed_pressure_uncertainty_pa", pressure_uncertainty
+        )
 
 
 @dataclass(frozen=True)
@@ -56,8 +119,10 @@ class PressureCascadeRequirement:
             raise ValueError("pressure-cascade room names cannot be empty")
         if self.higher_pressure_room == self.lower_pressure_room:
             raise ValueError("pressure-cascade rooms must be different")
-        if self.min_delta_pa <= 0:
+        minimum = _finite(self.min_delta_pa, "min_delta_pa")
+        if minimum <= 0:
             raise ValueError("min_delta_pa must be positive")
+        object.__setattr__(self, "min_delta_pa", minimum)
 
 
 @dataclass(frozen=True)
@@ -90,7 +155,9 @@ class ProjectSpec:
                 )
             edge = (higher, lower)
             if edge in seen_edges:
-                raise ValueError(f"duplicate pressure-cascade requirement: {higher!r} -> {lower!r}")
+                raise ValueError(
+                    f"duplicate pressure-cascade requirement: {higher!r} -> {lower!r}"
+                )
             seen_edges.add(edge)
             adjacency[higher].append(lower)
             indegree[lower] += 1

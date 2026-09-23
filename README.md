@@ -26,6 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
+- Bounded fan-speed control scenario studies using simplified fan affinity laws, speed-scaled fan curves, and discrete project-airflow target screening.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
@@ -149,7 +150,21 @@ Write a Markdown report:
 
 The v0.16 workflow derives an equivalent fixed R·Q² resistance from passive branches that share common upstream/downstream pressure nodes, combines it with an explicit fixed-pressure term, solves the bounded fan/system intersection, and then redistributes the operating airflow across the original branches using equal pressure drop. It reports mass- and equal-pressure residuals and does not extrapolate supplied fan data. See docs/FAN_NETWORK_INTEGRATION.md.
 
-## Analyze fan-speed control scenarios\n\n    cleanroomx-fan-control examples/fan_speed_control_demo.json\n\nJSON output:\n\n    cleanroomx-fan-control examples/fan_speed_control_demo.json --format json\n\nWrite a Markdown report:\n\n    cleanroomx-fan-control examples/fan_speed_control_demo.json --output fan-speed-control-report.md\n\nThe v0.19 workflow scales a supplied reference fan curve for explicit speed ratios using the simplified fan affinity relations `Q ∝ N` and `ΔP ∝ N²`, then reuses the bounded fan/system solver for each scenario. An optional required airflow is checked only against the discrete tested speed scenarios; CleanroomX does not infer manufacturer RPM limits, VFD constraints, density/compressibility corrections, stall/surge limits, or continuous control optimization. See docs/FAN_SPEED_CONTROL.md.\n\n## Analyze a measured particle-recovery test
+## Analyze fan-speed control scenarios\n\n    cleanroomx-fan-control examples/fan_speed_control_demo.json\n\nJSON output:\n\n    cleanroomx-fan-control examples/fan_speed_control_demo.json --format json\n\nWrite a Markdown report:\n\n    cleanroomx-fan-control examples/fan_speed_control_demo.json --output fan-speed-control-report.md\n\nThe v0.19 workflow scales a supplied reference fan curve for explicit speed ratios using the simplified fan affinity relations `Q ∝ N` and `ΔP ∝ N²`, then reuses the bounded fan/system solver for each scenario. An optional required airflow is checked only against the discrete tested speed scenarios; CleanroomX does not infer manufacturer RPM limits, VFD constraints, density/compressibility corrections, stall/surge limits, or continuous control optimization. See docs/FAN_SPEED_CONTROL.md.\n\n## Analyze fan-speed control scenarios
+
+    cleanroomx-fan-control examples/fan_speed_control_demo.json
+
+JSON output:
+
+    cleanroomx-fan-control examples/fan_speed_control_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-fan-control examples/fan_speed_control_demo.json --output fan-speed-control-report.md
+
+The v0.19 workflow scales a supplied reference fan curve for explicit speed ratios using the simplified fan affinity relations `Q ∝ N` and `ΔP ∝ N²`, then reuses the bounded fan/system solver for each scenario. An optional required airflow is checked only against the discrete tested speed scenarios; CleanroomX does not infer manufacturer RPM limits, VFD constraints, density/compressibility corrections, stall/surge limits, or continuous control optimization. See docs/FAN_SPEED_CONTROL.md.
+
+## Analyze a measured particle-recovery test
 
     cleanroomx-recovery-test examples/recovery_test_demo.json
 

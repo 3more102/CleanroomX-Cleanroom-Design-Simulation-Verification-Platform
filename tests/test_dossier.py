@@ -24,7 +24,10 @@ def test_summary_marks_failures_as_attention_required() -> None:
 
 
 def test_summary_preserves_incomplete_and_indeterminate_states() -> None:
-    recovery = [{"criterion_status": "incomplete"}]
+    recovery = [
+        {"criterion_status": "incomplete"},
+        {"criterion_status": "indeterminate"},
+    ]
     uncertainty = [{"requirement": {"status": "indeterminate"}}]
     summary = summarize_dossier_components(
         recovery=recovery,
@@ -32,6 +35,7 @@ def test_summary_preserves_incomplete_and_indeterminate_states() -> None:
     )
     assert summary["state"] == "attention_required"
     assert summary["adverse_items"]["recovery_incomplete"] == 1
+    assert summary["adverse_items"]["recovery_indeterminate"] == 1
     assert summary["adverse_items"]["uncertainty_indeterminate"] == 1
 
 

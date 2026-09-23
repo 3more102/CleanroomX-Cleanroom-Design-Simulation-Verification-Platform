@@ -4,7 +4,7 @@ CleanroomX v0.5 adds a conservative interval-analysis foundation for engineering
 
 ## Scope
 
-The first implementation covers room dimensions, supply airflow, derived room volume, derived supply ACH, and a project-configured minimum ACH requirement.
+The foundation covers room dimensions, supply airflow, derived room volume, derived supply ACH, and a project-configured minimum ACH requirement. v0.7 extends the same conservative interval approach to observed room differential pressure and room-to-room pressure-cascade verification.
 
 Each numeric input carries:
 
@@ -49,6 +49,29 @@ For a configured minimum ACH:
 
 The indeterminate state is intentional. It prevents a nominal value from being reported as a robust pass when plausible input bounds cross the project requirement.
 
+## Pressure uncertainty extension
+
+A room may provide an absolute pressure uncertainty bound:
+
+    observed_pressure_pa = p
+    observed_pressure_uncertainty_pa = u_p
+
+CleanroomX evaluates the pressure interval as:
+
+    p_low = p - u_p
+    p_high = p + u_p
+
+For a configured minimum room pressure, the result is pass only when the complete interval is at or above the minimum, fail only when the complete interval is below it, and indeterminate when the minimum lies inside the interval.
+
+For a cascade from a higher-pressure room H to a lower-pressure room L:
+
+    delta_p = p_H - p_L
+    u_delta = u_H + u_L
+    delta_low = delta_p - u_delta
+    delta_high = delta_p + u_delta
+
+The summed absolute bound is deterministic worst-case interval propagation. It is not root-sum-square statistical uncertainty and does not assume independent random errors.
+
 ## Provenance completeness
 
 The report lists every analyzed input and its source metadata. Provenance completeness is reported separately from engineering acceptance. Missing provenance does not silently change a numerical result.
@@ -71,6 +94,6 @@ Write a Markdown report:
 
 Exit codes:
 
-- 0: pass or no configured ACH requirement;
-- 2: fail;
-- 3: indeterminate.
+- 0: pass or not-checked only;
+- 2: at least one configured requirement robustly fails;
+- 3: no robust failure, but at least one configured requirement is indeterminate.

@@ -3,7 +3,10 @@ import pytest
 from cleanroomx.hvac_models import AirState
 from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
 from cleanroomx.thermal_uncertainty_io import thermal_uncertainty_from_dict
-from cleanroomx.thermal_uncertainty_models import UncertainThermalDesign
+from cleanroomx.thermal_uncertainty_models import (
+    UncertainAirState,
+    UncertainThermalDesign,
+)
 from cleanroomx.uncertainty_models import Provenance, UncertainValue
 
 
@@ -174,3 +177,102 @@ def test_missing_provenance_is_reported_separately() -> None:
     assert result["overall_status"] == "pass"
     assert result["traceability"]["complete"] is False
     assert "internal_latent_kw" in result["traceability"]["missing_provenance"]
+
+
+
+def test_psychrometric_uncertainty_expands_derived_state_intervals() -> None:
+    room_air = UncertainAirState(
+        dry_bulb_c=uv(22.0, "C", 1.0),
+        relative_humidity_percent=uv(45.0, "%", 5.0),
+        pressure_kpa=uv(101.325, "kPa", 0.5),
+    )
+    result = analyze_thermal_uncertainty(
+        base_design(room_air=room_air)
+    )
+
+    state = result["psychrometric_states"]["room_air"]
+    assert state["corner_count"] == 8
+    for key in (
+        "humidity_ratio_g_kg_da",
+        "enthalpy_kj_kg_da",
+        "specific_volume_m3_kg_da",
+        "dew_point_c",
+    ):
+        interval = state["derived"][key]
+        assert interval["lower"] < interval["nominal"] < interval["upper"]
+
+
+def test_uncertain_air_states_expand_makeup_load_interval() -> None:
+    room_air = UncertainAirState(
+        dry_bulb_c=uv(22.0, "C", 0.5),
+        relative_humidity_percent=uv(45.0, "%", 2.0),
+        pressure_kpa=uv(101.325, "kPa", 0.3),
+    )
+    outdoor_air = UncertainAirState(
+        dry_bulb_c=uv(34.0, "C", 2.0),
+        relative_humidity_percent=uv(55.0, "%", 5.0),
+        pressure_kpa=uv(101.325, "kPa", 0.5),
+    )
+    result = analyze_thermal_uncertainty(
+        base_design(
+            room_air=room_air,
+            outdoor_air=outdoor_air,
+            makeup_airflow_m3_h=uv(900.0, "m3/h", 90.0),
+        )
+    )
+
+    makeup = result["loads_kw"]["makeup_air_total"]
+    assert makeup["lower"] < makeup["nominal"] < makeup["upper"]
+    thermal = result["airflow_m3_h"]["thermal_for_internal_sensible"]
+    assert thermal is not None
+    assert thermal["lower"] < thermal["upper"]
+
+
+def test_loader_accepts_nested_uncertain_air_state_components() -> None:
+    design = thermal_uncertainty_from_dict(
+        {
+            "name": "Psychrometric loader",
+            "room_air": {
+                "dry_bulb_c": {
+                    "value": 22.0,
+                    "uncertainty_abs": 0.5,
+                    "provenance": {
+                        "source_type": "design",
+                        "source_name": "Room setpoint",
+                    },
+                },
+                "relative_humidity_percent": {
+                    "value": 45.0,
+                    "uncertainty_abs": 3.0,
+                },
+                "pressure_kpa": 101.325,
+            },
+            "cleanroom_airflow_m3_h": {"value": 1500.0},
+            "internal_sensible_kw": {"value": 4.0},
+            "internal_latent_kw": {"value": 0.5},
+        }
+    )
+
+    assert isinstance(design.room_air, UncertainAirState)
+    assert design.room_air.dry_bulb_c.lower == 21.5
+    assert design.room_air.pressure_kpa.uncertainty_abs == 0
+    assert design.room_air.dry_bulb_c.provenance is not None
+    assert design.room_air.dry_bulb_c.provenance.source_name == "Room setpoint"
+
+
+def test_supply_temperature_must_be_below_uncertain_room_lower_bound() -> None:
+    room_air = UncertainAirState(
+        dry_bulb_c=uv(22.0, "C", 1.0),
+        relative_humidity_percent=uv(45.0, "%", 1.0),
+    )
+    with pytest.raises(ValueError, match="lowest room dry-bulb"):
+        base_design(
+            room_air=room_air,
+            supply_air_temp_c=uv(20.5, "C", 0.5),
+        )
+
+
+def test_fixed_air_state_remains_supported() -> None:
+    result = analyze_thermal_uncertainty(base_design())
+
+    assert result["psychrometric_states"]["room_air"]["corner_count"] == 1

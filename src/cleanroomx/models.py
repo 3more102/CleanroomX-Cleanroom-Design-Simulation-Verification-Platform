@@ -4,10 +4,34 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class Provenance:
+    source: str
+    reference: str | None = None
+    instrument_id: str | None = None
+    calibration_reference: str | None = None
+    observed_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.source.strip():
+            raise ValueError("provenance source cannot be empty")
+        for label, value in (
+            ("reference", self.reference),
+            ("instrument_id", self.instrument_id),
+            ("calibration_reference", self.calibration_reference),
+            ("observed_at", self.observed_at),
+        ):
+            if value is not None and not value.strip():
+                raise ValueError(f"{label} cannot be empty when provided")
+
+
+@dataclass(frozen=True)
 class ParticleRequirement:
     size_um: float
     max_concentration_per_m3: float
     observed_concentration_per_m3: float
+    observed_uncertainty_per_m3: float | None = None
+    requirement_reference: str | None = None
+    provenance: Provenance | None = None
 
     def __post_init__(self) -> None:
         if self.size_um <= 0:
@@ -16,6 +40,10 @@ class ParticleRequirement:
             raise ValueError("particle concentration limit cannot be negative")
         if self.observed_concentration_per_m3 < 0:
             raise ValueError("observed particle concentration cannot be negative")
+        if self.observed_uncertainty_per_m3 is not None and self.observed_uncertainty_per_m3 < 0:
+            raise ValueError("particle concentration uncertainty cannot be negative")
+        if self.requirement_reference is not None and not self.requirement_reference.strip():
+            raise ValueError("requirement_reference cannot be empty when provided")
 
 
 @dataclass(frozen=True)
@@ -29,6 +57,12 @@ class RoomSpec:
     min_pressure_pa: float | None = None
     observed_pressure_pa: float | None = None
     particle_requirements: tuple[ParticleRequirement, ...] = field(default_factory=tuple)
+    supply_airflow_uncertainty_m3_h: float | None = None
+    observed_pressure_uncertainty_pa: float | None = None
+    ach_requirement_reference: str | None = None
+    pressure_requirement_reference: str | None = None
+    airflow_provenance: Provenance | None = None
+    pressure_provenance: Provenance | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -43,6 +77,18 @@ class RoomSpec:
                 raise ValueError(f"{label} must be positive")
         if self.min_ach is not None and self.min_ach <= 0:
             raise ValueError("min_ach must be positive when provided")
+        for label, value in (
+            ("supply_airflow_uncertainty_m3_h", self.supply_airflow_uncertainty_m3_h),
+            ("observed_pressure_uncertainty_pa", self.observed_pressure_uncertainty_pa),
+        ):
+            if value is not None and value < 0:
+                raise ValueError(f"{label} cannot be negative")
+        for label, value in (
+            ("ach_requirement_reference", self.ach_requirement_reference),
+            ("pressure_requirement_reference", self.pressure_requirement_reference),
+        ):
+            if value is not None and not value.strip():
+                raise ValueError(f"{label} cannot be empty when provided")
 
 
 @dataclass(frozen=True)
@@ -50,6 +96,7 @@ class PressureCascadeRequirement:
     higher_pressure_room: str
     lower_pressure_room: str
     min_delta_pa: float
+    requirement_reference: str | None = None
 
     def __post_init__(self) -> None:
         if not self.higher_pressure_room.strip() or not self.lower_pressure_room.strip():
@@ -58,6 +105,8 @@ class PressureCascadeRequirement:
             raise ValueError("pressure-cascade rooms must be different")
         if self.min_delta_pa <= 0:
             raise ValueError("min_delta_pa must be positive")
+        if self.requirement_reference is not None and not self.requirement_reference.strip():
+            raise ValueError("requirement_reference cannot be empty when provided")
 
 
 @dataclass(frozen=True)

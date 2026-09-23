@@ -48,6 +48,12 @@ Example:
 }
 ```
 
+## Fan-speed studies
+
+The optional `fan_speed_studies` list reuses the v0.19 bounded fan-speed workflow. Each referenced input is SHA-256 fingerprinted, analyzed, and rendered in the dossier with its explicit speed ratios, optional RPM values, case statuses, and solved operating points.
+
+If any speed case reports `no_intersection_in_supplied_range`, the dossier records a fan-speed attention item. Solved cases remain bounded screening results; the dossier does not infer allowable VFD range, motor limits, efficiency, stall/surge acceptance, or manufacturer selection.
+
 ## Cross-module consistency
 
 The optional `verification_hvac_airflow` block reuses the v0.17 standalone consistency engine. It compares the verification project's `supply_airflow_m3_h` against the HVAC project's `cleanroom_airflow_m3_h` for exact matching room names.

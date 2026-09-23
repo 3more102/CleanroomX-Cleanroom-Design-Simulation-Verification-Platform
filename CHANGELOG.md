@@ -1,4 +1,14 @@
 # Changelog
+## v0.42 bounded fan-curve point pressure uncertainty — 2026-09-23
+
+- Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute pressure bounds at selected supplied fan-curve airflow points.
+- Keeps nominal point pressure single-sourced in the fan curve; uncertainty entries identify an existing airflow coordinate and provide only an absolute pressure bound plus optional provenance.
+- Combines fan-pressure corners with fixed-pressure and duct physical/geometry uncertainty dimensions, then re-solves the complete nonlinear Darcy-friction network at every corner.
+- Rejects negative pressure intervals, unknown/duplicate airflow-point references, repeated nominal pressures, and any interval combination capable of making pressure increase with airflow.
+- Preserves the supplied airflow coordinates and strict no-extrapolation fan boundary.
+- Added Markdown evidence, a reproducible fan-curve uncertainty example, provenance tracking, and regression coverage.
+- Bumped package/runtime metadata to v0.42.0.
+
 ## v0.41 bounded rectangular duct-geometry uncertainty — 2026-09-23
 
 - Preserves explicit circular diameter and rectangular width/height in geometry-derived loop-resistance evidence.

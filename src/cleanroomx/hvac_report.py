@@ -7,18 +7,49 @@ def markdown_hvac_report(result: dict) -> str:
         [
             "## Airflow and preliminary capacity",
             "",
-            "| Room | Cleanroom m³/h | Governing m³/h | Basis | Cooling kW | Heating kW | Filter units |",
-            "|---|---:|---:|---|---:|---:|---:|",
+            "| Room | Cleanroom m³/h | Governing m³/h | Basis | Cooling kW | Heating kW | Filter units | Air-balance residual m³/h |",
+            "|---|---:|---:|---|---:|---:|---:|---:|",
         ]
     )
     for room in result["rooms"]:
         thermal = room["thermal"]
         units = room["filter_units"] if room["filter_units"] is not None else "—"
+        balance = room.get("air_balance")
+        residual = balance["balance_residual_m3_h"] if balance is not None else "—"
         lines.append(
             f"| {room['name']} | {room['cleanroom_airflow_m3_h']} | "
             f"{room['governing_airflow_m3_h']} | {thermal['governing_airflow_basis']} | "
             f"{thermal['preliminary_cooling_capacity_kw']} | "
-            f"{thermal['preliminary_heating_capacity_kw']} | {units} |"
+            f"{thermal['preliminary_heating_capacity_kw']} | {units} | {residual} |"
+        )
+
+    balances = [room for room in result["rooms"] if room.get("air_balance") is not None]
+    if balances:
+        summary = result["air_balance_summary"]
+        lines.extend(
+            [
+                "",
+                "## Room air-balance closure",
+                "",
+                f"Configured rooms: **{summary['rooms_configured']}**; balanced within explicit tolerance: "
+                f"**{summary['rooms_balanced']}**; out of balance: **{summary['rooms_out_of_balance']}**.",
+                "",
+            ]
+        )
+        for room in balances:
+            balance = room["air_balance"]
+            lines.append(
+                f"- **{room['name']}** — supply {balance['analysis_supply_airflow_m3_h']} m³/h; "
+                f"return {balance['return_air_m3_h']} m³/h; exhaust {balance['exhaust_air_m3_h']} m³/h; "
+                f"transfer in/out {balance['transfer_in_m3_h']}/{balance['transfer_out_m3_h']} m³/h; "
+                f"leakage in/out {balance['leakage_in_m3_h']}/{balance['leakage_out_m3_h']} m³/h; "
+                f"residual {balance['balance_residual_m3_h']} m³/h; status `{balance['status']}`."
+            )
+        lines.extend(
+            [
+                "",
+                "Outdoor/makeup air is treated as a component of total room supply and is not added a second time in the room balance.",
+            ]
         )
 
     lines.extend(["", "## Psychrometric states", ""])

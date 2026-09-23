@@ -87,7 +87,7 @@ def test_result_integrity_sha256_is_recomputable_and_input_sensitive() -> None:
     assert hashlib.sha256(encoded).hexdigest() == integrity["sha256"]
 
     changed_data = _example_data()
-    changed_data["fixed_pressure_pa"]["uncertainty_abs"] = 25.0
+    changed_data["fixed_pressure_pa"]["uncertainty_abs"] = 10.0
     changed = analyze_fan_variable_friction_loop_uncertainty(
         fan_variable_friction_loop_uncertainty_from_dict(changed_data)
     )

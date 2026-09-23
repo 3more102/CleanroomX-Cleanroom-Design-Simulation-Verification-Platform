@@ -142,12 +142,43 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 f"**{audit['strict_sign_change_segment_count']}**",
                 "- Candidate crossing features: "
                 f"**{audit['candidate_crossing_feature_count']}**",
+                "- Selection policy: "
+                f"**{audit['selection_policy']}**",
                 "- Residual-increase transitions: "
                 f"**{audit['residual_increase_transition_count']}**",
                 "- Largest positive residual increase: "
                 f"**{audit['largest_positive_residual_increase_pa']} Pa**",
             ]
         )
+        selected = audit.get("selected_candidate_feature")
+        if selected is None:
+            lines.append("- Selected discrete candidate: **not available**")
+        else:
+            if selected["feature_kind"] == "supplied_point_tolerance_contact":
+                selected_text = (
+                    f"supplied point {selected['point_index']} at "
+                    f"{selected['airflow_m3_h']} m³/h"
+                )
+            else:
+                selected_text = (
+                    f"strict sign-change segment "
+                    f"{selected['low_point_index']}–"
+                    f"{selected['high_point_index']} "
+                    f"({selected['low_airflow_m3_h']}–"
+                    f"{selected['high_airflow_m3_h']} m³/h)"
+                )
+            lines.extend(
+                [
+                    "- Selected discrete candidate: "
+                    f"**{selected_text}**",
+                    "- Selected candidate priority rank: "
+                    f"**{audit['selected_candidate_feature_rank']}**",
+                    "- Additional discrete candidate features: "
+                    f"**{audit['additional_candidate_feature_count']}**",
+                    "- Selected candidate is the only discrete feature: "
+                    f"**{audit['selected_candidate_is_only_discrete_feature']}**",
+                ]
+            )
         if audit["residual_transitions"]:
             lines.extend(
                 [

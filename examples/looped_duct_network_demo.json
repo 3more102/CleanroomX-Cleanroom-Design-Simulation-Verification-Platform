@@ -1,0 +1,80 @@
+{
+  "name": "Geometry-derived cleanroom supply loop",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 5400.0,
+    "Junction A": 0.0,
+    "Junction B": 0.0,
+    "Return": -5400.0
+  },
+  "edges": [
+    {
+      "name": "Supply to A",
+      "start_node": "Supply",
+      "end_node": "Junction A",
+      "section": {
+        "length_m": 12.0,
+        "airflow_m3_h": 3000.0,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 1.5,
+        "diameter_m": 0.55,
+        "absolute_roughness_m": 0.00009,
+        "kinematic_viscosity_m2_s": 0.000015
+      }
+    },
+    {
+      "name": "A to Return",
+      "start_node": "Junction A",
+      "end_node": "Return",
+      "section": {
+        "length_m": 16.0,
+        "airflow_m3_h": 2700.0,
+        "friction_factor": 0.021,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 2.1,
+        "diameter_m": 0.5
+      }
+    },
+    {
+      "name": "Supply to B",
+      "start_node": "Supply",
+      "end_node": "Junction B",
+      "section": {
+        "length_m": 14.0,
+        "airflow_m3_h": 2400.0,
+        "friction_factor": 0.022,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 1.8,
+        "width_m": 0.55,
+        "height_m": 0.35
+      }
+    },
+    {
+      "name": "B to Return",
+      "start_node": "Junction B",
+      "end_node": "Return",
+      "section": {
+        "length_m": 13.0,
+        "airflow_m3_h": 2700.0,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 2.0,
+        "diameter_m": 0.5,
+        "absolute_roughness_m": 0.00009,
+        "kinematic_viscosity_m2_s": 0.000015
+      }
+    },
+    {
+      "name": "Cross-link A to B",
+      "start_node": "Junction A",
+      "end_node": "Junction B",
+      "section": {
+        "length_m": 6.0,
+        "airflow_m3_h": 600.0,
+        "friction_factor": 0.024,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 1.2,
+        "diameter_m": 0.25
+      }
+    }
+  ]
+}

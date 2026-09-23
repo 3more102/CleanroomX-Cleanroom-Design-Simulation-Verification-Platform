@@ -65,6 +65,29 @@ def test_unequal_loop_matches_analytical_parallel_path_ratio() -> None:
     assert flows["Series 1"] == pytest.approx(flows["Series 2"], abs=1e-6)
 
 
+def test_reference_node_choice_does_not_change_edge_flows() -> None:
+    first = _symmetric_loop()
+    second = LoopedFlowNetwork(
+        name=first.name,
+        node_injections_m3_h=first.node_injections_m3_h,
+        edges=first.edges,
+        reference_node="Sink",
+    )
+
+    first_result = solve_looped_network(first)
+    second_result = solve_looped_network(second)
+    first_flows = {
+        edge["name"]: edge["airflow_m3_h"]
+        for edge in first_result["edges"]
+    }
+    second_flows = {
+        edge["name"]: edge["airflow_m3_h"]
+        for edge in second_result["edges"]
+    }
+
+    assert second_flows == pytest.approx(first_flows, abs=1e-6)
+
+
 def test_edge_may_solve_opposite_to_declared_direction() -> None:
     network = LoopedFlowNetwork(
         name="Reverse declared edge",

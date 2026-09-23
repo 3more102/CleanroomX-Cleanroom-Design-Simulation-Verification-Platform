@@ -42,6 +42,13 @@ def test_qualification_indeterminate_is_attention_item() -> None:
     assert summary["adverse_items"]["qualification_indeterminate"] == 1
 
 
+def test_recovery_indeterminate_is_attention_item() -> None:
+    recovery = [{"criterion_status": "indeterminate"}]
+    summary = summarize_dossier_components(recovery=recovery)
+    assert summary["state"] == "attention_required"
+    assert summary["adverse_items"]["recovery_indeterminate"] == 1
+
+
 def test_psychrometric_missing_provenance_is_unresolved_not_failure() -> None:
     summary = summarize_dossier_components(
         psychrometric_uncertainty=[

@@ -1,4 +1,16 @@
 # Changelog
+## v0.63 selected crossing-candidate provenance — 2026-09-24
+
+- Orders discrete supplied-point crossing candidates using the nonlinear solver's actual selection policy: tolerance-contact fan points first in point order, followed by strict positive-to-negative sign-change segments in segment order.
+- Records the exact selected candidate for every solved nonlinear fan/variable-friction case, including candidate kind, zero-based solver-priority rank, additional candidate count, and whether the selected sampled feature is the only discrete candidate.
+- Leaves selected-candidate fields unset for no-intersection and non-converged cases rather than fabricating a choice.
+- Propagates selected-candidate provenance through nonlinear uncertainty corners and aggregates selected-evidence coverage, first-priority-selection coverage, and exact solved-corner indices where additional discrete candidates remain.
+- Surfaces the selection policy and selected-candidate evidence in standalone reports while extending engineering-dossier residual-topology summaries.
+- Adds deterministic regression coverage for multiple synthetic discrete candidates and for repository example/uncertainty/dossier propagation.
+- Preserves the independently added v0.62 interpolation-segment position audit.
+- Treats this as deterministic sampled-data solver-choice provenance only; it does not prove continuous physical intersection count or uniqueness and does not define dynamic stability, stall/surge, manufacturer-region, commissioning, certification, or equipment-acceptance criteria.
+- Bumped package/runtime metadata to v0.63.0.
+
 ## v0.62 fan-curve interpolation segment-position audit — 2026-09-24
 
 - Adds per-solved-corner evidence for the exact supplied fan-curve interpolation segment containing the nonlinear operating point.

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.1 duct-input hardening — 2026-09-23
+
+- Rejected non-finite duct inputs (NaN and positive/negative infinity) before pressure-loss analysis.
+- Added regression coverage for airflow, air density, friction factor, local-loss coefficient, length, and circular/rectangular geometry dimensions.
+- Synchronized package runtime metadata with the v0.6 release line.
+- Corrected duct-model documentation that still referred to v0.5.
+
 ## v0.6 duct critical-path pressure loss — 2026-09-23
 
 - Added circular and rectangular duct-section models with strict input validation.

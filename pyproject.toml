@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleanroomx"
-version = "0.6.0"
+version = "0.6.1"
 description = "Cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"

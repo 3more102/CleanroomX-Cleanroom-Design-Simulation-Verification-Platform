@@ -6,15 +6,15 @@ from dataclasses import dataclass
 
 def _positive(value: float, field_name: str) -> float:
     value = float(value)
-    if value <= 0:
-        raise ValueError(f"{field_name} must be > 0")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{field_name} must be finite and > 0")
     return value
 
 
 def _nonnegative(value: float, field_name: str) -> float:
     value = float(value)
-    if value < 0:
-        raise ValueError(f"{field_name} must be >= 0")
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{field_name} must be finite and >= 0")
     return value
 
 

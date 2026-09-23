@@ -336,6 +336,42 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow} | {pressure} |"
             )
 
+    if result.get("fan_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan-speed affinity-law studies",
+                "",
+                "| Study | Status | Speed cases | Solved | Unresolved |",
+                "|---|---|---:|---:|---:|",
+            ]
+        )
+        for item in result["fan_speed_studies"]:
+            solved = item.get("counts", {}).get("solved", 0)
+            unresolved = item.get("counts", {}).get(
+                "no_intersection_in_supplied_range", 0
+            )
+            lines.append(
+                f"| {item['study']} | {item['status']} | "
+                f"{item['speed_case_count']} | {solved} | {unresolved} |"
+            )
+            lines.extend(
+                [
+                    "",
+                    "| Speed ratio | Speed rpm | Status | Operating airflow m³/h | System pressure Pa |",
+                    "|---:|---:|---|---:|---:|",
+                ]
+            )
+            for case in item["speed_cases"]:
+                point = case["operating_point"]
+                rpm = "—" if case["speed_rpm"] is None else case["speed_rpm"]
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = "—" if point is None else point["system_pressure_pa"]
+                lines.append(
+                    f"| {case['speed_ratio']} | {rpm} | {case['status']} | "
+                    f"{airflow} | {pressure} |"
+                )
+
     fan_airflow_consistency = result.get("consistency_checks", {}).get(
         "hvac_fan_operating_airflow"
     )

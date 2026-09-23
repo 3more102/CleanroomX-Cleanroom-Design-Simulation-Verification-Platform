@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.17 uncertainty-aware recovery acceptance — 2026-09-23
+
+- Added optional absolute concentration uncertainty to measured recovery samples with zero-uncertainty backward compatibility.
+- Added deterministic concentration intervals and confirmed-above, overlaps-target, and confirmed-at-or-below sample states.
+- Added conservative pass/fail/indeterminate/incomplete/not-checked maximum-time decisions using only project-supplied targets, deadlines, and uncertainties.
+- Preserved nominal observed recovery timing and added first possible/first confirmed recovery sample reporting.
+- Kept log-linear recovery fitting nominal-only and outside the acceptance decision.
+- Added CLI exit code 4 for indeterminate recovery and propagated that state into engineering-dossier attention tracking.
+- Updated Markdown/JSON reports, example input, recovery/dossier documentation, finite-input validation, and regression coverage.
+
 ## v0.16 fan-driven passive parallel-network integration — 2026-09-23
 
 - Coupled the bounded fan/system operating-point solver to the passive common-pressure-node parallel-path model.
@@ -19,7 +29,7 @@
 - Added bounded vapor-pressure, humidity-ratio, enthalpy, specific-volume, dew-point, and moist-air specific-heat results.
 - Added provenance completeness reporting without inventing uncertainty magnitudes, probability distributions, covariance, or acceptance limits.
 - Added JSON loading, Markdown/JSON reporting, the `cleanroomx-psychrometric-uncertainty` CLI, example data, documentation, and regression coverage.
-- Kept the v0.10 thermal uncertainty workflow psychrometrically fixed; explicit cross-module coupling remains a later milestone.
+- The standalone v0.15 psychrometric workflow remains independently usable; subsequent thermal-uncertainty coupling can also propagate bounded room/outdoor psychrometric states.
 
 ## v0.14 fan/duct-network operating-point integration — 2026-09-23
 

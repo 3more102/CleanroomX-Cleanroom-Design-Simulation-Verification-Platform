@@ -4,6 +4,7 @@ import math
 from dataclasses import dataclass, field
 
 from .hvac_models import AirState
+from .psychrometric_uncertainty_models import UncertainAirState
 from .uncertainty_models import UncertainValue
 
 
@@ -30,14 +31,17 @@ def _expect_unit(item: UncertainValue, expected: str, field_name: str) -> None:
         )
 
 
+AirStateInput = AirState | UncertainAirState
+
+
 @dataclass(frozen=True)
 class UncertainThermalDesign:
     name: str
-    room_air: AirState
+    room_air: AirStateInput
     cleanroom_airflow_m3_h: UncertainValue
     internal_sensible_kw: UncertainValue
     internal_latent_kw: UncertainValue
-    outdoor_air: AirState | None = None
+    outdoor_air: AirStateInput | None = None
     makeup_airflow_m3_h: UncertainValue = field(
         default_factory=lambda: UncertainValue(0.0, "m3/h")
     )
@@ -50,18 +54,10 @@ class UncertainThermalDesign:
         if not self.name.strip():
             raise ValueError("thermal uncertainty analysis name cannot be empty")
 
-        _expect_unit(
-            self.cleanroom_airflow_m3_h,
-            "m3/h",
-            "cleanroom_airflow_m3_h",
-        )
+        _expect_unit(self.cleanroom_airflow_m3_h, "m3/h", "cleanroom_airflow_m3_h")
         _expect_unit(self.internal_sensible_kw, "kW", "internal_sensible_kw")
         _expect_unit(self.internal_latent_kw, "kW", "internal_latent_kw")
-        _expect_unit(
-            self.makeup_airflow_m3_h,
-            "m3/h",
-            "makeup_airflow_m3_h",
-        )
+        _expect_unit(self.makeup_airflow_m3_h, "m3/h", "makeup_airflow_m3_h")
 
         if self.cleanroom_airflow_m3_h.lower <= 0:
             raise ValueError(
@@ -86,13 +82,19 @@ class UncertainThermalDesign:
 
         if self.supply_air_temp_c is not None:
             _expect_unit(self.supply_air_temp_c, "C", "supply_air_temp_c")
+            room_min_c = (
+                self.room_air.dry_bulb_c.lower
+                if isinstance(self.room_air, UncertainAirState)
+                else self.room_air.dry_bulb_c
+            )
             if (
                 self.internal_sensible_kw.upper > 0
-                and self.supply_air_temp_c.upper >= self.room_air.dry_bulb_c
+                and self.supply_air_temp_c.upper >= room_min_c
             ):
                 raise ValueError(
                     "supply_air_temp_c upper uncertainty bound must remain below "
-                    "room dry-bulb temperature when sensible load can be positive"
+                    "the lowest room dry-bulb temperature when sensible load can "
+                    "be positive"
                 )
 
         object.__setattr__(

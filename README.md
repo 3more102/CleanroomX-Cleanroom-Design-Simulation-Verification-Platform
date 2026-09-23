@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.20 engineering core
+## v0.21 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -18,6 +18,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
 - Path-based duct pressure-loss analysis using Darcy-Weisbach friction plus explicit local loss coefficients.
+- Optional Darcy friction-factor resolution from explicit absolute roughness and kinematic viscosity, with Reynolds-number evidence and preserved manual-factor compatibility.
 - Circular and rectangular duct geometry with hydraulic-diameter reporting.
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
@@ -51,6 +52,8 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. The v0.19 fan-speed workflow applies user-requested affinity-law speed ratios to supplied reference fan-curve points and reuses the bounded operating-point solver at each transformed speed. These are bounded models rather than a general nonlinear duct-network/control solver; CleanroomX does not infer arbitrary looped-network flows, variable friction factors, damper positions, leakage, system effect, acoustics, stall/surge limits, motor/VFD limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
+v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
+
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. These workflows do not model covariance, hourly weather/load behavior, or equipment selection.
 
 ## Install
@@ -79,6 +82,10 @@ A failing configured verification requirement returns exit code 2.
 Duct critical-path demo:
 
     cleanroomx-hvac examples/duct_network_demo.json
+
+Automatic Darcy-friction demo (explicit roughness and kinematic viscosity):
+
+    cleanroomx-hvac examples/auto_friction_duct_demo.json
 
 Branch-flow supply-tree demo:
 

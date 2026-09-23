@@ -30,13 +30,27 @@ def thermal_design_from_dict(data: dict) -> ThermalDesign:
     )
 
 
+def _with_optional_friction_factor(data: dict) -> dict:
+    values = dict(data)
+    if (
+        "friction_factor" not in values
+        and (
+            "absolute_roughness_m" in values
+            or "kinematic_viscosity_m2_s" in values
+        )
+    ):
+        values["friction_factor"] = None
+    return values
+
+
 def duct_network_from_dict(data: dict) -> DuctNetwork:
     return DuctNetwork(
         paths=tuple(
             DuctPath(
                 name=path["name"],
                 sections=tuple(
-                    DuctSection(**section) for section in path["sections"]
+                    DuctSection(**_with_optional_friction_factor(section))
+                    for section in path["sections"]
                 ),
             )
             for path in data["paths"]
@@ -44,11 +58,13 @@ def duct_network_from_dict(data: dict) -> DuctNetwork:
     )
 
 
-
 def branch_flow_network_from_dict(data: dict) -> BranchFlowNetwork:
     return BranchFlowNetwork(
         source_node=data["source_node"],
-        branches=tuple(BranchDuct(**branch) for branch in data["branches"]),
+        branches=tuple(
+            BranchDuct(**_with_optional_friction_factor(branch))
+            for branch in data["branches"]
+        ),
         terminal_demands=tuple(
             TerminalDemand(**terminal) for terminal in data["terminal_demands"]
         ),

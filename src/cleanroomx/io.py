@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .models import ParticleRequirement, RoomSpec
+from .models import ParticleRequirement, PressureCascadeSpec, PressureRequirement, PressureZone, RoomSpec
 
 
 def load_room(path: str | Path) -> RoomSpec:
@@ -27,3 +27,20 @@ def load_room(path: str | Path) -> RoomSpec:
         observed_pressure_pa=data.get("observed_pressure_pa"),
         particle_requirements=particle_requirements,
     )
+
+
+def load_pressure_cascade(path: str | Path) -> PressureCascadeSpec:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    zones = tuple(
+        PressureZone(name=item["name"], observed_pressure_pa=item["observed_pressure_pa"])
+        for item in data["zones"]
+    )
+    requirements = tuple(
+        PressureRequirement(
+            high_zone=item["high_zone"],
+            low_zone=item["low_zone"],
+            min_delta_pa=item["min_delta_pa"],
+        )
+        for item in data["requirements"]
+    )
+    return PressureCascadeSpec(name=data["name"], zones=zones, requirements=requirements)

@@ -386,9 +386,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.extend(
             [
                 "",
-                "These are min/max values across evaluated solved corners "
-                "only. Efficiency values are fixed explicit inputs here, not "
-                "uncertain variables, and no missing efficiency is inferred.",
+                "These are min/max values across evaluated solved hydraulic "
+                "corners at the nominal explicit efficiency values. Any configured "
+                "efficiency uncertainty is propagated separately below; no missing "
+                "efficiency is inferred.",
             ]
         )
 

@@ -1,4 +1,13 @@
 # Changelog
+## Unreleased — bounded fan-power efficiency uncertainty — 2026-09-24
+
+- Adds explicit bounded uncertainty for user-supplied fan, motor, and VFD efficiencies while keeping the existing `power_efficiencies` values as the nominal source.
+- Crosses efficiency endpoint combinations with every solved nonlinear aerodynamic corner for power evidence only; airflow, pressure, solver-quality, nominal-relative excursion, and fan-curve boundary-clearance evidence are unchanged.
+- Reports evaluated-case ranges for fluid air power, shaft power, electrical input, and specific fan power with tie-aware hydraulic/efficiency witnesses.
+- Rejects invalid `(0, 1]` efficiency bounds, missing nominal efficiency inputs, ineffective motor-efficiency uncertainty without an explicit VFD efficiency, and excessive combined power-case counts.
+- Adds JSON loading, standalone Markdown reporting, dossier summaries, traceability, examples, and regression coverage.
+- No package-version bump is assigned on this feature branch; release numbering is left to the aggregate integration branch.
+
 ## v0.53 nominal-relative corner excursion evidence — 2026-09-24
 
 - Adds nominal-centered absolute and percentage excursion evidence for complete nonlinear fan/variable-friction uncertainty operating-point envelopes.

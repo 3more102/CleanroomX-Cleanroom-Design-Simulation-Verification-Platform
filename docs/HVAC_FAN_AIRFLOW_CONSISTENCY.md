@@ -8,10 +8,13 @@ This check detects contradictory design inputs or study outputs across modules. 
 
 Supported fan-study results:
 
-- standalone fan/system operating-point studies,
-- reference-flow fan/duct-network operating-point studies,
-- fan-driven passive parallel-network studies,
-- individual cases from bounded fan-speed affinity-law studies.
+- standalone fan/system operating-point studies;
+- reference-flow fan/duct-network operating-point studies;
+- fan-driven passive parallel-network studies;
+- fixed-resistance fan/loop-network operating points;
+- fan/variable-friction loop operating points;
+- individual cases from standalone, fixed-resistance-loop, and variable-friction-loop fan-speed studies; and
+- individual evaluated corners from nonlinear fan/variable-friction uncertainty analyses.
 
 ## Dossier configuration
 
@@ -25,11 +28,11 @@ Supported fan-study results:
 }
 ```
 
-The dossier must also include an `hvac_project` and at least one supported fan operating-point or fan-speed study. Each fan-speed case is compared independently because each solved speed ratio has its own operating airflow.
+The dossier must also include an `hvac_project` and at least one supported fan workflow. Each fan-speed case is compared independently because each solved speed ratio has its own operating airflow. Each nonlinear uncertainty corner is also compared independently; an unresolved or non-converged corner remains `not_comparable` rather than being replaced by an envelope midpoint or fabricated airflow.
 
 ## Decision logic
 
-For each fan operating point, including each fan-speed case, CleanroomX compares:
+For each fan operating point, fan-speed case, or evaluated nonlinear-uncertainty corner, CleanroomX compares:
 
 `fan operating airflow - HVAC total governing airflow`
 

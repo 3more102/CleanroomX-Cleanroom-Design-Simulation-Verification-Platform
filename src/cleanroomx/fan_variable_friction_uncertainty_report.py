@@ -352,6 +352,86 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"{case['fixed_pressure_pa']} |"
                 )
 
+    quality = result.get("solver_quality_summary")
+    if quality:
+        coverage_label = (
+            "complete"
+            if quality["complete_study_coverage"]
+            else "incomplete"
+        )
+        lines.extend(
+            [
+                "",
+                "## Aggregate solver-quality evidence",
+                "",
+                "- Solved evaluated corners: "
+                f"**{quality['solved_corner_count']}/{quality['corner_count']}**",
+                "- Complete study coverage: "
+                f"**{coverage_label}** (nominal status: "
+                f"{quality['nominal_status']})",
+                "",
+                "| Metric | Worst value | Unit | Configured tolerance | Witness source corner(s) |",
+                "|---|---:|---|---:|---|",
+            ]
+        )
+        tolerances = quality["configured_tolerances"]
+        metric_rows = (
+            (
+                "absolute_operating_pressure_residual_pa",
+                "Absolute operating pressure residual",
+                "operating_pressure_tolerance_pa",
+            ),
+            (
+                "network_max_relative_resistance_closure_error",
+                "Resistance closure error",
+                "resistance_relative_tolerance",
+            ),
+            (
+                "max_abs_mass_balance_residual_m3_h",
+                "Mass-balance residual",
+                "mass_balance_tolerance_m3_h",
+            ),
+            (
+                "max_abs_pressure_law_residual_pa",
+                "Pressure-law residual",
+                None,
+            ),
+            (
+                "network_outer_iterations",
+                "Network outer iterations",
+                None,
+            ),
+            (
+                "operating_iterations",
+                "Operating-point iterations",
+                None,
+            ),
+        )
+        for metric_key, label, tolerance_key in metric_rows:
+            evidence = quality["worst_metrics"].get(metric_key)
+            if evidence is None:
+                lines.append(
+                    f"| {label} | — | — | "
+                    f"{'—' if tolerance_key is None else tolerances[tolerance_key]} | — |"
+                )
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                source_text = _fmt_extreme_source(source)
+                if "observed_value" in source:
+                    source_text += f"; observed={source['observed_value']}"
+                source_texts.append(source_text)
+            tolerance = (
+                "—"
+                if tolerance_key is None
+                else tolerances[tolerance_key]
+            )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{tolerance} | {' / '.join(source_texts)} |"
+            )
+        lines.extend(["", quality["scope_note"]])
+
     edge_sources = result.get("edge_airflow_extrema_sources")
     if edge_sources:
         lines.extend(

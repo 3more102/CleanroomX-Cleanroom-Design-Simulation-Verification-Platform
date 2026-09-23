@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Provenance complete |",
-                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---|",
             ]
         )
         for item in result[
@@ -656,6 +656,21 @@ def markdown_dossier_report(result: dict) -> str:
                 )
                 if bracket_evidence is not None:
                     bracket_gap = bracket_evidence["value"]
+            conditioning_summary = item.get(
+                "fan_curve_crossing_conditioning_summary"
+            )
+            crossing_gradient = "—"
+            crossing_coverage = "—"
+            if conditioning_summary is not None:
+                crossing_coverage = (
+                    f"{conditioning_summary['conditioning_evidence_corner_count']}/"
+                    f"{conditioning_summary['corner_count']}"
+                )
+                crossing_evidence = conditioning_summary.get(
+                    "minimum_absolute_fan_minus_system_slope_pa_per_m3_h"
+                )
+                if crossing_evidence is not None:
+                    crossing_gradient = crossing_evidence["value"]
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
@@ -669,6 +684,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{fan_curve_headroom} | "
                 f"{boundary_coverage} | "
                 f"{bracket_gap} | {bracket_coverage} | "
+                f"{crossing_gradient} | {crossing_coverage} | "
                 f"{item['traceability']['complete']} |"
             )
             integrity = item.get("result_integrity")

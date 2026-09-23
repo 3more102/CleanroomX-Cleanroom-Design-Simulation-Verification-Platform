@@ -2231,6 +2231,30 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert summary[
         "solved_with_additional_candidate_feature_corner_count"
     ] >= 0
+    separation_gaps = [
+        corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+        )
+        for corner in result["corners"]
+        if corner["status"] == "solved"
+        and corner["fan_curve_supplied_point_residual_audit"] is not None
+        and corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+        )
+        is not None
+    ]
+    assert summary[
+        "alternative_candidate_separation_evidence_corner_count"
+    ] == len(separation_gaps)
+    minimum_gap = summary[
+        "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
+    ]
+    if separation_gaps:
+        assert minimum_gap is not None
+        assert minimum_gap["value"] == pytest.approx(min(separation_gaps))
+        assert minimum_gap["sources"]
+    else:
+        assert minimum_gap is None
     assert summary["residual_increase_corner_count"] == 0
     assert summary["residual_increase_corner_indices"] == []
     assert summary["maximum_positive_residual_increase_pa"] is None
@@ -2247,6 +2271,7 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "Supplied-point residual topology across corners" in report
     assert "Corners monotonic non-increasing within tolerance" in report
     assert "Solved corners with selected-candidate provenance" in report
+    assert "alternative-candidate separation evidence" in report
     assert "do not prove continuous uniqueness" in report
 
 

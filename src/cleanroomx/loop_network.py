@@ -231,11 +231,10 @@ def solve_looped_network(
     iterations = 0
     while True:
         residuals, edge_flows = evaluate(pressures)
-        max_unknown_residual = max(
-            (abs(residuals[node]) for node in unknown_nodes),
-            default=0.0,
+        max_mass_balance_residual = max(
+            abs(residuals[node]) for node in nodes
         )
-        if max_unknown_residual <= tolerance_m3_s:
+        if max_mass_balance_residual <= tolerance_m3_s:
             break
         if iterations >= max_iterations:
             raise RuntimeError(
@@ -271,7 +270,7 @@ def solve_looped_network(
             jacobian,
             [-residuals[node] for node in unknown_nodes],
         )
-        baseline = max_unknown_residual
+        baseline = max_mass_balance_residual
         line_search_scale = 1.0
         accepted = False
         while line_search_scale >= 2.0**-20:
@@ -282,8 +281,7 @@ def solve_looped_network(
                 )
             candidate_residuals, _ = evaluate(candidate)
             candidate_norm = max(
-                (abs(candidate_residuals[node]) for node in unknown_nodes),
-                default=0.0,
+                abs(candidate_residuals[node]) for node in nodes
             )
             if candidate_norm < baseline:
                 pressures = candidate

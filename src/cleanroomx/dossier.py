@@ -198,6 +198,24 @@ def _consistency_summary(result: dict | None) -> dict:
     }
 
 
+def _fan_airflow_consistency_summary(result: dict | None) -> dict:
+    if result is None:
+        return {
+            "status": "not_included",
+            "study_count": 0,
+            "solved_study_count": 0,
+            "mismatch_count": 0,
+            "unresolved_study_count": 0,
+        }
+    return {
+        "status": result["status"],
+        "study_count": result.get("study_count", 0),
+        "solved_study_count": result.get("solved_study_count", 0),
+        "mismatch_count": result.get("mismatch_count", 0),
+        "unresolved_study_count": result.get("unresolved_study_count", 0),
+    }
+
+
 def summarize_dossier_components(
     verification: dict | None = None,
     hvac: dict | None = None,
@@ -210,6 +228,7 @@ def summarize_dossier_components(
     fan_duct_networks: list[dict] | None = None,
     fan_parallel_networks: list[dict] | None = None,
     consistency: dict | None = None,
+    fan_airflow_consistency: dict | None = None,
 ) -> dict:
     recovery = recovery or []
     uncertainty = uncertainty or []
@@ -234,6 +253,9 @@ def summarize_dossier_components(
         "fan_duct_networks": _fan_duct_network_summary(fan_duct_networks),
         "fan_parallel_networks": _fan_parallel_network_summary(fan_parallel_networks),
         "cross_module_consistency": _consistency_summary(consistency),
+        "hvac_fan_operating_airflow_consistency": _fan_airflow_consistency_summary(
+            fan_airflow_consistency
+        ),
     }
 
     adverse = {
@@ -264,6 +286,11 @@ def summarize_dossier_components(
             if components["cross_module_consistency"]["status"] == "fail"
             else 0
         ),
+        "hvac_fan_operating_airflow_mismatches": (
+            components["hvac_fan_operating_airflow_consistency"]["mismatch_count"]
+            if components["hvac_fan_operating_airflow_consistency"]["status"] == "fail"
+            else 0
+        ),
     }
     unresolved = {
         "verification_not_checked": components["verification"]["counts"].get("not_checked", 0),
@@ -279,6 +306,14 @@ def summarize_dossier_components(
         "cross_module_consistency_not_comparable": (
             1
             if components["cross_module_consistency"]["status"] == "not_comparable"
+            else 0
+        ),
+        "hvac_fan_operating_airflow_unresolved": (
+            components["hvac_fan_operating_airflow_consistency"][
+                "unresolved_study_count"
+            ]
+            if components["hvac_fan_operating_airflow_consistency"]["status"]
+            in {"not_comparable", "pass_with_unresolved_studies"}
             else 0
         ),
     }
@@ -333,7 +368,10 @@ def _clean_source(record: dict) -> dict:
 
 
 def build_dossier(manifest_path: str | Path) -> dict:
-    from .consistency import analyze_project_consistency
+    from .consistency import (
+        analyze_hvac_fan_airflow_consistency,
+        analyze_project_consistency,
+    )
     from .fan_curve import solve_fan_operating_point
     from .fan_curve_io import load_fan_operating_point_study
     from .fan_duct_network import analyze_fan_duct_network
@@ -495,6 +533,41 @@ def build_dossier(manifest_path: str | Path) -> dict:
             ),
         )
 
+    fan_airflow_consistency = None
+    fan_airflow_config = consistency_block.get("hvac_fan_operating_airflow")
+    if fan_airflow_config is not None:
+        if not isinstance(fan_airflow_config, dict):
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency configuration must be an object"
+            )
+        if hvac is None:
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency requires hvac_project"
+            )
+        if not (
+            fan_operating_points or fan_duct_networks or fan_parallel_networks
+        ):
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency requires at least one "
+                "fan operating-point study"
+            )
+        allowed_keys = {"airflow_abs_tolerance_m3_h"}
+        unknown_keys = set(fan_airflow_config) - allowed_keys
+        if unknown_keys:
+            raise ValueError(
+                "unsupported hvac_fan_operating_airflow option(s): "
+                + ", ".join(sorted(unknown_keys))
+            )
+        fan_airflow_consistency = analyze_hvac_fan_airflow_consistency(
+            hvac,
+            fan_operating_points=fan_operating_points,
+            fan_duct_networks=fan_duct_networks,
+            fan_parallel_networks=fan_parallel_networks,
+            airflow_abs_tolerance_m3_h=fan_airflow_config.get(
+                "airflow_abs_tolerance_m3_h", 0.0
+            ),
+        )
+
     summary = summarize_dossier_components(
         verification=verification,
         hvac=hvac,
@@ -507,6 +580,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         fan_duct_networks=fan_duct_networks,
         fan_parallel_networks=fan_parallel_networks,
         consistency=consistency,
+        fan_airflow_consistency=fan_airflow_consistency,
     )
     return {
         "dossier": name,
@@ -530,5 +604,6 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "fan_parallel_network_studies": fan_parallel_networks,
         "consistency_checks": {
             "verification_hvac_airflow": consistency,
+            "hvac_fan_operating_airflow": fan_airflow_consistency,
         },
     }

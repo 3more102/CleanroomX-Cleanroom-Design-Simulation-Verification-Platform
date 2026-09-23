@@ -157,6 +157,50 @@ class DuctSection:
         )
 
 
+def derive_duct_section_quadratic_resistance(section: DuctSection) -> dict:
+    """Freeze a duct section into a quadratic pressure-loss resistance.
+
+    The Darcy factor is evaluated at the section's configured reference airflow.
+    The returned resistance then represents the bounded fixed law deltaP = R*Q^2.
+    """
+    friction = section.friction_analysis()
+    friction_factor = friction["friction_factor"]
+    loss_multiplier = (
+        friction_factor
+        * section.length_m
+        / section.hydraulic_diameter_m
+        + section.local_loss_coefficient
+    )
+    resistance = (
+        0.5
+        * section.air_density_kg_m3
+        * loss_multiplier
+        / (section.area_m2**2)
+    )
+    reference_airflow_m3_s = section.airflow_m3_h / 3600.0
+    reference_pressure_drop_pa = (
+        resistance * reference_airflow_m3_s**2
+    )
+    return {
+        "quadratic_resistance_pa_per_m3_s_squared": resistance,
+        "reference_airflow_m3_h": section.airflow_m3_h,
+        "reference_airflow_m3_s": reference_airflow_m3_s,
+        "reference_pressure_drop_pa": reference_pressure_drop_pa,
+        "shape": section.shape,
+        "area_m2": section.area_m2,
+        "hydraulic_diameter_m": section.hydraulic_diameter_m,
+        "length_m": section.length_m,
+        "air_density_kg_m3": section.air_density_kg_m3,
+        "local_loss_coefficient": section.local_loss_coefficient,
+        "friction_factor": friction_factor,
+        "friction_factor_method": friction["method"],
+        "reynolds_number": friction["reynolds_number"],
+        "absolute_roughness_m": friction["absolute_roughness_m"],
+        "relative_roughness": friction["relative_roughness"],
+        "kinematic_viscosity_m2_s": friction["kinematic_viscosity_m2_s"],
+    }
+
+
 @dataclass(frozen=True)
 class DuctPath:
     name: str

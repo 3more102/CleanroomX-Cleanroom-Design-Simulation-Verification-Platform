@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8 room-linked branch-flow supply network — 2026-09-23
+
+- Added rooted directed supply-tree topology with explicit source, branches, and leaf terminal-to-room mappings.
+- Derived each terminal demand automatically from the mapped room's computed governing HVAC airflow instead of duplicating airflow in duct input.
+- Added upstream branch-flow propagation by steady-state mass continuity, per-node continuity residuals, and source-flow reporting.
+- Reused the hardened Darcy-Weisbach/local-K section model at solved branch flows and accumulated source-to-terminal pressure losses.
+- Added critical-terminal selection and direct integration of computed branch-network duct loss into preliminary fan duty.
+- Added validation for multiple feeds, disconnected nodes, invalid leaf mappings, duplicate room mappings, and HVAC rooms not mapped exactly once.
+- Preserved the v0.6 explicit path-comparison model for backward compatibility and the complete v0.7 uncertainty/qualification feature set.
+- Added JSON loading, Markdown reporting, tests, example data, documentation, and package version 0.8.0.
+
 ## v0.7 qualification uncertainty — 2026-09-23
 
 - Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.

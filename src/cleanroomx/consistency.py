@@ -119,6 +119,7 @@ def analyze_hvac_fan_airflow_consistency(
     fan_loop_speed_studies: list[dict] | None = None,
     fan_variable_friction_loops: list[dict] | None = None,
     fan_variable_friction_speed_studies: list[dict] | None = None,
+    fan_variable_friction_uncertainty_analyses: list[dict] | None = None,
     airflow_abs_tolerance_m3_h: float = 0.0,
 ) -> dict:
     """Compare solved fan-study airflow against the HVAC governing airflow."""
@@ -223,6 +224,21 @@ def analyze_hvac_fan_airflow_consistency(
                     "study": f"{study_name} @ {ratio}x",
                     "status": case.get("status"),
                     "fan_operating_point": case.get("fan_operating_point"),
+                },
+                "fan_operating_point",
+            )
+
+    for analysis in fan_variable_friction_uncertainty_analyses or []:
+        analysis_name = str(analysis.get("analysis", "")).strip() or "unnamed"
+        for corner_index, corner in enumerate(
+            analysis.get("corners", []), start=1
+        ):
+            add_check(
+                "fan_variable_friction_uncertainty_corner",
+                {
+                    "study": f"{analysis_name} @ corner {corner_index}",
+                    "status": corner.get("status"),
+                    "fan_operating_point": corner.get("operating_point"),
                 },
                 "fan_operating_point",
             )

@@ -134,6 +134,27 @@ def _fan_operating_point_summary(results: list[dict]) -> dict:
     }
 
 
+def _consistency_summary(result: dict | None) -> dict:
+    if result is None or result.get("status") == "not_configured":
+        return {
+            "status": "not_configured",
+            "comparison_count": 0,
+            "failed_comparisons": 0,
+            "required_unmapped_rooms": 0,
+            "issue_count": 0,
+        }
+    required_unmapped = len(
+        result.get("required_unmapped_verification_rooms", [])
+    ) + len(result.get("required_unmapped_hvac_rooms", []))
+    return {
+        "status": result["status"],
+        "comparison_count": len(result.get("comparisons", [])),
+        "failed_comparisons": result.get("failed_comparison_count", 0),
+        "required_unmapped_rooms": required_unmapped,
+        "issue_count": result.get("issue_count", 0),
+    }
+
+
 def summarize_dossier_components(
     verification: dict | None = None,
     hvac: dict | None = None,
@@ -142,6 +163,7 @@ def summarize_dossier_components(
     qualification: list[dict] | None = None,
     thermal_uncertainty: list[dict] | None = None,
     fan_operating_points: list[dict] | None = None,
+    consistency: dict | None = None,
 ) -> dict:
     recovery = recovery or []
     uncertainty = uncertainty or []
@@ -157,6 +179,7 @@ def summarize_dossier_components(
         "qualification": _qualification_summary(qualification),
         "thermal_uncertainty": _thermal_uncertainty_summary(thermal_uncertainty),
         "fan_operating_points": _fan_operating_point_summary(fan_operating_points),
+        "cross_module_consistency": _consistency_summary(consistency),
     }
 
     adverse = {
@@ -175,6 +198,9 @@ def summarize_dossier_components(
         "fan_operating_points_unsolved": components["fan_operating_points"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
+        "cross_module_consistency_issues": components[
+            "cross_module_consistency"
+        ].get("issue_count", 0),
     }
     unresolved = {
         "verification_not_checked": components["verification"]["counts"].get("not_checked", 0),
@@ -183,6 +209,11 @@ def summarize_dossier_components(
         "qualification_not_checked": components["qualification"]["counts"].get("not_checked", 0),
         "thermal_uncertainty_not_checked": components["thermal_uncertainty"]["counts"].get(
             "not_checked", 0
+        ),
+        "cross_module_consistency_not_checked": (
+            1
+            if components["cross_module_consistency"]["status"] == "not_checked"
+            else 0
         ),
     }
 
@@ -236,6 +267,7 @@ def _clean_source(record: dict) -> dict:
 
 
 def build_dossier(manifest_path: str | Path) -> dict:
+    from .consistency import check_verification_hvac_airflow_consistency
     from .fan_curve import solve_fan_operating_point
     from .fan_curve_io import load_fan_operating_point_study
     from .hvac import analyze_hvac_project
@@ -319,6 +351,15 @@ def build_dossier(manifest_path: str | Path) -> dict:
     if not source_records:
         raise ValueError("dossier must reference at least one analysis input file")
 
+    consistency_block = data.get("consistency_checks", {})
+    if not isinstance(consistency_block, dict):
+        raise ValueError("consistency_checks must be an object when provided")
+    consistency = check_verification_hvac_airflow_consistency(
+        verification,
+        hvac,
+        consistency_block.get("verification_hvac_airflow"),
+    )
+
     summary = summarize_dossier_components(
         verification=verification,
         hvac=hvac,
@@ -327,6 +368,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         qualification=qualification,
         thermal_uncertainty=thermal_uncertainty,
         fan_operating_points=fan_operating_points,
+        consistency=consistency,
     )
     return {
         "dossier": name,
@@ -345,4 +387,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "uncertainty_rooms": uncertainty,
         "thermal_uncertainty_analyses": thermal_uncertainty,
         "fan_operating_point_studies": fan_operating_points,
+        "consistency_checks": {
+            "verification_hvac_airflow": consistency,
+        },
     }

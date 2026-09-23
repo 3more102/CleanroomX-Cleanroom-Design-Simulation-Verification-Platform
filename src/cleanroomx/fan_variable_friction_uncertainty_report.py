@@ -536,6 +536,80 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
 
         lines.extend(["", quality["scope_note"]])
 
+    excursions = result.get("operating_point_excursions_from_nominal")
+    power_excursions = result.get("power_evidence_excursions_from_nominal")
+    if excursions:
+        lines.extend(
+            [
+                "",
+                "## Evaluated-corner excursions from nominal",
+                "",
+                "| Metric | Nominal | Lower delta | Upper delta | Lower % | Upper % | Unit |",
+                "|---|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        excursion_rows = (
+            ("airflow_m3_h", "Operating airflow"),
+            ("fan_pressure_pa", "Fan pressure"),
+            ("system_pressure_pa", "System pressure"),
+            ("air_power_kw", "Fan air power"),
+        )
+        for key, label in excursion_rows:
+            evidence = excursions[key]
+            lower_percent = (
+                "—"
+                if evidence["lower_percent"] is None
+                else evidence["lower_percent"]
+            )
+            upper_percent = (
+                "—"
+                if evidence["upper_percent"] is None
+                else evidence["upper_percent"]
+            )
+            lines.append(
+                f"| {label} | {evidence['nominal']} | "
+                f"{evidence['lower_delta']} | {evidence['upper_delta']} | "
+                f"{lower_percent} | {upper_percent} | {evidence['unit']} |"
+            )
+
+        if power_excursions:
+            power_rows = (
+                ("shaft_power_kw", "Shaft power"),
+                ("electrical_input_kw", "Electrical input"),
+                (
+                    "specific_fan_power_w_per_m3_s",
+                    "Specific fan power",
+                ),
+            )
+            for key, label in power_rows:
+                evidence = power_excursions.get(key)
+                if evidence is None:
+                    continue
+                lower_percent = (
+                    "—"
+                    if evidence["lower_percent"] is None
+                    else evidence["lower_percent"]
+                )
+                upper_percent = (
+                    "—"
+                    if evidence["upper_percent"] is None
+                    else evidence["upper_percent"]
+                )
+                lines.append(
+                    f"| {label} | {evidence['nominal']} | "
+                    f"{evidence['lower_delta']} | {evidence['upper_delta']} | "
+                    f"{lower_percent} | {upper_percent} | "
+                    f"{evidence['unit']} |"
+                )
+        lines.extend(
+            [
+                "",
+                "Excursions are relative to the solved nominal case and summarize "
+                "evaluated corners only; they are not sensitivity coefficients or "
+                "guaranteed continuous-interval extrema.",
+            ]
+        )
+
     edge_sources = result.get("edge_airflow_extrema_sources")
     if edge_sources:
         lines.extend(

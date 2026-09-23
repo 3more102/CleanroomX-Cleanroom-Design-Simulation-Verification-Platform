@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.9 engineering core
+## v0.10 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -30,6 +30,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
+- Endpoint-scenario thermal uncertainty screening across bounded room/outdoor psychrometric states, cleanroom and makeup airflow, and supply-air temperature, with input provenance.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -42,7 +43,7 @@ The decay/recovery function is a **screening model**, not CFD. It assumes a well
 
 The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. Neither is a general nonlinear duct-network solver; CleanroomX does not infer arbitrary looped-network flows, fan operating points, variable friction factors, damper positions, leakage, system effect, acoustics, controls, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules.
+The uncertainty workflows use explicit user-supplied input bounds. Qualification checks use deterministic worst-case intervals; the thermal workflow evaluates all lower/upper endpoint combinations and is explicitly a sensitivity envelope rather than a guaranteed continuous global enclosure. These workflows are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules.
 
 ## Install
 
@@ -146,6 +147,22 @@ Write a Markdown report:
 The v0.7 qualification workflow evaluates user-configured minimum/maximum requirements over the complete supplied uncertainty interval. Pressure cascades use the conservative differential interval `H_low - L_high` to `H_high - L_low`. A threshold overlap is `indeterminate`, not a pass.
 
 See docs/QUALIFICATION_UNCERTAINTY.md.
+
+## Screen thermal input uncertainty
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --output thermal-uncertainty-report.md
+
+The v0.10 thermal workflow evaluates every supplied lower/upper endpoint combination for bounded environmental and airflow inputs, then reuses the normal preliminary thermal model for each scenario. Because the psychrometric model is nonlinear, the reported range is an endpoint-scenario sensitivity envelope rather than a proof of the global extrema inside the full continuous input box.
+
+See docs/THERMAL_UNCERTAINTY.md.
 
 ## Multi-room pressure-cascade JSON
 

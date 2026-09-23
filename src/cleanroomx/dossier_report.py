@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -555,6 +555,17 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{envelope['air_power_kw']['upper']}"
                 )
             )
+            excursions = item.get("operating_point_excursions_from_nominal")
+            airflow_excursion = "—"
+            if excursions is not None:
+                airflow_evidence = excursions.get("airflow_m3_h")
+                if airflow_evidence is not None:
+                    lower_percent = airflow_evidence.get("lower_percent")
+                    upper_percent = airflow_evidence.get("upper_percent")
+                    if lower_percent is not None and upper_percent is not None:
+                        airflow_excursion = (
+                            f"{lower_percent}–{upper_percent}"
+                        )
             power_ranges = item.get("power_evidence_corner_ranges")
             electrical_input = "—"
             specific_fan_power = "—"
@@ -585,8 +596,9 @@ def markdown_dossier_report(result: dict) -> str:
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | {scenario_names} | "
-                f"{airflow_envelope} | {air_power} | {electrical_input} | "
-                f"{specific_fan_power} | {item['nominal_status']} | "
+                f"{airflow_envelope} | {airflow_excursion} | {air_power} | "
+                f"{electrical_input} | {specific_fan_power} | "
+                f"{item['nominal_status']} | "
                 f"{solver_tolerance_audit} | "
                 f"{item['traceability']['complete']} |"
             )

@@ -383,15 +383,25 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"{evidence['unit']} | {source_text} |"
                     )
 
-        lines.extend(
-            [
-                "",
-                "These are min/max values across evaluated solved aerodynamic "
-                "corners at the nominal efficiency values. Any separately "
-                "configured efficiency uncertainty is reported below; no missing "
-                "efficiency is inferred.",
-            ]
-        )
+        if result.get("power_efficiency_case_count", 0) > 0:
+            lines.extend(
+                [
+                    "",
+                    "These are min/max values across evaluated solved aerodynamic "
+                    "corners at the nominal efficiency values. Separately "
+                    "configured efficiency uncertainty is reported below; no "
+                    "missing efficiency is inferred.",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "",
+                    "These are min/max values across evaluated solved corners "
+                    "only. Efficiency values are fixed explicit inputs here, not "
+                    "uncertain variables, and no missing efficiency is inferred.",
+                ]
+            )
 
     power_uncertainty_ranges = result.get("power_uncertainty_ranges")
     power_uncertainty_sources = result.get(

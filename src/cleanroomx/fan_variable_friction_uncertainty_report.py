@@ -668,6 +668,75 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             )
         lines.extend(["", conditioning_summary["scope_note"]])
 
+    residual_summary = result.get(
+        "fan_curve_supplied_point_residual_summary"
+    )
+    nominal_residual_audit = result.get(
+        "nominal_fan_curve_supplied_point_residual_audit"
+    )
+    if residual_summary:
+        lines.extend(
+            [
+                "",
+                "## Supplied-point residual topology across corners",
+                "",
+                "- Corners with audit evidence: "
+                f"**{residual_summary['audit_evidence_corner_count']}/"
+                f"{residual_summary['corner_count']}**",
+                "- Corners with complete supplied-point coverage: "
+                f"**{residual_summary['complete_supplied_point_coverage_corner_count']}/"
+                f"{residual_summary['corner_count']}**",
+                "- Corners monotonic non-increasing within tolerance: "
+                f"**{residual_summary['monotonic_non_increasing_corner_count']}/"
+                f"{residual_summary['corner_count']}**",
+                "- Corners with residual-increase transitions: "
+                f"**{residual_summary['residual_increase_corner_count']}**",
+                "- Corners with multiple discrete candidate crossing features: "
+                f"**{residual_summary['multiple_candidate_feature_corner_count']}**",
+                "- Complete study audit coverage: "
+                f"**{residual_summary['complete_study_coverage']}**",
+            ]
+        )
+        if nominal_residual_audit is not None:
+            lines.append(
+                "- Nominal discrete candidate crossing features: "
+                f"**{nominal_residual_audit['candidate_crossing_feature_count']}**"
+            )
+        if residual_summary["residual_increase_corner_indices"]:
+            lines.append(
+                "- Residual-increase corner indices: "
+                + ", ".join(
+                    str(index)
+                    for index in residual_summary[
+                        "residual_increase_corner_indices"
+                    ]
+                )
+            )
+        if residual_summary["multiple_candidate_feature_corner_indices"]:
+            lines.append(
+                "- Multiple-candidate-feature corner indices: "
+                + ", ".join(
+                    str(index)
+                    for index in residual_summary[
+                        "multiple_candidate_feature_corner_indices"
+                    ]
+                )
+            )
+        increase = residual_summary.get(
+            "maximum_positive_residual_increase_pa"
+        )
+        if increase is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                for source in increase["sources"]
+            ]
+            lines.append(
+                "- Maximum positive supplied-point residual increase: "
+                f"**{increase['value']} {increase['unit']}** "
+                f"({' / '.join(source_texts)})"
+            )
+        lines.extend(["", residual_summary["scope_note"]])
+
     quality = result.get("solver_quality_summary")
     if quality:
         coverage_label = (

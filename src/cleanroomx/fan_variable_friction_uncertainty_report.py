@@ -490,9 +490,13 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     "- Evaluable configured checks: "
                     f"**{assessment['evaluable_check_count']}/"
                     f"{assessment['configured_check_count']}**",
+                    "- Maximum configured-tolerance utilization ratio: "
+                    f"**{assessment.get('max_utilization_ratio', '—')}**",
+                    "- Critical configured tolerance metric(s): "
+                    f"**{', '.join(assessment.get('critical_metric_keys', [])) or '—'}**",
                     "",
-                    "| Metric | Worst value | Tolerance | Utilization | Remaining margin | Result |",
-                    "|---|---:|---:|---:|---:|---|",
+                    "| Metric | Worst value | Tolerance | Utilization | Remaining margin | Result | Witness source corner(s) |",
+                    "|---|---:|---:|---:|---:|---|---|",
                 ]
             )
             tolerance_rows = (
@@ -528,10 +532,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     if check["remaining_margin"] is None
                     else check["remaining_margin"]
                 )
+                source_text = " / ".join(
+                    _fmt_extreme_source(source)
+                    for source in check.get("sources", [])
+                ) or "—"
                 lines.append(
                     f"| {label} | {observed} | "
                     f"{check['configured_tolerance']} | {utilization} | "
-                    f"{margin} | {check['status']} |"
+                    f"{margin} | {check['status']} | {source_text} |"
                 )
 
         lines.extend(["", quality["scope_note"]])

@@ -40,11 +40,19 @@ def main() -> int:
     if args.command == "verify":
         report = verify_room(load_room(args.file))
         print(json.dumps(report.to_dict(), indent=2))
-        return 0 if report.passed else 2
+        if report.failed:
+            return 2
+        if report.indeterminate:
+            return 3
+        return 0
     if args.command == "verify-project":
         report = verify_project(load_project(args.file))
         print(json.dumps(report.to_dict(), indent=2))
-        return 0 if report.passed else 2
+        if report.failed:
+            return 2
+        if report.indeterminate:
+            return 3
+        return 0
     if args.command == "decay":
         value = decay_concentration(args.initial, args.ach, args.minutes, args.efficiency)
         print(json.dumps({"concentration_per_m3": value}, indent=2))

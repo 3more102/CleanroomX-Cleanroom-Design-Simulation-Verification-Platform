@@ -146,7 +146,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, branch-flow/network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are branch-flow/network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, richer export formats, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

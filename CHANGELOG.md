@@ -1,4 +1,23 @@
 # Changelog
+## v0.35 dossier-integrated nonlinear fan / loop workflows — 2026-09-23
+
+- Integrated v0.33 fan/variable-friction loop studies and v0.34 fan-speed/variable-friction loop studies into dossier manifests.
+- Added SHA-256 source fingerprints, full JSON evidence retention, executive-summary counts, and Markdown solver diagnostics for both nonlinear workflow families.
+- Propagates both bounded no-intersection and numerical `non_converged` cases into dossier attention; numerical non-convergence is never reported as PASS.
+- Extended HVAC-to-fan operating-airflow consistency to solved nonlinear loop and nonlinear speed cases while preserving unresolved/non-converged cases as not comparable.
+- Added a combined reproducible dossier example plus end-to-end, deterministic-fingerprint, missing-source, adverse-state, and cross-consistency regression coverage.
+- Bumped package/runtime metadata to v0.35.0.
+
+## v0.34 fan-speed / variable-friction loop coupling — 2026-09-23
+
+- Added explicit affinity-law fan-speed studies over the v0.33 bounded fan/variable-friction loop solver.
+- Reuses `scale_fan_curve_for_speed` for every configured speed ratio; no fan-scaling equations are duplicated.
+- Re-solves the complete loop and Darcy-friction closure at every transformed fan-curve point and bounded operating-point airflow.
+- Preserves transformed fan-curve bounds with no extrapolation and reports solved, `no_intersection_in_supplied_range`, and `non_converged` states independently per speed.
+- Reports optional rpm, operating airflow/pressure, signed network edge flows, Reynolds/friction evidence, resistance closure, continuity, edge-law residuals, and fan/system residuals.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-loop-friction-speed` CLI, example data, documentation, and fixed-resistance compatibility/non-convergence regression coverage.
+- Bumped package and runtime metadata to v0.34.0.
+
 ## v0.33 bounded fan / variable-friction loop coupling — 2026-09-23
 
 - Added direct coupling between supplied fan pressure/airflow data and the v0.30 variable-friction two-terminal loop solver.

@@ -4,14 +4,41 @@
   "width_m": 4.0,
   "height_m": 3.0,
   "supply_airflow_m3_h": 1800.0,
+  "supply_airflow_uncertainty_m3_h": 60.0,
   "min_ach": 20.0,
+  "ach_requirement_reference": "DEMO-URS-HVAC-001",
+  "airflow_provenance": {
+    "source": "Demonstration TAB record",
+    "reference": "DEMO-TAB-001",
+    "instrument_id": "DEMO-AFM-01",
+    "calibration_reference": "DEMO-CAL-01",
+    "observed_at": "2026-09-20T10:30:00+03:00"
+  },
   "min_pressure_pa": 10.0,
   "observed_pressure_pa": 14.0,
+  "observed_pressure_uncertainty_pa": 1.0,
+  "pressure_requirement_reference": "DEMO-URS-PRESSURE-001",
+  "pressure_provenance": {
+    "source": "Demonstration differential-pressure record",
+    "reference": "DEMO-DP-001",
+    "instrument_id": "DEMO-DPM-01",
+    "calibration_reference": "DEMO-CAL-02",
+    "observed_at": "2026-09-20T10:35:00+03:00"
+  },
   "particle_requirements": [
     {
       "size_um": 0.5,
       "max_concentration_per_m3": 400000.0,
-      "observed_concentration_per_m3": 120000.0
+      "observed_concentration_per_m3": 120000.0,
+      "observed_uncertainty_per_m3": 10000.0,
+      "requirement_reference": "DEMO-PARTICLE-001",
+      "provenance": {
+        "source": "Demonstration particle-count record",
+        "reference": "DEMO-PC-001",
+        "instrument_id": "DEMO-PC-01",
+        "calibration_reference": "DEMO-CAL-03",
+        "observed_at": "2026-09-20T11:00:00+03:00"
+      }
     }
   ]
 }

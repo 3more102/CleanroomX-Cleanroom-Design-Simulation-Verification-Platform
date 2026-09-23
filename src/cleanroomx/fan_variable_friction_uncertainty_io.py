@@ -146,6 +146,22 @@ def fan_variable_friction_loop_uncertainty_from_dict(
         unit="m",
         label="circular-diameter",
     )
+    edge_rectangular_width_uncertainty = _edge_parameter_uncertainty(
+        data,
+        edges_by_name,
+        block_key="edge_rectangular_width_uncertainty",
+        evidence_key="width_m",
+        unit="m",
+        label="rectangular-width",
+    )
+    edge_rectangular_height_uncertainty = _edge_parameter_uncertainty(
+        data,
+        edges_by_name,
+        block_key="edge_rectangular_height_uncertainty",
+        evidence_key="height_m",
+        unit="m",
+        label="rectangular-height",
+    )
 
     solver = data.get("solver", {})
     if not isinstance(solver, dict):
@@ -180,6 +196,8 @@ def fan_variable_friction_loop_uncertainty_from_dict(
         edge_air_density_kg_m3=edge_air_density_uncertainty,
         edge_length_m=edge_length_uncertainty,
         edge_circular_diameter_m=edge_circular_diameter_uncertainty,
+        edge_rectangular_width_m=edge_rectangular_width_uncertainty,
+        edge_rectangular_height_m=edge_rectangular_height_uncertainty,
         fan_curve_provenance=_provenance_from_dict(
             fan_data.get("provenance")
         ),

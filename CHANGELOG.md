@@ -1,4 +1,16 @@
 # Changelog
+## v0.33 bounded fan / variable-friction loop coupling — 2026-09-23
+
+- Added direct coupling between supplied fan pressure/airflow data and the v0.30 variable-friction two-terminal loop solver.
+- Re-solves the complete loop and updates automatic Darcy friction at every supplied fan point and every bounded operating-point bisection airflow instead of reducing the system to one fixed equivalent quadratic resistance.
+- Preserves strict no-extrapolation behavior for fan data and reports `no_intersection_in_supplied_range` when no bounded crossing exists.
+- Adds explicit `non_converged` results when variable-friction network closure or bounded operating-point iteration cannot satisfy configured limits; no fabricated operating point is emitted.
+- Reports fan/system residuals, network continuity and edge-law residuals, Darcy resistance-closure evidence, iteration diagnostics, and fluid air power.
+- Keeps explicit-resistance and user-supplied-friction edges fixed while iterating only geometry edges configured with roughness and kinematic viscosity.
+- Added validated JSON solver controls, Markdown/JSON reporting, the `cleanroomx-fan-loop-friction` CLI, a reproducible example, focused regression tests, and engineering-boundary documentation.
+- Added a fixed-resistance compatibility regression against the existing v0.26 fan/loop solver.
+- Bumped package and runtime metadata to v0.33.0 while retaining the v0.32 dossier integrations.
+
 
 ## v0.32 dossier-integrated fan/loop uncertainty and speed studies — 2026-09-23
 

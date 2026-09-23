@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Iteration budget audit | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -576,9 +576,15 @@ def markdown_dossier_report(result: dict) -> str:
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
             ) or "—"
+            solver_quality = item.get("solver_quality_summary", {})
             solver_tolerance_audit = (
-                item.get("solver_quality_summary", {})
+                solver_quality
                 .get("configured_tolerance_assessment", {})
+                .get("status", "—")
+            )
+            iteration_budget_audit = (
+                solver_quality
+                .get("configured_iteration_assessment", {})
                 .get("status", "—")
             )
             lines.append(
@@ -588,6 +594,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow_envelope} | {air_power} | {electrical_input} | "
                 f"{specific_fan_power} | {item['nominal_status']} | "
                 f"{solver_tolerance_audit} | "
+                f"{iteration_budget_audit} | "
                 f"{item['traceability']['complete']} |"
             )
             if item["traceability"]["missing_provenance"]:

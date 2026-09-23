@@ -13,9 +13,10 @@ A dossier manifest can reference:
 - zero or more uncertainty/provenance room inputs;
 - zero or more thermal/HVAC uncertainty analyses;
 - zero or more standalone psychrometric-state uncertainty analyses;
-- zero or more fan/system operating-point studies.
+- zero or more fan/system operating-point studies;
+- an optional v0.17 verification/HVAC duplicated-input consistency check.
 
-Paths are resolved relative to the manifest file. Existing manifests that omit optional v0.13/v0.14 analysis lists remain valid.
+Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
 
 Example:
 
@@ -31,9 +32,30 @@ Example:
   "uncertainty_rooms": ["uncertainty_room_demo.json"],
   "thermal_uncertainty_analyses": ["thermal_uncertainty_demo.json"],
   "psychrometric_uncertainty_analyses": ["psychrometric_uncertainty_demo.json"],
-  "fan_operating_point_studies": ["fan_operating_point_demo.json"]
+  "fan_operating_point_studies": ["fan_operating_point_demo.json"],
+  "consistency_checks": {
+    "verification_hvac_airflow": {
+      "room_airflow_abs_tolerance_m3_h": 0.0,
+      "require_same_room_set": true
+    }
+  }
 }
 ```
+
+## Cross-module consistency
+
+The optional `verification_hvac_airflow` block reuses the v0.17 standalone consistency engine. It compares the verification project's `supply_airflow_m3_h` against the HVAC project's `cleanroom_airflow_m3_h` for exact matching room names.
+
+Supported dossier options are the same as the standalone checker:
+
+- `room_airflow_abs_tolerance_m3_h`: user-supplied absolute duplicated-input tolerance, default `0.0 m³/h`;
+- `require_same_room_set`: when true, rooms present in only one project make the consistency result fail.
+
+A `fail` contributes to dossier attention tracking. `not_comparable` is preserved as an unresolved item instead of being promoted to pass. `pass_with_scope_difference` remains visible in the dossier but is not converted into a failure when identical room sets were not required.
+
+Both `verification_project` and `hvac_project` are required when this consistency block is configured. The already-hashed source files are reused; no duplicate input files are introduced.
+
+See `docs/CROSS_MODULE_CONSISTENCY.md` for the standalone checker and its engineering boundary.
 
 ## Traceability
 
@@ -43,8 +65,8 @@ Each referenced source file is hashed byte-for-byte with SHA-256. The report rec
 
 The dossier preserves component-specific states instead of turning every result into a certification verdict:
 
-- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, or a fan/system study has no intersection inside the supplied fan-curve range;
-- `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked` or a standalone psychrometric analysis has incomplete provenance;
+- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a configured cross-module consistency check failed, or a fan/system study has no intersection inside the supplied fan-curve range;
+- `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, or a standalone psychrometric analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
 A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. A solved fan operating point and a completed psychrometric-state envelope are reported as engineering screening, not as equipment acceptance or conformity decisions. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.

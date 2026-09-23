@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Residual topology | Provenance complete |",
-                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Min segment-point clearance m³/h | Segment evidence | Residual topology | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---|---|---|",
             ]
         )
         for item in result[
@@ -671,6 +671,21 @@ def markdown_dossier_report(result: dict) -> str:
                 )
                 if crossing_evidence is not None:
                     crossing_gradient = crossing_evidence["value"]
+            segment_summary = item.get(
+                "fan_curve_segment_position_summary"
+            )
+            segment_clearance = "—"
+            segment_coverage = "—"
+            if segment_summary is not None:
+                segment_coverage = (
+                    f"{segment_summary['segment_position_evidence_corner_count']}/"
+                    f"{segment_summary['corner_count']}"
+                )
+                segment_evidence = segment_summary.get(
+                    "minimum_nearest_segment_endpoint_clearance_m3_h"
+                )
+                if segment_evidence is not None:
+                    segment_clearance = segment_evidence["value"]
             residual_summary = item.get(
                 "fan_curve_supplied_point_residual_summary"
             )
@@ -698,6 +713,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{boundary_coverage} | "
                 f"{bracket_gap} | {bracket_coverage} | "
                 f"{crossing_gradient} | {crossing_coverage} | "
+                f"{segment_clearance} | {segment_coverage} | "
                 f"{residual_topology} | "
                 f"{item['traceability']['complete']} |"
             )

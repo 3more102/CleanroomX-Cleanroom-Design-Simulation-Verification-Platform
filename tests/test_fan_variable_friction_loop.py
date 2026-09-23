@@ -10,6 +10,8 @@ from cleanroomx.fan_loop_network import (
 )
 from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
+    _fan_curve_supplied_point_residual_audit,
+    _with_selected_crossing_feature,
     solve_fan_variable_friction_loop,
 )
 from cleanroomx.fan_variable_friction_loop_cli import (
@@ -286,9 +288,66 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
         expected_contacts + expected_brackets
     )
     assert audit["candidate_crossing_feature_count"] >= 1
+    candidates = audit["candidate_crossing_features_in_solver_priority_order"]
+    selected = audit["selected_candidate_feature"]
+    assert selected is not None
+    assert audit["selected_candidate_feature_rank"] == 0
+    assert selected == candidates[0]
+    assert audit["additional_candidate_feature_count"] == len(candidates) - 1
+    assert audit["selected_candidate_is_only_discrete_feature"] is (
+        len(candidates) == 1
+    )
+    if result["solver_diagnostics"]["termination_reason"] == (
+        "fan_curve_point_residual"
+    ):
+        assert selected["feature_kind"] == "supplied_point_tolerance_contact"
+    else:
+        assert selected["feature_kind"] == "strict_sign_change_segment"
 
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Supplied-point residual topology audit" in report
     assert "Candidate crossing features" in report
+    assert "Selected discrete candidate" in report
+    assert "Selection policy" in report
     assert "not a count or proof of continuous physical intersections" in report
+
+def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candidates() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    checks = [
+        {
+            "airflow_m3_h": 0.0,
+            "pressure_margin_pa": 10.0,
+        },
+        {
+            "airflow_m3_h": 1000.0,
+            "pressure_margin_pa": -10.0,
+        },
+        {
+            "airflow_m3_h": 2000.0,
+            "pressure_margin_pa": 10.0,
+        },
+        {
+            "airflow_m3_h": 3000.0,
+            "pressure_margin_pa": -10.0,
+        },
+    ]
+    audit = _fan_curve_supplied_point_residual_audit(study, checks)
+    assert audit["strict_sign_change_segment_count"] == 2
+    assert audit["candidate_crossing_feature_count"] == 2
+
+    selected = _with_selected_crossing_feature(
+        audit,
+        termination_reason="pressure_residual",
+        selected_airflow_m3_h=500.0,
+        selected_segment_index=0,
+    )
+    assert selected["selected_candidate_feature_rank"] == 0
+    assert selected["selected_candidate_feature"]["feature_kind"] == (
+        "strict_sign_change_segment"
+    )
+    assert selected["selected_candidate_feature"]["low_point_index"] == 0
+    assert selected["additional_candidate_feature_count"] == 1
+    assert selected["selected_candidate_is_only_discrete_feature"] is False
 

@@ -208,3 +208,40 @@ def test_dossier_wires_nonlinear_uncertainty_into_hvac_consistency(
         item["study_kind"] == "fan_variable_friction_uncertainty_corner"
         for item in check["study_airflow_checks"]
     )
+
+
+def test_dossier_builds_fan_airflow_uncertainty_end_to_end(tmp_path) -> None:
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Fan airflow-coordinate uncertainty dossier",
+                "fan_variable_friction_uncertainty_analyses": [
+                    str(
+                        Path(
+                            "examples/fan_variable_friction_fan_airflow_uncertainty_demo.json"
+                        ).resolve()
+                    )
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_dossier(manifest)
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+    assert analysis["status"] == "complete"
+    assert analysis["corner_count"] == 4
+    assert analysis["solved_corner_count"] == 4
+    assert analysis["traceability"]["complete"] is True
+    assert set(analysis["input_intervals"]["fan_curve_airflow_m3_h"]) == {
+        "1",
+        "2",
+    }
+
+    component = result["executive_summary"]["components"][
+        "fan_variable_friction_uncertainty"
+    ]
+    assert component["status"] == "screening_complete"
+    assert component["corner_count"] == 4
+    assert result["executive_summary"]["state"] == "no_adverse_findings"

@@ -109,3 +109,67 @@ def test_fan_power_uses_total_entered_static_pressure() -> None:
     assert result["air_power_kw"] == 0.6
     assert result["shaft_power_kw"] == 1.2
     assert result["estimated_electrical_input_kw"] == 1.5
+
+
+
+def test_hvac_project_adds_network_critical_path_to_fan_static(tmp_path) -> None:
+    path = tmp_path / "hvac-duct.json"
+    path.write_text(
+        json.dumps(
+            {
+                "name": "HVAC Duct Demo",
+                "fan_system": {
+                    "name": "Supply AHU",
+                    "duct_pressure_drop_pa": 50,
+                    "coil_pressure_drop_pa": 100,
+                    "other_pressure_drop_pa": 0,
+                    "fan_efficiency": 0.7,
+                    "motor_efficiency": 0.9
+                },
+                "duct_network": {
+                    "name": "Supply network",
+                    "paths": [
+                        {
+                            "name": "Process path",
+                            "sections": [
+                                {
+                                    "name": "Main",
+                                    "length_m": 10,
+                                    "hydraulic_diameter_m": 0.5,
+                                    "cross_section_area_m2": 0.5,
+                                    "airflow_m3_h": 3600,
+                                    "darcy_friction_factor": 0.02,
+                                    "minor_loss_coefficient": 1.5,
+                                    "additional_pressure_drop_pa": 10,
+                                    "air_density_kg_m3": 1.2
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "rooms": [
+                    {
+                        "name": "Process",
+                        "cleanroom_airflow_m3_h": 3600,
+                        "thermal_design": {
+                            "room_air": {
+                                "dry_bulb_c": 22,
+                                "relative_humidity_percent": 45
+                            }
+                        }
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = analyze_hvac_project(load_hvac_project(path))
+
+    assert result["duct_network"]["critical_path"] == "Process path"
+    assert result["duct_network"]["critical_path_pressure_drop_pa"] == 14.56
+    pressure = result["supply_fan"]["pressure_components_pa"]
+    assert pressure["entered_duct"] == 50
+    assert pressure["network_critical_path"] == 14.56
+    assert pressure["duct"] == 64.56
+    assert result["supply_fan"]["total_static_pressure_pa"] == 164.56

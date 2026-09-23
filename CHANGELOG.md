@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.12 recovery uncertainty qualification — 2026-09-23
+
+- Added optional absolute concentration uncertainty to every measured recovery sample while preserving zero-uncertainty backward compatibility.
+- Added conservative per-sample concentration intervals and confirmed-above / overlap / confirmed-at-or-below target relations.
+- Added uncertainty-aware PASS/FAIL/INDETERMINATE/INCOMPLETE maximum-time decisions without inventing a project conformity rule.
+- Preserved nominal observed-recovery timing and recovery windows for traceability while separating them from conservative acceptance.
+- Added uncertainty-aware Markdown/JSON reporting, CLI exit code 4 for indeterminate results, an updated example, validation hardening, and regression coverage.
+- Kept the log-linear fit nominal-only and explicitly outside the acceptance decision.
+
 ## v0.11 fan/system operating-point solver — 2026-09-23
 
 - Added explicit fan performance curves from ordered airflow/pressure points with strict finite and monotonic validation.

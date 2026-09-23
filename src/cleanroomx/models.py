@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 
@@ -45,12 +46,22 @@ class RoomSpec:
         if self.min_ach is not None and self.min_ach <= 0:
             raise ValueError("min_ach must be positive when provided")
         uncertainty = float(self.observed_pressure_uncertainty_pa)
-        if uncertainty < 0:
-            raise ValueError("observed_pressure_uncertainty_pa cannot be negative")
+        if not math.isfinite(uncertainty) or uncertainty < 0:
+            raise ValueError(
+                "observed_pressure_uncertainty_pa must be finite and cannot be negative"
+            )
         if self.observed_pressure_pa is None and uncertainty != 0:
             raise ValueError(
                 "observed_pressure_uncertainty_pa requires observed_pressure_pa"
             )
+        if self.observed_pressure_pa is not None and not math.isfinite(
+            float(self.observed_pressure_pa)
+        ):
+            raise ValueError("observed_pressure_pa must be finite when provided")
+        if self.min_pressure_pa is not None and not math.isfinite(
+            float(self.min_pressure_pa)
+        ):
+            raise ValueError("min_pressure_pa must be finite when provided")
         object.__setattr__(self, "observed_pressure_uncertainty_pa", uncertainty)
 
 

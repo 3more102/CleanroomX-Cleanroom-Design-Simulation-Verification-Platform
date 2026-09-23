@@ -55,8 +55,9 @@ class FanDuctNetworkStudy:
 
 
 def _section_base_resistance(section: DuctSection) -> float:
+    friction_factor = section.friction_analysis()["friction_factor"]
     loss_multiplier = (
-        section.friction_factor
+        friction_factor
         * section.length_m
         / section.hydraulic_diameter_m
         + section.local_loss_coefficient
@@ -93,6 +94,7 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
                 section.airflow_m3_h
                 / study.reference_system_airflow_m3_h
             )
+            friction = section.friction_analysis()
             scaled_resistance = _section_scaled_resistance(
                 section,
                 study.reference_system_airflow_m3_h,
@@ -109,6 +111,13 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
                         section.airflow_m3_h, 3
                     ),
                     "flow_ratio_to_system": round(flow_ratio, 9),
+                    "friction_factor": round(friction["friction_factor"], 6),
+                    "friction_factor_method": friction["method"],
+                    "reynolds_number": (
+                        None
+                        if friction["reynolds_number"] is None
+                        else round(friction["reynolds_number"], 3)
+                    ),
                     "quadratic_resistance_pa_per_m3_s_squared": round(
                         scaled_resistance, 9
                     ),
@@ -202,7 +211,7 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
         "fan_solver": fan_result,
         "scope_note": (
             "Duct pressure is converted to a quadratic system curve by "
-            "holding each section's air density, Darcy friction factor, "
+            "holding each section's air density, resolved Darcy friction factor, "
             "local-loss coefficient, and reference airflow fraction "
             "constant as total system airflow changes. The highest-"
             "resistance supplied path governs. Fan pressure is interpolated "

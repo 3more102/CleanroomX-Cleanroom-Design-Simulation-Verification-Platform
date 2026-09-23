@@ -9,6 +9,10 @@ from cleanroomx.loop_network import (
 )
 from cleanroomx.loop_network_io import looped_flow_network_from_dict
 from cleanroomx.loop_network_report import markdown_looped_network_report
+from cleanroomx.loop_resistance import (
+    LoopedDuctResistanceInput,
+    derive_loop_edge_resistance,
+)
 
 
 def _symmetric_loop() -> LoopedFlowNetwork:
@@ -234,3 +238,182 @@ def test_reported_reference_residual_respects_requested_tolerance() -> None:
         if node["name"] == result["reference_node"]
     )
     assert abs(reference["mass_balance_residual_m3_h"]) <= tolerance
+
+
+def test_circular_geometry_derives_expected_fixed_resistance() -> None:
+    spec = LoopedDuctResistanceInput(
+        length_m=10.0,
+        air_density_kg_m3=1.2,
+        friction_factor=0.02,
+        local_loss_coefficient=1.0,
+        diameter_m=0.5,
+    )
+    result = derive_loop_edge_resistance(spec)
+
+    area = math.pi * 0.5**2 / 4.0
+    expected = 0.5 * 1.2 * (0.02 * 10.0 / 0.5 + 1.0) / area**2
+    assert result["resistance_pa_per_m3_s_squared"] == pytest.approx(expected)
+    assert result["friction_factor_method"] == "user_input"
+    assert result["reference_airflow_m3_h"] is None
+
+
+def test_rectangular_geometry_uses_hydraulic_diameter() -> None:
+    spec = LoopedDuctResistanceInput(
+        length_m=8.0,
+        air_density_kg_m3=1.18,
+        friction_factor=0.021,
+        local_loss_coefficient=0.7,
+        width_m=0.6,
+        height_m=0.4,
+    )
+    result = derive_loop_edge_resistance(spec)
+
+    assert result["shape"] == "rectangular"
+    assert result["area_m2"] == pytest.approx(0.24)
+    assert result["hydraulic_diameter_m"] == pytest.approx(0.48)
+    assert result["resistance_pa_per_m3_s_squared"] > 0.0
+
+
+def test_geometry_can_resolve_friction_once_at_reference_airflow() -> None:
+    spec = LoopedDuctResistanceInput(
+        length_m=12.0,
+        air_density_kg_m3=1.2,
+        local_loss_coefficient=0.5,
+        diameter_m=0.5,
+        absolute_roughness_m=0.00015,
+        kinematic_viscosity_m2_s=1.5e-5,
+        reference_airflow_m3_h=3600.0,
+    )
+    result = derive_loop_edge_resistance(spec)
+
+    assert result["friction_factor_method"] == "colebrook"
+    assert result["reynolds_number"] > 2300.0
+    assert result["reference_airflow_m3_h"] == 3600.0
+    assert result["resistance_pa_per_m3_s_squared"] > 0.0
+
+
+def test_loader_accepts_geometry_derived_edges_and_preserves_evidence() -> None:
+    network = looped_flow_network_from_dict(
+        {
+            "name": "Geometry loop",
+            "reference_node": "Supply",
+            "node_injections_m3_h": {
+                "Supply": 3600.0,
+                "Junction": 0.0,
+                "Return": -3600.0,
+            },
+            "edges": [
+                {
+                    "name": "Direct",
+                    "start_node": "Supply",
+                    "end_node": "Return",
+                    "duct_geometry": {
+                        "length_m": 10.0,
+                        "air_density_kg_m3": 1.2,
+                        "friction_factor": 0.02,
+                        "local_loss_coefficient": 1.0,
+                        "diameter_m": 0.5,
+                    },
+                },
+                {
+                    "name": "Branch A",
+                    "start_node": "Supply",
+                    "end_node": "Junction",
+                    "duct_geometry": {
+                        "length_m": 5.0,
+                        "air_density_kg_m3": 1.2,
+                        "friction_factor": 0.02,
+                        "local_loss_coefficient": 0.5,
+                        "diameter_m": 0.4,
+                    },
+                },
+                {
+                    "name": "Branch B",
+                    "start_node": "Junction",
+                    "end_node": "Return",
+                    "duct_geometry": {
+                        "length_m": 5.0,
+                        "air_density_kg_m3": 1.2,
+                        "friction_factor": 0.02,
+                        "local_loss_coefficient": 0.5,
+                        "diameter_m": 0.4,
+                    },
+                },
+            ],
+        }
+    )
+
+    result = solve_looped_network(network)
+    report = markdown_looped_network_report(result)
+
+    assert all(edge["resistance_basis"] == "duct_geometry" for edge in result["edges"])
+    assert all(edge["resistance_evidence"] is not None for edge in result["edges"])
+    assert result["max_abs_mass_balance_residual_m3_h"] <= 1e-6
+    assert "Geometry-derived resistance evidence" in report
+    assert "user_input" in report
+
+
+@pytest.mark.parametrize(
+    "edge",
+    [
+        {
+            "name": "Bad",
+            "start_node": "A",
+            "end_node": "B",
+            "resistance_pa_per_m3_s_squared": 2.0,
+            "duct_geometry": {
+                "length_m": 1.0,
+                "air_density_kg_m3": 1.2,
+                "friction_factor": 0.02,
+                "diameter_m": 0.4,
+            },
+        },
+        {
+            "name": "Bad",
+            "start_node": "A",
+            "end_node": "B",
+        },
+    ],
+)
+def test_loader_requires_exactly_one_resistance_source(edge: dict) -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        looped_flow_network_from_dict(
+            {
+                "name": "Bad source",
+                "reference_node": "A",
+                "node_injections_m3_h": {"A": 1000.0, "B": -1000.0},
+                "edges": [edge],
+            }
+        )
+
+
+def test_automatic_geometry_friction_requires_reference_airflow() -> None:
+    with pytest.raises(ValueError, match="reference_airflow_m3_h"):
+        LoopedDuctResistanceInput(
+            length_m=10.0,
+            air_density_kg_m3=1.2,
+            diameter_m=0.5,
+            absolute_roughness_m=0.00015,
+            kinematic_viscosity_m2_s=1.5e-5,
+        )
+
+
+def test_direct_explicit_resistance_remains_backward_compatible() -> None:
+    network = looped_flow_network_from_dict(
+        {
+            "name": "Legacy edge",
+            "reference_node": "A",
+            "node_injections_m3_h": {"A": 3600.0, "B": -3600.0},
+            "edges": [
+                {
+                    "name": "AB",
+                    "start_node": "A",
+                    "end_node": "B",
+                    "resistance_pa_per_m3_s_squared": 12.0,
+                }
+            ],
+        }
+    )
+    result = solve_looped_network(network)
+    assert result["edges"][0]["resistance_basis"] == "explicit"
+    assert result["edges"][0]["resistance_evidence"] is None

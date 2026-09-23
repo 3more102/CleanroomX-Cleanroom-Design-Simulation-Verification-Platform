@@ -1,4 +1,16 @@
 # Changelog
+## v0.50 efficiency-chain power evidence and extrema provenance — 2026-09-24
+
+- Retains the fan solver's complete `power_evidence` for every solved nonlinear uncertainty corner and the nominal case.
+- Adds complete-study evaluated-corner ranges for fluid air power plus shaft power, electrical input, and specific fan power when the corresponding explicit efficiency chain is configured.
+- Adds tie-aware source-corner provenance for every reported power-chain lower/upper value, preserving the active fixed-pressure, fan-speed/scenario, fan-point, and duct uncertainty inputs.
+- Keeps the v0.49 `air_power_kw` operating-point envelope intact and cross-checkable against the fluid-air-power evidence range.
+- Preserves the no-inference rule: missing fan/motor/VFD efficiencies do not fabricate shaft, electrical-input, or specific-fan-power evidence.
+- Suppresses complete power-chain ranges and source attribution whenever any evaluated uncertainty corner is unresolved.
+- Keeps all power-chain extrema explicitly scoped to evaluated corners; `Q × ΔP` may have an interior extremum, so no guaranteed continuous-box power extremum is claimed.
+- Added Markdown reporting and regression coverage for complete efficiencies, missing efficiencies, exact corner witnesses, report output, and indeterminate withholding.
+- Bumped package/runtime metadata to v0.50.0.
+
 ## v0.49 evaluated-corner air-power envelope and provenance — 2026-09-24
 
 - Added fan air-power min/max across every solved nonlinear uncertainty corner in complete studies.

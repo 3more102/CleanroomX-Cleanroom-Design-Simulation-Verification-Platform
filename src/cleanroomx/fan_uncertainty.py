@@ -98,9 +98,6 @@ def analyze_fan_system_uncertainty(
             "system_pressure_pa": _metric_envelope(
                 solved_points, "system_pressure_pa", "Pa"
             ),
-            "air_power_kw": _metric_envelope(
-                solved_points, "air_power_kw", "kW"
-            ),
         }
 
     inputs = [
@@ -157,7 +154,8 @@ def analyze_fan_system_uncertainty(
         "traceability": traceability,
         "message": (
             "All bounded system-curve corners intersect the supplied fan curve; "
-            "the reported envelope is the min/max across solved corners."
+            "the reported airflow and pressure envelope is the min/max across solved "
+            "corners."
             if all_corners_solved
             else "At least one bounded system-curve corner has no intersection "
             "inside the supplied fan-curve range; no complete operating-point "
@@ -165,7 +163,10 @@ def analyze_fan_system_uncertainty(
         ),
         "engineering_note": (
             "This is deterministic corner analysis for user-supplied absolute "
-            "bounds on fixed system pressure and quadratic resistance. Fan pressure "
+            "bounds on fixed system pressure and quadratic resistance. The bounded "
+            "envelope is limited to operating airflow and pressure; air-power extrema "
+            "are not inferred from corner values because Q*pressure can have an "
+            "interior extremum along a fan-curve segment. Fan pressure "
             "is piecewise-linearly interpolated only inside the supplied fan curve. "
             "No fan-curve extrapolation, probability distribution, covariance, "
             "fan-law scaling, variable resistance, controls, system-effect correction, "

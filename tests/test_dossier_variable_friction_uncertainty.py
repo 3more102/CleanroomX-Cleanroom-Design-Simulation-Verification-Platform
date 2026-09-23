@@ -39,6 +39,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert component["status"] == "screening_complete"
     assert component["analysis_count"] == 1
     assert component["corner_count"] == 8
+    assert component["no_intersection_corner_count"] == 0
     assert result["executive_summary"]["state"] == "no_adverse_findings"
 
     source = next(
@@ -60,6 +61,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Airflow excursion from nominal %" in report
     assert "Fan-curve min headroom m³/h" in report
     assert "Boundary evidence" in report
+    assert "No-intersection boundary cases" in report
     assert "8" in report
 
 
@@ -69,6 +71,9 @@ def test_nonlinear_uncertainty_indeterminate_propagates_attention() -> None:
             {
                 "status": "indeterminate",
                 "corner_count": 4,
+                "fan_curve_no_intersection_summary": {
+                    "no_intersection_corner_count": 3,
+                },
                 "traceability": {
                     "complete": True,
                     "missing_provenance": [],
@@ -80,6 +85,7 @@ def test_nonlinear_uncertainty_indeterminate_propagates_attention() -> None:
     component = summary["components"]["fan_variable_friction_uncertainty"]
     assert component["status"] == "attention_required"
     assert component["counts"] == {"indeterminate": 1}
+    assert component["no_intersection_corner_count"] == 3
     assert summary["adverse_items"][
         "fan_variable_friction_uncertainty_indeterminate"
     ] == 1

@@ -1,4 +1,14 @@
 # Changelog
+## v0.48 tie-aware internal edge-flow extrema provenance — 2026-09-24
+
+- Added tie-aware source attribution for every internal edge-airflow lower/upper extremum in complete nonlinear uncertainty studies.
+- Each edge extremum now preserves every evaluated corner sharing the same extreme value, including fixed pressure, fan speed/scenario, fan-point overrides, and duct physical/geometry overrides.
+- Retains the existing compact first-witness edge corner indices for backward-compatible direct lookup.
+- Keeps edge extrema-source evidence conditional on a complete study; indeterminate studies continue to emit neither complete edge-flow ranges nor fabricated edge witnesses.
+- Markdown reports now include an internal edge-airflow witness-provenance table.
+- Added regression coverage for exact source-corner resolution, tied whole-curve scenarios, report output, and indeterminate withholding.
+- Bumped package/runtime metadata to v0.48.0.
+
 ## v0.47 uncertainty corner outcome diagnostics — 2026-09-24
 
 - Added deterministic status accounting across every evaluated nonlinear fan/variable-friction uncertainty corner.

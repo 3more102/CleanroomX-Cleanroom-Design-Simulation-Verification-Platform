@@ -213,6 +213,91 @@ class FanSystem:
 
 
 @dataclass(frozen=True)
+class DuctSection:
+    name: str
+    length_m: float
+    airflow_m3_h: float
+    roughness_m: float
+    local_loss_coefficient: float = 0.0
+    diameter_m: float | None = None
+    width_m: float | None = None
+    height_m: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("duct-section name cannot be empty")
+        object.__setattr__(self, "length_m", _positive(self.length_m, "length_m"))
+        object.__setattr__(
+            self, "airflow_m3_h", _positive(self.airflow_m3_h, "airflow_m3_h")
+        )
+        object.__setattr__(
+            self, "roughness_m", _nonnegative(self.roughness_m, "roughness_m")
+        )
+        object.__setattr__(
+            self,
+            "local_loss_coefficient",
+            _nonnegative(self.local_loss_coefficient, "local_loss_coefficient"),
+        )
+
+        has_round = self.diameter_m is not None
+        has_rect_any = self.width_m is not None or self.height_m is not None
+        has_rect_complete = self.width_m is not None and self.height_m is not None
+        if has_round == has_rect_complete or (has_rect_any and not has_rect_complete):
+            raise ValueError(
+                "duct section must define exactly one geometry: diameter_m or both "
+                "width_m and height_m"
+            )
+        if has_round:
+            object.__setattr__(
+                self, "diameter_m", _positive(self.diameter_m, "diameter_m")
+            )
+        else:
+            object.__setattr__(self, "width_m", _positive(self.width_m, "width_m"))
+            object.__setattr__(
+                self, "height_m", _positive(self.height_m, "height_m")
+            )
+
+
+@dataclass(frozen=True)
+class DuctPath:
+    name: str
+    sections: tuple[DuctSection, ...]
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("duct-path name cannot be empty")
+        if not self.sections:
+            raise ValueError("duct path must contain at least one section")
+        names = [section.name for section in self.sections]
+        if len(names) != len(set(names)):
+            raise ValueError("duct section names must be unique within a path")
+
+
+@dataclass(frozen=True)
+class DuctNetwork:
+    paths: tuple[DuctPath, ...]
+    air_density_kg_m3: float
+    dynamic_viscosity_pa_s: float
+
+    def __post_init__(self) -> None:
+        if not self.paths:
+            raise ValueError("duct network must contain at least one path")
+        names = [path.name for path in self.paths]
+        if len(names) != len(set(names)):
+            raise ValueError("duct path names must be unique")
+        object.__setattr__(
+            self,
+            "air_density_kg_m3",
+            _positive(self.air_density_kg_m3, "air_density_kg_m3"),
+        )
+        object.__setattr__(
+            self,
+            "dynamic_viscosity_pa_s",
+            _positive(self.dynamic_viscosity_pa_s, "dynamic_viscosity_pa_s"),
+        )
+
+
+@dataclass(frozen=True)
 class HVACRoom:
     name: str
     cleanroom_airflow_m3_h: float
@@ -235,6 +320,7 @@ class HVACProject:
     rooms: tuple[HVACRoom, ...]
     filter_unit: FilterUnit | None = None
     fan_system: FanSystem | None = None
+    supply_duct_network: DuctNetwork | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

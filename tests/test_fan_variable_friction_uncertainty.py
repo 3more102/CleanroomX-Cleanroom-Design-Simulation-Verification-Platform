@@ -98,6 +98,7 @@ def test_unresolved_corners_do_not_emit_complete_envelope() -> None:
     assert result["nominal_status"] == "no_intersection_in_supplied_range"
     assert result["unresolved_corner_count"] == result["corner_count"]
     assert result["operating_point_envelope"] is None
+    assert result["operating_point_extreme_cases"] is None
     assert result["edge_airflow_corner_ranges"] is None
 
 
@@ -864,3 +865,62 @@ def test_whole_fan_curve_scenarios_count_toward_corner_limit() -> None:
 
     with pytest.raises(ValueError, match="corner count 3"):
         analyze_fan_variable_friction_loop_uncertainty(study)
+
+
+def test_complete_envelope_extrema_reference_exact_corner_witnesses() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    witnesses = result["operating_point_extreme_cases"]
+    assert witnesses is not None
+    for metric in (
+        "airflow_m3_h",
+        "fan_pressure_pa",
+        "system_pressure_pa",
+    ):
+        envelope = result["operating_point_envelope"][metric]
+        metric_witnesses = witnesses[metric]
+        for bound in ("lower", "upper"):
+            witness = metric_witnesses[bound]
+            corner = result["corners"][witness["corner_index"]]
+            assert witness["value"] == pytest.approx(envelope[bound], abs=1e-6)
+            assert corner["operating_point"][metric] == pytest.approx(
+                witness["value"],
+                abs=1e-6,
+            )
+
+
+def test_edge_airflow_ranges_reference_exact_corner_witnesses() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    for edge_range in result["edge_airflow_corner_ranges"]:
+        edge = edge_range["edge"]
+        for bound, field in (
+            ("lower", "lower_airflow_m3_h"),
+            ("upper", "upper_airflow_m3_h"),
+        ):
+            corner = result["corners"][
+                edge_range[f"{bound}_corner_index"]
+            ]
+            assert corner["edge_airflows_m3_h"][edge] == pytest.approx(
+                edge_range[field],
+                abs=1e-6,
+            )
+
+
+def test_uncertainty_report_surfaces_extreme_corner_witnesses() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "corner indices" in report

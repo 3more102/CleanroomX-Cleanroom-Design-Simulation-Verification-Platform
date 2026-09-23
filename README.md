@@ -23,7 +23,6 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
-- Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, relative node pressures, node-continuity residuals, and edge pressure-law residuals.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.

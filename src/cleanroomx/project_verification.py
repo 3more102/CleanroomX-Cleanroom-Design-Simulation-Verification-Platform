@@ -15,6 +15,9 @@ class PressureCascadeFinding:
     lower_pressure_room: str
     actual_delta_pa: float | None = None
     limit_pa: float | None = None
+    uncertainty_pa: float | None = None
+    interval_low_pa: float | None = None
+    interval_high_pa: float | None = None
 
 
 @dataclass(frozen=True)
@@ -24,15 +27,28 @@ class ProjectVerificationReport:
     pressure_cascade_findings: tuple[PressureCascadeFinding, ...]
 
     @property
-    def passed(self) -> bool:
-        return all(report.passed for report in self.room_reports) and all(
-            finding.status != "fail" for finding in self.pressure_cascade_findings
+    def failed(self) -> bool:
+        return any(report.failed for report in self.room_reports) or any(
+            finding.status == "fail" for finding in self.pressure_cascade_findings
         )
+
+    @property
+    def indeterminate(self) -> bool:
+        return any(report.indeterminate for report in self.room_reports) or any(
+            finding.status == "indeterminate"
+            for finding in self.pressure_cascade_findings
+        )
+
+    @property
+    def passed(self) -> bool:
+        return not self.failed and not self.indeterminate
 
     def to_dict(self) -> dict:
         return {
             "project": self.project,
             "passed": self.passed,
+            "failed": self.failed,
+            "indeterminate": self.indeterminate,
             "rooms": [report.to_dict() for report in self.room_reports],
             "pressure_cascade": [asdict(finding) for finding in self.pressure_cascade_findings],
         }
@@ -61,20 +77,42 @@ def verify_project(project: ProjectSpec) -> ProjectVerificationReport:
             continue
 
         actual_delta = higher.observed_pressure_pa - lower.observed_pressure_pa
-        ok = actual_delta >= requirement.min_delta_pa
+        uncertainty = (
+            higher.observed_pressure_uncertainty_pa
+            + lower.observed_pressure_uncertainty_pa
+        )
+        low = actual_delta - uncertainty
+        high = actual_delta + uncertainty
+        if low >= requirement.min_delta_pa:
+            status: Status = "pass"
+            message = (
+                "The complete room-to-room pressure-difference interval meets the "
+                "configured project requirement."
+            )
+        elif high < requirement.min_delta_pa:
+            status = "fail"
+            message = (
+                "The complete room-to-room pressure-difference interval is below the "
+                "configured project requirement."
+            )
+        else:
+            status = "indeterminate"
+            message = (
+                "The configured pressure-cascade requirement lies inside the conservative "
+                "pressure-difference uncertainty interval."
+            )
         findings.append(
             PressureCascadeFinding(
                 code="PRESSURE_CASCADE",
-                status="pass" if ok else "fail",
-                message=(
-                    "Observed room-to-room pressure cascade meets the configured project requirement."
-                    if ok
-                    else "Observed room-to-room pressure cascade is below the configured project requirement."
-                ),
+                status=status,
+                message=message,
                 higher_pressure_room=higher.name,
                 lower_pressure_room=lower.name,
                 actual_delta_pa=actual_delta,
                 limit_pa=requirement.min_delta_pa,
+                uncertainty_pa=uncertainty,
+                interval_low_pa=low,
+                interval_high_pa=high,
             )
         )
 

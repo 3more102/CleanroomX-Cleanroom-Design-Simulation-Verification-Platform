@@ -63,6 +63,18 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert residual_summary["selected_candidate_feature_corner_count"] == (
         analysis["solved_corner_count"]
     )
+    separation_count = residual_summary[
+        "alternative_candidate_separation_evidence_corner_count"
+    ]
+    alternative_gap = residual_summary[
+        "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
+    ]
+    if separation_count:
+        assert alternative_gap is not None
+        assert alternative_gap["value"] >= 0.0
+        assert alternative_gap["sources"]
+    else:
+        assert alternative_gap is None
     assert residual_summary["residual_increase_corner_count"] == 0
     assert bracket_summary["bracket_evidence_corner_count"] == analysis[
         "corner_count"
@@ -123,6 +135,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Search evidence" in report
     assert "Min segment-point clearance m³/h" in report
     assert "Segment evidence" in report
+    assert "Min alternative candidate gap m³/h" in report
     assert "Residual topology" in report
     assert "No-intersection boundary cases" in report
     assert "Result SHA-256" in report

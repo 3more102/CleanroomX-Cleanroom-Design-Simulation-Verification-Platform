@@ -1,0 +1,47 @@
+{
+  "name": "Cleanroom Parallel Supply Branches",
+  "total_airflow_m3_h": 7200.0,
+  "paths": [
+    {
+      "name": "Process Bay Branch",
+      "sections": [
+        {
+          "name": "Process duct",
+          "length_m": 18.0,
+          "friction_factor": 0.020,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 2.5,
+          "width_m": 0.55,
+          "height_m": 0.35
+        }
+      ]
+    },
+    {
+      "name": "Metrology Branch",
+      "sections": [
+        {
+          "name": "Metrology duct",
+          "length_m": 24.0,
+          "friction_factor": 0.020,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 3.2,
+          "diameter_m": 0.48
+        }
+      ]
+    },
+    {
+      "name": "Gowning Branch",
+      "sections": [
+        {
+          "name": "Gowning duct",
+          "length_m": 12.0,
+          "friction_factor": 0.021,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 2.0,
+          "width_m": 0.40,
+          "height_m": 0.25
+        }
+      ]
+    }
+  ]
+}

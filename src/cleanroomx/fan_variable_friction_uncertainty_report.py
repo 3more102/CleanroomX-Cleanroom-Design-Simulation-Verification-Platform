@@ -5,6 +5,38 @@ def _fmt(value: object) -> str:
     return "—" if value is None else str(value)
 
 
+def _fmt_extreme_source(source: dict) -> str:
+    parts = [
+        f"corner {source['corner_index']}",
+        f"fixed={source['fixed_pressure_pa']} Pa",
+    ]
+    if "fan_speed_ratio" in source:
+        parts.append(f"speed={source['fan_speed_ratio']}")
+    if "fan_curve_scenario" in source:
+        parts.append(f"scenario={source['fan_curve_scenario']}")
+
+    labels = (
+        ("fan_curve_pressure_pa", "fan-P"),
+        ("fan_curve_airflow_m3_h", "fan-Q"),
+        ("edge_local_loss_coefficient", "K"),
+        ("edge_absolute_roughness_m", "roughness"),
+        ("edge_kinematic_viscosity_m2_s", "viscosity"),
+        ("edge_air_density_kg_m3", "density"),
+        ("edge_length_m", "length"),
+        ("edge_circular_diameter_m", "diameter"),
+        ("edge_rectangular_width_m", "width"),
+        ("edge_rectangular_height_m", "height"),
+    )
+    for key, label in labels:
+        values = source.get(key)
+        if values:
+            encoded = ", ".join(
+                f"{name}={value}" for name, value in values.items()
+            )
+            parts.append(f"{label}[{encoded}]")
+    return "; ".join(parts)
+
+
 def markdown_fan_variable_friction_loop_uncertainty_report(
     result: dict,
 ) -> str:
@@ -212,6 +244,57 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"**{evidence['value']} {evidence['unit']}** — "
                     + ", ".join(sources)
                 )
+
+    extrema_sources = result.get("operating_point_extrema_sources")
+    if extrema_sources:
+        metric_labels = {
+            "airflow_m3_h": "Airflow m³/h",
+            "fan_pressure_pa": "Fan pressure Pa",
+            "system_pressure_pa": "System pressure Pa",
+        }
+        lines.extend(
+            [
+                "",
+                "## Envelope witness provenance",
+                "",
+                "| Metric | Bound | Value | Source corner input(s) |",
+                "|---|---|---:|---|",
+            ]
+        )
+        for metric, label in metric_labels.items():
+            metric_sources = extrema_sources.get(metric)
+            if metric_sources is None:
+                continue
+            for bound in ("lower", "upper"):
+                witness = metric_sources[bound]
+                source_text = " / ".join(
+                    _fmt_extreme_source(source)
+                    for source in witness["sources"]
+                )
+                lines.append(
+                    f"| {label} | {bound} | {witness['value']} | "
+                    f"{source_text} |"
+                )
+
+    edge_ranges = result.get("edge_airflow_corner_ranges")
+    if edge_ranges:
+        lines.extend(
+            [
+                "",
+                "## Internal edge-airflow corner ranges",
+                "",
+                "| Edge | Lower m³/h | Lower corner | Upper m³/h | Upper corner | Direction reversal |",
+                "|---|---:|---:|---:|---:|---|",
+            ]
+        )
+        for edge in edge_ranges:
+            lines.append(
+                f"| {edge['edge']} | {edge['lower_airflow_m3_h']} | "
+                f"{edge['lower_corner_index']} | "
+                f"{edge['upper_airflow_m3_h']} | "
+                f"{edge['upper_corner_index']} | "
+                f"{'yes' if edge['direction_reversal_across_corners'] else 'no'} |"
+            )
 
     lines.extend(
         [

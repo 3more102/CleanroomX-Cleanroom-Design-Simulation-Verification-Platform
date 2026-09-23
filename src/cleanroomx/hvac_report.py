@@ -7,18 +7,33 @@ def markdown_hvac_report(result: dict) -> str:
         [
             "## Airflow and preliminary capacity",
             "",
-            "| Room | Cleanroom m³/h | Governing m³/h | Basis | Cooling kW | Heating kW | Filter units |",
-            "|---|---:|---:|---|---:|---:|---:|",
+            "| Room | Cleanroom m³/h | Governing m³/h | Basis | Net surplus m³/h | Balance | Cooling kW | Heating kW | Filter units |",
+            "|---|---:|---:|---|---:|---|---:|---:|---:|",
         ]
     )
     for room in result["rooms"]:
         thermal = room["thermal"]
+        balance = room["air_balance"]
         units = room["filter_units"] if room["filter_units"] is not None else "—"
+        balance_status = "PASS" if balance["passes_minimum_surplus"] else "FAIL"
         lines.append(
             f"| {room['name']} | {room['cleanroom_airflow_m3_h']} | "
             f"{room['governing_airflow_m3_h']} | {thermal['governing_airflow_basis']} | "
+            f"{balance['net_surplus_m3_h']} | {balance_status} | "
             f"{thermal['preliminary_cooling_capacity_kw']} | "
             f"{thermal['preliminary_heating_capacity_kw']} | {units} |"
+        )
+
+    lines.extend(["", "## Air-balance details", ""])
+    for room in result["rooms"]:
+        balance = room["air_balance"]
+        lines.append(
+            f"- **{room['name']}:** supply {balance['supply_airflow_m3_h']} m³/h, "
+            f"return {balance['return_airflow_m3_h']} m³/h, exhaust "
+            f"{balance['exhaust_airflow_m3_h']} m³/h, transfer-in "
+            f"{balance['transfer_in_airflow_m3_h']} m³/h, transfer-out "
+            f"{balance['transfer_out_airflow_m3_h']} m³/h, net surplus "
+            f"{balance['net_surplus_m3_h']} m³/h."
         )
 
     lines.extend(["", "## Psychrometric states", ""])
@@ -41,10 +56,28 @@ def markdown_hvac_report(result: dict) -> str:
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
             )
 
+    if result["supply_fan"] is not None:
+        fan = result["supply_fan"]
+        lines.extend(
+            [
+                "",
+                "## Preliminary supply-fan duty",
+                "",
+                f"- Airflow: **{fan['airflow_m3_h']} m³/h**.",
+                f"- Total entered static pressure: **{fan['total_static_pressure_pa']} Pa**.",
+                f"- Estimated electrical input: **{fan['estimated_electrical_input_kw']} kW**.",
+                f"- {fan['scope_note']}",
+            ]
+        )
+
     lines.extend(
         [
             "",
             f"Total governing airflow: **{result['total_governing_airflow_m3_h']} m³/h**.",
+            f"Total return airflow: **{result['total_return_airflow_m3_h']} m³/h**.",
+            f"Total exhaust airflow: **{result['total_exhaust_airflow_m3_h']} m³/h**.",
+            f"Total net surplus: **{result['total_net_surplus_m3_h']} m³/h**.",
+            f"All minimum airflow-surplus checks pass: **{result['all_air_balances_pass']}**.",
             f"Preliminary cooling capacity: **{result['total_preliminary_cooling_capacity_kw']} kW**.",
             f"Preliminary heating capacity: **{result['total_preliminary_heating_capacity_kw']} kW**.",
             "",

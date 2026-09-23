@@ -17,6 +17,13 @@ def _nonnegative(value: float, field_name: str) -> float:
     return value
 
 
+def _efficiency(value: float, field_name: str) -> float:
+    value = float(value)
+    if not 0.0 < value <= 1.0:
+        raise ValueError(f"{field_name} must be > 0 and <= 1")
+    return value
+
+
 @dataclass(frozen=True)
 class AirState:
     dry_bulb_c: float
@@ -118,10 +125,34 @@ class ThermalDesign:
 
 
 @dataclass(frozen=True)
+class AirBalanceDesign:
+    return_airflow_m3_h: float = 0.0
+    exhaust_airflow_m3_h: float = 0.0
+    transfer_in_airflow_m3_h: float = 0.0
+    transfer_out_airflow_m3_h: float = 0.0
+    minimum_surplus_m3_h: float = 0.0
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "return_airflow_m3_h",
+            "exhaust_airflow_m3_h",
+            "transfer_in_airflow_m3_h",
+            "transfer_out_airflow_m3_h",
+            "minimum_surplus_m3_h",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _nonnegative(getattr(self, field_name), field_name),
+            )
+
+
+@dataclass(frozen=True)
 class FilterUnit:
     name: str
     rated_airflow_m3_h: float
     design_utilization: float = 0.90
+    pressure_drop_pa: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -131,10 +162,16 @@ class FilterUnit:
             "rated_airflow_m3_h",
             _positive(self.rated_airflow_m3_h, "rated_airflow_m3_h"),
         )
-        utilization = float(self.design_utilization)
-        if not 0.0 < utilization <= 1.0:
-            raise ValueError("design_utilization must be > 0 and <= 1")
-        object.__setattr__(self, "design_utilization", utilization)
+        object.__setattr__(
+            self,
+            "design_utilization",
+            _efficiency(self.design_utilization, "design_utilization"),
+        )
+        object.__setattr__(
+            self,
+            "pressure_drop_pa",
+            _nonnegative(self.pressure_drop_pa, "pressure_drop_pa"),
+        )
 
     @property
     def design_airflow_m3_h(self) -> float:
@@ -142,10 +179,45 @@ class FilterUnit:
 
 
 @dataclass(frozen=True)
+class FanSystem:
+    name: str
+    duct_pressure_drop_pa: float = 0.0
+    coil_pressure_drop_pa: float = 0.0
+    other_pressure_drop_pa: float = 0.0
+    fan_efficiency: float = 0.65
+    motor_efficiency: float = 0.90
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("fan-system name cannot be empty")
+        for field_name in (
+            "duct_pressure_drop_pa",
+            "coil_pressure_drop_pa",
+            "other_pressure_drop_pa",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _nonnegative(getattr(self, field_name), field_name),
+            )
+        object.__setattr__(
+            self,
+            "fan_efficiency",
+            _efficiency(self.fan_efficiency, "fan_efficiency"),
+        )
+        object.__setattr__(
+            self,
+            "motor_efficiency",
+            _efficiency(self.motor_efficiency, "motor_efficiency"),
+        )
+
+
+@dataclass(frozen=True)
 class HVACRoom:
     name: str
     cleanroom_airflow_m3_h: float
     thermal_design: ThermalDesign
+    air_balance: AirBalanceDesign = field(default_factory=AirBalanceDesign)
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -162,6 +234,7 @@ class HVACProject:
     name: str
     rooms: tuple[HVACRoom, ...]
     filter_unit: FilterUnit | None = None
+    fan_system: FanSystem | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

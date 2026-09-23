@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 
 from .hvac_models import (
+    AirBalanceDesign,
     AirState,
+    FanSystem,
     FilterUnit,
     HVACProject,
     HVACRoom,
@@ -31,12 +33,20 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
             name=item["name"],
             cleanroom_airflow_m3_h=item["cleanroom_airflow_m3_h"],
             thermal_design=thermal_design_from_dict(item["thermal_design"]),
+            air_balance=AirBalanceDesign(**item.get("air_balance", {})),
         )
         for item in data["rooms"]
     )
     filter_data = data.get("filter_unit")
     filter_unit = FilterUnit(**filter_data) if filter_data is not None else None
-    return HVACProject(name=data["name"], rooms=rooms, filter_unit=filter_unit)
+    fan_data = data.get("fan_system")
+    fan_system = FanSystem(**fan_data) if fan_data is not None else None
+    return HVACProject(
+        name=data["name"],
+        rooms=rooms,
+        filter_unit=filter_unit,
+        fan_system=fan_system,
+    )
 
 
 def load_hvac_project(path: str | Path) -> HVACProject:

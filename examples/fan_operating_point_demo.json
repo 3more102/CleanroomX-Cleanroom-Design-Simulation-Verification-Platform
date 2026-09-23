@@ -1,0 +1,17 @@
+{
+  "name": "Supply fan operating-point demo",
+  "fan_curve": {
+    "name": "Example manufacturer fan curve",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+      {"airflow_m3_h": 3000.0, "pressure_pa": 500.0},
+      {"airflow_m3_h": 6000.0, "pressure_pa": 300.0},
+      {"airflow_m3_h": 8000.0, "pressure_pa": 100.0}
+    ]
+  },
+  "system_curve": {
+    "name": "Example duct system",
+    "fixed_pressure_pa": 80.0,
+    "resistance_pa_per_m3_s_squared": 100.0
+  }
+}

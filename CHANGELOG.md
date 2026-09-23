@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.11 fan/system operating-point solver — 2026-09-23
+
+- Added explicit fan performance curves from ordered airflow/pressure points with strict finite and monotonic validation.
+- Added fixed-plus-quadratic system curves using project-supplied fixed pressure and resistance.
+- Added bounded fan/system intersection solving with piecewise-linear fan interpolation and no fan-curve extrapolation.
+- Added operating airflow, fan/system pressure, pressure residual, interpolation segment, and fluid air-power reporting.
+- Added explicit no-intersection status when the operating point lies outside the supplied fan data.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-curve` CLI, example data, tests, and documentation.
+- Kept the workflow explicitly bounded: no inferred fan laws, manufacturer acceptance, stall/surge limits, variable resistance, system effect, controls, or electrical-power inference.
+
 ## v0.10 thermal uncertainty screening — 2026-09-23
 
 - Added deterministic interval propagation for internal sensible/latent loads, cleanroom airflow, makeup airflow, and optional supply-air temperature.

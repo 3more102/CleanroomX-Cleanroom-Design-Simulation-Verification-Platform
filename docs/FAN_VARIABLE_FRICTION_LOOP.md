@@ -93,3 +93,8 @@ The CLI exits with code 0 only for `solved`; unresolved/non-converged studies re
 ## Engineering boundary
 
 This is a steady incompressible engineering network model, not CFD. It does not infer damper position, leakage, system effect, acoustic performance, fan stall/surge boundaries, motor/VFD limits, controls, transients, or manufacturer acceptance. The supplied fan data and all engineering inputs remain the user's responsibility.
+
+
+## Automatic-friction evidence validation
+
+Before solving, every geometry edge identified as automatic-friction is validated against its stored resistance evidence. The solver requires complete finite geometry, density/local-loss, roughness, kinematic-viscosity, positive reference-airflow, hydraulic-diameter/area, and positive stored friction-factor evidence. This validation occurs before near-zero-flow freezing, so a zero-flow branch cannot hide malformed automatic-friction provenance.

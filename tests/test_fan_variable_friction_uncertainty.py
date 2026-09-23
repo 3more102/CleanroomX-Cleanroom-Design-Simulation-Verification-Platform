@@ -1625,3 +1625,82 @@ def test_fan_curve_boundary_clearance_marks_zero_solved_corner_coverage() -> Non
         corner["fan_curve_boundary_clearance"] is None
         for corner in result["corners"]
     )
+
+
+
+def test_no_intersection_endpoint_diagnostics_preserve_lower_boundary_gap() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {
+        "value": 900.0,
+        "uncertainty_abs": 0.0,
+    }
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["fan_curve_no_intersection_summary"]
+    assert result["status"] == "indeterminate"
+    assert summary["no_intersection_corner_count"] == result["corner_count"]
+    assert summary["lower_boundary_corner_count"] == result["corner_count"]
+    assert summary["upper_boundary_corner_count"] == 0
+
+    for corner in result["corners"]:
+        diagnostic = corner["fan_curve_no_intersection_diagnostic"]
+        assert diagnostic is not None
+        assert diagnostic["boundary"] == "lower"
+        assert diagnostic["mismatch_kind"] == "fan_pressure_deficit"
+        assert diagnostic["airflow_m3_h"] == pytest.approx(0.0)
+        assert diagnostic["fan_pressure_pa"] == pytest.approx(800.0)
+        assert diagnostic["system_pressure_pa"] == pytest.approx(900.0)
+        assert diagnostic["fan_minus_system_pressure_pa"] == pytest.approx(
+            -100.0
+        )
+        assert diagnostic["absolute_boundary_pressure_gap_pa"] == pytest.approx(
+            100.0
+        )
+
+    largest = summary["largest_absolute_boundary_pressure_gap_pa"]
+    assert largest is not None
+    assert largest["value"] == pytest.approx(100.0)
+    assert len(largest["sources"]) == result["corner_count"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "No-intersection supplied-boundary diagnostics" in report
+    assert "Lower supplied-airflow boundary cases" in report
+    assert "fan_pressure_deficit" in report
+    assert "does not extrapolate the fan curve" in report
+
+
+def test_no_intersection_endpoint_diagnostics_preserve_upper_boundary_gap() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {
+        "value": 0.0,
+        "uncertainty_abs": 0.0,
+    }
+    data["fan_curve"]["points"] = [
+        {"airflow_m3_h": 0, "pressure_pa": 10000},
+        {"airflow_m3_h": 5400, "pressure_pa": 9000},
+        {"airflow_m3_h": 9000, "pressure_pa": 8000},
+    ]
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["fan_curve_no_intersection_summary"]
+    assert result["status"] == "indeterminate"
+    assert summary["no_intersection_corner_count"] == result["corner_count"]
+    assert summary["lower_boundary_corner_count"] == 0
+    assert summary["upper_boundary_corner_count"] == result["corner_count"]
+
+    for corner in result["corners"]:
+        diagnostic = corner["fan_curve_no_intersection_diagnostic"]
+        assert diagnostic is not None
+        assert diagnostic["boundary"] == "upper"
+        assert diagnostic["mismatch_kind"] == "fan_pressure_surplus"
+        assert diagnostic["airflow_m3_h"] == pytest.approx(9000.0)
+        assert diagnostic["fan_pressure_pa"] == pytest.approx(8000.0)
+        assert diagnostic["fan_minus_system_pressure_pa"] > 0.0
+        assert diagnostic["absolute_boundary_pressure_gap_pa"] == pytest.approx(
+            diagnostic["fan_minus_system_pressure_pa"],
+            abs=1e-9,
+        )

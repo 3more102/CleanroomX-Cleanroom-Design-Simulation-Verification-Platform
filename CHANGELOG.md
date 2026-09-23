@@ -1,4 +1,16 @@
 # Changelog
+## v0.65 alternative crossing-candidate separation audit — 2026-09-24
+
+- Extends solved nonlinear fan/variable-friction crossing provenance with airflow separation to every additional discrete supplied-point candidate feature.
+- Represents supplied-point tolerance contacts as point intervals and strict sign-change candidates as their exact supplied-point airflow intervals; a zero gap means only that the selected airflow lies inside an alternative discrete candidate interval.
+- Retains every alternative candidate's solver-priority rank, exact interval, selected-airflow gap, nearest tied alternative feature(s), and overlap state without estimating any alternate continuous root.
+- Aggregates nonlinear uncertainty corners with alternative-separation coverage, overlap corner indices, and the minimum selected-to-alternative candidate interval gap with exact tied source-corner provenance.
+- Preserves the v0.64 pressure-residual airflow-equivalence audit and all earlier solver-quality, topology, integrity, and power-coverage evidence.
+- Surfaces the evidence in standalone nonlinear-loop Markdown, nonlinear uncertainty reports, and engineering-dossier tables.
+- Adds regression coverage for deterministic multiple-candidate arithmetic, uncertainty aggregation/reporting, and dossier propagation.
+- Treats the new separation values as discrete numerical topology evidence only; they do not prove multiple physical roots, dynamic stability, stall/surge margin, manufacturer operating region, commissioning status, certification, or equipment acceptance.
+- Bumped package/runtime metadata to v0.65.0.
+
 ## v0.64 pressure-residual airflow-equivalence audit — 2026-09-24
 
 - Maps the already configured operating-pressure solver tolerance through each solved corner's local fan-minus-system secant gradient into an equivalent airflow magnitude.

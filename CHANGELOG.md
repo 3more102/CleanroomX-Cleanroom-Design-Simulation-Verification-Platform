@@ -1,4 +1,14 @@
 # Changelog
+## v0.44 bounded fan-speed ratio uncertainty — 2026-09-23
+
+- Added an optional user-supplied fan speed-ratio interval to nonlinear fan/variable-friction corner analysis.
+- Builds each bounded reference fan curve from configured point-pressure/airflow-coordinate bounds, then reuses the existing CleanroomX affinity-law transform before solving the complete nonlinear loop.
+- Scales airflow with speed ratio and pressure with speed ratio squared while preserving the transformed supplied-data range and strict no-extrapolation behavior.
+- Keeps the new input fully opt-in so legacy uncertainty studies retain their prior fan-curve naming, provenance completeness, corner counts, and solver behavior when no speed ratio is configured.
+- Rejects speed-ratio intervals whose lower bound is not strictly positive and includes configured speed bounds in the pre-materialization corner-limit check.
+- Added JSON loading, Markdown corner evidence, a reproducible speed-uncertainty example, and regression coverage.
+- Bumped package/runtime metadata to v0.44.0.
+
 ## v0.43 bounded fan-curve airflow-coordinate uncertainty — 2026-09-23
 
 - Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute airflow-coordinate bounds at selected supplied fan-curve point indices.

@@ -39,6 +39,9 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "minimum_nearest_segment_endpoint_clearance_m3_h"
     ]["value"] >= 0.0
     assert residual_summary["complete_study_coverage"] is True
+    assert residual_summary["selected_candidate_feature_corner_count"] == (
+        analysis["solved_corner_count"]
+    )
     assert residual_summary["residual_increase_corner_count"] == 0
     assert bracket_summary["bracket_evidence_corner_count"] == analysis[
         "corner_count"

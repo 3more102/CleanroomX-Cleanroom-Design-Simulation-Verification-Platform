@@ -1982,6 +1982,177 @@ def _fan_curve_crossing_conditioning_summary(
     }
 
 
+def _fan_curve_segment_position_diagnostic(result: dict) -> dict | None:
+    bracket = _fan_curve_intersection_bracket_diagnostic(result)
+    if bracket is None:
+        return None
+
+    point = result.get("fan_operating_point") or {}
+    operating_airflow = point.get("airflow_m3_h")
+    if operating_airflow is None:
+        return None
+
+    low_airflow = float(bracket["low_endpoint"]["airflow_m3_h"])
+    high_airflow = float(bracket["high_endpoint"]["airflow_m3_h"])
+    airflow = float(operating_airflow)
+    span = high_airflow - low_airflow
+    if span <= 0.0:
+        return None
+
+    lower_clearance = max(0.0, airflow - low_airflow)
+    upper_clearance = max(0.0, high_airflow - airflow)
+    nearest_clearance = min(lower_clearance, upper_clearance)
+    normalized_position = lower_clearance / span
+    normalized_nearest_clearance = nearest_clearance / span
+
+    if math.isclose(
+        lower_clearance,
+        upper_clearance,
+        rel_tol=1e-12,
+        abs_tol=1e-9,
+    ):
+        nearest_endpoint = "tied"
+    elif lower_clearance < upper_clearance:
+        nearest_endpoint = "lower"
+    else:
+        nearest_endpoint = "upper"
+
+    return {
+        "segment_low_airflow_m3_h": round(low_airflow, 6),
+        "segment_high_airflow_m3_h": round(high_airflow, 6),
+        "segment_airflow_span_m3_h": round(span, 9),
+        "solved_operating_airflow_m3_h": round(airflow, 9),
+        "lower_segment_endpoint_clearance_m3_h": round(
+            lower_clearance,
+            9,
+        ),
+        "upper_segment_endpoint_clearance_m3_h": round(
+            upper_clearance,
+            9,
+        ),
+        "nearest_segment_endpoint": nearest_endpoint,
+        "nearest_segment_endpoint_clearance_m3_h": round(
+            nearest_clearance,
+            9,
+        ),
+        "normalized_segment_position_fraction": round(
+            normalized_position,
+            12,
+        ),
+        "normalized_nearest_segment_endpoint_clearance_fraction": round(
+            normalized_nearest_clearance,
+            12,
+        ),
+    }
+
+
+def _fan_curve_segment_position_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    cases = [
+        (corner_index, corner, corner["fan_curve_segment_position"])
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_segment_position") is not None
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(cases) == len(corners)
+    )
+
+    def _extreme_evidence(
+        key: str,
+        *,
+        mode: str,
+        unit: str,
+    ) -> dict | None:
+        if not cases:
+            return None
+        chooser = min if mode == "min" else max
+        extreme = chooser(
+            float(diagnostic[key])
+            for _corner_index, _corner, diagnostic in cases
+        )
+        sources = []
+        for corner_index, corner, diagnostic in cases:
+            if not math.isclose(
+                float(diagnostic[key]),
+                extreme,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "segment_low_airflow_m3_h": diagnostic[
+                        "segment_low_airflow_m3_h"
+                    ],
+                    "segment_high_airflow_m3_h": diagnostic[
+                        "segment_high_airflow_m3_h"
+                    ],
+                    "segment_airflow_span_m3_h": diagnostic[
+                        "segment_airflow_span_m3_h"
+                    ],
+                    "nearest_segment_endpoint": diagnostic[
+                        "nearest_segment_endpoint"
+                    ],
+                    "nearest_segment_endpoint_clearance_m3_h": diagnostic[
+                        "nearest_segment_endpoint_clearance_m3_h"
+                    ],
+                    "normalized_segment_position_fraction": diagnostic[
+                        "normalized_segment_position_fraction"
+                    ],
+                    "normalized_nearest_segment_endpoint_clearance_fraction": (
+                        diagnostic[
+                            "normalized_nearest_segment_endpoint_clearance_fraction"
+                        ]
+                    ),
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(extreme, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "segment_position_evidence_corner_count": len(cases),
+        "complete_study_coverage": complete_study_coverage,
+        "minimum_nearest_segment_endpoint_clearance_m3_h": (
+            _extreme_evidence(
+                "nearest_segment_endpoint_clearance_m3_h",
+                mode="min",
+                unit="m3/h",
+            )
+        ),
+        "minimum_normalized_nearest_segment_endpoint_clearance_fraction": (
+            _extreme_evidence(
+                "normalized_nearest_segment_endpoint_clearance_fraction",
+                mode="min",
+                unit="1",
+            )
+        ),
+        "maximum_segment_airflow_span_m3_h": (
+            _extreme_evidence(
+                "segment_airflow_span_m3_h",
+                mode="max",
+                unit="m3/h",
+            )
+        ),
+        "scope_note": (
+            "This diagnostic reports where each solved operating airflow lies "
+            "inside the exact supplied fan-curve interpolation segment that "
+            "bounded the root. Clearance to the segment endpoints is proximity "
+            "to supplied data points only; it is not an interpolation-error "
+            "estimate, fan-performance uncertainty, stall/surge margin, "
+            "manufacturer operating-region limit, or equipment-acceptance "
+            "threshold."
+        ),
+    }
+
+
 def _fan_curve_boundary_clearance(result: dict) -> dict | None:
     if result.get("status") != "solved":
         return None
@@ -2441,6 +2612,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                     result
                                 )
                             ),
+                            "fan_curve_segment_position": (
+                                _fan_curve_segment_position_diagnostic(result)
+                            ),
                             "fan_curve_supplied_point_residual_audit": result.get(
                                 "fan_curve_supplied_point_residual_audit"
                             ),
@@ -2482,6 +2656,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     fan_curve_crossing_conditioning_summary = (
         _fan_curve_crossing_conditioning_summary(
+            corners,
+            nominal["status"],
+        )
+    )
+    nominal_fan_curve_segment_position = (
+        _fan_curve_segment_position_diagnostic(nominal)
+    )
+    fan_curve_segment_position_summary = (
+        _fan_curve_segment_position_summary(
             corners,
             nominal["status"],
         )
@@ -2876,6 +3059,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "fan_curve_crossing_conditioning_summary": (
             fan_curve_crossing_conditioning_summary
+        ),
+        "nominal_fan_curve_segment_position": (
+            nominal_fan_curve_segment_position
+        ),
+        "fan_curve_segment_position_summary": (
+            fan_curve_segment_position_summary
         ),
         "nominal_fan_curve_supplied_point_residual_audit": (
             nominal_fan_curve_supplied_point_residual_audit

@@ -826,6 +826,22 @@ def _metric_envelope(points: list[dict], key: str, unit: str) -> dict:
     }
 
 
+def _metric_extreme_case_witnesses(points: list[dict], key: str) -> dict:
+    values = [float(point[key]) for point in points]
+    lower_index = min(range(len(values)), key=values.__getitem__)
+    upper_index = max(range(len(values)), key=values.__getitem__)
+    return {
+        "lower": {
+            "corner_index": lower_index,
+            "value": round(values[lower_index], 6),
+        },
+        "upper": {
+            "corner_index": upper_index,
+            "value": round(values[upper_index], 6),
+        },
+    }
+
+
 def _edge_airflow_corner_ranges(
     study: FanVariableFrictionLoopUncertaintyStudy,
     solved_networks: list[dict],
@@ -838,13 +854,17 @@ def _edge_airflow_corner_ranges(
                 item for item in network["edges"] if item["name"] == edge.name
             )
             values.append(float(match["airflow_m3_h"]))
-        lower = min(values)
-        upper = max(values)
+        lower_index = min(range(len(values)), key=values.__getitem__)
+        upper_index = max(range(len(values)), key=values.__getitem__)
+        lower = values[lower_index]
+        upper = values[upper_index]
         rows.append(
             {
                 "edge": edge.name,
                 "lower_airflow_m3_h": round(lower, 6),
                 "upper_airflow_m3_h": round(upper, 6),
+                "lower_corner_index": lower_index,
+                "upper_corner_index": upper_index,
                 "direction_reversal_across_corners": lower < 0.0 < upper,
             }
         )
@@ -1156,6 +1176,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
 
     operating_point_envelope = None
+    operating_point_extreme_cases = None
     edge_airflow_corner_ranges = None
     if all_corners_solved:
         operating_point_envelope = {
@@ -1174,6 +1195,14 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "system_pressure_pa",
                 "Pa",
             ),
+        }
+        operating_point_extreme_cases = {
+            key: _metric_extreme_case_witnesses(solved_points, key)
+            for key in (
+                "airflow_m3_h",
+                "fan_pressure_pa",
+                "system_pressure_pa",
+            )
         }
         edge_airflow_corner_ranges = _edge_airflow_corner_ranges(
             study,
@@ -1414,6 +1443,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "unresolved_corner_count": unresolved_corner_count,
         "corners": corners,
         "operating_point_envelope": operating_point_envelope,
+        "operating_point_extreme_cases": operating_point_extreme_cases,
         "edge_airflow_corner_ranges": edge_airflow_corner_ranges,
         "traceability": {
             "complete": not missing,

@@ -1,0 +1,48 @@
+{
+  "name": "Cleanroom Air Balance Demo",
+  "filter_unit": {
+    "name": "Example FFU",
+    "rated_airflow_m3_h": 1200.0,
+    "design_utilization": 0.9
+  },
+  "rooms": [
+    {
+      "name": "Process Bay",
+      "cleanroom_airflow_m3_h": 3000.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        },
+        "outdoor_air": {
+          "dry_bulb_c": 35.0,
+          "relative_humidity_percent": 55.0
+        },
+        "makeup_air_m3_h": 400.0
+      },
+      "air_balance": {
+        "return_air_m3_h": 2400.0,
+        "exhaust_air_m3_h": 300.0,
+        "transfer_out_m3_h": 200.0,
+        "leakage_out_m3_h": 100.0,
+        "balance_tolerance_m3_h": 0.0
+      }
+    },
+    {
+      "name": "Gowning",
+      "cleanroom_airflow_m3_h": 1200.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      },
+      "air_balance": {
+        "return_air_m3_h": 1050.0,
+        "exhaust_air_m3_h": 100.0,
+        "leakage_out_m3_h": 50.0,
+        "balance_tolerance_m3_h": 0.0
+      }
+    }
+  ]
+}

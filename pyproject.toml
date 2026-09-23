@@ -17,7 +17,8 @@ dev = ["pytest>=8"]
 [project.scripts]
 cleanroomx = "cleanroomx.cli:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
-cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"\ncleanroomx-measurement = "cleanroomx.measurement_cli:main"
+cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
+cleanroomx-measurement = "cleanroomx.measurement_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

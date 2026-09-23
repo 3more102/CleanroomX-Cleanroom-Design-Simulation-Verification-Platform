@@ -1,0 +1,37 @@
+{
+  "name": "Process Bay Recovery Demo",
+  "target_concentration_per_m3": 100000,
+  "max_recovery_time_minutes": 15,
+  "design_ach": 15,
+  "removal_efficiency": 0.9,
+  "samples": [
+    {
+      "time_minutes": 0,
+      "concentration_per_m3": 1000000
+    },
+    {
+      "time_minutes": 2,
+      "concentration_per_m3": 650000
+    },
+    {
+      "time_minutes": 4,
+      "concentration_per_m3": 420000
+    },
+    {
+      "time_minutes": 6,
+      "concentration_per_m3": 270000
+    },
+    {
+      "time_minutes": 8,
+      "concentration_per_m3": 175000
+    },
+    {
+      "time_minutes": 10,
+      "concentration_per_m3": 110000
+    },
+    {
+      "time_minutes": 12,
+      "concentration_per_m3": 75000
+    }
+  ]
+}

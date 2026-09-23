@@ -6,6 +6,9 @@ from pathlib import Path
 from .hvac_models import (
     AirBalanceDesign,
     AirState,
+    DuctNetwork,
+    DuctPath,
+    DuctSection,
     FanSystem,
     FilterUnit,
     HVACProject,
@@ -27,6 +30,21 @@ def thermal_design_from_dict(data: dict) -> ThermalDesign:
     )
 
 
+def duct_network_from_dict(data: dict) -> DuctNetwork:
+    paths = tuple(
+        DuctPath(
+            name=path["name"],
+            sections=tuple(DuctSection(**section) for section in path["sections"]),
+        )
+        for path in data["paths"]
+    )
+    return DuctNetwork(
+        paths=paths,
+        air_density_kg_m3=data["air_density_kg_m3"],
+        dynamic_viscosity_pa_s=data["dynamic_viscosity_pa_s"],
+    )
+
+
 def hvac_project_from_dict(data: dict) -> HVACProject:
     rooms = tuple(
         HVACRoom(
@@ -41,11 +59,16 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
     filter_unit = FilterUnit(**filter_data) if filter_data is not None else None
     fan_data = data.get("fan_system")
     fan_system = FanSystem(**fan_data) if fan_data is not None else None
+    duct_data = data.get("supply_duct_network")
+    duct_network = (
+        duct_network_from_dict(duct_data) if duct_data is not None else None
+    )
     return HVACProject(
         name=data["name"],
         rooms=rooms,
         filter_unit=filter_unit,
         fan_system=fan_system,
+        supply_duct_network=duct_network,
     )
 
 

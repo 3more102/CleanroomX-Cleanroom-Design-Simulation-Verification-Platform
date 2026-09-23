@@ -148,6 +148,22 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ]
         )
 
+    power_ranges = result.get("power_corner_ranges")
+    if power_ranges is not None:
+        lines.extend(["", "## Evaluated power corner ranges", ""])
+        labels = {
+            "fluid_air_power_kw": "Fluid air power",
+            "shaft_power_kw": "Shaft power",
+            "electrical_input_kw": "Electrical input",
+            "specific_fan_power_w_per_m3_s": "Specific fan power",
+        }
+        for key, interval in power_ranges["metrics"].items():
+            lines.append(
+                f"- {labels[key]}: **{interval['lower']} to "
+                f"{interval['upper']} {interval['unit']}**"
+            )
+        lines.extend(["", power_ranges["scope_note"]])
+
     lines.extend(
         [
             "",

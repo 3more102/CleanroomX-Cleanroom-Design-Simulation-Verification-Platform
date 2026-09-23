@@ -568,6 +568,11 @@ def solve_fan_variable_friction_loop(
                     operating_iterations = iteration
                     if abs(residual) <= tolerance:
                         bracket_width = high - low
+                        width_fraction = (
+                            bracket_width / supplied_segment_span
+                        )
+                        expected_width_fraction = 0.5 ** (iteration - 1)
+                        bracket_midpoint = 0.5 * (low + high)
                         final_bisection_bracket = {
                             "low_airflow_m3_h": round(low, 9),
                             "high_airflow_m3_h": round(high, 9),
@@ -593,10 +598,42 @@ def solve_fan_variable_friction_loop(
                                 9,
                             ),
                             "width_fraction_of_supplied_segment": round(
-                                bracket_width / supplied_segment_span,
+                                width_fraction,
                                 12,
                             ),
                             "iteration": iteration,
+                            "invariant_audit": {
+                                "strict_sign_change_preserved": (
+                                    low_residual > 0.0
+                                    and high_residual < 0.0
+                                ),
+                                "selected_airflow_is_bracket_midpoint": (
+                                    math.isclose(
+                                        airflow,
+                                        bracket_midpoint,
+                                        rel_tol=0.0,
+                                        abs_tol=1e-12,
+                                    )
+                                ),
+                                "binary_contraction_step_count": (
+                                    iteration - 1
+                                ),
+                                "expected_width_fraction_of_supplied_segment": round(
+                                    expected_width_fraction,
+                                    15,
+                                ),
+                                "actual_width_fraction_of_supplied_segment": round(
+                                    width_fraction,
+                                    15,
+                                ),
+                                "absolute_width_fraction_consistency_error": round(
+                                    abs(
+                                        width_fraction
+                                        - expected_width_fraction
+                                    ),
+                                    18,
+                                ),
+                            },
                         }
                         termination_reason = "pressure_residual"
                         break

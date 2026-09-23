@@ -9,7 +9,7 @@ from .fan_variable_friction_uncertainty import (
     FanVariableFrictionLoopUncertaintyStudy,
 )
 from .loop_network_io import looped_flow_network_from_dict
-from .pressure_power import fan_power_efficiencies_from_dict
+from .pressure_power import FanPowerEfficiencies, fan_power_efficiencies_from_dict
 from .uncertainty_models import Provenance, UncertainValue
 
 
@@ -43,6 +43,69 @@ def _uncertain_value(
         uncertainty_abs=data.get("uncertainty_abs", 0.0),
         provenance=_provenance_from_dict(data.get("provenance")),
     )
+
+
+def _power_efficiency_uncertainty(
+    data: dict,
+    power_efficiencies: FanPowerEfficiencies | None,
+) -> dict[str, UncertainValue]:
+    specs = data.get("power_efficiency_uncertainty", {})
+    if not isinstance(specs, dict):
+        raise ValueError(
+            "power_efficiency_uncertainty must be an object when provided"
+        )
+    allowed_names = {
+        "fan_efficiency",
+        "motor_efficiency",
+        "vfd_efficiency",
+    }
+    unknown_names = set(specs) - allowed_names
+    if unknown_names:
+        raise ValueError(
+            "unsupported power efficiency uncertainty field(s): "
+            + ", ".join(sorted(unknown_names))
+        )
+    if specs and power_efficiencies is None:
+        raise ValueError(
+            "power_efficiency_uncertainty requires explicit power_efficiencies"
+        )
+
+    nominal_values = (
+        {} if power_efficiencies is None else power_efficiencies.to_dict()
+    )
+    result: dict[str, UncertainValue] = {}
+    for name, spec in specs.items():
+        if isinstance(spec, (int, float)):
+            uncertainty_abs = float(spec)
+            provenance = None
+        elif isinstance(spec, dict):
+            unknown_fields = set(spec) - {"uncertainty_abs", "provenance"}
+            if unknown_fields:
+                raise ValueError(
+                    f"unsupported {name} uncertainty option(s): "
+                    + ", ".join(sorted(unknown_fields))
+                )
+            uncertainty_abs = spec.get("uncertainty_abs", 0.0)
+            provenance = _provenance_from_dict(spec.get("provenance"))
+        else:
+            raise ValueError(
+                f"power efficiency uncertainty for {name!r} must be a "
+                "number or object"
+            )
+
+        nominal = nominal_values.get(name)
+        if nominal is None:
+            raise ValueError(
+                f"power efficiency uncertainty for {name!r} requires an "
+                "explicit nominal efficiency"
+            )
+        result[name] = UncertainValue(
+            value=nominal,
+            unit="1",
+            uncertainty_abs=uncertainty_abs,
+            provenance=provenance,
+        )
+    return result
 
 
 def _fan_curve_scenarios(
@@ -322,6 +385,14 @@ def fan_variable_friction_loop_uncertainty_from_dict(
             + ", ".join(sorted(unknown))
         )
 
+    power_efficiencies = fan_power_efficiencies_from_dict(
+        data.get("power_efficiencies")
+    )
+    power_efficiency_uncertainty = _power_efficiency_uncertainty(
+        data,
+        power_efficiencies,
+    )
+
     return FanVariableFrictionLoopUncertaintyStudy(
         name=data["name"],
         fan_curve=fan_curve,
@@ -354,9 +425,9 @@ def fan_variable_friction_loop_uncertainty_from_dict(
             fan_data.get("provenance")
         ),
         max_corner_cases=data.get("max_corner_cases", 256),
-        power_efficiencies=fan_power_efficiencies_from_dict(
-            data.get("power_efficiencies")
-        ),
+        power_efficiencies=power_efficiencies,
+        power_efficiency_uncertainty=power_efficiency_uncertainty,
+        max_power_cases=data.get("max_power_cases", 2048),
         **solver,
     )
 

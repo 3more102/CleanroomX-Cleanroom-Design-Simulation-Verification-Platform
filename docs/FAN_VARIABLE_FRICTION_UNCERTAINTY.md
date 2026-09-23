@@ -53,11 +53,12 @@ A complete result reports:
 - the explicit bounded input intervals;
 - evaluated corner count and per-corner state;
 - airflow, fan-pressure, and system-pressure min/max across solved corners;
-- internal edge-airflow ranges across evaluated corners;
+- the exact zero-based corner index that produced each operating-point lower/upper bound;
+- internal edge-airflow ranges plus the exact lower/upper witness corner indices for each edge;
 - solver diagnostics for every corner; and
 - provenance completeness for the fan curve and every bounded input.
 
-These min/max values are evaluated-corner ranges only. They are not claimed to be mathematically guaranteed continuous-interval extrema for every interior combination.
+These min/max values are evaluated-corner ranges only. The v0.46 witness indices make each reported bound traceable to an exact evaluated case; ties resolve deterministically to the first matching corner. They are not claimed to be sensitivity coefficients or mathematically guaranteed continuous-interval extrema for every interior combination.
 
 ## Input and CLI
 

@@ -1,4 +1,15 @@
 # Changelog
+## v0.56 configured solver-iteration budget audit — 2026-09-24
+
+- Exposes the selected operating network's inner Newton iteration count alongside the existing outer Darcy-friction and operating-point iteration diagnostics.
+- Aggregates worst solved-corner outer, Newton, and operating-point iteration counts with exact tied source-corner provenance.
+- Preserves the study's existing `max_outer_iterations`, `max_newton_iterations`, and `max_operating_iterations` settings as explicit configured solver limits.
+- Reports utilization ratio and remaining iterations for each configured iteration budget, with an aggregate complete/partial audit state.
+- Keeps the v0.52 residual-tolerance audit and v0.55 no-intersection endpoint diagnostics unchanged; pressure-law residual remains raw because no separate configured threshold exists for it.
+- Treats iteration-budget utilization strictly as numerical convergence evidence, not an equipment, commissioning, certification, or cleanroom acceptance margin.
+- Surfaces the new audit in standalone Markdown and engineering-dossier reporting with regression coverage for complete and zero-solved-corner studies.
+- Bumped package/runtime metadata to v0.56.0.
+
 ## v0.55 no-intersection supplied-endpoint diagnostics — 2026-09-24
 
 - Adds explicit supplied-endpoint diagnostics for nonlinear uncertainty corners whose fan/system operating point does not intersect inside the available fan-curve range.

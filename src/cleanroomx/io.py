@@ -24,6 +24,9 @@ def room_from_dict(data: dict) -> RoomSpec:
         min_ach=data.get("min_ach"),
         min_pressure_pa=data.get("min_pressure_pa"),
         observed_pressure_pa=data.get("observed_pressure_pa"),
+        observed_pressure_uncertainty_pa=data.get(
+            "observed_pressure_uncertainty_pa", 0.0
+        ),
         particle_requirements=particle_requirements,
     )
 

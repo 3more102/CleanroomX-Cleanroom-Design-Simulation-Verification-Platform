@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — cross-module consistency
+
+- Added verification/HVAC room-airflow reconciliation inside engineering dossiers.
+- Requires an explicit project-supplied airflow tolerance; no default engineering tolerance is embedded.
+- Added exact-name matching plus optional one-to-one room mapping for differently named verification/HVAC rooms.
+- Added optional completeness guards that can require every verification room and/or HVAC room to be mapped.
+- Added explicit pass/fail/not-checked consistency states, issue counts, executive-summary integration, and Markdown reporting.
+- Added a runnable consistency dossier example, dedicated documentation, and regression coverage.
+- Kept the check strictly scoped to cross-module data consistency rather than airflow adequacy, cleanroom classification, commissioning acceptance, or universal engineering tolerances.
+
 ## v0.14 fan/duct-network operating-point integration — 2026-09-23
 
 - Added a reference-flow fan/duct-network study that derives path quadratic resistance from explicit duct geometry, Darcy friction factors, air density, local-loss coefficients, and section reference airflow fractions.

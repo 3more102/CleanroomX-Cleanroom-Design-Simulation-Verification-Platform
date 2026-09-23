@@ -4,7 +4,7 @@ CleanroomX v0.5 adds a conservative interval-analysis foundation for engineering
 
 ## Scope
 
-The first implementation covers room dimensions, supply airflow, derived room volume, derived supply ACH, and a project-configured minimum ACH requirement.
+The v0.5 foundation covers room dimensions, supply airflow, derived room volume, derived supply ACH, and a project-configured minimum ACH requirement. Later workflows reuse the same provenance and deterministic interval principles for qualification checks and v0.10 thermal/HVAC sizing uncertainty.
 
 Each numeric input carries:
 
@@ -74,3 +74,8 @@ Exit codes:
 - 0: pass or no configured ACH requirement;
 - 2: fail;
 - 3: indeterminate.
+
+
+## Thermal/HVAC uncertainty
+
+CleanroomX v0.10 applies the same explicit-bound and provenance philosophy to preliminary thermal loads and airflow sizing. See `docs/THERMAL_UNCERTAINTY.md`.

@@ -3,7 +3,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .models import ParticleRequirement, PressureCascadeRequirement, ProjectSpec, RoomSpec
+from .models import ParticleRequirement, PressureCascadeRequirement, ProjectSpec, Provenance, RoomSpec
+
+
+def provenance_from_dict(data: dict | None) -> Provenance | None:
+    if data is None:
+        return None
+    return Provenance(
+        source=data["source"],
+        reference=data.get("reference"),
+        instrument_id=data.get("instrument_id"),
+        calibration_reference=data.get("calibration_reference"),
+        observed_at=data.get("observed_at"),
+    )
 
 
 def room_from_dict(data: dict) -> RoomSpec:
@@ -12,6 +24,9 @@ def room_from_dict(data: dict) -> RoomSpec:
             size_um=item["size_um"],
             max_concentration_per_m3=item["max_concentration_per_m3"],
             observed_concentration_per_m3=item["observed_concentration_per_m3"],
+            observed_uncertainty_per_m3=item.get("observed_uncertainty_per_m3"),
+            requirement_reference=item.get("requirement_reference"),
+            provenance=provenance_from_dict(item.get("provenance")),
         )
         for item in data.get("particle_requirements", [])
     )
@@ -25,6 +40,12 @@ def room_from_dict(data: dict) -> RoomSpec:
         min_pressure_pa=data.get("min_pressure_pa"),
         observed_pressure_pa=data.get("observed_pressure_pa"),
         particle_requirements=particle_requirements,
+        supply_airflow_uncertainty_m3_h=data.get("supply_airflow_uncertainty_m3_h"),
+        observed_pressure_uncertainty_pa=data.get("observed_pressure_uncertainty_pa"),
+        ach_requirement_reference=data.get("ach_requirement_reference"),
+        pressure_requirement_reference=data.get("pressure_requirement_reference"),
+        airflow_provenance=provenance_from_dict(data.get("airflow_provenance")),
+        pressure_provenance=provenance_from_dict(data.get("pressure_provenance")),
     )
 
 
@@ -35,6 +56,7 @@ def project_from_dict(data: dict) -> ProjectSpec:
             higher_pressure_room=item["higher_pressure_room"],
             lower_pressure_room=item["lower_pressure_room"],
             min_delta_pa=item["min_delta_pa"],
+            requirement_reference=item.get("requirement_reference"),
         )
         for item in data.get("pressure_cascade", [])
     )

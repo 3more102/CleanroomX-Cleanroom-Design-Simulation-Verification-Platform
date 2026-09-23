@@ -69,3 +69,12 @@ Exit codes:
 - 0: pass or no maximum-time criterion configured;
 - 2: fail;
 - 3: incomplete test.
+
+
+## Uncertainty-aware companion workflow
+
+CleanroomX v0.14 adds a separate conservative interval workflow for measured recovery samples with user-supplied absolute concentration uncertainty. It preserves `indeterminate` when the concentration interval overlaps the project target rather than forcing a nominal pass/fail decision.
+
+See `docs/RECOVERY_UNCERTAINTY.md` and run:
+
+    cleanroomx-recovery-uncertainty examples/recovery_uncertainty_demo.json

@@ -2250,6 +2250,93 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "do not prove continuous uniqueness" in report
 
 
+def test_operating_point_search_resolution_is_auditable() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    summary = result["operating_point_search_resolution_summary"]
+    nominal = result["nominal_operating_point_search_evidence"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["complete_solved_corner_evidence"] is True
+    assert summary["search_evidence_corner_count"] == result["corner_count"]
+    assert (
+        summary["bisection_corner_count"]
+        + summary["supplied_point_contact_corner_count"]
+        == result["corner_count"]
+    )
+    assert summary["bisection_corner_count"] > 0
+
+    widths = []
+    half_widths = []
+    fractions = []
+    for corner in result["corners"]:
+        evidence = corner["operating_point_search_evidence"]
+        assert evidence is not None
+        if evidence["method"] == "supplied_point_tolerance_contact":
+            assert evidence["final_bisection_bracket"] is None
+            assert evidence["selected_supplied_point_index"] is not None
+            continue
+
+        assert evidence["method"] == "bounded_bisection"
+        bracket = evidence["final_bisection_bracket"]
+        assert bracket is not None
+        assert bracket["low_fan_minus_system_pressure_pa"] > 0.0
+        assert bracket["high_fan_minus_system_pressure_pa"] < 0.0
+        assert bracket["width_m3_h"] == pytest.approx(
+            bracket["high_airflow_m3_h"] - bracket["low_airflow_m3_h"],
+            abs=1e-9,
+        )
+        assert bracket["half_width_m3_h"] == pytest.approx(
+            0.5 * bracket["width_m3_h"],
+            abs=1e-9,
+        )
+        supplied_span = (
+            evidence["supplied_segment_high_airflow_m3_h"]
+            - evidence["supplied_segment_low_airflow_m3_h"]
+        )
+        assert bracket["width_fraction_of_supplied_segment"] == pytest.approx(
+            bracket["width_m3_h"] / supplied_span,
+            abs=1e-12,
+        )
+        widths.append(bracket["width_m3_h"])
+        half_widths.append(bracket["half_width_m3_h"])
+        fractions.append(bracket["width_fraction_of_supplied_segment"])
+
+    assert summary["maximum_final_bisection_bracket_width_m3_h"][
+        "value"
+    ] == pytest.approx(max(widths), abs=1e-9)
+    assert summary["maximum_final_bisection_half_width_m3_h"][
+        "value"
+    ] == pytest.approx(max(half_widths), abs=1e-9)
+    assert summary[
+        "maximum_final_bisection_width_fraction_of_supplied_segment"
+    ]["value"] == pytest.approx(max(fractions), abs=1e-12)
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Bounded operating-point search geometry" in report
+    assert "Final bisection bracket half-width" in report
+    assert "numerical search-geometry evidence only" in report
+
+
+def test_operating_point_search_resolution_preserves_partial_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 650.0, "uncertainty_abs": 400.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["operating_point_search_resolution_summary"]
+    assert result["status"] == "indeterminate"
+    assert summary["complete_study_coverage"] is False
+    assert summary["search_evidence_corner_count"] == result["solved_corner_count"]
+    assert summary["complete_solved_corner_evidence"] is True
+    assert summary["search_evidence_corner_count"] < result["corner_count"]
+
+
 def test_fan_curve_segment_position_is_auditable() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(
         load_fan_variable_friction_loop_uncertainty(

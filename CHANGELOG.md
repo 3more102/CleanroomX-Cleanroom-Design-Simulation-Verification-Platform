@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8 supply branch-flow aggregation — 2026-09-23
+
+- Added a validated rooted supply-network model with deterministic topology checks.
+- Added downstream airflow aggregation from each room's governing HVAC airflow plus explicit fixed auxiliary demand.
+- Required every HVAC room to map to exactly one supply node when a supply network is configured.
+- Added optional duct-section `flow_source_branch` mapping so solved branch airflow can drive velocity and pressure-loss calculations.
+- Updated preliminary supply-fan duty to use solved source airflow when a supply network is present.
+- Added Markdown reporting for branch flows and duct airflow provenance.
+- Added JSON loading, a worked HVAC example, documentation, and regression tests.
+- Kept the solver explicitly bounded as demand aggregation rather than pressure-driven network balancing.
+
 ## v0.7 qualification uncertainty — 2026-09-23
 
 - Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.

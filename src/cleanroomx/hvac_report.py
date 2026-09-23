@@ -56,6 +56,34 @@ def markdown_hvac_report(result: dict) -> str:
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
             )
 
+    if result["supply_network"] is not None:
+        network = result["supply_network"]
+        lines.extend(
+            [
+                "",
+                "## Supply branch-flow aggregation",
+                "",
+                "| Branch | Upstream | Downstream | Solved airflow m³/h |",
+                "|---|---|---|---:|",
+            ]
+        )
+        for branch in network["branches"]:
+            lines.append(
+                f"| {branch['name']} | {branch['upstream_node']} | "
+                f"{branch['downstream_node']} | {branch['airflow_m3_h']} |"
+            )
+        lines.extend(
+            [
+                "",
+                f"Source node: **{network['source_node']}**.",
+                f"Source design airflow: **{network['source_airflow_m3_h']} m³/h**.",
+                f"Room-derived airflow: **{network['total_room_airflow_m3_h']} m³/h**.",
+                f"Fixed auxiliary airflow: **{network['total_fixed_airflow_m3_h']} m³/h**.",
+                "",
+                network["scope_note"],
+            ]
+        )
+
     if result["duct_network"] is not None:
         network = result["duct_network"]
         lines.extend(
@@ -71,6 +99,24 @@ def markdown_hvac_report(result: dict) -> str:
             lines.append(
                 f"| {path['name']} | {path['total_pressure_drop_pa']} |"
             )
+
+        lines.extend(
+            [
+                "",
+                "### Duct section airflow sources",
+                "",
+                "| Path | Section | Effective airflow m³/h | Airflow source | Section drop Pa |",
+                "|---|---|---:|---|---:|",
+            ]
+        )
+        for path in network["paths"]:
+            for section in path["sections"]:
+                lines.append(
+                    f"| {path['name']} | {section['name']} | "
+                    f"{section['airflow_m3_h']} | {section['airflow_source']} | "
+                    f"{section['total_pressure_drop_pa']} |"
+                )
+
         lines.extend(
             [
                 "",
@@ -99,7 +145,8 @@ def markdown_hvac_report(result: dict) -> str:
     lines.extend(
         [
             "",
-            f"Total governing airflow: **{result['total_governing_airflow_m3_h']} m³/h**.",
+            f"Total governing room airflow: **{result['total_governing_airflow_m3_h']} m³/h**.",
+            f"Fan design airflow: **{result['fan_design_airflow_m3_h']} m³/h**.",
             f"Total return airflow: **{result['total_return_airflow_m3_h']} m³/h**.",
             f"Total exhaust airflow: **{result['total_exhaust_airflow_m3_h']} m³/h**.",
             f"Total net surplus: **{result['total_net_surplus_m3_h']} m³/h**.",

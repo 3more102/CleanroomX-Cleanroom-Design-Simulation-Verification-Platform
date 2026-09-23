@@ -181,10 +181,37 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         bracket["width_m3_h"] / supplied_span,
         abs=1e-12,
     )
+    invariant = bracket["invariant_audit"]
+    assert invariant["strict_sign_change_preserved"] is True
+    assert invariant["selected_airflow_is_bracket_midpoint"] is True
+    assert invariant["binary_contraction_step_count"] == (
+        bracket["iteration"] - 1
+    )
+    expected_fraction = 0.5 ** (bracket["iteration"] - 1)
+    assert invariant[
+        "expected_width_fraction_of_supplied_segment"
+    ] == pytest.approx(expected_fraction, abs=1e-15)
+    assert invariant[
+        "actual_width_fraction_of_supplied_segment"
+    ] == pytest.approx(
+        bracket["width_fraction_of_supplied_segment"],
+        abs=1e-12,
+    )
+    assert invariant[
+        "absolute_width_fraction_consistency_error"
+    ] == pytest.approx(
+        abs(
+            bracket["width_fraction_of_supplied_segment"]
+            - expected_fraction
+        ),
+        abs=1e-12,
+    )
 
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Operating-point search evidence" in report
     assert "Final bisection bracket width" in report
+    assert "Strict sign-change bracket preserved" in report
+    assert "Absolute binary-width consistency error" in report
     assert "numerical search-geometry evidence only" in report
 
 

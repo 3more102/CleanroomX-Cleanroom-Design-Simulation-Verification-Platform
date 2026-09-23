@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from itertools import product
 
 from .hvac_models import AirState
+from .psychrometrics import saturation_vapor_pressure_kpa
 from .uncertainty_models import UncertainValue
 
 
@@ -68,6 +69,16 @@ class UncertainAirState:
         if self.pressure_kpa.lower <= 0.0:
             raise ValueError(
                 "pressure_kpa lower uncertainty bound must remain > 0"
+            )
+
+        highest_vapor_pressure = (
+            self.relative_humidity_percent.upper
+            / 100.0
+            * saturation_vapor_pressure_kpa(self.dry_bulb_c.upper)
+        )
+        if highest_vapor_pressure >= self.pressure_kpa.lower:
+            raise ValueError(
+                "uncertainty box permits water-vapor partial pressure at or above total pressure"
             )
 
     @property

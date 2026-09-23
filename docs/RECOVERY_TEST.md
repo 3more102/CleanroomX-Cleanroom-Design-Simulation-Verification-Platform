@@ -1,6 +1,6 @@
 # Particle recovery-test workflow
 
-CleanroomX v0.15 provides an auditable workflow for measured airborne-particle recovery data with optional deterministic concentration uncertainty.
+CleanroomX v0.16 provides an auditable workflow for measured airborne-particle recovery data with optional deterministic concentration uncertainty.
 
 ISO 14644-3:2019 is the current published ISO test-method standard for cleanrooms and clean zones. CleanroomX does not reproduce its proprietary procedures or acceptance limits. Instead, the software records project-selected targets, measured samples, traceability metadata, supplied measurement uncertainty, and the resulting project criterion status.
 

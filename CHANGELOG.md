@@ -1,4 +1,13 @@
 # Changelog
+## v0.41 bounded rectangular duct-geometry uncertainty — 2026-09-23
+
+- Preserves explicit circular diameter and rectangular width/height in geometry-derived loop-resistance evidence.
+- Extends nonlinear fan/variable-friction corner analysis to user-supplied absolute rectangular width and height bounds.
+- Rebuilds rectangular area, hydraulic diameter, Reynolds/friction evidence, and resistance at every geometry corner before each complete nonlinear fan/network solve.
+- Rejects shape-mismatched dimension bounds, nonpositive dimensional intervals, repeated nominal values, and geometry corners whose minimum hydraulic diameter would not exceed the maximum bounded roughness.
+- Added per-corner rectangular dimension evidence, Markdown reporting, a reproducible rectangular example, and regression coverage.
+- Bumped package/runtime metadata to v0.41.0.
+
 ## v0.40 bounded nonlinear duct-geometry uncertainty — 2026-09-23
 
 - Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute bounds on automatic-friction duct length and circular-duct diameter.

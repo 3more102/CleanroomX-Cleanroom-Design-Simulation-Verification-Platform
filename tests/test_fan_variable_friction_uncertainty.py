@@ -402,3 +402,73 @@ def test_geometry_uncertainty_rejects_repeated_nominal_value() -> None:
     with pytest.raises(ValueError, match="must not repeat the nominal length"):
         fan_variable_friction_loop_uncertainty_from_dict(data)
 
+def test_rectangular_geometry_uncertainty_produces_complete_envelope() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_rectangular_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 8
+    assert result["solved_corner_count"] == 8
+    assert result["unresolved_corner_count"] == 0
+    assert result["traceability"]["complete"] is True
+    assert result["operating_point_envelope"] is not None
+    assert result["input_intervals"]["edge_rectangular_width_m"]["Direct"][
+        "nominal"
+    ] == pytest.approx(0.5)
+    assert result["input_intervals"]["edge_rectangular_height_m"]["Direct"][
+        "nominal"
+    ] == pytest.approx(0.35)
+    assert all(
+        set(corner["edge_rectangular_width_m"]) == {"Direct"}
+        and set(corner["edge_rectangular_height_m"]) == {"Direct"}
+        for corner in result["corners"]
+    )
+
+
+def test_rectangular_geometry_uncertainty_report_surfaces_dimensions() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_rectangular_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Rectangular width" in report
+    assert "Rectangular height" in report
+    assert "Direct width=" in report
+    assert "Direct height=" in report
+
+
+def test_rectangular_width_uncertainty_rejects_circular_edge() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_geometry_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["edge_rectangular_width_uncertainty"] = {
+        "Direct": {"uncertainty_abs": 0.01}
+    }
+    with pytest.raises(ValueError, match="no rectangular-width geometry evidence"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_rectangular_dimension_bounds_respect_roughness_limit() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_rectangular_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["edge_rectangular_width_uncertainty"]["Direct"][
+        "uncertainty_abs"
+    ] = 0.49995
+    with pytest.raises(
+        ValueError,
+        match="must keep hydraulic diameter larger than the maximum bounded",
+    ):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+

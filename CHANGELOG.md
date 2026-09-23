@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.19 HVAC / fan operating-airflow consistency — 2026-09-23
+
+- Added dossier-integrated consistency checking between HVAC total governing airflow and solved fan operating airflow.
+- Covers standalone fan/system, reference-flow fan/duct-network, and fan-driven passive parallel-network studies already referenced by the dossier.
+- Uses an explicit user-supplied absolute airflow tolerance; exact agreement remains the zero-tolerance default.
+- Preserves unsolved fan studies as `not_comparable` rather than converting missing operating points into failures.
+- Adds pass, fail, not-comparable, and pass-with-unresolved-studies states with per-study evidence in Markdown/JSON dossiers.
+- Propagates solved mismatches into dossier attention items and unresolved studies into unchecked tracking.
+- Added focused unit tests, an end-to-end dossier example, documentation, and package/runtime version 0.19.0.
+- Keeps the feature bounded as cross-study consistency, not airflow adequacy, fan selection, commissioning acceptance, certification, or a standards-derived tolerance.
+
 ## v0.18 complete engineering dossier — 2026-09-23
 
 - Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.

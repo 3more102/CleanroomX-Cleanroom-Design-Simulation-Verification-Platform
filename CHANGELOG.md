@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5 uncertainty/provenance foundation — 2026-09-23
+
+- Added explicit provenance records for engineering inputs, including source type/name, reference, revision, date, uncertainty basis, and notes.
+- Added absolute uncertainty bounds for room dimensions and supply airflow.
+- Added deterministic conservative interval propagation for room volume and supply ACH.
+- Added robust pass/fail/indeterminate/not-checked evaluation against a project-configured minimum ACH requirement.
+- Added provenance-completeness reporting without conflating missing traceability with numerical acceptance.
+- Added JSON loading, Markdown/JSON reporting, a dedicated CLI, example data, tests, and documentation.
+- Kept the method explicitly bounded as interval screening rather than a statistical measurement-uncertainty budget.
+
 ## v0.4 recovery qualification — 2026-09-23
 
 - Added measured particle-recovery test records with strict sample validation.

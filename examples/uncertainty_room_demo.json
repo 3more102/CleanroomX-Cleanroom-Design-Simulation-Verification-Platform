@@ -1,0 +1,48 @@
+{
+  "name": "Process Bay Uncertainty Demo",
+  "min_ach": 30.0,
+  "length_m": {
+    "value": 6.0,
+    "uncertainty_abs": 0.02,
+    "provenance": {
+      "source_type": "drawing",
+      "source_name": "Architectural cleanroom plan",
+      "reference": "A-CR-101",
+      "revision": "P3",
+      "uncertainty_basis": "Project dimensional tolerance"
+    }
+  },
+  "width_m": {
+    "value": 5.0,
+    "uncertainty_abs": 0.02,
+    "provenance": {
+      "source_type": "drawing",
+      "source_name": "Architectural cleanroom plan",
+      "reference": "A-CR-101",
+      "revision": "P3",
+      "uncertainty_basis": "Project dimensional tolerance"
+    }
+  },
+  "height_m": {
+    "value": 3.0,
+    "uncertainty_abs": 0.01,
+    "provenance": {
+      "source_type": "survey",
+      "source_name": "Site dimensional survey",
+      "reference": "SUR-CR-007",
+      "date": "2026-09-20",
+      "uncertainty_basis": "Declared survey tolerance"
+    }
+  },
+  "supply_airflow_m3_h": {
+    "value": 2700.0,
+    "uncertainty_abs": 135.0,
+    "provenance": {
+      "source_type": "measurement",
+      "source_name": "TAB airflow measurement",
+      "reference": "TAB-CR-014",
+      "date": "2026-09-22",
+      "uncertainty_basis": "Project-entered absolute measurement bound"
+    }
+  }
+}

@@ -1,8 +1,8 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.4 engineering core
+## v0.5 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -20,6 +20,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
+- Conservative interval propagation for uncertain room dimensions and supply airflow.
+- Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
+- Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -31,6 +34,8 @@ CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
 The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+
+The uncertainty workflow uses deterministic worst-case input intervals. It is not a statistical measurement-uncertainty budget, does not invent tolerances, and does not replace calibration records or a project qualification procedure.
 
 ## Install
 
@@ -81,9 +86,25 @@ The recovery workflow uses measured time/concentration samples directly. It reco
 
 See docs/RECOVERY_TEST.md.
 
+## Analyze uncertainty and input provenance
+
+    cleanroomx-uncertainty examples/uncertainty_room_demo.json
+
+JSON output:
+
+    cleanroomx-uncertainty examples/uncertainty_room_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-uncertainty examples/uncertainty_room_demo.json --output uncertainty-report.md
+
+The v0.5 workflow propagates user-supplied absolute bounds through room volume and supply ACH using deterministic conservative intervals. A configured minimum ACH is reported as pass only when the complete interval meets it, fail only when the complete interval is below it, and indeterminate when the requirement lies inside the interval.
+
+See docs/UNCERTAINTY_PROVENANCE.md.
+
 ## Multi-room pressure-cascade JSON
 
-```json
+\`\`\`json
 {
   "name": "Suite",
   "rooms": [
@@ -112,13 +133,13 @@ See docs/RECOVERY_TEST.md.
     }
   ]
 }
-```
+\`\`\`
 
 The numeric limits in the examples are demonstration project inputs, **not quoted ISO limits**.
 
 ## Roadmap
 
-Next milestones are uncertainty/provenance tracking, richer engineering reports, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, duct/network pressure-loss modeling, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

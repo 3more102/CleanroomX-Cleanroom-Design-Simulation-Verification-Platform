@@ -18,6 +18,7 @@ A dossier manifest can reference:
 - zero or more fan-driven passive parallel-network operating-point studies;
 - zero or more fan affinity-law speed studies;
 - an optional v0.17 verification/HVAC duplicated-input consistency check.
+- an optional v0.21 HVAC/fan operating-airflow consistency check with project-supplied absolute tolerance.
 
 Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
 
@@ -72,7 +73,7 @@ Each referenced source file is hashed byte-for-byte with SHA-256. The report rec
 The dossier preserves component-specific states instead of turning every result into a certification verdict:
 
 - `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a configured cross-module consistency check failed, or any standalone/integrated fan or fan-speed case has no intersection inside the supplied fan-curve range;
-- `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, or a standalone psychrometric analysis has incomplete provenance;
+- `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, an HVAC/fan airflow comparison has unresolved fan cases, or a standalone psychrometric analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
 A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.

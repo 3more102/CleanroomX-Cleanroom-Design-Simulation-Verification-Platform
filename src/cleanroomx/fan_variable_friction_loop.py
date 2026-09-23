@@ -341,6 +341,10 @@ def _fan_curve_supplied_point_residual_audit(
         "selected_candidate_feature_rank": None,
         "additional_candidate_feature_count": None,
         "selected_candidate_is_only_discrete_feature": None,
+        "alternative_candidate_features": None,
+        "nearest_alternative_candidate_airflow_interval_gap_m3_h": None,
+        "nearest_alternative_candidate_features": None,
+        "selected_airflow_overlaps_alternative_candidate_interval": None,
         "selection_policy": (
             "first supplied-point tolerance contact in point order; otherwise "
             "first strict positive-to-negative sign-change segment in segment "
@@ -363,10 +367,12 @@ def _fan_curve_supplied_point_residual_audit(
             "whether those sampled residuals are non-increasing within the "
             "configured pressure tolerance. Candidate features are ordered "
             "using the solver's actual selection priority, while selected-"
-            "candidate provenance is added only for solved results. Candidate "
+            "candidate provenance is added only for solved results. For solved "
+            "cases with additional candidates, airflow separation is measured "
+            "only to each alternative discrete point or sign-change interval; "
+            "no alternate continuous root location is inferred. Candidate "
             "crossing features are not a count or proof of continuous physical "
-            "intersections, and "
-            "sampled monotonicity is not a dynamic stability, stall/surge, "
+            "intersections, and sampled monotonicity is not a dynamic stability, stall/surge, "
             "manufacturer-region, or equipment-acceptance criterion."
         ),
     }
@@ -407,6 +413,76 @@ def _with_selected_crossing_feature(
     selected_rank = (
         None if selected_copy is None else selected_copy["solver_priority_rank"]
     )
+
+    alternative_features = None
+    nearest_alternative_gap = None
+    nearest_alternative_features = None
+    selected_overlaps_alternative_interval = None
+    if selected_copy is not None:
+        alternative_features = []
+        airflow = float(selected_airflow_m3_h)
+        for feature in candidates:
+            if feature["solver_priority_rank"] == selected_rank:
+                continue
+            alternative = dict(feature)
+            if feature["feature_kind"] == "supplied_point_tolerance_contact":
+                low_airflow = float(feature["airflow_m3_h"])
+                high_airflow = low_airflow
+            else:
+                low_airflow = float(feature["low_airflow_m3_h"])
+                high_airflow = float(feature["high_airflow_m3_h"])
+            if airflow < low_airflow:
+                gap = low_airflow - airflow
+            elif airflow > high_airflow:
+                gap = airflow - high_airflow
+            else:
+                gap = 0.0
+            alternative.update(
+                {
+                    "airflow_interval_low_m3_h": round(low_airflow, 9),
+                    "airflow_interval_high_m3_h": round(high_airflow, 9),
+                    "selected_airflow_to_feature_interval_gap_m3_h": round(
+                        gap,
+                        9,
+                    ),
+                }
+            )
+            alternative_features.append(alternative)
+
+        if alternative_features:
+            nearest_alternative_gap = min(
+                float(
+                    feature[
+                        "selected_airflow_to_feature_interval_gap_m3_h"
+                    ]
+                )
+                for feature in alternative_features
+            )
+            nearest_alternative_features = [
+                dict(feature)
+                for feature in alternative_features
+                if math.isclose(
+                    float(
+                        feature[
+                            "selected_airflow_to_feature_interval_gap_m3_h"
+                        ]
+                    ),
+                    nearest_alternative_gap,
+                    rel_tol=1e-12,
+                    abs_tol=1e-9,
+                )
+            ]
+            selected_overlaps_alternative_interval = math.isclose(
+                nearest_alternative_gap,
+                0.0,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+            nearest_alternative_gap = round(nearest_alternative_gap, 9)
+        else:
+            nearest_alternative_features = []
+            selected_overlaps_alternative_interval = False
+
     enriched.update(
         {
             "selected_candidate_feature": selected_copy,
@@ -418,6 +494,16 @@ def _with_selected_crossing_feature(
             ),
             "selected_candidate_is_only_discrete_feature": (
                 None if selected_copy is None else len(candidates) == 1
+            ),
+            "alternative_candidate_features": alternative_features,
+            "nearest_alternative_candidate_airflow_interval_gap_m3_h": (
+                nearest_alternative_gap
+            ),
+            "nearest_alternative_candidate_features": (
+                nearest_alternative_features
+            ),
+            "selected_airflow_overlaps_alternative_candidate_interval": (
+                selected_overlaps_alternative_interval
             ),
         }
     )

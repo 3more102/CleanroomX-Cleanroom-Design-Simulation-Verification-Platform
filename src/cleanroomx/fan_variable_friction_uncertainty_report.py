@@ -291,6 +291,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
 
     power_ranges = result.get("power_evidence_corner_ranges")
     power_sources = result.get("power_evidence_extrema_sources")
+    power_availability = result.get("power_evidence_availability")
     if power_ranges is not None:
         efficiencies = result.get("power_efficiencies")
         lines.extend(
@@ -327,18 +328,36 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.extend(
             [
                 "",
-                "| Metric | Lower | Upper | Unit |",
-                "|---|---:|---:|---|",
+                "| Metric | Availability | Lower | Upper | Unit |",
+                "|---|---|---:|---:|---|",
             ]
         )
         for key, label, display_unit in metric_labels:
             evidence = power_ranges.get(key)
+            availability = (
+                None
+                if power_availability is None
+                else power_availability.get(key)
+            )
+            availability_text = (
+                "—"
+                if availability is None
+                else (
+                    f"{availability['status']} "
+                    f"({availability['available_corner_count']}/"
+                    f"{availability['total_corner_count']})"
+                )
+            )
             if evidence is None:
-                lines.append(f"| {label} | — | — | {display_unit} |")
+                lines.append(
+                    f"| {label} | {availability_text} | — | — | "
+                    f"{display_unit} |"
+                )
             else:
                 lines.append(
-                    f"| {label} | {evidence['lower']} | "
-                    f"{evidence['upper']} | {display_unit} |"
+                    f"| {label} | {availability_text} | "
+                    f"{evidence['lower']} | {evidence['upper']} | "
+                    f"{display_unit} |"
                 )
 
         if power_sources is not None:
@@ -368,8 +387,11 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             [
                 "",
                 "These are min/max values across evaluated solved corners "
-                "only. Efficiency values are fixed explicit inputs here, not "
-                "uncertain variables, and no missing efficiency is inferred.",
+                "only. A range is emitted only when that metric is available "
+                "at every solved evaluated corner; partial coverage is "
+                "withheld rather than summarized from a subset. Efficiency "
+                "values are fixed explicit inputs here, not uncertain "
+                "variables, and no missing efficiency is inferred.",
             ]
         )
 

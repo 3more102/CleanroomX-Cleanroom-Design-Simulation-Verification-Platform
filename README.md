@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.57 engineering core
+## v0.58 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -37,6 +37,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Supplied-fan-curve boundary-clearance evidence for nonlinear uncertainty corners, retaining each solved corner's exact supplied or speed-transformed airflow range and reporting absolute/normalized distance to the nearest no-extrapolation endpoint with tied source-corner provenance.
 - No-intersection supplied-endpoint diagnostics for unresolved nonlinear uncertainty corners, identifying the limiting lower/upper supplied airflow endpoint and preserving signed fan-minus-system pressure mismatch with exact source-corner context, without extrapolating a missing operating point.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
+- Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.
 - Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
@@ -128,6 +129,10 @@ v0.53 adds nominal-relative excursion evidence to complete nonlinear uncertainty
 v0.54 adds supplied-fan-curve boundary-clearance evidence for every solved nonlinear uncertainty corner. CleanroomX retains that corner's exact supplied or speed-transformed fan-curve airflow endpoints, reports lower/upper and nearest airflow headroom plus normalized position, and identifies the evaluated corner(s) with minimum endpoint headroom. This is a no-extrapolation audit diagnostic only; it does not infer an acceptable minimum margin, stall/surge boundary, manufacturer operating region, or equipment acceptance.
 
 v0.56 extends the same numerical audit model to iteration budgets that were already explicit solver inputs. It records the selected network's inner Newton iteration count and compares worst solved-corner outer-Darcy, inner-Newton, and operating-point iterations with `max_outer_iterations`, `max_newton_iterations`, and `max_operating_iterations`, reporting utilization and remaining iterations with exact witness provenance. Incomplete studies remain explicitly partial. These are algorithmic convergence budgets, not engineering, equipment, commissioning, certification, or cleanroom acceptance limits.
+
+v0.57 adds deterministic result-integrity evidence to nonlinear fan/variable-friction uncertainty results. CleanroomX canonicalizes the complete result payload before the integrity field is attached, computes a SHA-256 digest over sorted-key compact UTF-8 JSON, and surfaces that digest in standalone reports and engineering dossiers. The digest identifies exact computed content; it is not an equipment, commissioning, certification, or source-authority decision.
+
+v0.58 hardens evaluated-corner power evidence. Each power metric now carries explicit complete/partial/unavailable coverage with available/total corner counts and exact missing corner indices. A range, extrema witness set, and nominal-relative excursion are emitted only when that metric covers every solved evaluated corner; subset-only metrics are never presented as complete deterministic-corner ranges.
 
 v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersection_in_supplied_range`. Each such corner records whether the lower or upper supplied airflow endpoint bounds the case, the endpoint fan and system pressures, the signed fan-minus-system pressure mismatch, and the absolute boundary pressure gap. Aggregate evidence counts lower/upper boundary cases and retains the largest evaluated gap with source-corner provenance. No fan-curve extrapolation or missing operating-point estimate is performed.
 

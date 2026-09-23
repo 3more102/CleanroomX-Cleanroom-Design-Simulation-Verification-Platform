@@ -1,4 +1,15 @@
 # Changelog
+## v0.58 complete per-metric power-coverage audit — 2026-09-24
+
+- Requires every evaluated solved corner to provide a power metric before CleanroomX emits that metric's min/max range, extrema provenance, or nominal-relative excursion.
+- Adds explicit `complete`, `partial`, and `unavailable` coverage states with available/total corner counts and exact missing corner indices for fluid air power, shaft power, electrical input, and specific fan power.
+- Exposes the nominal solver power record directly as `nominal_power_evidence`.
+- Prevents a partially populated power metric from being summarized as though it covered the complete deterministic corner study.
+- Surfaces electrical-input and SFP coverage states in engineering-dossier Markdown and all power-metric coverage states in standalone uncertainty reports.
+- Preserves v0.57 deterministic result-integrity evidence plus v0.56 solver-iteration budget evidence and earlier bounded-solver diagnostics.
+- Adds regression coverage for partial metric coverage, missing explicit efficiencies, complete coverage, nominal power evidence, and report output.
+- Bumped package/runtime metadata to v0.58.0.
+
 ## v0.57 deterministic nonlinear result integrity — 2026-09-24
 
 - Adds a canonical SHA-256 digest to every fan/variable-friction nonlinear uncertainty result.

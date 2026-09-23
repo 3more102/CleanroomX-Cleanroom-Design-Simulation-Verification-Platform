@@ -339,6 +339,29 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"{case['fixed_pressure_pa']} |"
                 )
 
+    edge_sources = result.get("edge_airflow_extrema_sources")
+    if edge_sources:
+        lines.extend(
+            [
+                "",
+                "## Internal edge-airflow witness provenance",
+                "",
+                "| Edge | Bound | Value m³/h | Source corner input(s) |",
+                "|---|---|---:|---|",
+            ]
+        )
+        for edge in edge_sources:
+            for bound in ("lower", "upper"):
+                evidence = edge[bound]
+                source_text = " / ".join(
+                    _fmt_extreme_source(source)
+                    for source in evidence["sources"]
+                )
+                lines.append(
+                    f"| {edge['edge']} | {bound} | {evidence['value']} | "
+                    f"{source_text} |"
+                )
+
     lines.extend(
         [
             "",

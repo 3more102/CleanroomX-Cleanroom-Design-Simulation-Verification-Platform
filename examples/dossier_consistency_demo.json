@@ -1,0 +1,13 @@
+{
+  "name": "CleanroomX Cross-Module Consistency Demo",
+  "project_reference": "CRX-CONSISTENCY-001",
+  "revision": "A",
+  "notes": "Demonstration only. The 0.5% tolerance is an explicit example project input, not a universal engineering limit.",
+  "verification_project": "facility_project.json",
+  "hvac_project": "consistency_hvac_demo.json",
+  "consistency_checks": {
+    "verification_hvac_airflow": {
+      "airflow_tolerance_percent": 0.5
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.13 engineering core
+## v0.14 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -26,7 +26,8 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
-- Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
+- Optional per-sample absolute concentration uncertainty with conservative target-overlap handling.
+- Recovery traceability metadata plus pass/fail/indeterminate/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
@@ -129,7 +130,7 @@ Write a Markdown report:
 
     cleanroomx-recovery-test examples/recovery_test_demo.json --output recovery-report.md
 
-The recovery workflow uses measured time/concentration samples directly. It records the first measured sample at or below the configured target, the measurement interval in which recovery occurred, optional traceability fields, and an optional maximum-time criterion. The log-linear fit is diagnostic only and does not replace the measured qualification result.
+The v0.14 recovery workflow preserves the nominal measured result and can also propagate user-supplied absolute concentration uncertainty. A sample interval entirely at/below the target confirms recovery, an interval entirely above confirms non-recovery at that sample, and target overlap is indeterminate when it affects the maximum-time decision. The log-linear fit still uses nominal values only and remains diagnostic.
 
 See docs/RECOVERY_TEST.md.
 
@@ -234,7 +235,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are tighter cross-module consistency checks, general looped-network solving research, fan/system control-law studies, richer equipment/control uncertainty, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

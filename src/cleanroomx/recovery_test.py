@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from .recovery_models import RecoveryTestSpec
+from .recovery_models import RecoverySample, RecoveryTestSpec
 
 
 def _log_linear_fit(spec: RecoveryTestSpec) -> dict:
@@ -57,18 +57,42 @@ def _log_linear_fit(spec: RecoveryTestSpec) -> dict:
             round(crossing, 4) if crossing is not None else None
         ),
         "screening_note": (
-            "The log-linear fit is a diagnostic screening metric only. It is not used "
-            "as the acceptance result and does not replace the configured test method."
+            "The log-linear fit uses nominal concentration values only and is a "
+            "diagnostic screening metric. It is not used as the acceptance result and "
+            "does not replace the configured test method or uncertainty evaluation."
         ),
     }
 
 
+def _target_relation(sample: RecoverySample, target: float) -> str:
+    if sample.concentration_upper_per_m3 <= target:
+        return "confirmed_at_or_below"
+    if sample.concentration_lower_per_m3 > target:
+        return "confirmed_above"
+    return "overlaps_target"
+
+
 def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
+    target = spec.target_concentration_per_m3
+    relations = [_target_relation(sample, target) for sample in spec.samples]
+
     first_reached_index = next(
         (
             index
             for index, sample in enumerate(spec.samples)
-            if sample.concentration_per_m3 <= spec.target_concentration_per_m3
+            if sample.concentration_per_m3 <= target
+        ),
+        None,
+    )
+    first_possible_index = next(
+        (index for index, relation in enumerate(relations) if relation != "confirmed_above"),
+        None,
+    )
+    first_confirmed_index = next(
+        (
+            index
+            for index, relation in enumerate(relations)
+            if relation == "confirmed_at_or_below"
         ),
         None,
     )
@@ -90,42 +114,83 @@ def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
         lower_bound = spec.samples[first_reached_index - 1].time_minutes
         upper_bound = spec.samples[first_reached_index].time_minutes
 
+    first_possible_time = (
+        spec.samples[first_possible_index].time_minutes
+        if first_possible_index is not None
+        else None
+    )
+    first_confirmed_time = (
+        spec.samples[first_confirmed_index].time_minutes
+        if first_confirmed_index is not None
+        else None
+    )
+
     if spec.max_recovery_time_minutes is None:
         criterion_status = "not_checked"
         criterion_message = "No maximum recovery-time requirement configured."
-    elif reached_target:
-        passed = observed_recovery_time <= spec.max_recovery_time_minutes
-        criterion_status = "pass" if passed else "fail"
-        criterion_message = (
-            "Observed recovery reached the configured target within the maximum time."
-            if passed
-            else "Observed recovery reached the target after the configured maximum time."
-        )
-    elif spec.samples[-1].time_minutes >= spec.max_recovery_time_minutes:
-        criterion_status = "fail"
-        criterion_message = (
-            "The target concentration was still not reached by or after the configured "
-            "maximum recovery time."
-        )
     else:
-        criterion_status = "incomplete"
-        criterion_message = (
-            "The target concentration was not reached, but measurements ended before "
-            "the configured maximum recovery time."
+        maximum = spec.max_recovery_time_minutes
+        confirmed_within_max = any(
+            relation == "confirmed_at_or_below" and sample.time_minutes <= maximum
+            for sample, relation in zip(spec.samples, relations)
         )
+        possible_within_max = any(
+            relation != "confirmed_above" and sample.time_minutes <= maximum
+            for sample, relation in zip(spec.samples, relations)
+        )
+
+        if confirmed_within_max:
+            criterion_status = "pass"
+            criterion_message = (
+                "At least one measured concentration interval is entirely at or below "
+                "the configured target within the maximum recovery time."
+            )
+        elif possible_within_max:
+            criterion_status = "indeterminate"
+            criterion_message = (
+                "At least one sample at or before the maximum recovery time overlaps "
+                "the target, but no sample interval is entirely at or below the target "
+                "within that time."
+            )
+        elif spec.samples[-1].time_minutes >= maximum:
+            criterion_status = "fail"
+            criterion_message = (
+                "No measured sample at or before the configured maximum recovery time "
+                "could be at or below the target within its supplied concentration "
+                "uncertainty interval."
+            )
+        else:
+            criterion_status = "incomplete"
+            criterion_message = (
+                "No measured sample could be at or below the target, but measurements "
+                "ended before the configured maximum recovery time."
+            )
+
+    uncertainty_present = any(
+        sample.concentration_uncertainty_abs > 0 for sample in spec.samples
+    )
+    overlap_count = sum(relation == "overlaps_target" for relation in relations)
 
     return {
         "test": spec.name,
         "particle_size_um": round(spec.particle_size_um, 6),
-        "target_concentration_per_m3": round(
-            spec.target_concentration_per_m3, 6
-        ),
+        "target_concentration_per_m3": round(target, 6),
         "max_recovery_time_minutes": spec.max_recovery_time_minutes,
         "reached_target": reached_target,
         "observed_recovery_time_minutes": observed_recovery_time,
         "recovery_time_window_minutes": {
             "lower_bound": lower_bound,
             "upper_bound": upper_bound,
+        },
+        "recovery_uncertainty": {
+            "method": "deterministic_concentration_interval",
+            "uncertainty_present": uncertainty_present,
+            "first_possible_at_or_below_target_time_minutes": first_possible_time,
+            "first_confirmed_at_or_below_target_time_minutes": first_confirmed_time,
+            "possible_target_reached": first_possible_index is not None,
+            "confirmed_target_reached": first_confirmed_index is not None,
+            "samples_overlapping_target": overlap_count,
+            "uncertainty_reference": spec.uncertainty_reference,
         },
         "criterion_status": criterion_status,
         "criterion_message": criterion_message,
@@ -138,22 +203,28 @@ def analyze_recovery_test(spec: RecoveryTestSpec) -> dict:
             "sample_location": spec.sample_location,
             "occupancy_state": spec.occupancy_state,
             "method_reference": spec.method_reference,
+            "uncertainty_reference": spec.uncertainty_reference,
         },
         "samples": [
             {
                 "time_minutes": sample.time_minutes,
                 "concentration_per_m3": sample.concentration_per_m3,
-                "at_or_below_target": (
-                    sample.concentration_per_m3
-                    <= spec.target_concentration_per_m3
-                ),
+                "concentration_uncertainty_abs": sample.concentration_uncertainty_abs,
+                "concentration_interval_per_m3": {
+                    "lower": sample.concentration_lower_per_m3,
+                    "upper": sample.concentration_upper_per_m3,
+                },
+                "at_or_below_target": sample.concentration_per_m3 <= target,
+                "target_relation": relation,
             }
-            for sample in spec.samples
+            for sample, relation in zip(spec.samples, relations)
         ],
         "log_linear_fit": _log_linear_fit(spec),
         "engineering_note": (
-            "Acceptance is based only on the explicit target concentration and optional "
-            "maximum recovery time supplied by the project. CleanroomX does not embed "
-            "ISO class limits or a universal recovery-time criterion."
+            "Acceptance uses only the explicit target concentration, optional maximum "
+            "recovery time, and user-supplied absolute concentration uncertainty. "
+            "Threshold overlap is reported as indeterminate rather than forced to pass "
+            "or fail. CleanroomX does not embed ISO class limits, universal recovery-time "
+            "criteria, or statistical uncertainty assumptions."
         ),
     }

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 
+def _fmt_time(value: float | None) -> str:
+    return "not observed" if value is None else f"{value} min"
+
+
 def markdown_recovery_report(result: dict) -> str:
+    uncertainty = result["recovery_uncertainty"]
     lines = [f"# CleanroomX Recovery Test Report — {result['test']}", ""]
     lines.extend(
         [
@@ -9,9 +14,12 @@ def markdown_recovery_report(result: dict) -> str:
             "",
             f"- Particle size: **{result['particle_size_um']} µm**",
             f"- Target concentration: **{result['target_concentration_per_m3']} particles/m³**",
-            f"- Target reached: **{'yes' if result['reached_target'] else 'no'}**",
-            f"- Observed recovery time: **{result['observed_recovery_time_minutes'] if result['observed_recovery_time_minutes'] is not None else 'not reached'} min**",
-            f"- Configured maximum recovery time: **{result['max_recovery_time_minutes'] if result['max_recovery_time_minutes'] is not None else 'not configured'}**",
+            f"- Nominal target reached: **{'yes' if result['reached_target'] else 'no'}**",
+            f"- Nominal observed recovery time: **{_fmt_time(result['observed_recovery_time_minutes'])}**",
+            f"- First possible at/below-target sample: **{_fmt_time(uncertainty['first_possible_at_or_below_target_time_minutes'])}**",
+            f"- First confirmed at/below-target sample: **{_fmt_time(uncertainty['first_confirmed_at_or_below_target_time_minutes'])}**",
+            f"- Concentration uncertainty supplied: **{'yes' if uncertainty['uncertainty_present'] else 'no'}**",
+            f"- Configured maximum recovery time: **{_fmt_time(result['max_recovery_time_minutes']) if result['max_recovery_time_minutes'] is not None else 'not configured'}**",
             f"- Criterion status: **{result['criterion_status'].upper()}**",
             "",
             result["criterion_message"],
@@ -31,14 +39,16 @@ def markdown_recovery_report(result: dict) -> str:
         [
             "## Samples",
             "",
-            "| Time (min) | Concentration (particles/m³) | At/below target |",
-            "|---:|---:|---|",
+            "| Time (min) | Nominal concentration | ± uncertainty | Interval (particles/m³) | Target relation |",
+            "|---:|---:|---:|---:|---|",
         ]
     )
     for sample in result["samples"]:
+        interval = sample["concentration_interval_per_m3"]
         lines.append(
             f"| {sample['time_minutes']} | {sample['concentration_per_m3']} | "
-            f"{'yes' if sample['at_or_below_target'] else 'no'} |"
+            f"{sample['concentration_uncertainty_abs']} | "
+            f"{interval['lower']} to {interval['upper']} | {sample['target_relation']} |"
         )
 
     fit = result["log_linear_fit"]

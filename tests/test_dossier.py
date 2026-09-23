@@ -96,3 +96,12 @@ def test_markdown_report_includes_new_v013_sections() -> None:
     assert "Thermal/HVAC uncertainty screening" in text
     assert "Fan/system operating-point studies" in text
     assert "Source-file fingerprints" in text
+
+
+def test_recovery_indeterminate_is_attention_item() -> None:
+    summary = summarize_dossier_components(
+        recovery=[{"criterion_status": "indeterminate"}]
+    )
+    assert summary["state"] == "attention_required"
+    assert summary["components"]["recovery"]["status"] == "indeterminate"
+    assert summary["adverse_items"]["recovery_indeterminate"] == 1

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14 recovery acceptance uncertainty — 2026-09-23
+
+- Added optional absolute concentration uncertainty to each measured particle-recovery sample while keeping zero uncertainty as the backward-compatible default.
+- Added conservative non-negative concentration intervals and explicit per-sample target relations: confirmed at/below, confirmed above, or target overlap.
+- Added first-possible and first-confirmed recovery observations without inventing an exact between-sample crossing time.
+- Added `indeterminate` recovery acceptance when a sample at or before the configured maximum time overlaps the target and no robust pass is available.
+- Preserved legacy pass/fail/incomplete/not-checked behavior when uncertainty is zero.
+- Added uncertainty-basis traceability, Markdown/JSON reporting, CLI exit code 4 for indeterminate recovery, and finite-input hardening.
+- Integrated recovery indeterminate states into the v0.13 engineering dossier as explicit attention items.
+- Kept the workflow deterministic and requirement-driven; no statistical distribution, coverage factor, ISO class limit, or universal recovery-time criterion is inferred.
+
 ## v0.13 integrated engineering dossier — 2026-09-23
 
 - Added a manifest-driven engineering dossier that aggregates room/cascade verification, HVAC/duct screening, v0.12 HVAC fan-curve design-duty verification, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and standalone fan/system operating-point studies.

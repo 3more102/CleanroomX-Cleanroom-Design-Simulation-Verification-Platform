@@ -17,6 +17,7 @@ def recovery_test_from_dict(data: dict) -> RecoveryTestSpec:
         sample_location=data.get("sample_location"),
         occupancy_state=data.get("occupancy_state"),
         method_reference=data.get("method_reference"),
+        uncertainty_reference=data.get("uncertainty_reference"),
         samples=samples,
     )
 

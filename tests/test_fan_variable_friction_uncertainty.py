@@ -2091,3 +2091,38 @@ def test_crossing_conditioning_marks_zero_solved_corner_coverage() -> None:
         for corner in result["corners"]
     )
 
+def test_supplied_point_residual_topology_propagates_across_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    summary = result["fan_curve_supplied_point_residual_summary"]
+    nominal = result["nominal_fan_curve_supplied_point_residual_audit"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["audit_evidence_corner_count"] == result["corner_count"]
+    assert summary["complete_supplied_point_coverage_corner_count"] == (
+        result["corner_count"]
+    )
+    assert summary["monotonic_non_increasing_corner_count"] == (
+        result["corner_count"]
+    )
+    assert summary["residual_increase_corner_count"] == 0
+    assert summary["residual_increase_corner_indices"] == []
+    assert summary["maximum_positive_residual_increase_pa"] is None
+
+    for corner in result["corners"]:
+        audit = corner["fan_curve_supplied_point_residual_audit"]
+        assert audit is not None
+        assert audit["complete_supplied_point_coverage"] is True
+        assert audit[
+            "residual_monotonic_non_increasing_with_tolerance"
+        ] is True
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Supplied-point residual topology across corners" in report
+    assert "Corners monotonic non-increasing within tolerance" in report
+    assert "do not prove continuous uniqueness" in report
+

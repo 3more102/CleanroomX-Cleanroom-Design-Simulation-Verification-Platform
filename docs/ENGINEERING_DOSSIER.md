@@ -16,6 +16,7 @@ A dossier manifest can reference:
 - zero or more fan/system operating-point studies;
 - zero or more reference-flow fan/duct-network operating-point studies;
 - zero or more fan-driven passive parallel-network operating-point studies;
+- zero or more bounded fan-speed affinity-law studies;
 - an optional v0.17 verification/HVAC duplicated-input consistency check.
 
 Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
@@ -37,6 +38,7 @@ Example:
   "fan_operating_point_studies": ["fan_operating_point_demo.json"],
   "fan_duct_network_studies": ["fan_duct_network_demo.json"],
   "fan_parallel_network_studies": ["fan_parallel_network_demo.json"],
+  "fan_speed_studies": ["fan_speed_dossier_demo.json"],
   "consistency_checks": {
     "verification_hvac_airflow": {
       "room_airflow_abs_tolerance_m3_h": 0.0,
@@ -69,11 +71,11 @@ Each referenced source file is hashed byte-for-byte with SHA-256. The report rec
 
 The dossier preserves component-specific states instead of turning every result into a certification verdict:
 
-- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a configured cross-module consistency check failed, or any standalone/integrated fan study has no intersection inside the supplied fan-curve range;
+- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a configured cross-module consistency check failed, or any standalone/integrated/fan-speed case has no intersection inside the supplied fan-curve range;
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, or a standalone psychrometric analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, and passive parallel-network operating points are reported as bounded engineering screening, not equipment acceptance. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, and speed-scaled fan operating points are reported as bounded engineering screening, not equipment acceptance. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
 
 ## CLI
 
@@ -88,3 +90,10 @@ The CLI exits with code 2 when the dossier state is `attention_required`; otherw
 ## Boundary
 
 The dossier is an aggregation of CleanroomX calculations against user-configured project criteria and bounded engineering models. Final cleanroom classification, qualification, commissioning, regulatory approval, fan/equipment selection, and acceptance remain governed by the applicable licensed standards, client/project requirements, approved procedures, calibrated instrumentation, manufacturer data, and qualified engineering judgment.
+
+
+## Fan-speed dossier integration
+
+The optional `fan_speed_studies` array points to the same JSON inputs accepted by `cleanroomx-fan-speed`. Each referenced file receives a SHA-256 fingerprint and the dossier preserves every discrete speed-case status. A case with `no_intersection_in_supplied_range` contributes an attention item; solved cases remain bounded screening results.
+
+The dossier does not reinterpret the fan affinity laws or infer acceptable speed ranges. Speed ratios, reference fan data, system-curve inputs, and manufacturer/VFD limits remain external engineering inputs and constraints.

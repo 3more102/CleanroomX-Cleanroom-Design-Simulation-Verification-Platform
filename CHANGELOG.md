@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.27 explicit fan/loop damper-state studies — 2026-09-23
+
+- Added discrete damper-state studies on top of the v0.26 bounded fan/loop-network solver.
+- Each state applies explicit user-supplied additive quadratic resistance to selected loop edges; no opening-percentage, actuator-signal, or blade-angle characteristic is invented.
+- Re-solves the equivalent fan/system operating point and full loop network for every configured state without fan-curve extrapolation.
+- Reports base, added, and adjusted edge resistance plus per-state equivalent resistance, fan operating point, signed branch flows, and inherited numerical residual evidence.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-damper` CLI, example data, documentation, and regression tests.
+- Bumped package/runtime metadata to v0.27.0.
+
 ## v0.26 bounded fan / loop-network coupling — 2026-09-23
 
 - Added two-terminal coupling between supplied fan curves and connected fixed-resistance loop networks.

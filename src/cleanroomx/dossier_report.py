@@ -35,6 +35,11 @@ def markdown_dossier_report(result: dict) -> str:
         detail = _fmt_counts(component.get("counts", {}))
         if name == "hvac" and component["status"] != "not_included":
             detail = f"failed_air_balances={component['failed_air_balances']}"
+        elif name == "psychrometric_uncertainty" and component["status"] != "not_included":
+            detail = (
+                f"analyses={component['analysis_count']}, "
+                f"missing_provenance={component['missing_provenance_analyses']}"
+            )
         lines.append(f"| {name} | {component['status']} | {detail} |")
 
     verification = result["verification"]
@@ -172,6 +177,26 @@ def markdown_dossier_report(result: dict) -> str:
                 f"| {item['analysis']} | {item['overall_status']} | "
                 f"{cooling['lower']} to {cooling['upper']} | "
                 f"{heating['lower']} to {heating['upper']} | "
+                f"{'yes' if item['traceability']['complete'] else 'no'} |"
+            )
+
+    if result["psychrometric_uncertainty_analyses"]:
+        lines.extend(
+            [
+                "",
+                "## Psychrometric-state uncertainty screening",
+                "",
+                "| Analysis | Corners | Humidity ratio g/kg dry air | Enthalpy kJ/kg dry air | Provenance complete |",
+                "|---|---:|---:|---:|---|",
+            ]
+        )
+        for item in result["psychrometric_uncertainty_analyses"]:
+            humidity = item["psychrometric_properties"]["humidity_ratio_g_kg_da"]
+            enthalpy = item["psychrometric_properties"]["enthalpy_kj_kg_da"]
+            lines.append(
+                f"| {item['analysis']} | {item['corner_count']} | "
+                f"{humidity['lower']} to {humidity['upper']} | "
+                f"{enthalpy['lower']} to {enthalpy['upper']} | "
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
             )
 

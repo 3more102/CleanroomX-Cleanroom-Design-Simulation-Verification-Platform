@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8 branched supply-duct solving — 2026-09-23
+
+- Added a validated rooted supply-tree model with explicit branches, nodes, and terminal-room assignments.
+- Added deterministic downstream airflow aggregation so shared trunks carry the sum of all served terminal demands.
+- Reused the existing Darcy-Weisbach and local-loss section model after branch airflow is derived.
+- Added root-to-terminal pressure-path calculation and automatic controlling-terminal selection.
+- Integrated the computed controlling path into preliminary supply-fan sizing with an explicit `computed_branched_duct_network` source tag.
+- Added JSON loading, Markdown reporting, a worked two-room example, regression coverage, and engineering-scope documentation.
+- Preserved the legacy user-defined `duct_network` path model and rejected configurations that specify both network modes.
+- Kept the solver explicitly bounded as a rooted-tree demand aggregation model, not a pressure-driven nonlinear airflow-network, fan-curve, leakage, balancing, acoustic, or commissioning solver.
+
 ## v0.7 qualification uncertainty — 2026-09-23
 
 - Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.
@@ -28,7 +39,7 @@
 
 ## v0.5 uncertainty/provenance foundation — 2026-09-23
 
-- Added explicit provenance records for engineering inputs, including source type/name, reference, revision, date, uncertainty basis, and notes.
+- Added explicit provenance records for engineering inputs, including source type/name, reference, revision/date, uncertainty basis, and notes.
 - Added absolute uncertainty bounds for room dimensions and supply airflow.
 - Added deterministic conservative interval propagation for room volume and supply ACH.
 - Added robust pass/fail/indeterminate/not-checked evaluation against a project-configured minimum ACH requirement.

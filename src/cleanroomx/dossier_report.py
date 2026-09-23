@@ -40,6 +40,12 @@ def markdown_dossier_report(result: dict) -> str:
                 f"analyses={component['analysis_count']}, "
                 f"missing_provenance={component['missing_provenance_analyses']}"
             )
+        elif name == "cross_module_consistency" and component["status"] != "not_included":
+            detail = (
+                f"shared_rooms={component['shared_room_count']}, "
+                f"mismatches={component['mismatch_count']}, "
+                f"room_set_mismatch={component['room_set_mismatch']}"
+            )
         lines.append(f"| {name} | {component['status']} | {detail} |")
 
     verification = result["verification"]
@@ -104,6 +110,60 @@ def markdown_dossier_report(result: dict) -> str:
                 lines.append(
                     f"- Fan-curve pressure margin: **{check['pressure_margin_pa']} Pa**"
                 )
+
+    consistency = result.get("consistency_checks", {}).get(
+        "verification_hvac_airflow"
+    )
+    if consistency is not None:
+        lines.extend(
+            [
+                "",
+                "## Cross-module verification / HVAC consistency",
+                "",
+                f"- Status: **{consistency['status']}**",
+                (
+                    "- Room airflow absolute consistency tolerance: "
+                    f"**{consistency['room_airflow_abs_tolerance_m3_h']} m³/h**"
+                ),
+                (
+                    "- Require identical room sets: "
+                    f"**{consistency['require_same_room_set']}**"
+                ),
+                f"- Shared rooms: **{consistency['shared_room_count']}**",
+                f"- Airflow mismatches: **{consistency['mismatch_count']}**",
+            ]
+        )
+        if consistency["room_airflow_checks"]:
+            lines.extend(
+                [
+                    "",
+                    (
+                        "| Room | Verification supply m³/h | HVAC cleanroom m³/h | "
+                        "Difference m³/h | Absolute difference m³/h | Status |"
+                    ),
+                    "|---|---:|---:|---:|---:|---|",
+                ]
+            )
+            for item in consistency["room_airflow_checks"]:
+                lines.append(
+                    f"| {item['room']} | "
+                    f"{item['verification_supply_airflow_m3_h']} | "
+                    f"{item['hvac_cleanroom_airflow_m3_h']} | "
+                    f"{item['difference_m3_h']} | "
+                    f"{item['absolute_difference_m3_h']} | "
+                    f"{item['status']} |"
+                )
+        if consistency["verification_only_rooms"]:
+            lines.append(
+                "- Verification-only rooms: "
+                + ", ".join(consistency["verification_only_rooms"])
+            )
+        if consistency["hvac_only_rooms"]:
+            lines.append(
+                "- HVAC-only rooms: "
+                + ", ".join(consistency["hvac_only_rooms"])
+            )
+        lines.extend(["", consistency["scope_note"]])
 
     if result["recovery_tests"]:
         lines.extend(

@@ -27,16 +27,28 @@ class ProjectVerificationReport:
     pressure_cascade_findings: tuple[PressureCascadeFinding, ...]
 
     @property
-    def passed(self) -> bool:
-        return all(report.passed for report in self.room_reports) and all(
-            finding.status not in {"fail", "indeterminate"}
+    def failed(self) -> bool:
+        return any(report.failed for report in self.room_reports) or any(
+            finding.status == "fail" for finding in self.pressure_cascade_findings
+        )
+
+    @property
+    def indeterminate(self) -> bool:
+        return any(report.indeterminate for report in self.room_reports) or any(
+            finding.status == "indeterminate"
             for finding in self.pressure_cascade_findings
         )
+
+    @property
+    def passed(self) -> bool:
+        return not self.failed and not self.indeterminate
 
     def to_dict(self) -> dict:
         return {
             "project": self.project,
             "passed": self.passed,
+            "failed": self.failed,
+            "indeterminate": self.indeterminate,
             "rooms": [report.to_dict() for report in self.room_reports],
             "pressure_cascade": [asdict(finding) for finding in self.pressure_cascade_findings],
         }

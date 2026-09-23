@@ -449,6 +449,7 @@ def _nonconverged_result(
             )
         ),
         "fan_operating_point": None,
+        "operating_point_search_evidence": None,
         "operating_network_solution": None,
         "system_pressure_check": None,
         "power_evidence": None,
@@ -510,6 +511,8 @@ def solve_fan_variable_friction_loop(
     selected_network: dict | None = None
     selected_network_pressure: float | None = None
     selected_segment = 0
+    selected_supplied_point_index: int | None = None
+    final_bisection_bracket: dict | None = None
     operating_iterations = 0
     termination_reason = "no_intersection_in_supplied_range"
 
@@ -524,6 +527,7 @@ def solve_fan_variable_friction_loop(
                 check["loop_network_pressure_pa"]
             )
             selected_segment = min(index, len(points) - 2)
+            selected_supplied_point_index = index
             termination_reason = "fan_curve_point_residual"
             break
 
@@ -539,6 +543,8 @@ def solve_fan_variable_friction_loop(
             low = left.airflow_m3_h
             high = right.airflow_m3_h
             low_residual = left_residual
+            high_residual = right_residual
+            supplied_segment_span = high - low
             final: tuple[float, float, dict, float, float] | None = None
 
             try:
@@ -561,6 +567,37 @@ def solve_fan_variable_friction_loop(
                     )
                     operating_iterations = iteration
                     if abs(residual) <= tolerance:
+                        bracket_width = high - low
+                        final_bisection_bracket = {
+                            "low_airflow_m3_h": round(low, 9),
+                            "high_airflow_m3_h": round(high, 9),
+                            "width_m3_h": round(bracket_width, 9),
+                            "half_width_m3_h": round(
+                                0.5 * bracket_width,
+                                9,
+                            ),
+                            "low_fan_minus_system_pressure_pa": round(
+                                low_residual,
+                                9,
+                            ),
+                            "high_fan_minus_system_pressure_pa": round(
+                                high_residual,
+                                9,
+                            ),
+                            "selected_midpoint_airflow_m3_h": round(
+                                airflow,
+                                9,
+                            ),
+                            "selected_fan_minus_system_pressure_pa": round(
+                                residual,
+                                9,
+                            ),
+                            "width_fraction_of_supplied_segment": round(
+                                bracket_width / supplied_segment_span,
+                                12,
+                            ),
+                            "iteration": iteration,
+                        }
                         termination_reason = "pressure_residual"
                         break
                     if residual > 0.0:
@@ -568,6 +605,7 @@ def solve_fan_variable_friction_loop(
                         low_residual = residual
                     else:
                         high = airflow
+                        high_residual = residual
                 else:
                     termination_reason = "bisection_iteration_limit"
             except RuntimeError as exc:
@@ -649,6 +687,7 @@ def solve_fan_variable_friction_loop(
             **base,
             "status": "no_intersection_in_supplied_range",
             "fan_operating_point": None,
+            "operating_point_search_evidence": None,
             "operating_network_solution": None,
             "system_pressure_check": None,
             "power_evidence": None,
@@ -694,6 +733,34 @@ def solve_fan_variable_friction_loop(
         selected_airflow_m3_h=selected_airflow,
         selected_segment_index=selected_segment,
     )
+    operating_point_search_evidence = {
+        "method": (
+            "supplied_point_tolerance_contact"
+            if termination_reason == "fan_curve_point_residual"
+            else "bounded_bisection"
+        ),
+        "supplied_segment_index": selected_segment,
+        "supplied_segment_low_airflow_m3_h": round(
+            left.airflow_m3_h,
+            6,
+        ),
+        "supplied_segment_high_airflow_m3_h": round(
+            right.airflow_m3_h,
+            6,
+        ),
+        "selected_supplied_point_index": selected_supplied_point_index,
+        "operating_iterations": operating_iterations,
+        "final_bisection_bracket": final_bisection_bracket,
+        "scope_note": (
+            "The final bisection bracket is the active signed-residual search "
+            "interval immediately before a pressure-tolerance midpoint "
+            "termination. Its width and half-width are numerical search-"
+            "geometry evidence only; they are not physical airflow "
+            "uncertainty, interpolation error, continuous worst-case bounds, "
+            "or equipment-acceptance limits. Supplied-point tolerance-contact "
+            "solutions do not fabricate a bisection bracket."
+        ),
+    }
 
     power_evidence["system_components"] = {
         "fixed_pressure_power_w": round(fixed_pressure_power_w, 9),
@@ -713,6 +780,7 @@ def solve_fan_variable_friction_loop(
         **base,
         "status": "solved",
         "fan_curve_supplied_point_residual_audit": selected_residual_audit,
+        "operating_point_search_evidence": operating_point_search_evidence,
         "fan_operating_point": {
             "airflow_m3_h": round(selected_airflow, 6),
             "airflow_m3_s": round(airflow_m3_s, 9),

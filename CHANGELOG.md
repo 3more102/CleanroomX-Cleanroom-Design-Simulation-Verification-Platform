@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.23.1 loop-network global-balance hardening — 2026-09-23
+
+- Enforced an absolute `1e-6 m³/h` tolerance on the configured sum of loop-network node injections.
+- Removed the previous flow-scale-relative relaxation that could accept a material source/sink imbalance in very large-flow networks.
+- Added a regression test proving that large total airflow does not hide an absolute global imbalance.
+- Bumped package/runtime metadata to v0.23.1.
+
 ## v0.23 fixed-resistance looped airflow networks — 2026-09-23
 
 - Added a connected steady-state pressure-node solver for airflow networks with arbitrary loops.

@@ -88,6 +88,7 @@ def markdown_dossier_report(result: dict) -> str:
             detail = (
                 f"analyses={component['analysis_count']}, "
                 f"corners={component['corner_count']}, "
+                f"fan_curve_scenarios={component.get('fan_curve_scenario_count', 0)}, "
                 f"missing_provenance={component['missing_provenance_analyses']}, "
                 f"indeterminate={component['counts'].get('indeterminate', 0)}"
             )
@@ -530,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Operating airflow envelope m³/h | Nominal state | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Nominal state | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|",
             ]
         )
         for item in result[
@@ -546,11 +547,15 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{envelope['airflow_m3_h']['upper']}"
                 )
             )
+            scenario_names = ", ".join(
+                scenario["name"]
+                for scenario in item.get("fan_curve_scenarios", [])
+            ) or "—"
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
-                f"{item['unresolved_corner_count']} | {airflow_envelope} | "
-                f"{item['nominal_status']} | "
+                f"{item['unresolved_corner_count']} | {scenario_names} | "
+                f"{airflow_envelope} | {item['nominal_status']} | "
                 f"{item['traceability']['complete']} |"
             )
             if item["traceability"]["missing_provenance"]:

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.19 bounded fan-speed control studies — 2026-09-23
+
+- Added fan-speed scenario studies that scale an explicit reference fan curve with the simplified affinity relations Q proportional to speed and pressure proportional to speed squared.
+- Reused the existing bounded fan/system operating-point solver for every scaled curve, preserving no-extrapolation and no-intersection behavior.
+- Added optional reference RPM traceability and optional required-airflow screening across only the discrete user-supplied speed scenarios.
+- Reports the lowest tested speed scenario meeting the configured airflow target without interpolating a continuous optimum.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-control` CLI, example data, documentation, and regression coverage.
+- Kept speed ratios explicit and user-supplied; no manufacturer RPM limits, VFD/motor limits, efficiency, density/compressibility corrections, stall/surge acceptance, structural limits, or control-loop stability are inferred.
+
 ## v0.18 complete engineering dossier — 2026-09-23
 
 - Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.

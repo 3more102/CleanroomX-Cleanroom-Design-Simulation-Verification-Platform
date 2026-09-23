@@ -436,6 +436,47 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"{case['fixed_pressure_pa']} |"
                 )
 
+    no_intersection = result.get("fan_curve_no_intersection_summary")
+    if no_intersection and no_intersection["no_intersection_corner_count"]:
+        lines.extend(
+            [
+                "",
+                "## No-intersection supplied-boundary diagnostics",
+                "",
+                "- No-intersection evaluated corners: "
+                f"**{no_intersection['no_intersection_corner_count']}**",
+                "- Lower supplied-airflow boundary cases: "
+                f"**{no_intersection['lower_boundary_corner_count']}**",
+                "- Upper supplied-airflow boundary cases: "
+                f"**{no_intersection['upper_boundary_corner_count']}**",
+            ]
+        )
+        largest_gap = no_intersection.get(
+            "largest_absolute_boundary_pressure_gap_pa"
+        )
+        if largest_gap is not None:
+            lines.extend(
+                [
+                    "",
+                    "| Largest endpoint pressure mismatch | Unit | Source corner input(s) |",
+                    "|---:|---|---|",
+                ]
+            )
+            source_texts = []
+            for source in largest_gap["sources"]:
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; boundary={source['boundary']}"
+                    + f"; mismatch={source['mismatch_kind']}"
+                    + f"; Q={source['airflow_m3_h']} m³/h"
+                    + f"; fan-system={source['fan_minus_system_pressure_pa']} Pa"
+                )
+            lines.append(
+                f"| {largest_gap['value']} | {largest_gap['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", no_intersection["scope_note"]])
+
     quality = result.get("solver_quality_summary")
     if quality:
         coverage_label = "complete" if quality["complete_study_coverage"] else "incomplete"

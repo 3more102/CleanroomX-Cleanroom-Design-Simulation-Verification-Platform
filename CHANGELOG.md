@@ -1,4 +1,25 @@
 # Changelog
+## v0.54 supplied fan-curve boundary-clearance audit — 2026-09-24
+
+- Adds per-solved-corner airflow distance from the operating point to both endpoints of that corner's exact supplied or speed-transformed fan-curve airflow range.
+- Reports lower, upper, and nearest endpoint headroom in m³/h together with normalized airflow position, normalized nearest-boundary headroom, and the nearest endpoint identity.
+- Aggregates the minimum nearest-boundary headroom across solved evaluated corners with tie-aware source-corner provenance and preserves the exact active fan/system/duct uncertainty context.
+- Keeps boundary-clearance evidence explicitly diagnostic: no minimum acceptable headroom, stall/surge margin, manufacturer operating region, or equipment-acceptance criterion is inferred.
+- Marks complete versus partial study coverage independently, so indeterminate analyses may retain solved-corner diagnostic evidence without fabricating a complete uncertainty envelope.
+- Surfaces the new evidence in standalone Markdown reports and engineering-dossier tables, with regression coverage for exact arithmetic, provenance, zero-solved-corner behavior, and dossier integration.
+- Bumped package/runtime metadata to v0.54.0.
+
+## v0.53 nominal-relative corner excursion evidence — 2026-09-24
+
+- Adds nominal-centered absolute and percentage excursion evidence for complete nonlinear fan/variable-friction uncertainty operating-point envelopes.
+- Covers operating airflow, fan pressure, system pressure, and fan air power, plus available fluid/shaft/electrical/SFP power-chain ranges.
+- Percentage excursion is withheld when the solved nominal value is effectively zero rather than inventing an unstable denominator.
+- Keeps excursions conditional on complete corner coverage; indeterminate studies emit no nominal-relative envelope evidence.
+- Explicitly treats the new values as evaluated-corner summaries rather than sensitivity coefficients or guarantees about continuous interior extrema.
+- Surfaces operating-point excursions in standalone Markdown reports and a compact airflow-excursion column in engineering dossiers.
+- Adds regression coverage for excursion arithmetic, power-chain availability, reporting, dossier integration, and indeterminate withholding.
+- Bumped package/runtime metadata to v0.53.0.
+
 ## v0.52 configured solver-tolerance utilization audit — 2026-09-24
 
 - Extends nonlinear fan/variable-friction uncertainty solver-quality evidence with explicit checks against the operating-pressure, resistance-closure, and mass-balance tolerances already configured for the solver.

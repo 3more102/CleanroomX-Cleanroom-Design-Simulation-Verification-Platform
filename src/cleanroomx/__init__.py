@@ -1,3 +1,3 @@
 """CleanroomX core package."""
 
-__version__ = "0.52.0"
+__version__ = "0.54.0"

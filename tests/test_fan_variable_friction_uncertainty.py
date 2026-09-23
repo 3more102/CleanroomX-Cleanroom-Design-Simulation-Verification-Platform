@@ -883,6 +883,7 @@ def test_complete_envelope_extrema_reference_exact_corner_witnesses() -> None:
         "airflow_m3_h",
         "fan_pressure_pa",
         "system_pressure_pa",
+        "air_power_kw",
     ):
         envelope = result["operating_point_envelope"][metric]
         metric_witnesses = witnesses[metric]
@@ -914,6 +915,33 @@ def test_complete_envelope_extrema_reference_exact_corner_witnesses() -> None:
                 assert source["fan_curve_scenario"] == source_corner[
                     "fan_curve_scenario"
                 ]
+
+
+def test_air_power_envelope_matches_exact_evaluated_corner_power() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    envelope = result["operating_point_envelope"]["air_power_kw"]
+    witnesses = result["operating_point_extreme_cases"]["air_power_kw"]
+    sources = result["operating_point_extrema_sources"]["air_power_kw"]
+
+    for bound in ("lower", "upper"):
+        corner = result["corners"][witnesses[bound]["corner_index"]]
+        point = corner["operating_point"]
+        assert point is not None
+        expected_kw = (
+            point["airflow_m3_h"] / 3600.0 * point["system_pressure_pa"] / 1000.0
+        )
+        assert point["air_power_kw"] == pytest.approx(expected_kw, abs=1e-9)
+        assert witnesses[bound]["value"] == pytest.approx(
+            envelope[bound], abs=1e-6
+        )
+        assert sources[bound]["value"] == pytest.approx(
+            envelope[bound], abs=1e-6
+        )
 
 
 def test_edge_airflow_ranges_reference_exact_corner_witnesses() -> None:
@@ -949,6 +977,7 @@ def test_uncertainty_report_surfaces_extreme_corner_witnesses() -> None:
     assert "corner indices" in report
     assert "Envelope witness provenance" in report
     assert "Internal edge-airflow corner ranges" in report
+    assert "Air power" in report
     assert "scenario=" in report
 
 
@@ -967,6 +996,7 @@ def test_operating_point_extrema_sources_reference_exact_corners() -> None:
         "airflow_m3_h",
         "fan_pressure_pa",
         "system_pressure_pa",
+        "air_power_kw",
     }
 
     for metric in sources:

@@ -2014,6 +2014,191 @@ def _fan_curve_crossing_conditioning_summary(
     }
 
 
+def _pressure_residual_airflow_equivalence_diagnostic(
+    result: dict,
+    operating_pressure_tolerance_pa: float,
+) -> dict | None:
+    conditioning = _fan_curve_crossing_conditioning_diagnostic(result)
+    if conditioning is None:
+        return None
+
+    point = result.get("fan_operating_point") or {}
+    pressure_residual = point.get("pressure_residual_pa")
+    if pressure_residual is None:
+        return None
+
+    residual_slope = float(
+        conditioning["fan_minus_system_slope_pa_per_m3_h"]
+    )
+    airflow_per_pa = conditioning["airflow_change_per_pa_m3_h_per_pa"]
+    bracket_span = float(conditioning["bracket_airflow_span_m3_h"])
+    tolerance = float(operating_pressure_tolerance_pa)
+    residual = float(pressure_residual)
+
+    base = {
+        "configured_operating_pressure_tolerance_pa": round(tolerance, 12),
+        "solved_pressure_residual_pa": round(residual, 12),
+        "absolute_solved_pressure_residual_pa": round(abs(residual), 12),
+        "fan_minus_system_slope_pa_per_m3_h": round(residual_slope, 12),
+        "airflow_change_per_pa_m3_h_per_pa": airflow_per_pa,
+        "bracket_airflow_span_m3_h": round(bracket_span, 9),
+    }
+    if airflow_per_pa is None:
+        return {
+            **base,
+            "status": "not_evaluable_zero_local_residual_slope",
+            "configured_tolerance_equivalent_airflow_m3_h": None,
+            "solved_residual_equivalent_airflow_m3_h": None,
+            "signed_linearized_airflow_correction_m3_h": None,
+            "configured_tolerance_equivalent_fraction_of_bracket_span": None,
+            "solved_residual_equivalent_fraction_of_bracket_span": None,
+        }
+
+    airflow_per_pressure = float(airflow_per_pa)
+    configured_equivalent = tolerance * airflow_per_pressure
+    residual_equivalent = abs(residual) * airflow_per_pressure
+    signed_correction = -residual / residual_slope
+    return {
+        **base,
+        "status": "evaluated",
+        "configured_tolerance_equivalent_airflow_m3_h": round(
+            configured_equivalent,
+            12,
+        ),
+        "solved_residual_equivalent_airflow_m3_h": round(
+            residual_equivalent,
+            12,
+        ),
+        "signed_linearized_airflow_correction_m3_h": round(
+            signed_correction,
+            12,
+        ),
+        "configured_tolerance_equivalent_fraction_of_bracket_span": round(
+            configured_equivalent / bracket_span,
+            12,
+        ),
+        "solved_residual_equivalent_fraction_of_bracket_span": round(
+            residual_equivalent / bracket_span,
+            12,
+        ),
+    }
+
+
+def _pressure_residual_airflow_equivalence_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    cases = [
+        (
+            corner_index,
+            corner,
+            corner["pressure_residual_airflow_equivalence"],
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get("pressure_residual_airflow_equivalence") is not None
+    ]
+    evaluable = [
+        (corner_index, corner, diagnostic)
+        for corner_index, corner, diagnostic in cases
+        if diagnostic["status"] == "evaluated"
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(evaluable) == len(corners)
+    )
+
+    def _maximum_evidence(key: str, unit: str) -> dict | None:
+        available = [
+            (corner_index, corner, diagnostic)
+            for corner_index, corner, diagnostic in evaluable
+            if diagnostic.get(key) is not None
+        ]
+        if not available:
+            return None
+        maximum = max(
+            float(diagnostic[key])
+            for _corner_index, _corner, diagnostic in available
+        )
+        sources = []
+        for corner_index, corner, diagnostic in available:
+            if not math.isclose(
+                float(diagnostic[key]),
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "configured_operating_pressure_tolerance_pa": diagnostic[
+                        "configured_operating_pressure_tolerance_pa"
+                    ],
+                    "solved_pressure_residual_pa": diagnostic[
+                        "solved_pressure_residual_pa"
+                    ],
+                    "fan_minus_system_slope_pa_per_m3_h": diagnostic[
+                        "fan_minus_system_slope_pa_per_m3_h"
+                    ],
+                    "airflow_change_per_pa_m3_h_per_pa": diagnostic[
+                        "airflow_change_per_pa_m3_h_per_pa"
+                    ],
+                    "signed_linearized_airflow_correction_m3_h": diagnostic[
+                        "signed_linearized_airflow_correction_m3_h"
+                    ],
+                    "bracket_airflow_span_m3_h": diagnostic[
+                        "bracket_airflow_span_m3_h"
+                    ],
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "diagnostic_evidence_corner_count": len(cases),
+        "evaluable_corner_count": len(evaluable),
+        "complete_study_coverage": complete_study_coverage,
+        "maximum_configured_tolerance_equivalent_airflow_m3_h": (
+            _maximum_evidence(
+                "configured_tolerance_equivalent_airflow_m3_h",
+                "m3/h",
+            )
+        ),
+        "maximum_solved_residual_equivalent_airflow_m3_h": (
+            _maximum_evidence(
+                "solved_residual_equivalent_airflow_m3_h",
+                "m3/h",
+            )
+        ),
+        "maximum_configured_tolerance_equivalent_fraction_of_bracket_span": (
+            _maximum_evidence(
+                "configured_tolerance_equivalent_fraction_of_bracket_span",
+                "1",
+            )
+        ),
+        "maximum_solved_residual_equivalent_fraction_of_bracket_span": (
+            _maximum_evidence(
+                "solved_residual_equivalent_fraction_of_bracket_span",
+                "1",
+            )
+        ),
+        "scope_note": (
+            "This diagnostic maps the already configured operating-pressure "
+            "solver tolerance and the solved pressure residual through the "
+            "local supplied-point fan-minus-system secant gradient. The "
+            "resulting airflow quantities are first-order numerical "
+            "equivalents/corrections only; they are not measurement "
+            "uncertainty, fan-performance uncertainty, interpolation-error "
+            "bounds, continuous worst-case guarantees, stability criteria, "
+            "or equipment-acceptance limits."
+        ),
+    }
+
+
 def _fan_curve_segment_position_diagnostic(result: dict) -> dict | None:
     bracket = _fan_curve_intersection_bracket_diagnostic(result)
     if bracket is None:
@@ -2644,6 +2829,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                     result
                                 )
                             ),
+                            "pressure_residual_airflow_equivalence": (
+                                _pressure_residual_airflow_equivalence_diagnostic(
+                                    result,
+                                    study.operating_pressure_tolerance_pa,
+                                )
+                            ),
                             "fan_curve_segment_position": (
                                 _fan_curve_segment_position_diagnostic(result)
                             ),
@@ -2688,6 +2879,18 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     fan_curve_crossing_conditioning_summary = (
         _fan_curve_crossing_conditioning_summary(
+            corners,
+            nominal["status"],
+        )
+    )
+    nominal_pressure_residual_airflow_equivalence = (
+        _pressure_residual_airflow_equivalence_diagnostic(
+            nominal,
+            study.operating_pressure_tolerance_pa,
+        )
+    )
+    pressure_residual_airflow_equivalence_summary = (
+        _pressure_residual_airflow_equivalence_summary(
             corners,
             nominal["status"],
         )
@@ -3092,6 +3295,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "fan_curve_crossing_conditioning_summary": (
             fan_curve_crossing_conditioning_summary
         ),
+        "nominal_pressure_residual_airflow_equivalence": (
+            nominal_pressure_residual_airflow_equivalence
+        ),
+        "pressure_residual_airflow_equivalence_summary": (
+            pressure_residual_airflow_equivalence_summary
+        ),
         "nominal_fan_curve_segment_position": (
             nominal_fan_curve_segment_position
         ),
@@ -3195,7 +3404,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "local crossing-conditioning audit reuses each supplied-point "
             "intersection bracket to report fan, system, and residual secant "
             "slopes plus secant-root agreement without inferring a stability "
-            "or acceptance threshold. The supplied-point residual-topology "
+            "or acceptance threshold. The pressure-residual-to-airflow audit "
+            "maps only the configured operating-pressure solver tolerance and "
+            "actual solved residual through that local secant gradient; its "
+            "airflow equivalents are numerical diagnostics, not physical "
+            "uncertainty or acceptance limits. The supplied-point residual-topology "
             "audit also propagates discrete monotonicity and candidate-crossing "
             "features from every nonlinear solver case without presenting "
             "sampled behavior as proof of continuous uniqueness. Those "

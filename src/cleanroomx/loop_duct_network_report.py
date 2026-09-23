@@ -31,7 +31,7 @@ def markdown_geometry_derived_loop_report(result: dict) -> str:
             "",
             "## Geometry-derived edges",
             "",
-            "| Edge | Solved airflow (m³/h) | Reference airflow (m³/h) | |Q solved| / Q ref | Derived R [Pa/(m³/s)²] | Pressure difference (Pa) |",
+            "| Edge | Solved airflow (m³/h) | Reference airflow (m³/h) | Absolute flow ratio | Derived R [Pa/(m³/s)²] | Pressure difference (Pa) |",
             "|---|---:|---:|---:|---:|---:|",
         ]
     )

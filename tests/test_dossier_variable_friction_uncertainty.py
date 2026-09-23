@@ -21,6 +21,12 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert analysis["corner_count"] == 8
     assert analysis["solved_corner_count"] == 8
     assert analysis["traceability"]["complete"] is True
+    boundary_summary = analysis["fan_curve_boundary_clearance_summary"]
+    assert boundary_summary["complete_study_coverage"] is True
+    assert boundary_summary["solved_corner_count"] == analysis["corner_count"]
+    assert boundary_summary[
+        "minimum_nearest_boundary_headroom_m3_h"
+    ]["value"] >= 0.0
     assert analysis["operating_point_envelope"]["air_power_kw"]["lower"] >= 0.0
     assert (
         analysis["operating_point_envelope"]["air_power_kw"]["lower"]
@@ -52,6 +58,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Solver tolerance audit" in report
     assert "within_configured_tolerances" in report
     assert "Airflow excursion from nominal %" in report
+    assert "Fan-curve min headroom m³/h" in report
+    assert "Boundary evidence" in report
     assert "8" in report
 
 

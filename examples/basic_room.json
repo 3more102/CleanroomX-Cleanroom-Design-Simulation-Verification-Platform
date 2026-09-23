@@ -1,17 +1,18 @@
 {
   "name": "Example cleanroom",
-  "length_m": 6.0,
-  "width_m": 4.0,
-  "height_m": 3.0,
-  "supply_airflow_m3_h": 1800.0,
-  "min_ach": 20.0,
-  "min_pressure_pa": 10.0,
-  "observed_pressure_pa": 14.0,
+  "length_m": 6,
+  "width_m": 4,
+  "height_m": 3,
+  "supply_airflow_m3_h": 1800,
+  "min_ach": 20,
+  "min_pressure_pa": 10,
+  "observed_pressure_pa": 14,
   "particle_requirements": [
     {
       "size_um": 0.5,
-      "max_concentration_per_m3": 400000.0,
-      "observed_concentration_per_m3": 120000.0
+      "max_concentration_per_m3": 400000,
+      "observed_concentration_per_m3": 120000
     }
-  ]
+  ],
+  "observed_pressure_uncertainty_pa": 0.5
 }

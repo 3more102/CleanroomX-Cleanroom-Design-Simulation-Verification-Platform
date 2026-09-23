@@ -1015,6 +1015,64 @@ def _edge_airflow_extrema_sources(
     return rows
 
 
+def _power_metric_corner_range(
+    corners: list[dict],
+    key: str,
+    unit: str,
+) -> dict | None:
+    values = [
+        float(corner["power_evidence"][key])
+        for corner in corners
+        if corner.get("power_evidence") is not None
+        and corner["power_evidence"].get(key) is not None
+    ]
+    if not values:
+        return None
+    return {
+        "lower": round(min(values), 6),
+        "upper": round(max(values), 6),
+        "unit": unit,
+    }
+
+
+def _power_metric_extrema_sources(
+    corners: list[dict],
+    key: str,
+    unit: str,
+) -> dict | None:
+    values = [
+        (corner_index, float(corner["power_evidence"][key]))
+        for corner_index, corner in enumerate(corners)
+        if corner.get("power_evidence") is not None
+        and corner["power_evidence"].get(key) is not None
+    ]
+    if not values:
+        return None
+
+    lower = min(value for _corner_index, value in values)
+    upper = max(value for _corner_index, value in values)
+
+    def _sources(target: float) -> list[dict]:
+        return [
+            _critical_case_summary(corner_index, corners[corner_index])
+            for corner_index, value in values
+            if math.isclose(value, target, rel_tol=1e-12, abs_tol=1e-9)
+        ]
+
+    return {
+        "lower": {
+            "value": round(lower, 6),
+            "unit": unit,
+            "sources": _sources(lower),
+        },
+        "upper": {
+            "value": round(upper, 6),
+            "unit": unit,
+            "sources": _sources(upper),
+        },
+    }
+
+
 def analyze_fan_variable_friction_loop_uncertainty(
     study: FanVariableFrictionLoopUncertaintyStudy,
 ) -> dict:
@@ -1307,6 +1365,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "status": result["status"],
                             "operating_point": point,
                             "edge_airflows_m3_h": edge_airflows,
+                            "power_evidence": result["power_evidence"],
                             "solver_diagnostics": result["solver_diagnostics"],
                         }
                     )
@@ -1325,6 +1384,8 @@ def analyze_fan_variable_friction_loop_uncertainty(
     operating_point_extrema_sources = None
     edge_airflow_corner_ranges = None
     edge_airflow_extrema_sources = None
+    power_evidence_corner_ranges = None
+    power_evidence_extrema_sources = None
     if all_corners_solved:
         operating_point_envelope = {
             "airflow_m3_h": _metric_envelope(
@@ -1387,6 +1448,20 @@ def analyze_fan_variable_friction_loop_uncertainty(
             study,
             corners,
         )
+        power_metric_specs = (
+            ("fluid_air_power_kw", "kW"),
+            ("shaft_power_kw", "kW"),
+            ("electrical_input_kw", "kW"),
+            ("specific_fan_power_w_per_m3_s", "W/(m3/s)"),
+        )
+        power_evidence_corner_ranges = {
+            key: _power_metric_corner_range(corners, key, unit)
+            for key, unit in power_metric_specs
+        }
+        power_evidence_extrema_sources = {
+            key: _power_metric_extrema_sources(corners, key, unit)
+            for key, unit in power_metric_specs
+        }
 
     fixed_record = _input_record(
         "fixed_pressure_pa",
@@ -1627,6 +1702,13 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "operating_point_extrema_sources": operating_point_extrema_sources,
         "edge_airflow_corner_ranges": edge_airflow_corner_ranges,
         "edge_airflow_extrema_sources": edge_airflow_extrema_sources,
+        "power_efficiencies": (
+            None
+            if study.power_efficiencies is None
+            else study.power_efficiencies.to_dict()
+        ),
+        "power_evidence_corner_ranges": power_evidence_corner_ranges,
+        "power_evidence_extrema_sources": power_evidence_extrema_sources,
         "traceability": {
             "complete": not missing,
             "missing_provenance": missing,
@@ -1671,8 +1753,14 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "auditability. Corner outcome diagnostics separately retain "
             "status and solver termination-reason counts plus the exact input "
             "context of every unresolved evaluated corner without converting "
-            "partial solved cases into a complete envelope. These are not "
-            "claimed as guaranteed extrema for all interior combinations. "
+            "partial solved cases into a complete envelope. When explicit "
+            "fan/motor/VFD efficiencies are supplied, solved-corner power "
+            "evidence also retains fluid, shaft, electrical-input, and "
+            "specific-fan-power ranges plus their source corners. Those "
+            "efficiencies remain fixed user inputs in this workflow; no "
+            "efficiency value or efficiency uncertainty is inferred. These "
+            "are not claimed as guaranteed extrema for all interior "
+            "combinations. "
             "No probability distribution, "
             "covariance beyond explicitly supplied whole-curve scenarios, "
             "unconfigured geometry tolerance inference, "

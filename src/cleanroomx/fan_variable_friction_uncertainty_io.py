@@ -44,27 +44,27 @@ def _uncertain_value(
     )
 
 
-def fan_variable_friction_loop_uncertainty_from_dict(
+def _edge_parameter_uncertainty(
     data: dict,
-) -> FanVariableFrictionLoopUncertaintyStudy:
-    fan_data = data["fan_curve"]
-    loop_network = looped_flow_network_from_dict(data["loop_network"])
-    edges_by_name = {edge.name: edge for edge in loop_network.edges}
-
-    edge_uncertainty: dict[str, UncertainValue] = {}
-    for edge_name, spec in data.get(
-        "edge_local_loss_uncertainty", {}
-    ).items():
+    edges_by_name: dict,
+    *,
+    block_key: str,
+    evidence_key: str,
+    unit: str,
+    label: str,
+) -> dict[str, UncertainValue]:
+    result: dict[str, UncertainValue] = {}
+    for edge_name, spec in data.get(block_key, {}).items():
         edge = edges_by_name.get(edge_name)
         if edge is None:
             raise ValueError(
-                "edge local-loss uncertainty references unknown edge "
+                f"edge {label} uncertainty references unknown edge "
                 f"{edge_name!r}"
             )
         evidence = edge.resistance_evidence
-        if evidence is None or "local_loss_coefficient" not in evidence:
+        if evidence is None or evidence.get(evidence_key) is None:
             raise ValueError(
-                f"edge {edge_name!r} has no local-loss geometry evidence"
+                f"edge {edge_name!r} has no {label} geometry evidence"
             )
         if isinstance(spec, (int, float)):
             uncertainty_abs = float(spec)
@@ -72,23 +72,64 @@ def fan_variable_friction_loop_uncertainty_from_dict(
         elif isinstance(spec, dict):
             if "value" in spec:
                 raise ValueError(
-                    "edge_local_loss_uncertainty must not repeat the nominal "
-                    "local-loss coefficient; the loop-network geometry is "
-                    "the nominal source"
+                    f"{block_key} must not repeat the nominal {label}; "
+                    "the loop-network geometry is the nominal source"
                 )
             uncertainty_abs = spec.get("uncertainty_abs", 0.0)
             provenance = _provenance_from_dict(spec.get("provenance"))
         else:
             raise ValueError(
-                f"edge local-loss uncertainty for {edge_name!r} must be "
+                f"edge {label} uncertainty for {edge_name!r} must be "
                 "a number or object"
             )
-        edge_uncertainty[edge_name] = UncertainValue(
-            value=evidence["local_loss_coefficient"],
-            unit="1",
+        result[edge_name] = UncertainValue(
+            value=evidence[evidence_key],
+            unit=unit,
             uncertainty_abs=uncertainty_abs,
             provenance=provenance,
         )
+    return result
+
+
+def fan_variable_friction_loop_uncertainty_from_dict(
+    data: dict,
+) -> FanVariableFrictionLoopUncertaintyStudy:
+    fan_data = data["fan_curve"]
+    loop_network = looped_flow_network_from_dict(data["loop_network"])
+    edges_by_name = {edge.name: edge for edge in loop_network.edges}
+
+    edge_local_loss_uncertainty = _edge_parameter_uncertainty(
+        data,
+        edges_by_name,
+        block_key="edge_local_loss_uncertainty",
+        evidence_key="local_loss_coefficient",
+        unit="1",
+        label="local-loss",
+    )
+    edge_absolute_roughness_uncertainty = _edge_parameter_uncertainty(
+        data,
+        edges_by_name,
+        block_key="edge_absolute_roughness_uncertainty",
+        evidence_key="absolute_roughness_m",
+        unit="m",
+        label="absolute-roughness",
+    )
+    edge_kinematic_viscosity_uncertainty = _edge_parameter_uncertainty(
+        data,
+        edges_by_name,
+        block_key="edge_kinematic_viscosity_uncertainty",
+        evidence_key="kinematic_viscosity_m2_s",
+        unit="m2/s",
+        label="kinematic-viscosity",
+    )
+    edge_air_density_uncertainty = _edge_parameter_uncertainty(
+        data,
+        edges_by_name,
+        block_key="edge_air_density_uncertainty",
+        evidence_key="air_density_kg_m3",
+        unit="kg/m3",
+        label="air-density",
+    )
 
     solver = data.get("solver", {})
     if not isinstance(solver, dict):
@@ -115,7 +156,12 @@ def fan_variable_friction_loop_uncertainty_from_dict(
             data.get("fixed_pressure_pa", 0.0),
             "Pa",
         ),
-        edge_local_loss_coefficient=edge_uncertainty,
+        edge_local_loss_coefficient=edge_local_loss_uncertainty,
+        edge_absolute_roughness_m=edge_absolute_roughness_uncertainty,
+        edge_kinematic_viscosity_m2_s=(
+            edge_kinematic_viscosity_uncertainty
+        ),
+        edge_air_density_kg_m3=edge_air_density_uncertainty,
         fan_curve_provenance=_provenance_from_dict(
             fan_data.get("provenance")
         ),

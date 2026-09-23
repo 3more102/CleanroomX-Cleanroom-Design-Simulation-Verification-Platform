@@ -1,0 +1,88 @@
+{
+  "name": "Geometry-derived looped-duct demo",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 5400.0,
+    "Junction A": 0.0,
+    "Junction B": 0.0,
+    "Return": -5400.0
+  },
+  "edges": [
+    {
+      "name": "Supply to A",
+      "start_node": "Supply",
+      "end_node": "Junction A",
+      "sections": [
+        {
+          "name": "SA circular",
+          "length_m": 8.0,
+          "diameter_m": 0.5,
+          "friction_factor": 0.02,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.1
+        }
+      ]
+    },
+    {
+      "name": "A to Return",
+      "start_node": "Junction A",
+      "end_node": "Return",
+      "sections": [
+        {
+          "name": "AR rectangular",
+          "length_m": 10.0,
+          "width_m": 0.6,
+          "height_m": 0.35,
+          "friction_factor": 0.019,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.4
+        }
+      ]
+    },
+    {
+      "name": "Supply to B",
+      "start_node": "Supply",
+      "end_node": "Junction B",
+      "sections": [
+        {
+          "name": "SB circular",
+          "length_m": 11.0,
+          "diameter_m": 0.45,
+          "friction_factor": 0.021,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.0
+        }
+      ]
+    },
+    {
+      "name": "B to Return",
+      "start_node": "Junction B",
+      "end_node": "Return",
+      "sections": [
+        {
+          "name": "BR circular",
+          "length_m": 7.0,
+          "diameter_m": 0.45,
+          "friction_factor": 0.021,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.2
+        }
+      ]
+    },
+    {
+      "name": "Cross-link A to B",
+      "start_node": "Junction A",
+      "end_node": "Junction B",
+      "sections": [
+        {
+          "name": "Cross-link",
+          "length_m": 3.0,
+          "diameter_m": 0.3,
+          "friction_factor": 0.022,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.8
+        }
+      ]
+    }
+  ]
+}

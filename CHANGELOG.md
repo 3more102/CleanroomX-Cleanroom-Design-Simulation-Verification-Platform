@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.24 geometry-derived looped duct resistance — 2026-09-23
+
+- Added geometry-derived fixed quadratic resistance for looped-network edges.
+- Supports circular and rectangular sections, multiple series sections per edge, explicit air density, fixed Darcy friction factor, and explicit local-loss coefficients.
+- Uses R = rho/(2 A^2) * (f L/Dh + K) per section and sums section resistances before reusing the v0.23 connected loop solver.
+- Adds solved section velocity, velocity pressure, friction loss, local loss, total pressure drop, and geometry pressure residual evidence.
+- Rejects roughness/kinematic-viscosity automatic-friction inputs in this workflow so a fixed-resistance solve cannot silently become a flow-dependent friction iteration.
+- Added JSON loading, Markdown/JSON reporting, the cleanroomx-loop-duct CLI, example data, documentation, and focused regression tests.
+- Keeps fan coupling, dampers/controls, leakage, variable-friction iteration, compressibility, and transient behavior outside this bounded workflow.
+- Bumped package/runtime metadata to v0.24.0.
+
 ## v0.23.1 loop-network injection-balance hardening — 2026-09-23
 
 - Tightened loop-network global node-injection validation to a fixed absolute tolerance of 1e-6 m³/h.

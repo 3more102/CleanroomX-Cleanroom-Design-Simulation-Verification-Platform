@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from .airflow import analyze_air_balance
+from .duct import analyze_duct_network
 from .fan import analyze_supply_fan
 from .hvac_models import HVACProject
 from .thermal import analyze_thermal_design
@@ -68,6 +69,12 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         total_cooling_kw += thermal["preliminary_cooling_capacity_kw"]
         total_heating_kw += thermal["preliminary_heating_capacity_kw"]
 
+    duct_network = (
+        analyze_duct_network(project.duct_network)
+        if project.duct_network is not None
+        else None
+    )
+
     supply_fan = None
     if project.fan_system is not None:
         filter_drop = (
@@ -79,6 +86,11 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             total_governing_airflow,
             project.fan_system,
             terminal_filter_pressure_drop_pa=filter_drop,
+            duct_pressure_drop_pa=(
+                duct_network["critical_path_pressure_drop_pa"]
+                if duct_network is not None
+                else None
+            ),
         )
 
     return {
@@ -90,6 +102,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         "total_exhaust_airflow_m3_h": round(total_exhaust_airflow, 3),
         "total_net_surplus_m3_h": round(total_net_surplus, 3),
         "all_air_balances_pass": all_air_balances_pass,
+        "duct_network": duct_network,
         "supply_fan": supply_fan,
         "total_preliminary_cooling_capacity_kw": round(total_cooling_kw, 4),
         "total_preliminary_heating_capacity_kw": round(total_heating_kw, 4),
@@ -97,6 +110,8 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             "Thermal/HVAC results are preliminary calculations from explicit project "
             "inputs. Cleanroom airflow is supplied independently; no ISO class is mapped "
             "to a fixed ACH, pressure offset, airflow surplus, filter pressure drop, or "
-            "fan duty."
+            "fan duty. When a duct network is supplied, its calculated critical-path "
+            "pressure loss replaces the fan system's manually entered duct-pressure-drop "
+            "component; the two values are not added together."
         ),
     }

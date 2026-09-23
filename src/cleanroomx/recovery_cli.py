@@ -38,6 +38,8 @@ def main() -> int:
         return 2
     if status == "incomplete":
         return 3
+    if status == "indeterminate":
+        return 4
     return 0
 
 

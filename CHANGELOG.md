@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.20 fan-speed dossier integration and HVAC/fan airflow consistency — 2026-09-23
+
+- Integrated v0.19 fan-speed affinity-law studies into engineering dossier manifests, SHA-256 source traceability, executive summaries, and Markdown/JSON reports.
+- Preserved each fan-speed case's solved or no-intersection state instead of collapsing a sweep into a generic success result.
+- Fixed dossier source validation so fan/duct, passive parallel-network, or fan-speed-only dossiers are valid source-bearing dossiers.
+- Added dossier-integrated comparison of HVAC total governing airflow against standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed operating points.
+- Uses an explicit user-supplied absolute airflow tolerance; exact agreement remains the zero-tolerance default.
+- Preserves unsolved fan studies and speed cases as `not_comparable` rather than converting missing operating points into failures.
+- Propagates solved mismatches into dossier attention items and unresolved comparisons into unchecked tracking.
+- Added focused unit tests, end-to-end fan-speed and fan-airflow dossier examples, documentation, and package/runtime version 0.20.0.
+- Keeps the feature bounded as cross-study consistency and traceability, not airflow adequacy, fan selection, commissioning acceptance, certification, or a standards-derived tolerance.
+
 ## v0.19 bounded fan-speed affinity-law study — 2026-09-23
 
 - Added explicit user-supplied fan speed-ratio sweeps from a supplied reference fan curve.

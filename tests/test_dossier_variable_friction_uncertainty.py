@@ -26,11 +26,24 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     boundary_summary = analysis["fan_curve_boundary_clearance_summary"]
     bracket_summary = analysis["fan_curve_intersection_bracket_summary"]
     conditioning_summary = analysis["fan_curve_crossing_conditioning_summary"]
+    pressure_airflow_summary = analysis[
+        "pressure_residual_airflow_equivalence_summary"
+    ]
     segment_summary = analysis["fan_curve_segment_position_summary"]
     residual_summary = analysis["fan_curve_supplied_point_residual_summary"]
     assert boundary_summary["complete_study_coverage"] is True
     assert bracket_summary["complete_study_coverage"] is True
     assert conditioning_summary["complete_study_coverage"] is True
+    assert pressure_airflow_summary["complete_study_coverage"] is True
+    assert pressure_airflow_summary["evaluable_corner_count"] == analysis[
+        "corner_count"
+    ]
+    assert pressure_airflow_summary[
+        "maximum_configured_tolerance_equivalent_airflow_m3_h"
+    ]["value"] >= 0.0
+    assert pressure_airflow_summary[
+        "maximum_solved_residual_equivalent_airflow_m3_h"
+    ]["value"] >= 0.0
     assert segment_summary["complete_study_coverage"] is True
     assert segment_summary["segment_position_evidence_corner_count"] == analysis[
         "corner_count"
@@ -95,6 +108,9 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Bracket evidence" in report
     assert "Min crossing gradient Pa/(m³/h)" in report
     assert "Crossing evidence" in report
+    assert "Max pressure-tolerance airflow equiv m³/h" in report
+    assert "Max solved-residual airflow equiv m³/h" in report
+    assert "Pressure→airflow evidence" in report
     assert "Min segment-point clearance m³/h" in report
     assert "Segment evidence" in report
     assert "Residual topology" in report

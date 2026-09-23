@@ -1,0 +1,45 @@
+{
+  "name": "Two-path loop fan-speed sweep",
+  "reference_speed_rpm": 1800.0,
+  "speed_ratios": [0.5, 0.75, 1.0],
+  "fan_discharge_node": "Supply",
+  "fan_suction_node": "Return",
+  "fixed_pressure_pa": 0.0,
+  "reference_fan_curve": {
+    "name": "Reference loop fan",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 500.0},
+      {"airflow_m3_h": 3600.0, "pressure_pa": 125.0},
+      {"airflow_m3_h": 7200.0, "pressure_pa": 0.0}
+    ]
+  },
+  "loop_network": {
+    "name": "Two-path fixed-resistance loop",
+    "reference_node": "Supply",
+    "node_injections_m3_h": {
+      "Supply": 3600.0,
+      "Mid": 0.0,
+      "Return": -3600.0
+    },
+    "edges": [
+      {
+        "name": "Direct",
+        "start_node": "Supply",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 500.0
+      },
+      {
+        "name": "Upper 1",
+        "start_node": "Supply",
+        "end_node": "Mid",
+        "resistance_pa_per_m3_s_squared": 250.0
+      },
+      {
+        "name": "Upper 2",
+        "start_node": "Mid",
+        "end_node": "Return",
+        "resistance_pa_per_m3_s_squared": 250.0
+      }
+    ]
+  }
+}

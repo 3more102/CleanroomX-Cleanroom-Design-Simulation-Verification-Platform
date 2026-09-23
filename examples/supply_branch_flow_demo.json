@@ -1,0 +1,127 @@
+{
+  "name": "Supply Branch Flow Demo",
+  "fan_system": {
+    "name": "Supply AHU",
+    "duct_pressure_drop_pa": 0.0,
+    "coil_pressure_drop_pa": 180.0,
+    "other_pressure_drop_pa": 90.0,
+    "fan_efficiency": 0.68,
+    "motor_efficiency": 0.92
+  },
+  "supply_network": {
+    "source_node": "AHU",
+    "nodes": [
+      {
+        "name": "AHU"
+      },
+      {
+        "name": "Main split",
+        "fixed_airflow_m3_h": 100.0
+      },
+      {
+        "name": "Process terminal",
+        "room_name": "Process Bay"
+      },
+      {
+        "name": "Gowning terminal",
+        "room_name": "Gowning"
+      }
+    ],
+    "branches": [
+      {
+        "name": "Main trunk",
+        "upstream_node": "AHU",
+        "downstream_node": "Main split"
+      },
+      {
+        "name": "Process branch",
+        "upstream_node": "Main split",
+        "downstream_node": "Process terminal"
+      },
+      {
+        "name": "Gowning branch",
+        "upstream_node": "Main split",
+        "downstream_node": "Gowning terminal"
+      }
+    ]
+  },
+  "duct_network": {
+    "paths": [
+      {
+        "name": "Process Bay Path",
+        "sections": [
+          {
+            "name": "Main trunk duct",
+            "length_m": 18.0,
+            "airflow_m3_h": 4600.0,
+            "flow_source_branch": "Main trunk",
+            "friction_factor": 0.02,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 1.8,
+            "width_m": 0.8,
+            "height_m": 0.45
+          },
+          {
+            "name": "Process branch duct",
+            "length_m": 12.0,
+            "airflow_m3_h": 3600.0,
+            "flow_source_branch": "Process branch",
+            "friction_factor": 0.021,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.4,
+            "diameter_m": 0.5
+          }
+        ]
+      },
+      {
+        "name": "Gowning Path",
+        "sections": [
+          {
+            "name": "Main trunk duplicate",
+            "length_m": 18.0,
+            "airflow_m3_h": 4600.0,
+            "flow_source_branch": "Main trunk",
+            "friction_factor": 0.02,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 1.8,
+            "width_m": 0.8,
+            "height_m": 0.45
+          },
+          {
+            "name": "Gowning branch duct",
+            "length_m": 10.0,
+            "airflow_m3_h": 900.0,
+            "flow_source_branch": "Gowning branch",
+            "friction_factor": 0.021,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.0,
+            "width_m": 0.4,
+            "height_m": 0.25
+          }
+        ]
+      }
+    ]
+  },
+  "rooms": [
+    {
+      "name": "Process Bay",
+      "cleanroom_airflow_m3_h": 3600.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    },
+    {
+      "name": "Gowning",
+      "cleanroom_airflow_m3_h": 900.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "Supply fan bounded system uncertainty demo",
+  "fan_curve": {
+    "name": "Example manufacturer fan curve",
+    "provenance": {
+      "source_type": "manufacturer_data",
+      "source_name": "Example fan performance schedule",
+      "reference": "DEMO-FAN-001",
+      "revision": "A",
+      "uncertainty_basis": "Fan curve held fixed; only system-side bounds are propagated"
+    },
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+      {"airflow_m3_h": 3000.0, "pressure_pa": 500.0},
+      {"airflow_m3_h": 6000.0, "pressure_pa": 300.0},
+      {"airflow_m3_h": 8000.0, "pressure_pa": 100.0}
+    ]
+  },
+  "system_curve": {
+    "name": "Example bounded duct system",
+    "fixed_pressure_pa": {
+      "value": 80.0,
+      "uncertainty_abs": 20.0,
+      "provenance": {
+        "source_type": "design_basis",
+        "source_name": "Fixed pressure allowance",
+        "reference": "DEMO-SYS-DP-001",
+        "uncertainty_basis": "Demonstration absolute design bound"
+      }
+    },
+    "resistance_pa_per_m3_s_squared": {
+      "value": 100.0,
+      "uncertainty_abs": 20.0,
+      "provenance": {
+        "source_type": "design_basis",
+        "source_name": "Quadratic system resistance",
+        "reference": "DEMO-SYS-R-001",
+        "uncertainty_basis": "Demonstration absolute design bound"
+      }
+    }
+  }
+}

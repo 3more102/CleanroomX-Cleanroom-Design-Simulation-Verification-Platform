@@ -1,4 +1,13 @@
 # Changelog
+## v0.36 nonlinear-network validation hardening — 2026-09-23
+
+- Added pre-solve validation for every loop edge identified as automatic Darcy-friction geometry.
+- Requires complete stored geometry, density/local-loss, roughness, kinematic-viscosity, positive reference-airflow, hydraulic-diameter/area, and positive stored friction-factor evidence.
+- Reconstructs the stored automatic-friction calculation at the declared reference airflow before iteration so malformed provenance cannot be hidden by a near-zero-flow freeze.
+- Added regression coverage for incomplete, zero, NaN, and infinite stored automatic-friction evidence.
+- Retains intentional parallel physical paths; existing connected-graph, self-loop, injection-balance, two-terminal fan-boundary, and finite solver-control validation remains unchanged.
+- Bumped package/runtime metadata to v0.36.0.
+
 ## v0.35 dossier-integrated nonlinear fan / loop workflows — 2026-09-23
 
 - Integrated v0.33 fan/variable-friction loop studies and v0.34 fan-speed/variable-friction loop studies into dossier manifests.

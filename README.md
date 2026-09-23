@@ -20,6 +20,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Path-based duct pressure-loss analysis using Darcy-Weisbach friction plus explicit local loss coefficients.
 - Circular and rectangular duct geometry with hydraulic-diameter reporting.
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
+- Directed supply-tree branch-flow solving from explicit terminal demands, with continuity residuals and terminal critical-path analysis.
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity checks and terminal critical-path analysis.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.

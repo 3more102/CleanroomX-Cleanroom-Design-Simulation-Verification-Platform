@@ -10,6 +10,7 @@ from .fan_variable_friction_loop import (
     solve_fan_variable_friction_loop,
 )
 from .loop_network import LoopedFlowNetwork
+from .pressure_power import FanPowerEfficiencies
 
 
 def _positive(value: float, field_name: str) -> float:
@@ -29,6 +30,7 @@ class FanVariableFrictionSpeedStudy:
     speed_ratios: tuple[float, ...]
     fixed_pressure_pa: float = 0.0
     reference_speed_rpm: float | None = None
+    power_efficiencies: FanPowerEfficiencies | None = None
     resistance_relative_tolerance: float = 1e-6
     relaxation: float = 0.5
     near_zero_airflow_m3_h: float = 1e-6
@@ -75,6 +77,7 @@ class FanVariableFrictionSpeedStudy:
             fan_discharge_node=self.fan_discharge_node,
             fan_suction_node=self.fan_suction_node,
             fixed_pressure_pa=self.fixed_pressure_pa,
+            power_efficiencies=self.power_efficiencies,
             resistance_relative_tolerance=self.resistance_relative_tolerance,
             relaxation=self.relaxation,
             near_zero_airflow_m3_h=self.near_zero_airflow_m3_h,
@@ -115,6 +118,7 @@ def _case_solver_study(
         fan_discharge_node=study.fan_discharge_node,
         fan_suction_node=study.fan_suction_node,
         fixed_pressure_pa=study.fixed_pressure_pa,
+        power_efficiencies=study.power_efficiencies,
         resistance_relative_tolerance=study.resistance_relative_tolerance,
         relaxation=study.relaxation,
         near_zero_airflow_m3_h=study.near_zero_airflow_m3_h,
@@ -170,6 +174,7 @@ def analyze_fan_variable_friction_speed_study(
                     solved["operating_network_solution"]
                 ),
                 "system_pressure_check": solved["system_pressure_check"],
+                "power_evidence": solved["power_evidence"],
                 "fan_curve_point_checks": solved["fan_curve_point_checks"],
                 "solver_diagnostics": solved["solver_diagnostics"],
                 "solver_message": solved["message"],
@@ -208,8 +213,9 @@ def analyze_fan_variable_friction_speed_study(
             "Every transformed fan curve remains bounded by its transformed "
             "supplied points and is never extrapolated. Speed cases preserve "
             "solved, no-intersection, and non-converged states independently. "
-            "No acceptable VFD range, motor limit, efficiency, damper/control "
-            "action, system effect, stall/surge acceptance, or manufacturer "
-            "selection is inferred."
+            "No acceptable VFD range, motor limit, damper/control action, "
+            "system effect, stall/surge acceptance, or manufacturer selection "
+            "is inferred. Fluid pressure power is direct evidence; shaft and "
+            "electrical power require explicit efficiency inputs."
         ),
     }

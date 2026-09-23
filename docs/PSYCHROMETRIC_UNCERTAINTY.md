@@ -1,6 +1,6 @@
 # Psychrometric state uncertainty workflow
 
-CleanroomX v0.13 adds deterministic uncertainty envelopes for psychrometric air-state inputs and derived properties.
+CleanroomX v0.14 adds deterministic uncertainty envelopes for psychrometric air-state inputs and derived properties.
 
 ## Scope
 
@@ -52,7 +52,7 @@ This is deterministic interval screening. It is not a statistical measurement-un
 
 The workflow does not create project acceptance limits. Use calibrated instruments, project qualification procedures, applicable standards, and qualified engineering judgment for real measurements and design decisions.
 
-The v0.13 workflow is standalone. The existing thermal-uncertainty workflow continues to hold room and outdoor psychrometric states fixed until those models are explicitly coupled in a later milestone.
+The v0.14 workflow is standalone. The existing thermal-uncertainty workflow continues to hold room and outdoor psychrometric states fixed until those models are explicitly coupled in a later milestone.
 
 ## CLI
 

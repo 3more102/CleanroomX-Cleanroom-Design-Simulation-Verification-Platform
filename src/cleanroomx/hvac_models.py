@@ -118,6 +118,33 @@ class ThermalDesign:
 
 
 @dataclass(frozen=True)
+class AirBalanceDesign:
+    return_air_m3_h: float = 0.0
+    exhaust_air_m3_h: float = 0.0
+    transfer_in_m3_h: float = 0.0
+    transfer_out_m3_h: float = 0.0
+    leakage_in_m3_h: float = 0.0
+    leakage_out_m3_h: float = 0.0
+    balance_tolerance_m3_h: float = 0.0
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "return_air_m3_h",
+            "exhaust_air_m3_h",
+            "transfer_in_m3_h",
+            "transfer_out_m3_h",
+            "leakage_in_m3_h",
+            "leakage_out_m3_h",
+            "balance_tolerance_m3_h",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                _nonnegative(getattr(self, field_name), field_name),
+            )
+
+
+@dataclass(frozen=True)
 class FilterUnit:
     name: str
     rated_airflow_m3_h: float
@@ -146,6 +173,7 @@ class HVACRoom:
     name: str
     cleanroom_airflow_m3_h: float
     thermal_design: ThermalDesign
+    air_balance: AirBalanceDesign | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

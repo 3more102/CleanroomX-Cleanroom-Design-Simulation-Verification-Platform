@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from cleanroomx.dossier import _source_record, summarize_dossier_components
+from cleanroomx.dossier import _source_record, build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
 
 
@@ -94,3 +94,15 @@ def test_qualification_indeterminate_is_attention_item() -> None:
     summary = summarize_dossier_components(None, None, [], [], qualification)
     assert summary["state"] == "attention_required"
     assert summary["adverse_items"]["qualification_indeterminate"] == 1
+
+
+def test_repository_demo_builds_end_to_end() -> None:
+    result = build_dossier("examples/dossier_demo.json")
+    assert result["dossier"] == "CleanroomX Integrated Engineering Demo"
+    assert len(result["source_files"]) == 5
+    assert result["verification"] is not None
+    assert result["hvac"] is not None
+    assert len(result["recovery_tests"]) == 1
+    assert len(result["qualification_analyses"]) == 1
+    assert len(result["uncertainty_rooms"]) == 1
+    assert all(len(item["sha256"]) == 64 for item in result["source_files"])

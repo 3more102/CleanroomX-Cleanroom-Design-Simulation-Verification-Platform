@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.33 engineering core
+## v0.34 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -30,7 +30,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Explicit loop-network damper-resistance scenario studies using user-supplied per-edge resistance multipliers, with baseline/case flow redistribution and residual evidence.
 - Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
 - Optional variable-friction loop iteration for automatic roughness/viscosity geometry edges, with Reynolds/Darcy recomputation at solved edge flow, relaxation, closure reporting, and explicit near-zero-flow handling.
-- Bounded fan/variable-friction loop coupling that re-solves the complete Darcy-friction network at every candidate fan/system airflow, with no fan-curve extrapolation, convergence diagnostics, and explicit non-converged states.
+- Bounded fan/variable-friction loop coupling that re-solves the complete Darcy-friction network at every candidate fan/system airflow, with no fan-curve extrapolation, convergence diagnostics, and explicit non-converged states.\n- Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
@@ -76,7 +76,7 @@ v0.31 fan/loop-network uncertainty evaluates explicit lower/upper bounds on fixe
 
 v0.32 integrates v0.31 fan/loop-network uncertainty and v0.29 fan-speed/loop studies into engineering dossiers. Source inputs are SHA-256 fingerprinted; indeterminate uncertainty corners and unresolved speed cases propagate into dossier attention state, while missing uncertainty provenance remains visible as unresolved traceability. The dossier does not turn these screening workflows into fan acceptance, commissioning, certification, or statistical uncertainty claims.
 
-v0.33 couples supplied fan data directly to the v0.30 variable-friction loop solver. Every fan-curve endpoint check and every bounded root-search airflow re-solves the complete network and iterates automatic Darcy friction to the configured resistance-closure tolerance. Fan pressure remains piecewise-linear only inside supplied data. A network iteration failure is reported as `non_converged`; no operating point is fabricated. The workflow remains a steady engineering network model rather than CFD and does not infer fan/VFD limits, controls, leakage, system effect, stall/surge acceptance, or equipment selection.
+v0.33 couples supplied fan data directly to the v0.30 variable-friction loop solver. Every fan-curve endpoint check and every bounded root-search airflow re-solves the complete network and iterates automatic Darcy friction to the configured resistance-closure tolerance. Fan pressure remains piecewise-linear only inside supplied data. A network iteration failure is reported as `non_converged`; no operating point is fabricated. The workflow remains a steady engineering network model rather than CFD and does not infer fan/VFD limits, controls, leakage, system effect, stall/surge acceptance, or equipment selection.\n\nv0.34 applies the existing affinity-law fan-curve transform to each explicit speed ratio and then delegates each transformed curve to the v0.33 variable-friction coupling solver. Each speed case preserves transformed supplied-data bounds, complete network re-solving, Darcy resistance closure, fan/system residuals, and independent solved/no-intersection/non-converged status. No acceptable VFD range or motor limit is inferred.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
@@ -173,7 +173,7 @@ The v0.30 workflow iterates only geometry-derived edges configured with automati
 
 ## Solve a fan-driven loop with variable Darcy friction
 
-    cleanroomx-fan-loop-friction examples/fan_variable_friction_loop_demo.json
+    cleanroomx-fan-loop-friction examples/fan_variable_friction_loop_demo.json\n    cleanroomx-fan-loop-friction-speed examples/fan_variable_friction_speed_demo.json
 
 JSON output:
 

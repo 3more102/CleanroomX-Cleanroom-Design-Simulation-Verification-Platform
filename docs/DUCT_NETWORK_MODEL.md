@@ -1,6 +1,6 @@
 # Duct critical-path pressure-loss model
 
-CleanroomX v0.5 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design.
+CleanroomX v0.6 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design. v0.6.1 hardens numeric validation so non-finite inputs are rejected before analysis.
 
 ## Section calculation
 
@@ -41,9 +41,15 @@ When a duct network is present in an HVAC project, its critical-path pressure dr
 
 This is intentionally a **critical-path comparison**, not a full nonlinear airflow-network solver. Branch flow distribution is not inferred.
 
+## Input validation
+
+All numeric duct inputs must be finite. Positive quantities such as airflow, air density, and duct dimensions must also be greater than zero. Length, Darcy friction factor, and local loss coefficient may be zero where physically intentional, subject to the section requiring a nonzero friction length or local loss.
+
+Rejecting `NaN` and positive/negative infinity prevents invalid pressure-loss values from silently propagating into the fan-duty calculation.
+
 ## Engineering boundaries
 
-- Friction factor is an explicit input. CleanroomX does not infer roughness, Reynolds number, or a Colebrook solution in v0.5.
+- Friction factor is an explicit input. CleanroomX does not infer roughness, Reynolds number, or a Colebrook solution in v0.6.
 - Fitting loss coefficients are explicit inputs. Use project/manufacturer data or an applicable licensed fitting database.
 - The model does not determine fan operating point, system effect, duct leakage, noise, balancing-damper position, control behavior, redundancy, or commissioning acceptance.
 - The calculation is preliminary engineering screening and does not replace detailed duct design or qualified engineering review.

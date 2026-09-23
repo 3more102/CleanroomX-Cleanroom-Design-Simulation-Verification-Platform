@@ -1,4 +1,15 @@
 # Changelog
+## v0.53 critical solver-tolerance provenance — 2026-09-24
+
+- Makes each configured solver-tolerance check self-contained by retaining the exact tied worst-corner sources already identified by the solver-quality evidence.
+- Adds the maximum available configured-tolerance utilization ratio and all tied critical metric keys to the aggregate tolerance assessment.
+- Extends standalone Markdown tolerance checks with exact witness-corner context for every evaluable residual metric.
+- Surfaces the maximum tolerance utilization and critical metric(s) in engineering-dossier uncertainty summaries.
+- Keeps zero-solved-corner studies explicit: no synthetic maximum utilization or critical metric is emitted.
+- Preserves the numerical-only scope of these margins; no equipment, commissioning, certification, or regulatory acceptance threshold is introduced.
+- Adds regression coverage for source propagation, critical-metric selection, zero-evidence behavior, and report/dossier rendering.
+- Bumped package/runtime metadata to v0.53.0.
+
 ## v0.52 configured solver-tolerance utilization audit — 2026-09-24
 
 - Extends nonlinear fan/variable-friction uncertainty solver-quality evidence with explicit checks against the operating-pressure, resistance-closure, and mass-balance tolerances already configured for the solver.

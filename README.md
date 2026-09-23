@@ -28,6 +28,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
+- Combined engineering dossier with component-aware summaries and SHA-256 source-file fingerprints.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -127,6 +128,22 @@ The v0.7 qualification workflow evaluates user-configured minimum/maximum requir
 
 See docs/QUALIFICATION_UNCERTAINTY.md.
 
+## Build a combined engineering dossier
+
+    cleanroomx-dossier examples/dossier_demo.json
+
+JSON output:
+
+    cleanroomx-dossier examples/dossier_demo.json --format json
+
+Write a Markdown dossier:
+
+    cleanroomx-dossier examples/dossier_demo.json --output dossier.md
+
+The dossier can combine room/cascade verification, HVAC and duct screening, measured recovery tests, uncertainty-aware qualification, and uncertainty/provenance analyses. It preserves component-specific states and fingerprints every referenced source file with SHA-256. Its executive state is a workflow summary, not a certification verdict.
+
+See docs/ENGINEERING_DOSSIER.md.
+
 ## Multi-room pressure-cascade JSON
 
 ```json
@@ -164,7 +181,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, branch-flow/network solving, uncertainty propagation into thermal and recovery acceptance workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are branch-flow/network solving, uncertainty propagation into thermal and recovery acceptance workflows, richer export formats, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

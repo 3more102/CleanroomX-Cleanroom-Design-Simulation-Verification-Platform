@@ -472,3 +472,86 @@ def test_rectangular_dimension_bounds_respect_roughness_limit() -> None:
     ):
         fan_variable_friction_loop_uncertainty_from_dict(data)
 
+def test_fan_curve_pressure_uncertainty_produces_complete_envelope() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_fan_curve_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 4
+    assert result["solved_corner_count"] == 4
+    assert result["unresolved_corner_count"] == 0
+    assert result["traceability"]["complete"] is True
+    assert result["operating_point_envelope"] is not None
+    assert set(result["input_intervals"]["fan_curve_pressure_pa"]) == {
+        "0.0",
+        "5400.0",
+    }
+    assert all(
+        set(corner["fan_curve_pressure_pa"]) == {"0.0", "5400.0"}
+        for corner in result["corners"]
+    )
+
+
+def test_fan_curve_pressure_uncertainty_report_surfaces_point_bounds() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_fan_curve_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Fan pressure at `0.0 m³/h`" in report
+    assert "Fan pressure at `5400.0 m³/h`" in report
+    assert "Fan-point pressures Pa" in report
+
+
+def test_fan_curve_pressure_uncertainty_rejects_negative_pressure_bound() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_pressure_uncertainty"][1]["uncertainty_abs"] = 400.0
+    with pytest.raises(ValueError, match="lower uncertainty bound"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_fan_curve_pressure_uncertainty_rejects_nonmonotonic_corner() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_pressure_uncertainty"][0]["uncertainty_abs"] = 460.0
+    with pytest.raises(ValueError, match="pressure increase with airflow"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_fan_curve_pressure_uncertainty_rejects_unknown_airflow_point() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_pressure_uncertainty"][0]["airflow_m3_h"] = 1234.0
+    with pytest.raises(ValueError, match="unknown supplied airflow point"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_fan_curve_pressure_uncertainty_rejects_repeated_nominal() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_pressure_uncertainty"][0]["pressure_pa"] = 800.0
+    with pytest.raises(ValueError, match="must not repeat the nominal"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+

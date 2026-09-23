@@ -1,4 +1,15 @@
 # Changelog
+## v0.52 normalized nonlinear solver-budget evidence — 2026-09-24
+
+- Added selected operating-network Newton iteration counts to nonlinear fan/variable-friction solver diagnostics and uncertainty aggregation.
+- Added configured iteration limits alongside the existing pressure, resistance-closure, and mass-balance tolerances.
+- Added normalized solver-budget utilization for operating-pressure residual, resistance closure, mass balance, outer Darcy iterations, inner Newton iterations, and operating-point iterations.
+- Retains exact tied source corners for every normalized metric by reusing the v0.51 worst-metric witnesses.
+- Keeps pressure-law residual as a raw diagnostic because this workflow defines no separate acceptance threshold for it.
+- Explicitly labels utilization as numerical solver-budget evidence, not equipment, commissioning, certification, or cleanroom acceptance margin.
+- Extended standalone Markdown and engineering-dossier output plus regression coverage.
+- Bumped package/runtime metadata to v0.52.0.
+
 ## v0.51 aggregate nonlinear solver-quality evidence — 2026-09-24
 
 - Added a compact solver-quality summary across nonlinear fan/variable-friction uncertainty corners.

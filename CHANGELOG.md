@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6 duct critical-path pressure-loss modeling — 2026-09-23
+
+- Added round and rectangular duct-segment models with explicit airflow, air density, Darcy friction factor, geometry, and local loss coefficient inputs.
+- Added Darcy-Weisbach straight-duct pressure loss, local K-loss calculations, hydraulic diameter, path summation, and critical-path selection.
+- Added JSON loading, Markdown/JSON reporting, a dedicated duct CLI, example data, and tests.
+- Integrated computed critical-path duct loss with preliminary HVAC supply-fan sizing without double-counting the manually configured duct-loss field.
+- Documented engineering boundaries: no inferred fitting coefficients, no branch-flow solution, no fan-curve operating point, and no claim of detailed duct-design replacement.
+- Grounded the model in ASHRAE duct-design equations and fitting-loss resources while keeping project-specific coefficients explicit.
+
 ## v0.5 uncertainty/provenance foundation — 2026-09-23
 
 - Added explicit provenance records for engineering inputs, including source type/name, reference, revision, date, uncertainty basis, and notes.

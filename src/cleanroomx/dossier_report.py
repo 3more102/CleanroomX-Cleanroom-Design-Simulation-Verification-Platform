@@ -399,6 +399,21 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow} | {pressure} |"
             )
 
+    if result.get("fan_loop_network_studies"):
+        lines.extend(["", "## Fan/loop-network operating-point studies", "", "| Study | Status | Equivalent R Pa/(m³/s)² | Operating airflow m³/h | System pressure Pa |", "|---|---|---:|---:|---:|"])
+        for item in result["fan_loop_network_studies"]:
+            point = item["fan_operating_point"]
+            check = item["system_pressure_check"]
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = "—" if check is None else check["total_system_pressure_pa"]
+            lines.append(f"| {item['study']} | {item['status']} | {item['equivalent_loop_resistance_pa_per_m3_s_squared']} | {airflow} | {pressure} |")
+
+    if result.get("damper_studies"):
+        lines.extend(["", "## Loop damper-resistance scenario studies", "", "| Study | Status | Cases | Baseline continuity residual m³/h | Baseline pressure-law residual Pa |", "|---|---|---:|---:|---:|"])
+        for item in result["damper_studies"]:
+            baseline = item["baseline_solution"]
+            lines.append(f"| {item['study']} | {item['status']} | {len(item['cases'])} | {baseline['max_abs_mass_balance_residual_m3_h']} | {baseline['max_abs_pressure_law_residual_pa']} |")
+
     fan_airflow_consistency = result.get("consistency_checks", {}).get(
         "hvac_fan_operating_airflow"
     )

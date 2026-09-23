@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.27 engineering core
+## v0.28 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -33,9 +33,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
 - Deterministic bounded fan/system operating-point uncertainty across user-supplied fixed-pressure and quadratic-resistance intervals, with a complete airflow/pressure envelope only when every bounded corner is solved.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric/fan-system uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, fan-speed affinity-law studies, and optional cross-module consistency.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric/fan-system uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, fan/loop-network studies, loop damper-resistance scenarios, fan-speed affinity-law studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
-- Dossier-integrated HVAC-to-fan operating-airflow consistency across standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed cases, using an explicit user-supplied absolute tolerance and preserving unsolved studies as unresolved.
+- Dossier-integrated HVAC-to-fan operating-airflow consistency across standalone fan/system, reference-flow fan/duct, passive parallel-network, fan/loop-network, and fan-speed cases, using an explicit user-supplied absolute tolerance and preserving unsolved studies as unresolved.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.

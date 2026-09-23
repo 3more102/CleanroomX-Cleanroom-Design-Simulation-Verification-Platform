@@ -17,6 +17,8 @@ A dossier manifest can reference:
 - zero or more bounded fan/system uncertainty analyses;
 - zero or more reference-flow fan/duct-network operating-point studies;
 - zero or more fan-driven passive parallel-network operating-point studies;
+- zero or more fan-driven fixed-resistance loop-network operating-point studies;
+- zero or more explicit loop damper-resistance scenario studies;
 - zero or more fan affinity-law speed studies;
 - an optional v0.17 verification/HVAC duplicated-input consistency check;
 - an optional v0.22 HVAC/fan operating-airflow consistency check with project-supplied absolute tolerance.
@@ -41,6 +43,8 @@ Example:
   "fan_system_uncertainty_analyses": ["fan_uncertainty_demo.json"],
   "fan_duct_network_studies": ["fan_duct_network_demo.json"],
   "fan_parallel_network_studies": ["fan_parallel_network_demo.json"],
+  "fan_loop_network_studies": ["fan_loop_network_demo.json"],
+  "damper_studies": ["damper_study_demo.json"],
   "fan_speed_studies": ["fan_speed_dossier_demo.json"],
   "consistency_checks": {
     "verification_hvac_airflow": {
@@ -64,6 +68,8 @@ A `fail` contributes to dossier attention tracking. `not_comparable` is preserve
 
 Both `verification_project` and `hvac_project` are required when this consistency block is configured. The already-hashed source files are reused; no duplicate input files are introduced.
 
+The optional `hvac_fan_operating_airflow` check can compare HVAC governing airflow against solved standalone fan/system, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points. Unsolved fan/loop studies are preserved as not comparable rather than converted into failures.
+
 See `docs/CROSS_MODULE_CONSISTENCY.md` for the standalone checker and its engineering boundary.
 
 ## Traceability
@@ -78,7 +84,7 @@ The dossier preserves component-specific states instead of turning every result 
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, an HVAC/fan airflow comparison has unresolved fan cases, or a standalone psychrometric/fan-system uncertainty analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. A complete fan/system uncertainty airflow/pressure envelope is reported only when every bounded system corner intersects the supplied fan curve; otherwise the analysis remains indeterminate. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric or fan-system provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. Damper scenarios remain explicit resistance sensitivity studies and do not infer damper position or balancing acceptance. A complete fan/system uncertainty airflow/pressure envelope is reported only when every bounded system corner intersects the supplied fan curve; otherwise the analysis remains indeterminate. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric or fan-system provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
 
 ## CLI
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleanroomx"
-version = "0.27.0"
+version = "0.28.0"
 description = "Cleanroom design screening, verification, uncertainty, engineering-dossier, geometry-aware looped duct/fan-network, damper scenario studies, fan-speed studies, fan-system uncertainty, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"

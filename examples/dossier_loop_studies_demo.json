@@ -1,0 +1,8 @@
+{
+  "name": "CleanroomX Loop Workflow Dossier Demo",
+  "project_reference": "CRX-LOOP-DOSSIER-001",
+  "revision": "A",
+  "notes": "Demonstration manifest only; loop and fan inputs are engineering screening inputs rather than universal acceptance limits.",
+  "fan_loop_network_studies": ["fan_loop_network_demo.json"],
+  "damper_studies": ["damper_study_demo.json"]
+}

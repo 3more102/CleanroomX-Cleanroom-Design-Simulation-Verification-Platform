@@ -34,6 +34,10 @@ class FanVariableFrictionLoopUncertaintyStudy:
     edge_air_density_kg_m3: dict[str, UncertainValue] = field(
         default_factory=dict
     )
+    edge_length_m: dict[str, UncertainValue] = field(default_factory=dict)
+    edge_circular_diameter_m: dict[str, UncertainValue] = field(
+        default_factory=dict
+    )
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256
     power_efficiencies: FanPowerEfficiencies | None = None
@@ -199,6 +203,114 @@ class FanVariableFrictionLoopUncertaintyStudy:
                 normalized_physical[edge_name] = item
             object.__setattr__(self, attribute_name, normalized_physical)
 
+        normalized_length: dict[str, UncertainValue] = {}
+        for edge_name, item in self.edge_length_m.items():
+            edge = edges_by_name.get(edge_name)
+            if edge is None:
+                raise ValueError(
+                    "edge length uncertainty references unknown edge "
+                    f"{edge_name!r}"
+                )
+            evidence = edge.resistance_evidence
+            if (
+                edge.resistance_basis != "duct_geometry"
+                or evidence is None
+                or evidence.get("absolute_roughness_m") is None
+                or evidence.get("kinematic_viscosity_m2_s") is None
+            ):
+                raise ValueError(
+                    f"edge length uncertainty for {edge_name!r} requires "
+                    "an automatic-friction duct_geometry edge"
+                )
+            if item.unit != "m":
+                raise ValueError(
+                    f"edge length uncertainty for {edge_name!r} must use "
+                    "unit 'm'"
+                )
+            if item.lower <= 0:
+                raise ValueError(
+                    f"edge length lower uncertainty bound for {edge_name!r} "
+                    "must remain > 0"
+                )
+            nominal = float(evidence["length_m"])
+            if not math.isclose(
+                item.value,
+                nominal,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    f"edge length uncertainty nominal for {edge_name!r} "
+                    "must match the loop-network geometry evidence"
+                )
+            normalized_length[edge_name] = item
+        object.__setattr__(self, "edge_length_m", normalized_length)
+
+        normalized_diameter: dict[str, UncertainValue] = {}
+        for edge_name, item in self.edge_circular_diameter_m.items():
+            edge = edges_by_name.get(edge_name)
+            if edge is None:
+                raise ValueError(
+                    "edge circular-diameter uncertainty references unknown "
+                    f"edge {edge_name!r}"
+                )
+            evidence = edge.resistance_evidence
+            if (
+                edge.resistance_basis != "duct_geometry"
+                or evidence is None
+                or evidence.get("absolute_roughness_m") is None
+                or evidence.get("kinematic_viscosity_m2_s") is None
+            ):
+                raise ValueError(
+                    f"edge circular-diameter uncertainty for {edge_name!r} "
+                    "requires an automatic-friction duct_geometry edge"
+                )
+            if evidence.get("shape") != "circular":
+                raise ValueError(
+                    f"edge circular-diameter uncertainty for {edge_name!r} "
+                    "requires circular duct geometry"
+                )
+            if item.unit != "m":
+                raise ValueError(
+                    f"edge circular-diameter uncertainty for {edge_name!r} "
+                    "must use unit 'm'"
+                )
+            if item.lower <= 0:
+                raise ValueError(
+                    f"edge circular-diameter lower uncertainty bound for "
+                    f"{edge_name!r} must remain > 0"
+                )
+            nominal = float(evidence["hydraulic_diameter_m"])
+            if not math.isclose(
+                item.value,
+                nominal,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    f"edge circular-diameter uncertainty nominal for "
+                    f"{edge_name!r} must match the loop-network geometry "
+                    "evidence"
+                )
+            roughness_item = self.edge_absolute_roughness_m.get(edge_name)
+            roughness_upper = (
+                roughness_item.upper
+                if roughness_item is not None
+                else float(evidence["absolute_roughness_m"])
+            )
+            if roughness_upper >= item.lower:
+                raise ValueError(
+                    f"edge circular-diameter lower uncertainty bound for "
+                    f"{edge_name!r} must remain larger than the maximum "
+                    "bounded absolute roughness"
+                )
+            normalized_diameter[edge_name] = item
+        object.__setattr__(
+            self,
+            "edge_circular_diameter_m",
+            normalized_diameter,
+        )
+
         FanVariableFrictionLoopStudy(
             name=self.name,
             fan_curve=self.fan_curve,
@@ -265,7 +377,9 @@ def _edge_at_parameters(
             f"edge {edge.name!r} has no duct-geometry resistance evidence"
         )
     common = {
-        "length_m": evidence["length_m"],
+        "length_m": parameter_overrides.get(
+            "length_m", evidence["length_m"]
+        ),
         "air_density_kg_m3": parameter_overrides.get(
             "air_density_kg_m3", evidence["air_density_kg_m3"]
         ),
@@ -282,7 +396,9 @@ def _edge_at_parameters(
     }
     shape = evidence["shape"]
     if shape == "circular":
-        common["diameter_m"] = evidence["hydraulic_diameter_m"]
+        common["diameter_m"] = parameter_overrides.get(
+            "diameter_m", evidence["hydraulic_diameter_m"]
+        )
     elif shape == "rectangular":
         width, height = _rectangular_dimensions(
             evidence["area_m2"],
@@ -297,9 +413,12 @@ def _edge_at_parameters(
         LoopedDuctResistanceInput(**common)
     )
     for parameter_name, value in parameter_overrides.items():
-        rebuilt[f"uncertainty_base_{parameter_name}"] = evidence[
-            parameter_name
-        ]
+        evidence_key = (
+            "hydraulic_diameter_m"
+            if parameter_name == "diameter_m"
+            else parameter_name
+        )
+        rebuilt[f"uncertainty_base_{parameter_name}"] = evidence[evidence_key]
         rebuilt[f"uncertainty_adjusted_{parameter_name}"] = value
     return QuadraticFlowEdge(
         name=edge.name,
@@ -418,6 +537,16 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "edge_air_density_kg_m3",
             study.edge_air_density_kg_m3,
         ),
+        (
+            "length_m",
+            "edge_length_m",
+            study.edge_length_m,
+        ),
+        (
+            "diameter_m",
+            "edge_circular_diameter_m",
+            study.edge_circular_diameter_m,
+        ),
     )
 
     nominal_overrides: dict[str, dict[str, float]] = {}
@@ -507,6 +636,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
                     "edge_air_density_kg_m3": corner_parameter_values[
                         "edge_air_density_kg_m3"
                     ],
+                    "edge_length_m": corner_parameter_values[
+                        "edge_length_m"
+                    ],
+                    "edge_circular_diameter_m": corner_parameter_values[
+                        "edge_circular_diameter_m"
+                    ],
                     "status": result["status"],
                     "operating_point": point,
                     "edge_airflows_m3_h": edge_airflows,
@@ -568,6 +703,14 @@ def analyze_fan_variable_friction_loop_uncertainty(
             _input_record(f"edge_air_density:{name}", item)
             for name, item in study.edge_air_density_kg_m3.items()
         ],
+        *[
+            _input_record(f"edge_length:{name}", item)
+            for name, item in study.edge_length_m.items()
+        ],
+        *[
+            _input_record(f"edge_circular_diameter:{name}", item)
+            for name, item in study.edge_circular_diameter_m.items()
+        ],
     ]
     missing = [
         record["name"]
@@ -627,6 +770,24 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 }
                 for name, item in study.edge_air_density_kg_m3.items()
             },
+            "edge_length_m": {
+                name: {
+                    "nominal": item.value,
+                    "lower": item.lower,
+                    "upper": item.upper,
+                    "unit": "m",
+                }
+                for name, item in study.edge_length_m.items()
+            },
+            "edge_circular_diameter_m": {
+                name: {
+                    "nominal": item.value,
+                    "lower": item.lower,
+                    "upper": item.upper,
+                    "unit": "m",
+                }
+                for name, item in study.edge_circular_diameter_m.items()
+            },
         },
         "nominal_status": nominal["status"],
         "nominal_operating_point": nominal["fan_operating_point"],
@@ -661,14 +822,16 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "This is deterministic corner analysis for user-supplied "
             "absolute bounds on fixed pressure and selected automatic-friction "
             "duct local-loss coefficients, absolute roughness, kinematic "
-            "viscosity, and air density. Every corner rebuilds the affected "
+            "viscosity, air density, duct length, and circular diameter. "
+            "Every corner rebuilds the affected "
             "geometry-edge evidence and re-solves the complete Darcy-friction "
             "network at every fan/system airflow evaluated by the bounded "
             "operating-point search. Reported min/max values are ranges across "
             "evaluated corners only and are not claimed as guaranteed extrema "
             "for all interior combinations. No probability distribution, "
-            "covariance, fan-curve uncertainty, unconfigured geometry tolerance "
-            "inference, "
+            "covariance, fan-curve uncertainty, unconfigured geometry "
+            "tolerance inference, rectangular cross-section dimensional "
+            "uncertainty, "
             "damper/control inference, leakage, system effect, acoustics, "
             "stall/surge assessment, motor/VFD limits, compressibility, "
             "transients, or manufacturer acceptance is inferred."

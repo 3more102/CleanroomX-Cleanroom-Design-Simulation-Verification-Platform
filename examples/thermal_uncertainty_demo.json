@@ -1,0 +1,67 @@
+{
+  "name": "Semiconductor bay thermal uncertainty",
+  "room_air": {
+    "dry_bulb_c": 22.0,
+    "relative_humidity_percent": 45.0,
+    "pressure_kpa": 101.325
+  },
+  "outdoor_air": {
+    "dry_bulb_c": 34.0,
+    "relative_humidity_percent": 55.0,
+    "pressure_kpa": 101.325
+  },
+  "cleanroom_airflow_m3_h": {
+    "value": 3600.0,
+    "uncertainty_abs": 180.0,
+    "provenance": {
+      "source_type": "design_schedule",
+      "source_name": "Cleanroom airflow schedule",
+      "reference": "DEMO-HVAC-AIR-01",
+      "revision": "P2",
+      "uncertainty_basis": "Demonstration design bound"
+    }
+  },
+  "internal_sensible_kw": {
+    "value": 8.0,
+    "uncertainty_abs": 0.8,
+    "provenance": {
+      "source_type": "load_schedule",
+      "source_name": "Equipment and lighting load schedule",
+      "reference": "DEMO-HVAC-LOAD-01",
+      "uncertainty_basis": "Demonstration absolute bound"
+    }
+  },
+  "internal_latent_kw": {
+    "value": 1.2,
+    "uncertainty_abs": 0.2,
+    "provenance": {
+      "source_type": "load_schedule",
+      "source_name": "Occupancy and process latent schedule",
+      "reference": "DEMO-HVAC-LOAD-02",
+      "uncertainty_basis": "Demonstration absolute bound"
+    }
+  },
+  "makeup_airflow_m3_h": {
+    "value": 900.0,
+    "uncertainty_abs": 90.0,
+    "provenance": {
+      "source_type": "design_schedule",
+      "source_name": "Outdoor air schedule",
+      "reference": "DEMO-HVAC-OA-01",
+      "uncertainty_basis": "Demonstration absolute bound"
+    }
+  },
+  "supply_air_temp_c": {
+    "value": 16.0,
+    "uncertainty_abs": 0.5,
+    "provenance": {
+      "source_type": "design_setpoint",
+      "source_name": "Supply air design setpoint",
+      "reference": "DEMO-HVAC-SAT-01",
+      "uncertainty_basis": "Demonstration control/design bound"
+    }
+  },
+  "capacity_margin_percent": 10.0,
+  "available_cooling_capacity_kw": 18.0,
+  "available_heating_capacity_kw": 8.0
+}

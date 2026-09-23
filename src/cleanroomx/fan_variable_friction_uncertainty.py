@@ -1693,6 +1693,24 @@ def _fan_curve_supplied_point_residual_summary(
         audit["complete_supplied_point_coverage"]
         for _corner_index, _corner, audit in cases
     )
+    solved_cases = [
+        (corner_index, corner, audit)
+        for corner_index, corner, audit in cases
+        if corner.get("status") == "solved"
+    ]
+    selected_feature_count = sum(
+        audit.get("selected_candidate_feature") is not None
+        for _corner_index, _corner, audit in solved_cases
+    )
+    selected_first_priority_count = sum(
+        audit.get("selected_candidate_feature_rank") == 0
+        for _corner_index, _corner, audit in solved_cases
+    )
+    solved_with_additional_candidate_indices = [
+        corner_index
+        for corner_index, _corner, audit in solved_cases
+        if (audit.get("additional_candidate_feature_count") or 0) > 0
+    ]
     monotonic_count = sum(
         audit["residual_monotonic_non_increasing_with_tolerance"]
         for _corner_index, _corner, audit in cases
@@ -1761,6 +1779,17 @@ def _fan_curve_supplied_point_residual_summary(
         "complete_supplied_point_coverage_corner_count": (
             complete_corner_coverage
         ),
+        "solved_corner_count": len(solved_cases),
+        "selected_candidate_feature_corner_count": selected_feature_count,
+        "selected_first_priority_candidate_corner_count": (
+            selected_first_priority_count
+        ),
+        "solved_with_additional_candidate_feature_corner_count": len(
+            solved_with_additional_candidate_indices
+        ),
+        "solved_with_additional_candidate_feature_corner_indices": (
+            solved_with_additional_candidate_indices
+        ),
         "monotonic_non_increasing_corner_count": monotonic_count,
         "residual_increase_corner_count": len(residual_increase_indices),
         "residual_increase_corner_indices": residual_increase_indices,
@@ -1776,8 +1805,11 @@ def _fan_curve_supplied_point_residual_summary(
             "This aggregate preserves the base solver's discrete supplied-point "
             "fan-minus-system residual topology audit across uncertainty "
             "corners. Complete coverage means every supplied point was "
-            "evaluated for the nominal case and every corner. Sampled "
-            "monotonicity and candidate crossing features do not prove "
+            "evaluated for the nominal case and every corner. Solved-corner "
+            "selection evidence identifies the discrete feature chosen using "
+            "the solver's documented priority and preserves whether additional "
+            "discrete candidates were present. Sampled monotonicity and "
+            "candidate crossing features do not prove "
             "continuous uniqueness or dynamic stability and do not define "
             "stall/surge, manufacturer-region, commissioning, certification, "
             "or equipment-acceptance criteria."

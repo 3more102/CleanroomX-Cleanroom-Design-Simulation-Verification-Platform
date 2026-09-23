@@ -2,24 +2,14 @@
 
 ## v0.16 recovery uncertainty qualification — 2026-09-23
 
-- Added optional absolute concentration uncertainty to every measured recovery sample while preserving zero-uncertainty backward compatibility.
-- Added conservative per-sample concentration intervals with confirmed-above, overlaps-target, and confirmed-at-or-below target states.
-- Added uncertainty-aware PASS/FAIL/INDETERMINATE/INCOMPLETE maximum-recovery-time decisions without inventing a project conformity rule.
-- Preserved nominal observed recovery timing and recovery windows separately for traceability.
-- Added recovery-indeterminate attention tracking to the integrated engineering dossier.
-- Added uncertainty-aware Markdown/JSON reporting, CLI exit code 4 for indeterminate results, updated example data, finite-input validation, and regression coverage.
-- Kept the log-linear recovery fit nominal-only and explicitly outside the acceptance decision.
-
-## v0.16 recovery acceptance uncertainty — 2026-09-23
-
 - Added optional absolute concentration uncertainty to measured recovery samples while preserving zero-uncertainty backward compatibility.
-- Added conservative sample states for confirmed-above, target-overlap, and confirmed-at-or-below concentration intervals.
-- Added pass/fail/indeterminate/incomplete/not-checked maximum-time decisions without inventing a between-sample crossing time.
-- Added first possible and first confirmed recovery-sample reporting plus uncertainty-aware Markdown/JSON output.
+- Added conservative concentration-interval states for confirmed-above, overlaps-target, and confirmed-at-or-below samples.
+- Added pass/fail/indeterminate/incomplete/not-checked maximum-time decisions without inventing a between-sample crossing time or a project conformity rule.
+- Added first possible and first confirmed recovery-sample reporting while preserving nominal observed recovery timing and recovery windows for traceability.
 - Kept the log-linear recovery fit nominal-only and explicitly separate from qualification acceptance.
-- Added CLI exit code 4 for indeterminate recovery acceptance, updated example data, documentation, and regression coverage.
-- Propagated recovery indeterminate states into integrated dossier attention tracking.
-- Kept all targets, time limits, and uncertainty inputs project-supplied; no ISO class or conformity threshold is embedded.
+- Added uncertainty-aware Markdown/JSON reporting, CLI exit code 4 for indeterminate results, updated example data, finite-input validation, documentation, and regression coverage.
+- Propagated recovery-indeterminate states into integrated dossier attention tracking while preserving v0.15 psychrometric dossier support.
+- Kept all targets, time limits, and uncertainty inputs project-supplied; no ISO class or statistical conformity threshold is embedded.
 
 ## v0.15 psychrometric state uncertainty — 2026-09-23
 

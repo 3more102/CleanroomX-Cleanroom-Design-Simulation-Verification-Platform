@@ -1,6 +1,6 @@
 # HVAC / Fan Operating-Airflow Consistency
 
-CleanroomX v0.20 can cross-check the HVAC governing airflow against the operating airflow produced by fan studies already included in an engineering dossier.
+CleanroomX v0.22 can cross-check the HVAC governing airflow against the operating airflow produced by fan studies already included in an engineering dossier.
 
 ## Purpose
 

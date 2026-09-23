@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from .airflow import analyze_air_balance
+from .branch_network import analyze_branch_flow_network
 from .duct import analyze_duct_network
 from .fan import analyze_supply_fan
 from .hvac_models import HVACProject
@@ -74,6 +75,25 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         if project.duct_network is not None
         else None
     )
+    branch_flow_network = (
+        analyze_branch_flow_network(project.branch_flow_network)
+        if project.branch_flow_network is not None
+        else None
+    )
+
+    if branch_flow_network is not None:
+        source_airflow = branch_flow_network["source_airflow_m3_h"]
+        if not math.isclose(
+            source_airflow,
+            total_governing_airflow,
+            rel_tol=1e-3,
+            abs_tol=1.0,
+        ):
+            raise ValueError(
+                "branch_flow_network source airflow must match total governing "
+                f"HVAC airflow; network={source_airflow} m3/h, "
+                f"HVAC={round(total_governing_airflow, 3)} m3/h"
+            )
 
     supply_fan = None
     if project.fan_system is not None:
@@ -82,16 +102,21 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             if project.filter_unit is not None
             else 0.0
         )
-        duct_override = (
-            duct_network["critical_path_pressure_drop_pa"]
-            if duct_network is not None
-            else None
-        )
+        if branch_flow_network is not None:
+            duct_override = branch_flow_network["critical_path_pressure_drop_pa"]
+            duct_source = "computed_branch_flow_network"
+        elif duct_network is not None:
+            duct_override = duct_network["critical_path_pressure_drop_pa"]
+            duct_source = "computed_duct_network"
+        else:
+            duct_override = None
+            duct_source = None
         supply_fan = analyze_supply_fan(
             total_governing_airflow,
             project.fan_system,
             terminal_filter_pressure_drop_pa=filter_drop,
             duct_pressure_drop_override_pa=duct_override,
+            duct_pressure_drop_source=duct_source,
         )
 
     return {
@@ -104,6 +129,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         "total_net_surplus_m3_h": round(total_net_surplus, 3),
         "all_air_balances_pass": all_air_balances_pass,
         "duct_network": duct_network,
+        "branch_flow_network": branch_flow_network,
         "supply_fan": supply_fan,
         "total_preliminary_cooling_capacity_kw": round(total_cooling_kw, 4),
         "total_preliminary_heating_capacity_kw": round(total_heating_kw, 4),
@@ -111,6 +137,6 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             "Thermal/HVAC results are preliminary calculations from explicit project "
             "inputs. Cleanroom airflow is supplied independently; no ISO class is mapped "
             "to a fixed ACH, pressure offset, airflow surplus, filter pressure drop, "
-            "duct friction factor, fitting loss coefficient, or fan duty."
+            "duct friction factor, fitting loss coefficient, branch terminal demand, or fan duty."
         ),
     }

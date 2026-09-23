@@ -1974,3 +1974,120 @@ def test_fan_curve_intersection_bracket_marks_zero_solved_corner_coverage() -> N
         corner["fan_curve_intersection_bracket"] is None
         for corner in result["corners"]
     )
+
+def test_fan_curve_crossing_conditioning_is_auditable() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    summary = result["fan_curve_crossing_conditioning_summary"]
+    nominal = result["nominal_fan_curve_crossing_conditioning"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["conditioning_evidence_corner_count"] == result["corner_count"]
+    assert summary["secant_root_evidence_corner_count"] == result["corner_count"]
+
+    absolute_slopes = []
+    secant_errors = []
+    normalized_errors = []
+    for corner in result["corners"]:
+        diagnostic = corner["fan_curve_crossing_conditioning"]
+        bracket = corner["fan_curve_intersection_bracket"]
+        assert diagnostic is not None
+        assert bracket is not None
+
+        low = bracket["low_endpoint"]
+        high = bracket["high_endpoint"]
+        span = high["airflow_m3_h"] - low["airflow_m3_h"]
+        expected_fan_slope = (
+            high["fan_pressure_pa"] - low["fan_pressure_pa"]
+        ) / span
+        expected_system_slope = (
+            high["system_pressure_pa"] - low["system_pressure_pa"]
+        ) / span
+        expected_residual_slope = (
+            high["fan_minus_system_pressure_pa"]
+            - low["fan_minus_system_pressure_pa"]
+        ) / span
+
+        assert diagnostic["fan_pressure_slope_pa_per_m3_h"] == pytest.approx(
+            expected_fan_slope, abs=1e-12
+        )
+        assert diagnostic[
+            "system_pressure_secant_slope_pa_per_m3_h"
+        ] == pytest.approx(expected_system_slope, abs=1e-12)
+        assert diagnostic["fan_minus_system_slope_pa_per_m3_h"] == pytest.approx(
+            expected_residual_slope, abs=1e-12
+        )
+        assert diagnostic[
+            "absolute_fan_minus_system_slope_pa_per_m3_h"
+        ] == pytest.approx(abs(expected_residual_slope), abs=1e-12)
+
+        secant_root = low["airflow_m3_h"] - (
+            low["fan_minus_system_pressure_pa"] / expected_residual_slope
+        )
+        solved_airflow = corner["operating_point"]["airflow_m3_h"]
+        expected_error = abs(solved_airflow - secant_root)
+        expected_normalized_error = expected_error / span
+        assert diagnostic["secant_root_airflow_m3_h"] == pytest.approx(
+            secant_root, abs=1e-9
+        )
+        assert diagnostic["secant_root_absolute_error_m3_h"] == pytest.approx(
+            expected_error, abs=1e-9
+        )
+        assert diagnostic[
+            "normalized_secant_root_error_fraction"
+        ] == pytest.approx(expected_normalized_error, abs=1e-12)
+
+        absolute_slopes.append(abs(expected_residual_slope))
+        secant_errors.append(expected_error)
+        normalized_errors.append(expected_normalized_error)
+
+    minimum_slope = summary[
+        "minimum_absolute_fan_minus_system_slope_pa_per_m3_h"
+    ]
+    maximum_error = summary["maximum_secant_root_absolute_error_m3_h"]
+    maximum_normalized = summary[
+        "maximum_normalized_secant_root_error_fraction"
+    ]
+    assert minimum_slope["value"] == pytest.approx(
+        min(absolute_slopes), abs=1e-12
+    )
+    assert maximum_error["value"] == pytest.approx(max(secant_errors), abs=1e-9)
+    assert maximum_normalized["value"] == pytest.approx(
+        max(normalized_errors), abs=1e-12
+    )
+    assert minimum_slope["sources"]
+    assert maximum_error["sources"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Fan/system local crossing conditioning" in report
+    assert "Nominal fan-minus-system slope" in report
+    assert "No stability criterion" in report
+
+
+def test_crossing_conditioning_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["fan_curve_crossing_conditioning_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_fan_curve_crossing_conditioning"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["conditioning_evidence_corner_count"] == 0
+    assert summary["secant_root_evidence_corner_count"] == 0
+    assert (
+        summary["minimum_absolute_fan_minus_system_slope_pa_per_m3_h"]
+        is None
+    )
+    assert summary["maximum_secant_root_absolute_error_m3_h"] is None
+    assert all(
+        corner["fan_curve_crossing_conditioning"] is None
+        for corner in result["corners"]
+    )
+

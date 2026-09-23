@@ -34,6 +34,16 @@ def _fmt_extreme_source(source: dict) -> str:
                 f"{name}={value}" for name, value in values.items()
             )
             parts.append(f"{label}[{encoded}]")
+    efficiencies = source.get("power_efficiencies")
+    if efficiencies is not None:
+        parts.append(
+            "eff["
+            f"fan={_fmt(efficiencies.get('fan_efficiency'))}, "
+            f"motor={_fmt(efficiencies.get('motor_efficiency'))}, "
+            f"VFD={_fmt(efficiencies.get('vfd_efficiency'))}]"
+        )
+    if "power_case_index" in source:
+        parts.append(f"power-case={source['power_case_index']}")
     return "; ".join(parts)
 
 
@@ -63,6 +73,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.append(
             f"- Fan speed ratio: **{speed['lower']} to {speed['upper']}** "
             f"(nominal {speed['nominal']})"
+        )
+    for name, interval in result.get(
+        "power_efficiency_uncertainty", {}
+    ).items():
+        label = name.replace("_", " ")
+        lines.append(
+            f"- {label.title()}: **{interval['lower']} to "
+            f"{interval['upper']}** (nominal {interval['nominal']})"
         )
     for airflow, interval in result["input_intervals"].get(
         "fan_curve_pressure_pa", {}
@@ -307,12 +325,23 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "therefore not reported."
             )
         else:
+            uncertainty = result.get("power_efficiency_uncertainty", {})
+            qualifier = "nominal" if uncertainty else "fixed"
             lines.append(
-                "- Explicit fixed efficiencies: "
+                f"- Explicit {qualifier} efficiencies: "
                 f"fan={_fmt(efficiencies.get('fan_efficiency'))}, "
                 f"motor={_fmt(efficiencies.get('motor_efficiency'))}, "
                 f"VFD={_fmt(efficiencies.get('vfd_efficiency'))}."
             )
+            if uncertainty:
+                lines.append(
+                    "- Efficiency uncertainty is post-processed over solved "
+                    "hydraulic corners; it does not trigger additional airflow "
+                    "network solves."
+                )
+                lines.append(
+                    f"- Derived power cases: **{result.get('power_case_count', 0)}**"
+                )
 
         metric_labels = (
             ("fluid_air_power_kw", "Fluid air power", "kW"),
@@ -367,9 +396,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.extend(
             [
                 "",
-                "These are min/max values across evaluated solved corners "
-                "only. Efficiency values are fixed explicit inputs here, not "
-                "uncertain variables, and no missing efficiency is inferred.",
+                "These are min/max values across evaluated derived power "
+                "cases. Hydraulic uncertainty remains represented by the "
+                "solved corner set; configured efficiency uncertainty is "
+                "crossed with those corners only in post-processing. No "
+                "missing efficiency is inferred, and no continuous-box "
+                "extremum is claimed.",
             ]
         )
 

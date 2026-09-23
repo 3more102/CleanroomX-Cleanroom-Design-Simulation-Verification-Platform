@@ -10,6 +10,27 @@
 - Added a runnable consistency dossier example, dedicated documentation, and regression coverage.
 - Kept the check strictly scoped to cross-module data consistency rather than airflow adequacy, cleanroom classification, commissioning acceptance, or universal engineering tolerances.
 
+## v0.16 fan-driven passive parallel-network integration — 2026-09-23
+
+- Coupled the bounded fan/system operating-point solver to the passive common-pressure-node parallel-path model.
+- Added analytical equivalent network resistance for pressure-balanced paths following fixed R·Q² behavior.
+- Added fan/system operating-point solving followed by redistribution of the solved total airflow across the original branches.
+- Added fixed-pressure plus network-pressure decomposition, fan/system residual, mass-balance residual, equal-pressure residual, and per-section flow/loss reporting.
+- Preserved no-extrapolation behavior when the operating point lies outside supplied fan data.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-fan-network` CLI, example data, tests, and engineering-scope documentation.
+- Kept this distinct from v0.14 reference-flow fan/duct integration: v0.16 solves the passive branch split from common pressure instead of holding reference flow fractions fixed.
+- Kept the workflow explicitly bounded: no arbitrary looped-network solution, variable friction-factor iteration, dampers/controls, leakage, system effect, acoustics, fan-law scaling, stall/surge acceptance, or manufacturer selection.
+
+
+## v0.15 psychrometric state uncertainty — 2026-09-23
+
+- Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.
+- Added deterministic evaluation of every unique rectangular uncertainty-box corner using the existing CleanroomX psychrometric equations.
+- Added bounded vapor-pressure, humidity-ratio, enthalpy, specific-volume, dew-point, and moist-air specific-heat results.
+- Added provenance completeness reporting without inventing uncertainty magnitudes, probability distributions, covariance, or acceptance limits.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-psychrometric-uncertainty` CLI, example data, documentation, and regression coverage.
+- Kept the v0.10 thermal uncertainty workflow psychrometrically fixed; explicit cross-module coupling remains a later milestone.
+
 ## v0.14 fan/duct-network operating-point integration — 2026-09-23
 
 - Added a reference-flow fan/duct-network study that derives path quadratic resistance from explicit duct geometry, Darcy friction factors, air density, local-loss coefficients, and section reference airflow fractions.

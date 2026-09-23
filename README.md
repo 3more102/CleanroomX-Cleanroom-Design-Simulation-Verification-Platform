@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.14 engineering core
+## v0.16 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -25,6 +25,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
+- Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
 - Optional cross-module verification/HVAC airflow reconciliation with explicit project-supplied tolerance, exact-name or explicit room mapping, and unmapped-room completeness guards.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
@@ -35,7 +36,8 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
 - Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
 - Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
-- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, and equipment-capacity screening.
+- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, room/outdoor psychrometric states, and equipment-capacity screening.
+- Deterministic psychrometric-state uncertainty envelopes for dry-bulb temperature, relative humidity, pressure, humidity ratio, enthalpy, specific volume, dew point, and moist-air specific heat.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -46,9 +48,9 @@ CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. These are bounded models rather than a general nonlinear duct-network/control solver; CleanroomX does not infer arbitrary looped-network flows, variable friction factors, damper positions, leakage, system effect, acoustics, controls, stall/surge limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. These are bounded models rather than a general nonlinear duct-network/control solver; CleanroomX does not infer arbitrary looped-network flows, variable friction factors, damper positions, leakage, system effect, acoustics, controls, stall/surge limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
-The uncertainty workflows use deterministic worst-case input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. The v0.10 thermal uncertainty workflow holds room/outdoor psychrometric states fixed and does not replace hourly load simulation or equipment selection.
+The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. These workflows do not model covariance, hourly weather/load behavior, or equipment selection.
 
 ## Install
 
@@ -133,6 +135,20 @@ Write a Markdown report:
 
 The v0.14 integration derives a quadratic system curve from the existing duct-section geometry and loss inputs plus a declared reference system airflow. Each section's reference airflow fraction is held fixed as total airflow changes. This is explicit proportional scaling, not a new pressure-balancing network solution. See docs/FAN_DUCT_NETWORK_INTEGRATION.md.
 
+## Solve a fan-driven passive parallel network
+
+    cleanroomx-fan-network examples/fan_parallel_network_demo.json
+
+JSON output:
+
+    cleanroomx-fan-network examples/fan_parallel_network_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-fan-network examples/fan_parallel_network_demo.json --output fan-network-report.md
+
+The v0.16 workflow derives an equivalent fixed R·Q² resistance from passive branches that share common upstream/downstream pressure nodes, combines it with an explicit fixed-pressure term, solves the bounded fan/system intersection, and then redistributes the operating airflow across the original branches using equal pressure drop. It reports mass- and equal-pressure residuals and does not extrapolate supplied fan data. See docs/FAN_NETWORK_INTEGRATION.md.
+
 ## Analyze a measured particle-recovery test
 
     cleanroomx-recovery-test examples/recovery_test_demo.json
@@ -197,6 +213,22 @@ The v0.10 workflow propagates user-supplied absolute bounds through explicit sen
 
 See docs/THERMAL_UNCERTAINTY.md.
 
+## Analyze psychrometric-state uncertainty
+
+    cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json --output psychrometric-uncertainty-report.md
+
+The v0.15 workflow propagates user-supplied absolute bounds for dry-bulb temperature, relative humidity, and total pressure through the existing CleanroomX psychrometric equations by evaluating every unique input-box corner. It reports deterministic envelopes for vapor pressure, humidity ratio, enthalpy, specific volume, dew point, and moist-air specific heat.
+
+See docs/PSYCHROMETRIC_UNCERTAINTY.md.
+
 ## Build an integrated engineering dossier
 
     cleanroomx-dossier examples/dossier_demo.json
@@ -254,7 +286,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are uncertainty propagation into recovery acceptance workflows, broader cross-module consistency coverage, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are broader cross-module consistency coverage, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

@@ -122,6 +122,25 @@ def _thermal_uncertainty_summary(results: list[dict]) -> dict:
     }
 
 
+def _psychrometric_uncertainty_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "analysis_count": 0,
+            "missing_provenance_analyses": 0,
+        }
+    missing = sum(not item["traceability"]["complete"] for item in results)
+    return {
+        "status": (
+            "complete_with_missing_provenance"
+            if missing
+            else "screening_complete"
+        ),
+        "analysis_count": len(results),
+        "missing_provenance_analyses": missing,
+    }
+
+
 def _fan_operating_point_summary(results: list[dict]) -> dict:
     if not results:
         return {"status": "not_included", "counts": {}, "study_count": 0}
@@ -162,6 +181,7 @@ def summarize_dossier_components(
     uncertainty: list[dict] | None = None,
     qualification: list[dict] | None = None,
     thermal_uncertainty: list[dict] | None = None,
+    psychrometric_uncertainty: list[dict] | None = None,
     fan_operating_points: list[dict] | None = None,
     consistency: dict | None = None,
 ) -> dict:
@@ -169,6 +189,7 @@ def summarize_dossier_components(
     uncertainty = uncertainty or []
     qualification = qualification or []
     thermal_uncertainty = thermal_uncertainty or []
+    psychrometric_uncertainty = psychrometric_uncertainty or []
     fan_operating_points = fan_operating_points or []
 
     components = {
@@ -178,6 +199,9 @@ def summarize_dossier_components(
         "uncertainty": _uncertainty_summary(uncertainty),
         "qualification": _qualification_summary(qualification),
         "thermal_uncertainty": _thermal_uncertainty_summary(thermal_uncertainty),
+        "psychrometric_uncertainty": _psychrometric_uncertainty_summary(
+            psychrometric_uncertainty
+        ),
         "fan_operating_points": _fan_operating_point_summary(fan_operating_points),
         "cross_module_consistency": _consistency_summary(consistency),
     }
@@ -210,6 +234,9 @@ def summarize_dossier_components(
         "thermal_uncertainty_not_checked": components["thermal_uncertainty"]["counts"].get(
             "not_checked", 0
         ),
+        "psychrometric_uncertainty_missing_provenance": components[
+            "psychrometric_uncertainty"
+        ].get("missing_provenance_analyses", 0),
         "cross_module_consistency_not_checked": (
             1
             if components["cross_module_consistency"]["status"] == "not_checked"
@@ -276,6 +303,8 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .project_verification import verify_project
     from .qualification import analyze_qualification_uncertainty
     from .qualification_io import load_qualification_uncertainty
+    from .psychrometric_uncertainty import analyze_psychrometric_uncertainty
+    from .psychrometric_uncertainty_io import load_psychrometric_uncertainty
     from .recovery_io import load_recovery_test
     from .recovery_test import analyze_recovery_test
     from .thermal_uncertainty import analyze_thermal_uncertainty
@@ -338,6 +367,18 @@ def build_dossier(manifest_path: str | Path) -> dict:
             analyze_thermal_uncertainty(load_thermal_uncertainty(source["_resolved_path"]))
         )
 
+    psychrometric_uncertainty: list[dict] = []
+    for item in data.get("psychrometric_uncertainty_analyses", []):
+        source = _source_record(
+            "psychrometric_uncertainty_analysis", item, manifest_dir
+        )
+        source_records.append(source)
+        psychrometric_uncertainty.append(
+            analyze_psychrometric_uncertainty(
+                load_psychrometric_uncertainty(source["_resolved_path"])
+            )
+        )
+
     fan_operating_points: list[dict] = []
     for item in data.get("fan_operating_point_studies", []):
         source = _source_record("fan_operating_point_study", item, manifest_dir)
@@ -367,6 +408,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         uncertainty=uncertainty,
         qualification=qualification,
         thermal_uncertainty=thermal_uncertainty,
+        psychrometric_uncertainty=psychrometric_uncertainty,
         fan_operating_points=fan_operating_points,
         consistency=consistency,
     )
@@ -386,6 +428,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "qualification_analyses": qualification,
         "uncertainty_rooms": uncertainty,
         "thermal_uncertainty_analyses": thermal_uncertainty,
+        "psychrometric_uncertainty_analyses": psychrometric_uncertainty,
         "fan_operating_point_studies": fan_operating_points,
         "consistency_checks": {
             "verification_hvac_airflow": consistency,

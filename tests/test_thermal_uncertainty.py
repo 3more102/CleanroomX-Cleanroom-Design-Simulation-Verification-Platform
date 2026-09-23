@@ -3,7 +3,7 @@ import pytest
 from cleanroomx.hvac_models import AirState
 from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
 from cleanroomx.thermal_uncertainty_io import thermal_uncertainty_from_dict
-from cleanroomx.thermal_uncertainty_models import UncertainThermalDesign
+from cleanroomx.thermal_uncertainty_models import UncertainAirState, UncertainThermalDesign
 from cleanroomx.uncertainty_models import Provenance, UncertainValue
 
 
@@ -174,3 +174,81 @@ def test_missing_provenance_is_reported_separately() -> None:
     assert result["overall_status"] == "pass"
     assert result["traceability"]["complete"] is False
     assert "internal_latent_kw" in result["traceability"]["missing_provenance"]
+
+
+def test_loader_accepts_uncertain_psychrometric_states() -> None:
+    design = thermal_uncertainty_from_dict(
+        {
+            "name": "Coupled psychrometric uncertainty",
+            "room_air": {
+                "dry_bulb_c": {"value": 22.0, "uncertainty_abs": 0.5},
+                "relative_humidity_percent": {"value": 45.0, "uncertainty_abs": 3.0},
+                "pressure_kpa": 101.325,
+            },
+            "outdoor_air": {
+                "dry_bulb_c": {"value": 34.0, "uncertainty_abs": 2.0},
+                "relative_humidity_percent": {"value": 55.0, "uncertainty_abs": 5.0},
+                "pressure_kpa": {"value": 101.325, "uncertainty_abs": 0.5},
+            },
+            "cleanroom_airflow_m3_h": {"value": 1500.0, "uncertainty_abs": 0.0},
+            "internal_sensible_kw": {"value": 4.0, "uncertainty_abs": 0.0},
+            "internal_latent_kw": {"value": 0.5, "uncertainty_abs": 0.0},
+            "makeup_airflow_m3_h": {"value": 500.0, "uncertainty_abs": 0.0},
+            "supply_air_temp_c": {"value": 16.0, "uncertainty_abs": 0.0},
+        }
+    )
+
+    assert isinstance(design.room_air, UncertainAirState)
+    assert isinstance(design.outdoor_air, UncertainAirState)
+    assert len(design.room_air.corner_states()) == 4
+    assert len(design.outdoor_air.corner_states()) == 8
+
+
+def test_psychrometric_uncertainty_propagates_into_load_and_airflow() -> None:
+    design = thermal_uncertainty_from_dict(
+        {
+            "name": "Coupled propagation",
+            "room_air": {
+                "dry_bulb_c": {"value": 22.0, "uncertainty_abs": 0.5},
+                "relative_humidity_percent": {"value": 45.0, "uncertainty_abs": 3.0},
+                "pressure_kpa": 101.325,
+            },
+            "outdoor_air": {
+                "dry_bulb_c": {"value": 34.0, "uncertainty_abs": 2.0},
+                "relative_humidity_percent": {"value": 55.0, "uncertainty_abs": 5.0},
+                "pressure_kpa": {"value": 101.325, "uncertainty_abs": 0.5},
+            },
+            "cleanroom_airflow_m3_h": {"value": 1500.0, "uncertainty_abs": 0.0},
+            "internal_sensible_kw": {"value": 4.0, "uncertainty_abs": 0.0},
+            "internal_latent_kw": {"value": 0.5, "uncertainty_abs": 0.0},
+            "makeup_airflow_m3_h": {"value": 500.0, "uncertainty_abs": 0.0},
+            "supply_air_temp_c": {"value": 16.0, "uncertainty_abs": 0.0},
+        }
+    )
+    result = analyze_thermal_uncertainty(design)
+
+    makeup = result["loads_kw"]["makeup_air_total"]
+    thermal = result["airflow_m3_h"]["thermal_for_internal_sensible"]
+    assert makeup["lower"] < makeup["nominal"] < makeup["upper"]
+    assert thermal is not None
+    assert thermal["lower"] < thermal["nominal"] < thermal["upper"]
+    assert result["psychrometric_states"]["room_air"]["corner_count"] == 4
+    assert result["psychrometric_states"]["outdoor_air"]["corner_count"] == 8
+    assert "room_air.dry_bulb_c" in result["traceability"]["missing_provenance"]
+
+
+def test_thermal_air_state_rejects_nonphysical_vapor_pressure_corner() -> None:
+    with pytest.raises(ValueError, match="partial pressure"):
+        thermal_uncertainty_from_dict(
+            {
+                "name": "Nonphysical psychrometric box",
+                "room_air": {
+                    "dry_bulb_c": {"value": 60.0, "uncertainty_abs": 0.0},
+                    "relative_humidity_percent": {"value": 100.0, "uncertainty_abs": 0.0},
+                    "pressure_kpa": {"value": 10.0, "uncertainty_abs": 0.0},
+                },
+                "cleanroom_airflow_m3_h": {"value": 1000.0, "uncertainty_abs": 0.0},
+                "internal_sensible_kw": {"value": 1.0, "uncertainty_abs": 0.0},
+                "internal_latent_kw": {"value": 0.0, "uncertainty_abs": 0.0},
+            }
+        )

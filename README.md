@@ -1,8 +1,8 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, measurement uncertainty, recovery qualification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.4 engineering core
+## v0.5 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -19,6 +19,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
+- Generic measurement uncertainty budgets with provenance, expanded intervals, and uncertainty-aware screening decisions.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
@@ -81,6 +82,22 @@ The recovery workflow uses measured time/concentration samples directly. It reco
 
 See docs/RECOVERY_TEST.md.
 
+## Analyze a measurement uncertainty budget
+
+    cleanroomx-measurement examples/measurement_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-measurement examples/measurement_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-measurement examples/measurement_uncertainty_demo.json --output measurement-report.md
+
+The v0.5 measurement workflow combines independent standard-uncertainty components by root-sum-square, applies the configured coverage factor, preserves instrument/calibration/procedure provenance, and reports pass/fail/indeterminate/not-checked using an explicit interval screening rule. It does not infer a universal coverage probability or replace a project/regulatory decision rule.
+
+See docs/MEASUREMENT_UNCERTAINTY.md.
+
 ## Multi-room pressure-cascade JSON
 
 ```json
@@ -118,14 +135,17 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are uncertainty/provenance tracking, richer engineering reports, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, duct/network pressure-loss modeling, deeper uncertainty integration into qualification/HVAC workflows, and later a desktop/web UI plus CFD adapters.
 
-## Standards references
+## Standards and metrology references
 
 - ISO 14644-1:2015 — classification of air cleanliness by particle concentration.
 - ISO 14644-3:2019 — cleanroom and clean-zone test methods.
 - ISO 14644-4:2022 — cleanroom design, construction, and start-up.
 - ASHRAE Handbook—Fundamentals — psychrometrics.
 - ASHRAE Design Guide for Cleanrooms.
+- JCGM 100:2008 — Guide to the Expression of Uncertainty in Measurement.
+- JCGM 106:2012 — role of measurement uncertainty in conformity assessment.
+- NIST Technical Note 1297 — guidance for evaluating and expressing measurement uncertainty.
 
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.

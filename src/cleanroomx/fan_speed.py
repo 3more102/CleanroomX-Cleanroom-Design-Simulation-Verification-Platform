@@ -99,7 +99,7 @@ def analyze_fan_speed_study(study: FanSpeedStudy) -> dict:
                 "affinity_scaling": {
                     "airflow_ratio": round(ratio, 6),
                     "pressure_ratio": round(ratio**2, 6),
-                    "power_ratio": round(ratio**3, 6),
+                    "homologous_input_power_factor": round(ratio**3, 6),
                 },
                 "scaled_fan_curve_airflow_range_m3_h": (
                     solver["fan_curve_airflow_range_m3_h"]

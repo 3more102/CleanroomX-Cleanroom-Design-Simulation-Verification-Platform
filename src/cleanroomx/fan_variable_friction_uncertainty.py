@@ -877,29 +877,20 @@ def analyze_fan_variable_friction_loop_uncertainty(
         sorted({item.lower, item.upper})
         for _parameter_name, _output_key, _edge_name, item in dimensions
     ]
-    parameter_combinations = (
-        list(product(*value_sets)) if value_sets else [()]
-    )
     fan_pressure_dimensions = sorted(study.fan_curve_pressure_pa.items())
     fan_pressure_value_sets = [
         sorted({item.lower, item.upper})
         for _airflow_m3_h, item in fan_pressure_dimensions
     ]
-    fan_pressure_combinations = (
-        list(product(*fan_pressure_value_sets))
-        if fan_pressure_value_sets
-        else [()]
-    )
     fan_airflow_dimensions = sorted(study.fan_curve_airflow_m3_h.items())
     fan_airflow_value_sets = [
         sorted({item.lower, item.upper})
         for _point_index, item in fan_airflow_dimensions
     ]
-    fan_airflow_combinations = (
-        list(product(*fan_airflow_value_sets))
-        if fan_airflow_value_sets
-        else [()]
-    )
+
+    # Enforce the configured combinatorial limit before materializing any
+    # Cartesian product. This keeps an invalid high-dimensional uncertainty
+    # request from allocating a potentially enormous intermediate list.
     corner_count = (
         len(fixed_values)
         * prod(len(values) for values in value_sets)
@@ -912,6 +903,20 @@ def analyze_fan_variable_friction_loop_uncertainty(
             f"{corner_count} is exceeding "
             f"max_corner_cases={study.max_corner_cases}"
         )
+
+    parameter_combinations = (
+        list(product(*value_sets)) if value_sets else [()]
+    )
+    fan_pressure_combinations = (
+        list(product(*fan_pressure_value_sets))
+        if fan_pressure_value_sets
+        else [()]
+    )
+    fan_airflow_combinations = (
+        list(product(*fan_airflow_value_sets))
+        if fan_airflow_value_sets
+        else [()]
+    )
 
     corners = []
     solved_points = []

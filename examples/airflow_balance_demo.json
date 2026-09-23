@@ -1,0 +1,37 @@
+{
+  "name": "Pilot Cleanroom Airflow Balance",
+  "rooms": [
+    {
+      "name": "Process",
+      "supply_airflow_m3_h": 3000.0,
+      "return_airflow_m3_h": 2400.0,
+      "exhaust_airflow_m3_h": 200.0,
+      "min_net_offset_m3_h": 200.0
+    },
+    {
+      "name": "Preparation",
+      "supply_airflow_m3_h": 1200.0,
+      "return_airflow_m3_h": 1150.0,
+      "min_net_offset_m3_h": 0.0,
+      "max_net_offset_m3_h": 150.0
+    },
+    {
+      "name": "Gowning",
+      "supply_airflow_m3_h": 800.0,
+      "return_airflow_m3_h": 850.0,
+      "max_net_offset_m3_h": 0.0
+    }
+  ],
+  "transfers": [
+    {
+      "from_room": "Process",
+      "to_room": "Preparation",
+      "airflow_m3_h": 150.0
+    },
+    {
+      "from_room": "Preparation",
+      "to_room": "Gowning",
+      "airflow_m3_h": 100.0
+    }
+  ]
+}

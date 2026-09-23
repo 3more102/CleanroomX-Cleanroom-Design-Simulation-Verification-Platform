@@ -826,6 +826,29 @@ def _metric_envelope(points: list[dict], key: str, unit: str) -> dict:
     }
 
 
+def _nominal_relative_excursion(
+    envelope: dict,
+    nominal_value: float,
+) -> dict:
+    nominal = float(nominal_value)
+    lower_delta = float(envelope["lower"]) - nominal
+    upper_delta = float(envelope["upper"]) - nominal
+
+    def _percent(delta: float) -> float | None:
+        if math.isclose(nominal, 0.0, rel_tol=0.0, abs_tol=1e-15):
+            return None
+        return round(delta / abs(nominal) * 100.0, 6)
+
+    return {
+        "nominal": round(nominal, 6),
+        "lower_delta": round(lower_delta, 6),
+        "upper_delta": round(upper_delta, 6),
+        "lower_percent": _percent(lower_delta),
+        "upper_percent": _percent(upper_delta),
+        "unit": envelope["unit"],
+    }
+
+
 def _metric_extreme_case_witnesses(points: list[dict], key: str) -> dict:
     values = [float(point[key]) for point in points]
     lower_index = min(range(len(values)), key=values.__getitem__)
@@ -1584,6 +1607,8 @@ def analyze_fan_variable_friction_loop_uncertainty(
     edge_airflow_extrema_sources = None
     power_evidence_corner_ranges = None
     power_evidence_extrema_sources = None
+    operating_point_excursions_from_nominal = None
+    power_evidence_excursions_from_nominal = None
     if all_corners_solved:
         operating_point_envelope = {
             "airflow_m3_h": _metric_envelope(
@@ -1609,6 +1634,18 @@ def analyze_fan_variable_friction_loop_uncertainty(
         }
         operating_point_extreme_cases = {
             key: _metric_extreme_case_witnesses(solved_points, key)
+            for key in (
+                "airflow_m3_h",
+                "fan_pressure_pa",
+                "system_pressure_pa",
+                "air_power_kw",
+            )
+        }
+        operating_point_excursions_from_nominal = {
+            key: _nominal_relative_excursion(
+                operating_point_envelope[key],
+                nominal["fan_operating_point"][key],
+            )
             for key in (
                 "airflow_m3_h",
                 "fan_pressure_pa",
@@ -1659,6 +1696,20 @@ def analyze_fan_variable_friction_loop_uncertainty(
         power_evidence_extrema_sources = {
             key: _power_metric_extrema_sources(corners, key, unit)
             for key, unit in power_metric_specs
+        }
+
+        nominal_power_evidence = nominal.get("power_evidence") or {}
+        power_evidence_excursions_from_nominal = {
+            key: (
+                None
+                if power_evidence_corner_ranges[key] is None
+                or nominal_power_evidence.get(key) is None
+                else _nominal_relative_excursion(
+                    power_evidence_corner_ranges[key],
+                    nominal_power_evidence[key],
+                )
+            )
+            for key, _unit in power_metric_specs
         }
 
     fixed_record = _input_record(
@@ -1899,6 +1950,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "operating_point_envelope": operating_point_envelope,
         "operating_point_extreme_cases": operating_point_extreme_cases,
         "operating_point_extrema_sources": operating_point_extrema_sources,
+        "operating_point_excursions_from_nominal": (
+            operating_point_excursions_from_nominal
+        ),
         "edge_airflow_corner_ranges": edge_airflow_corner_ranges,
         "edge_airflow_extrema_sources": edge_airflow_extrema_sources,
         "power_efficiencies": (
@@ -1908,6 +1962,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "power_evidence_corner_ranges": power_evidence_corner_ranges,
         "power_evidence_extrema_sources": power_evidence_extrema_sources,
+        "power_evidence_excursions_from_nominal": (
+            power_evidence_excursions_from_nominal
+        ),
         "traceability": {
             "complete": not missing,
             "missing_provenance": missing,
@@ -1947,7 +2004,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "network at every fan/system airflow evaluated by the bounded "
             "operating-point search. Reported airflow, pressure, and air-power "
             "min/max values are ranges across evaluated corners only; when complete, "
-            "their source corner indices "
+            "nominal-centered absolute and percentage excursions are also reported "
+            "for operating-point and available power-chain metrics. Those excursions "
+            "describe only the evaluated corner set and are not sensitivity "
+            "coefficients. Their source corner indices "
             "and fan scenario/speed/fixed-pressure context are retained for "
             "auditability. Corner outcome diagnostics separately retain "
             "status and solver termination-reason counts plus the exact input "

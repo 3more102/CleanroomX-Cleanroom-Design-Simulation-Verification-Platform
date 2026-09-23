@@ -51,6 +51,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "SFP corner range W/(m³/s)" in report
     assert "Solver tolerance audit" in report
     assert "within_configured_tolerances" in report
+    assert "Iteration budget audit" in report
+    assert "within_configured_iteration_limits" in report
     assert "8" in report
 
 

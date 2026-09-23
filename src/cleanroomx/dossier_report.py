@@ -64,6 +64,23 @@ def markdown_dossier_report(result: dict) -> str:
                 f"speed_cases={component['speed_case_count']}, "
                 f"{_fmt_counts(component.get('counts', {}))}"
             )
+        elif (
+            name == "fan_variable_friction_loops"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"studies={component['study_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
+        elif (
+            name == "fan_variable_friction_speed_studies"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"studies={component['study_count']}, "
+                f"speed_cases={component['speed_case_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
         elif name == "cross_module_consistency" and component["status"] != "not_included":
             detail = (
                 f"shared_rooms={component['shared_room_count']}, "
@@ -420,6 +437,38 @@ def markdown_dossier_report(result: dict) -> str:
             pressure = "—" if check is None else check["total_system_pressure_pa"]
             lines.append(f"| {item['study']} | {item['status']} | {item['equivalent_loop_resistance_pa_per_m3_s_squared']} | {airflow} | {pressure} |")
 
+    if result.get("fan_variable_friction_loop_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan / variable-friction loop studies",
+                "",
+                "| Study | Status | Operating airflow m³/h | System pressure Pa | "
+                "Outer iterations | Resistance closure | Continuity residual m³/h | "
+                "Edge-law residual Pa | Fan-system residual Pa | Termination |",
+                "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for item in result["fan_variable_friction_loop_studies"]:
+            point = item.get("fan_operating_point")
+            check = item.get("system_pressure_check")
+            diagnostics = item.get("solver_diagnostics", {})
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = (
+                "—" if check is None else check["total_system_pressure_pa"]
+            )
+            residual = (
+                "—" if check is None else check["fan_minus_system_pressure_pa"]
+            )
+            lines.append(
+                f"| {item['study']} | {item['status']} | {airflow} | "
+                f"{pressure} | {diagnostics.get('network_outer_iterations', '—')} | "
+                f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
+                f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
+                f"{diagnostics.get('max_abs_pressure_law_residual_pa', '—')} | "
+                f"{residual} | {diagnostics.get('termination_reason', '—')} |"
+            )
+
     if result.get("fan_loop_uncertainty_analyses"):
         lines.extend(
             [
@@ -478,6 +527,46 @@ def markdown_dossier_report(result: dict) -> str:
                     f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
                     f"{case['status']} | {airflow} | {pressure} | "
                     f"{continuity} | {residual} |"
+                )
+
+    if result.get("fan_variable_friction_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan-speed / variable-friction loop studies",
+                "",
+                "| Study | Speed ratio | Speed rpm | Status | Operating airflow m³/h | "
+                "System pressure Pa | Outer iterations | Resistance closure | "
+                "Continuity residual m³/h | Edge-law residual Pa | "
+                "Fan-system residual Pa | Termination |",
+                "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for study in result["fan_variable_friction_speed_studies"]:
+            for case in study.get("speed_cases", []):
+                point = case.get("fan_operating_point")
+                check = case.get("system_pressure_check")
+                diagnostics = case.get("solver_diagnostics", {})
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = (
+                    "—" if check is None else check["total_system_pressure_pa"]
+                )
+                residual = (
+                    "—"
+                    if check is None
+                    else check["fan_minus_system_pressure_pa"]
+                )
+                rpm = (
+                    "—" if case.get("speed_rpm") is None else case["speed_rpm"]
+                )
+                lines.append(
+                    f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
+                    f"{case['status']} | {airflow} | {pressure} | "
+                    f"{diagnostics.get('network_outer_iterations', '—')} | "
+                    f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
+                    f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
+                    f"{diagnostics.get('max_abs_pressure_law_residual_pa', '—')} | "
+                    f"{residual} | {diagnostics.get('termination_reason', '—')} |"
                 )
 
     if result.get("damper_studies"):

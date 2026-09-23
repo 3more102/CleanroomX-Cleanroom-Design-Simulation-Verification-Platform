@@ -1,0 +1,42 @@
+{
+  "name": "Demo fan-driven parallel supply",
+  "fixed_pressure_pa": 80.0,
+  "fan_curve": {
+    "name": "Demo supply fan",
+    "points": [
+      {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+      {"airflow_m3_h": 3000.0, "pressure_pa": 500.0},
+      {"airflow_m3_h": 6000.0, "pressure_pa": 300.0},
+      {"airflow_m3_h": 8000.0, "pressure_pa": 100.0}
+    ]
+  },
+  "paths": [
+    {
+      "name": "Process branch",
+      "sections": [
+        {
+          "name": "Process main",
+          "length_m": 12.0,
+          "friction_factor": 0.02,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.5,
+          "diameter_m": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Ante branch",
+      "sections": [
+        {
+          "name": "Ante main",
+          "length_m": 18.0,
+          "friction_factor": 0.02,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 2.0,
+          "width_m": 0.5,
+          "height_m": 0.3
+        }
+      ]
+    }
+  ]
+}

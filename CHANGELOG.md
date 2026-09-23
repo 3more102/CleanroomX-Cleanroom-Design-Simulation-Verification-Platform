@@ -1,4 +1,14 @@
 # Changelog
+## v0.49 aggregate nonlinear solver-quality evidence — 2026-09-24
+
+- Added a compact solver-quality summary across nonlinear fan/variable-friction uncertainty corners.
+- Reports worst solved-corner absolute operating-pressure residual, Darcy resistance-closure error, mass-balance residual, pressure-law residual, network outer iterations, and operating-point iterations.
+- Retains every tied source corner for each worst metric, including the active fan/system/duct uncertainty context and observed signed value where applicable.
+- Preserves configured pressure, resistance-closure, and mass-balance tolerances without inventing thresholds for pressure-law residual or iteration counts.
+- Distinguishes evaluated-corner coverage from complete-study coverage, including nominal-case status, so partial evidence is not presented as a complete verification result.
+- Extended Markdown reporting and regression coverage for complete and zero-solved-corner studies.
+- Bumped package/runtime metadata to v0.49.0.
+
 ## v0.48 tie-aware internal edge-flow extrema provenance — 2026-09-24
 
 - Added tie-aware source attribution for every internal edge-airflow lower/upper extremum in complete nonlinear uncertainty studies.

@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.19 engineering core
+## v0.20 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -27,8 +27,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, and optional cross-module consistency.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, fan-speed affinity-law studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
+- Dossier-integrated HVAC-to-fan operating-airflow consistency across standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed cases, using an explicit user-supplied absolute tolerance and preserving unsolved studies as unresolved.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -180,6 +181,26 @@ The recovery workflow uses measured time/concentration samples directly and opti
 
 See docs/RECOVERY_TEST.md.
 
+## Cross-check HVAC governing airflow against fan studies
+
+Add this optional block to an engineering-dossier manifest:
+
+    "consistency_checks": {
+      "hvac_fan_operating_airflow": {
+        "airflow_abs_tolerance_m3_h": 1500.0
+      }
+    }
+
+The check compares the analyzed HVAC total governing airflow with each included solved fan operating point, including individual fan-speed cases. Unsolved cases remain `not_comparable`; they are not converted into failures. The tolerance is a project input, not a built-in engineering or standards limit.
+
+Example:
+
+    cleanroomx-dossier examples/dossier_fan_airflow_consistency_demo.json
+
+Fan-speed studies can also be included directly in a dossier with `fan_speed_studies`; see `examples/dossier_fan_speed_demo.json`.
+
+See docs/HVAC_FAN_AIRFLOW_CONSISTENCY.md.
+
 ## Analyze uncertainty and input provenance
 
     cleanroomx-uncertainty examples/uncertainty_room_demo.json
@@ -315,7 +336,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are integrating fan-speed studies into engineering dossiers, general looped-network solving research, and later a desktop/web UI plus CFD adapters.
+Next milestones are general looped-network solving research, broader control/operating-envelope consistency, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

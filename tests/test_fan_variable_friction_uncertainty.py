@@ -1315,3 +1315,138 @@ def test_uncertainty_report_surfaces_power_chain_corner_evidence() -> None:
     assert "Specific fan power" in report
     assert "fixed efficiencies" in report
     assert "not uncertain variables" in report
+
+
+def test_efficiency_uncertainty_expands_power_cases_not_hydraulic_corners() -> None:
+    data = _example_data()
+    data["power_efficiency_uncertainty"] = {
+        "fan_efficiency": {"uncertainty_abs": 0.02},
+        "motor_efficiency": {"uncertainty_abs": 0.01},
+        "vfd_efficiency": {"uncertainty_abs": 0.005},
+    }
+    data["max_power_cases"] = 128
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "complete"
+    assert result["corner_count"] == 8
+    assert result["power_case_count"] == 64
+    assert len(result["power_cases"]) == 64
+    assert result["power_efficiency_uncertainty"] == {
+        "fan_efficiency": {
+            "nominal": 0.72,
+            "lower": 0.7,
+            "upper": 0.74,
+            "unit": "1",
+        },
+        "motor_efficiency": {
+            "nominal": 0.93,
+            "lower": 0.92,
+            "upper": 0.9400000000000001,
+            "unit": "1",
+        },
+        "vfd_efficiency": {
+            "nominal": 0.97,
+            "lower": 0.965,
+            "upper": 0.975,
+            "unit": "1",
+        },
+    }
+    assert (
+        result["power_evidence_corner_ranges"]["electrical_input_kw"][
+            "evaluated_power_case_count"
+        ]
+        == 64
+    )
+
+
+def test_efficiency_uncertainty_power_extrema_resolve_exact_power_cases() -> None:
+    data = _example_data()
+    data["power_efficiency_uncertainty"] = {
+        "fan_efficiency": 0.02,
+        "motor_efficiency": 0.01,
+        "vfd_efficiency": 0.005,
+    }
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    for metric in (
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
+    ):
+        values = [
+            case["power_evidence"][metric] for case in result["power_cases"]
+        ]
+        expected_lower = min(values)
+        expected_upper = max(values)
+        evidence = result["power_evidence_extrema_sources"][metric]
+        assert evidence["lower"]["value"] == pytest.approx(expected_lower)
+        assert evidence["upper"]["value"] == pytest.approx(expected_upper)
+        for bound in ("lower", "upper"):
+            assert evidence[bound]["sources"]
+            for source in evidence[bound]["sources"]:
+                power_case = result["power_cases"][source["power_case_index"]]
+                assert power_case["corner_index"] == source["corner_index"]
+                assert power_case["efficiencies"] == source["power_efficiencies"]
+                assert power_case["power_evidence"][metric] == pytest.approx(
+                    evidence[bound]["value"]
+                )
+
+
+def test_efficiency_uncertainty_requires_explicit_nominal_efficiency() -> None:
+    data = _example_data()
+    del data["power_efficiencies"]["vfd_efficiency"]
+    data["power_efficiency_uncertainty"] = {
+        "vfd_efficiency": {"uncertainty_abs": 0.005}
+    }
+
+    with pytest.raises(ValueError, match="requires an explicit nominal efficiency"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_efficiency_uncertainty_rejects_nonphysical_bounds() -> None:
+    data = _example_data()
+    data["power_efficiency_uncertainty"] = {
+        "fan_efficiency": {"uncertainty_abs": 0.73}
+    }
+
+    with pytest.raises(ValueError, match=r"must remain within \(0, 1\]"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_efficiency_uncertainty_power_case_guard_is_separate() -> None:
+    data = _example_data()
+    data["power_efficiency_uncertainty"] = {
+        "fan_efficiency": 0.02,
+        "motor_efficiency": 0.01,
+        "vfd_efficiency": 0.005,
+    }
+    data["max_power_cases"] = 63
+
+    study = fan_variable_friction_loop_uncertainty_from_dict(data)
+    with pytest.raises(ValueError, match="power case count 64"):
+        analyze_fan_variable_friction_loop_uncertainty(study)
+
+
+def test_efficiency_uncertainty_report_surfaces_post_processing_scope() -> None:
+    data = _example_data()
+    data["power_efficiency_uncertainty"] = {
+        "fan_efficiency": 0.02,
+        "motor_efficiency": 0.01,
+        "vfd_efficiency": 0.005,
+    }
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Derived power cases: **64**" in report
+    assert "does not trigger additional airflow network solves" in report
+    assert "power-case=" in report
+    assert "eff[fan=" in report

@@ -8,6 +8,7 @@ def analyze_supply_fan(
     system: FanSystem,
     terminal_filter_pressure_drop_pa: float = 0.0,
     duct_pressure_drop_override_pa: float | None = None,
+    duct_pressure_drop_source: str | None = None,
 ) -> dict:
     """Return preliminary supply-fan duty and electrical input power."""
     airflow_m3_h = float(airflow_m3_h)
@@ -24,7 +25,7 @@ def analyze_supply_fan(
         duct_drop = float(duct_pressure_drop_override_pa)
         if duct_drop < 0:
             raise ValueError("duct_pressure_drop_override_pa must be >= 0")
-        duct_drop_source = "computed_duct_network"
+        duct_drop_source = duct_pressure_drop_source or "computed_duct_network"
 
     total_static_pa = (
         duct_drop

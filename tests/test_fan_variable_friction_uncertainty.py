@@ -2126,3 +2126,66 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "Corners monotonic non-increasing within tolerance" in report
     assert "do not prove continuous uniqueness" in report
 
+
+def test_fan_curve_segment_position_is_auditable() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    summary = result["fan_curve_segment_position_summary"]
+    nominal = result["nominal_fan_curve_segment_position"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["segment_position_evidence_corner_count"] == result["corner_count"]
+
+    nearest_clearances = []
+    normalized_clearances = []
+    segment_spans = []
+    for corner in result["corners"]:
+        diagnostic = corner["fan_curve_segment_position"]
+        bracket = corner["fan_curve_intersection_bracket"]
+        assert diagnostic is not None
+        assert bracket is not None
+        airflow = corner["operating_point"]["airflow_m3_h"]
+        low = bracket["low_endpoint"]["airflow_m3_h"]
+        high = bracket["high_endpoint"]["airflow_m3_h"]
+        span = high - low
+        lower_clearance = max(0.0, airflow - low)
+        upper_clearance = max(0.0, high - airflow)
+        nearest = min(lower_clearance, upper_clearance)
+        assert diagnostic["segment_airflow_span_m3_h"] == pytest.approx(span, abs=1e-9)
+        assert diagnostic["nearest_segment_endpoint_clearance_m3_h"] == pytest.approx(nearest, abs=1e-9)
+        assert diagnostic["normalized_segment_position_fraction"] == pytest.approx(lower_clearance / span, abs=1e-12)
+        assert diagnostic["normalized_nearest_segment_endpoint_clearance_fraction"] == pytest.approx(nearest / span, abs=1e-12)
+        nearest_clearances.append(nearest)
+        normalized_clearances.append(nearest / span)
+        segment_spans.append(span)
+
+    assert summary["minimum_nearest_segment_endpoint_clearance_m3_h"]["value"] == pytest.approx(min(nearest_clearances), abs=1e-9)
+    assert summary["minimum_normalized_nearest_segment_endpoint_clearance_fraction"]["value"] == pytest.approx(min(normalized_clearances), abs=1e-12)
+    assert summary["maximum_segment_airflow_span_m3_h"]["value"] == pytest.approx(max(segment_spans), abs=1e-9)
+    assert summary["minimum_nearest_segment_endpoint_clearance_m3_h"]["sources"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Fan-curve interpolation segment position" in report
+    assert "Minimum nearest segment-endpoint clearance" in report
+    assert "not an interpolation-error estimate" in report
+
+
+def test_fan_curve_segment_position_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+    summary = result["fan_curve_segment_position_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_fan_curve_segment_position"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["segment_position_evidence_corner_count"] == 0
+    assert summary["minimum_nearest_segment_endpoint_clearance_m3_h"] is None
+    assert summary["minimum_normalized_nearest_segment_endpoint_clearance_fraction"] is None
+    assert summary["maximum_segment_airflow_span_m3_h"] is None
+    assert all(corner["fan_curve_segment_position"] is None for corner in result["corners"])
+

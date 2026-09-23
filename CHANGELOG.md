@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.12 integrated HVAC fan-duty verification and engineering dossier — 2026-09-23
+
+- Added HVAC fan-curve design-duty verification at the governing airflow and preliminary static-pressure duty, with bounded interpolation and no extrapolation.
+- Added a manifest-driven engineering dossier aggregating room/cascade verification, HVAC/duct screening, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and fan/system operating-point studies.
+- Added SHA-256 fingerprints for every referenced dossier source file for reproducible traceability.
+- Preserved fail, incomplete, indeterminate, not-checked, solved, no-intersection, and outside-supplied-range states instead of collapsing results into a certification verdict.
+- Integrated HVAC fan-curve duty failures and outside-range results into dossier attention tracking.
+- Added Markdown/JSON dossier output, the `cleanroomx-dossier` CLI, example manifest, documentation, and regression coverage.
+- Kept the dossier explicitly bounded as a traceability/reporting layer rather than cleanroom certification, regulatory approval, commissioning acceptance, or fan/equipment selection.
+
 ## v0.11 fan/system operating-point solver — 2026-09-23
 
 - Added explicit fan performance curves from ordered airflow/pressure points with strict finite and monotonic validation.

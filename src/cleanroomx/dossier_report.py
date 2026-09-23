@@ -326,6 +326,28 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{airflow} | {pressure} |"
             )
 
+    if result["fan_speed_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan-speed affinity sweeps",
+                "",
+                "| Study | Overall status | Speed ratio | Speed rpm | Case status | Operating airflow m³/h | System pressure Pa |",
+                "|---|---|---:|---:|---|---:|---:|",
+            ]
+        )
+        for item in result["fan_speed_studies"]:
+            for case in item["speed_cases"]:
+                point = case["operating_point"]
+                rpm = "—" if case["speed_rpm"] is None else case["speed_rpm"]
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = "—" if point is None else point["system_pressure_pa"]
+                lines.append(
+                    f"| {item['study']} | {item['status']} | "
+                    f"{case['speed_ratio']} | {rpm} | {case['status']} | "
+                    f"{airflow} | {pressure} |"
+                )
+
     lines.extend(
         [
             "",

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.25 geometry-derived looped duct networks — 2026-09-23
+
+- Added a geometry-to-fixed-resistance workflow for connected looped duct networks.
+- Derives each edge resistance from explicit duct area, hydraulic diameter, length, air density, local-loss coefficient, and Darcy friction factor using `R = 0.5·ρ/A²·(fL/Dh + ΣK)`.
+- Supports either a user-supplied Darcy factor or the existing v0.21 roughness/kinematic-viscosity friction calculation evaluated at the edge's declared reference airflow.
+- Reuses the v0.23.1 loop solver for signed reverse flow, relative node pressures, absolute injection-balance validation, continuity residuals, and pressure-law residuals.
+- Reports the full resistance basis per edge, including reference airflow/drop, friction method, Reynolds number when applicable, geometry, solved flow, and direction.
+- Added the `cleanroomx-loop-duct` CLI, JSON loader, Markdown/JSON reporting, example data, documentation, and regression tests.
+- Factored the duct-section quadratic-resistance derivation into one shared helper and reused it in the existing fan/duct workflow to avoid formula drift.
+- Preserves the v0.24 bounded fan/system uncertainty workflow.
+- Keeps resistance fixed during mesh balancing; solved-flow Reynolds/friction iteration, fan coupling, dampers, controls, leakage, system effect, compressibility, and transients remain outside scope.
+- Bumped package/runtime metadata to v0.25.0.
+
 ## v0.24 fan/system operating-point uncertainty — 2026-09-23
 
 - Added deterministic bounded uncertainty analysis for user-supplied fixed system pressure and quadratic system resistance.

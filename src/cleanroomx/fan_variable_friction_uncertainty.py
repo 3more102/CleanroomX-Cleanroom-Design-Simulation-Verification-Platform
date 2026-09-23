@@ -1237,52 +1237,6 @@ def _solver_quality_summary(
     else:
         iteration_assessment_status = "within_configured_iteration_limits"
 
-    minimum_alternative_candidate_gap = None
-    if alternative_separation_cases:
-        minimum_gap = min(
-            float(
-                audit[
-                    "nearest_alternative_candidate_airflow_interval_gap_m3_h"
-                ]
-            )
-            for _corner_index, _corner, audit in alternative_separation_cases
-        )
-        sources = []
-        for corner_index, corner, audit in alternative_separation_cases:
-            observed_gap = float(
-                audit[
-                    "nearest_alternative_candidate_airflow_interval_gap_m3_h"
-                ]
-            )
-            if not math.isclose(
-                observed_gap,
-                minimum_gap,
-                rel_tol=1e-12,
-                abs_tol=1e-9,
-            ):
-                continue
-            source = _critical_case_summary(corner_index, corner)
-            source.update(
-                {
-                    "candidate_crossing_feature_count": audit[
-                        "candidate_crossing_feature_count"
-                    ],
-                    "selected_candidate_feature": audit.get(
-                        "selected_candidate_feature"
-                    ),
-                    "nearest_alternative_candidate_features": audit.get(
-                        "nearest_alternative_candidate_features"
-                    )
-                    or [],
-                }
-            )
-            sources.append(source)
-        minimum_alternative_candidate_gap = {
-            "value": round(minimum_gap, 9),
-            "unit": "m3/h",
-            "sources": sources,
-        }
-
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -1762,16 +1716,14 @@ def _fan_curve_supplied_point_residual_summary(
         for corner_index, corner, audit in solved_cases
         if audit.get(
             "nearest_alternative_candidate_airflow_interval_gap_m3_h"
-        )
-        is not None
+        ) is not None
     ]
     selected_overlap_alternative_interval_indices = [
         corner_index
         for corner_index, _corner, audit in alternative_separation_cases
         if audit.get(
             "selected_airflow_overlaps_alternative_candidate_interval"
-        )
-        is True
+        ) is True
     ]
     monotonic_count = sum(
         audit["residual_monotonic_non_increasing_with_tolerance"]
@@ -1832,6 +1784,52 @@ def _fan_curve_supplied_point_residual_summary(
         maximum_positive_increase = {
             "value": round(maximum, 9),
             "unit": "Pa",
+            "sources": sources,
+        }
+
+    minimum_alternative_candidate_gap = None
+    if alternative_separation_cases:
+        minimum_gap = min(
+            float(
+                audit[
+                    "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+                ]
+            )
+            for _corner_index, _corner, audit in alternative_separation_cases
+        )
+        sources = []
+        for corner_index, corner, audit in alternative_separation_cases:
+            observed_gap = float(
+                audit[
+                    "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+                ]
+            )
+            if not math.isclose(
+                observed_gap,
+                minimum_gap,
+                rel_tol=1e-12,
+                abs_tol=1e-9,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "candidate_crossing_feature_count": audit[
+                        "candidate_crossing_feature_count"
+                    ],
+                    "selected_candidate_feature": audit.get(
+                        "selected_candidate_feature"
+                    ),
+                    "nearest_alternative_candidate_features": audit.get(
+                        "nearest_alternative_candidate_features"
+                    )
+                    or [],
+                }
+            )
+            sources.append(source)
+        minimum_alternative_candidate_gap = {
+            "value": round(minimum_gap, 9),
+            "unit": "m3/h",
             "sources": sources,
         }
 

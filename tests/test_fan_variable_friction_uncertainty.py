@@ -1337,6 +1337,7 @@ def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
         "max_abs_mass_balance_residual_m3_h",
         "max_abs_pressure_law_residual_pa",
         "network_outer_iterations",
+        "network_newton_iterations",
         "operating_iterations",
     }
     assert set(quality["worst_metrics"]) == expected_metrics
@@ -1403,6 +1404,43 @@ def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
             abs=1e-9,
         )
 
+    iteration_limits = quality["configured_iteration_limits"]
+    assert iteration_limits == {
+        "max_outer_iterations": 50,
+        "max_newton_iterations": 100,
+        "max_operating_iterations": 80,
+    }
+    iteration_checks = quality["configured_iteration_checks"]
+    iteration_assessment = quality["configured_iteration_assessment"]
+    assert iteration_assessment["status"] == (
+        "within_configured_iteration_limits"
+    )
+    assert iteration_assessment["configured_check_count"] == 3
+    assert iteration_assessment["evaluable_check_count"] == 3
+    assert iteration_assessment["within_limit_count"] == 3
+    assert iteration_assessment["exceeded_limit_count"] == 0
+    assert iteration_assessment["not_evaluable_count"] == 0
+    assert iteration_assessment["complete_study_coverage"] is True
+
+    expected_iteration_keys = {
+        "network_outer_iterations": "max_outer_iterations",
+        "network_newton_iterations": "max_newton_iterations",
+        "operating_iterations": "max_operating_iterations",
+    }
+    for metric_key, limit_key in expected_iteration_keys.items():
+        check = iteration_checks[metric_key]
+        assert check["status"] == "within_iteration_limit"
+        assert check["observed_iterations"] == pytest.approx(
+            quality["worst_metrics"][metric_key]["value"], abs=1e-9
+        )
+        assert check["configured_limit"] == iteration_limits[limit_key]
+        assert check["utilization_ratio"] == pytest.approx(
+            check["observed_iterations"] / check["configured_limit"],
+            abs=1e-9,
+        )
+        assert check["remaining_iterations"] == (
+            check["configured_limit"] - check["observed_iterations"]
+        )
 
 def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
     data = _example_data()
@@ -1429,7 +1467,15 @@ def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
         check["status"] == "not_evaluable"
         for check in quality["configured_tolerance_checks"].values()
     )
-
+    assert quality["configured_iteration_assessment"]["status"] == (
+        "incomplete_coverage"
+    )
+    assert quality["configured_iteration_assessment"]["evaluable_check_count"] == 0
+    assert quality["configured_iteration_assessment"]["not_evaluable_count"] == 3
+    assert all(
+        check["status"] == "not_evaluable"
+        for check in quality["configured_iteration_checks"].values()
+    )
 
 def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(
@@ -1449,8 +1495,10 @@ def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     assert "within_configured_tolerances" in report
     assert "Utilization" in report
     assert "Remaining margin" in report
-
-
+    assert "Network Newton iterations" in report
+    assert "Configured solver-iteration checks" in report
+    assert "within_configured_iteration_limits" in report
+    assert "Remaining iterations" in report
 
 def test_nominal_relative_corner_excursions_are_auditable() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(

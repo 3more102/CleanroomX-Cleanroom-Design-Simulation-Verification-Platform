@@ -177,6 +177,27 @@ def _fan_operating_point_summary(results: list[dict]) -> dict:
     }
 
 
+def _fan_speed_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "study_count": 0,
+            "unsolved_speed_case_count": 0,
+        }
+    counts = _count_statuses(item["status"] for item in results)
+    unsolved = sum(
+        item.get("counts", {}).get("no_intersection_in_supplied_range", 0)
+        for item in results
+    )
+    return {
+        "status": "attention_required" if unsolved else "screening_complete",
+        "counts": counts,
+        "study_count": len(results),
+        "unsolved_speed_case_count": unsolved,
+    }
+
+
 def _fan_duct_network_summary(results: list[dict]) -> dict:
     if not results:
         return {"status": "not_included", "counts": {}, "study_count": 0}
@@ -232,6 +253,7 @@ def summarize_dossier_components(
     psychrometric_uncertainty: list[dict] | None = None,
     fan_operating_points: list[dict] | None = None,
     fan_system_uncertainty: list[dict] | None = None,
+    fan_speed_studies: list[dict] | None = None,
     fan_duct_networks: list[dict] | None = None,
     fan_parallel_networks: list[dict] | None = None,
     consistency: dict | None = None,
@@ -243,6 +265,7 @@ def summarize_dossier_components(
     psychrometric_uncertainty = psychrometric_uncertainty or []
     fan_operating_points = fan_operating_points or []
     fan_system_uncertainty = fan_system_uncertainty or []
+    fan_speed_studies = fan_speed_studies or []
     fan_duct_networks = fan_duct_networks or []
     fan_parallel_networks = fan_parallel_networks or []
 
@@ -260,6 +283,7 @@ def summarize_dossier_components(
         "fan_system_uncertainty": _fan_system_uncertainty_summary(
             fan_system_uncertainty
         ),
+        "fan_speed_studies": _fan_speed_summary(fan_speed_studies),
         "fan_duct_networks": _fan_duct_network_summary(fan_duct_networks),
         "fan_parallel_networks": _fan_parallel_network_summary(fan_parallel_networks),
         "cross_module_consistency": _consistency_summary(consistency),
@@ -285,6 +309,9 @@ def summarize_dossier_components(
         "fan_system_uncertainty_indeterminate": components[
             "fan_system_uncertainty"
         ]["counts"].get("indeterminate", 0),
+        "fan_speed_cases_unsolved": components["fan_speed_studies"].get(
+            "unsolved_speed_case_count", 0
+        ),
         "fan_duct_networks_unsolved": components["fan_duct_networks"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
@@ -376,6 +403,8 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .fan_uncertainty_io import load_fan_system_uncertainty
     from .fan_duct_network_io import load_fan_duct_network_study
     from .fan_network import solve_fan_driven_parallel_network
+    from .fan_speed import analyze_fan_speed_study
+    from .fan_speed_io import load_fan_speed_study
     from .fan_network_io import load_fan_driven_parallel_network_study
     from .hvac import analyze_hvac_project
     from .hvac_io import load_hvac_project
@@ -485,6 +514,16 @@ def build_dossier(manifest_path: str | Path) -> dict:
             )
         )
 
+    fan_speed_studies: list[dict] = []
+    for item in data.get("fan_speed_studies", []):
+        source = _source_record("fan_speed_study", item, manifest_dir)
+        source_records.append(source)
+        fan_speed_studies.append(
+            analyze_fan_speed_study(
+                load_fan_speed_study(source["_resolved_path"])
+            )
+        )
+
     fan_duct_networks: list[dict] = []
     for item in data.get("fan_duct_network_studies", []):
         source = _source_record("fan_duct_network_study", item, manifest_dir)
@@ -554,6 +593,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         psychrometric_uncertainty=psychrometric_uncertainty,
         fan_operating_points=fan_operating_points,
         fan_system_uncertainty=fan_system_uncertainty,
+        fan_speed_studies=fan_speed_studies,
         fan_duct_networks=fan_duct_networks,
         fan_parallel_networks=fan_parallel_networks,
         consistency=consistency,
@@ -577,6 +617,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "psychrometric_uncertainty_analyses": psychrometric_uncertainty,
         "fan_operating_point_studies": fan_operating_points,
         "fan_system_uncertainty_analyses": fan_system_uncertainty,
+        "fan_speed_studies": fan_speed_studies,
         "fan_duct_network_studies": fan_duct_networks,
         "fan_parallel_network_studies": fan_parallel_networks,
         "consistency_checks": {

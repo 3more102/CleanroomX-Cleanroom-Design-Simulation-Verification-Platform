@@ -661,3 +661,71 @@ def test_corner_limit_rejects_before_cartesian_product_materialization(
     )
     with pytest.raises(ValueError, match="corner count 4.*max_corner_cases=1"):
         analyze_fan_variable_friction_loop_uncertainty(study)
+
+def test_fan_speed_ratio_uncertainty_produces_complete_envelope() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 2
+    assert result["solved_corner_count"] == 2
+    assert result["unresolved_corner_count"] == 0
+    assert result["traceability"]["complete"] is True
+    assert result["input_intervals"]["fan_speed_ratio"] == {
+        "nominal": 1.0,
+        "lower": 0.9,
+        "upper": 1.1,
+        "unit": "1",
+    }
+    assert {
+        corner["fan_speed_ratio"] for corner in result["corners"]
+    } == {0.9, 1.1}
+    envelope = result["operating_point_envelope"]
+    assert envelope is not None
+    assert envelope["airflow_m3_h"]["lower"] < envelope["airflow_m3_h"]["upper"]
+
+
+def test_fan_speed_ratio_uncertainty_report_surfaces_bounds() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Fan speed ratio" in report
+    assert "0.9 to 1.1" in report
+    assert "Speed ratio" in report
+
+
+def test_fan_speed_ratio_uncertainty_rejects_nonpositive_lower_bound() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_speed_ratio"]["value"] = 0.1
+    data["fan_speed_ratio"]["uncertainty_abs"] = 0.1
+
+    with pytest.raises(ValueError, match="lower uncertainty bound must remain > 0"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_fan_speed_ratio_uncertainty_counts_toward_corner_limit() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["max_corner_cases"] = 1
+    study = fan_variable_friction_loop_uncertainty_from_dict(data)
+
+    with pytest.raises(ValueError, match="corner count 2"):
+        analyze_fan_variable_friction_loop_uncertainty(study)
+

@@ -281,4 +281,10 @@ def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
     ]
     assert component["status"] == "screening_complete"
     assert component["corner_count"] == 3
+    assert component["fan_curve_scenario_count"] == 2
     assert result["executive_summary"]["state"] == "no_adverse_findings"
+
+    report = markdown_dossier_report(result)
+    assert "fan_curve_scenarios=2" in report
+    assert "Whole fan-curve scenarios" in report
+    assert "lower_envelope, upper_envelope" in report

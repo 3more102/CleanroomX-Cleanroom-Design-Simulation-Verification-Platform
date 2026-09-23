@@ -34,6 +34,17 @@ def _fmt_extreme_source(source: dict) -> str:
                 f"{name}={value}" for name, value in values.items()
             )
             parts.append(f"{label}[{encoded}]")
+    efficiencies = source.get("efficiencies")
+    if efficiencies:
+        encoded = ", ".join(
+            f"{name}={value}"
+            for name, value in efficiencies.items()
+            if value is not None
+        )
+        if encoded:
+            parts.append(f"eff[{encoded}]")
+    if "power_case_index" in source:
+        parts.append(f"power-case={source['power_case_index']}")
     return "; ".join(parts)
 
 
@@ -63,6 +74,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.append(
             f"- Fan speed ratio: **{speed['lower']} to {speed['upper']}** "
             f"(nominal {speed['nominal']})"
+        )
+    for name, interval in result["input_intervals"].get(
+        "power_efficiency_uncertainty", {}
+    ).items():
+        lines.append(
+            f"- Power efficiency `{name}`: "
+            f"**{interval['lower']} to {interval['upper']}** "
+            f"(nominal {interval['nominal']})"
         )
     for airflow, interval in result["input_intervals"].get(
         "fan_curve_pressure_pa", {}
@@ -370,6 +389,79 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "These are min/max values across evaluated solved corners "
                 "only. Efficiency values are fixed explicit inputs here, not "
                 "uncertain variables, and no missing efficiency is inferred.",
+            ]
+        )
+
+    power_uncertainty_ranges = result.get("power_uncertainty_ranges")
+    power_uncertainty_sources = result.get(
+        "power_uncertainty_extrema_sources"
+    )
+    if power_uncertainty_ranges is not None:
+        metric_labels = (
+            ("fluid_air_power_kw", "Fluid air power", "kW"),
+            ("shaft_power_kw", "Shaft power", "kW"),
+            ("electrical_input_kw", "Electrical input", "kW"),
+            (
+                "specific_fan_power_w_per_m3_s",
+                "Specific fan power",
+                "W/(m³/s)",
+            ),
+        )
+        lines.extend(
+            [
+                "",
+                "## Power-efficiency uncertainty propagation",
+                "",
+                "- Efficiency combinations per hydraulic corner: "
+                f"**{result['power_efficiency_case_count']}**",
+                "- Combined hydraulic × efficiency power cases: "
+                f"**{result['power_uncertainty_case_count']}**",
+                "",
+                "| Metric | Lower | Upper | Unit |",
+                "|---|---:|---:|---|",
+            ]
+        )
+        for key, label, display_unit in metric_labels:
+            evidence = power_uncertainty_ranges.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | {display_unit} |")
+            else:
+                lines.append(
+                    f"| {label} | {evidence['lower']} | "
+                    f"{evidence['upper']} | {display_unit} |"
+                )
+
+        if power_uncertainty_sources is not None:
+            lines.extend(
+                [
+                    "",
+                    "| Metric | Bound | Value | Source hydraulic/efficiency case(s) |",
+                    "|---|---|---:|---|",
+                ]
+            )
+            for key, label, _display_unit in metric_labels:
+                metric_sources = power_uncertainty_sources.get(key)
+                if metric_sources is None:
+                    continue
+                for bound in ("lower", "upper"):
+                    evidence = metric_sources[bound]
+                    source_text = " / ".join(
+                        _fmt_extreme_source(source)
+                        for source in evidence["sources"]
+                    )
+                    lines.append(
+                        f"| {label} | {bound} | {evidence['value']} "
+                        f"{evidence['unit']} | {source_text} |"
+                    )
+
+        lines.extend(
+            [
+                "",
+                "Efficiency bounds are propagated only through power "
+                "calculations; they do not alter the hydraulic operating "
+                "point. Reported extrema are deterministic evaluated-case "
+                "evidence across the configured hydraulic and efficiency "
+                "endpoint combinations, not statistical confidence limits.",
             ]
         )
 

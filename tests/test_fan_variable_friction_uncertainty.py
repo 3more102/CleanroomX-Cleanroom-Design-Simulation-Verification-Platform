@@ -1211,3 +1211,112 @@ def test_report_surfaces_edge_airflow_witness_provenance() -> None:
     assert "Internal edge-airflow witness provenance" in report
     assert "Source corner input(s)" in report
     assert "scenario=" in report
+
+
+def test_power_evidence_is_retained_for_each_solved_corner() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_power_evidence"] is not None
+    assert all(
+        corner["power_evidence"] is not None for corner in result["corners"]
+    )
+
+    ranges = result["power_corner_ranges"]
+    assert ranges is not None
+    assert ranges["evaluated_corner_count"] == result["corner_count"]
+    assert {
+        "fluid_air_power_kw",
+        "shaft_power_kw",
+        "electrical_input_kw",
+        "specific_fan_power_w_per_m3_s",
+    } <= set(ranges["metrics"])
+
+
+def test_power_corner_ranges_do_not_infer_missing_efficiencies() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data.pop("power_efficiencies")
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    ranges = result["power_corner_ranges"]
+    assert ranges is not None
+    assert set(ranges["metrics"]) == {"fluid_air_power_kw"}
+    assert set(result["power_extrema_sources"]) == {"fluid_air_power_kw"}
+    assert all(
+        corner["power_evidence"]["shaft_power_kw"] is None
+        and corner["power_evidence"]["electrical_input_kw"] is None
+        for corner in result["corners"]
+    )
+
+
+def test_power_extrema_sources_reference_exact_evaluated_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+
+    ranges = result["power_corner_ranges"]
+    sources = result["power_extrema_sources"]
+    assert ranges is not None
+    assert sources is not None
+
+    for metric, metric_sources in sources.items():
+        assert metric in ranges["metrics"]
+        for bound in ("lower", "upper"):
+            evidence = metric_sources[bound]
+            assert evidence["sources"]
+            assert evidence["value"] == pytest.approx(
+                ranges["metrics"][metric][bound]
+            )
+            for source in evidence["sources"]:
+                corner = result["corners"][source["corner_index"]]
+                assert corner["power_evidence"][metric] == pytest.approx(
+                    evidence["value"]
+                )
+                assert source["fixed_pressure_pa"] == corner[
+                    "fixed_pressure_pa"
+                ]
+
+
+def test_indeterminate_analysis_withholds_complete_power_ranges() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {
+        "value": 900.0,
+        "uncertainty_abs": 0.0,
+    }
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["power_corner_ranges"] is None
+    assert result["power_extrema_sources"] is None
+
+
+def test_power_corner_report_is_explicitly_evaluated_only() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_speed_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Evaluated power corner ranges" in report
+    assert "Electrical input" in report
+    assert "Power witness provenance" in report
+    assert "evaluated solved uncertainty corners only" in report
+    assert "not claimed as guaranteed continuous-box power extrema" in report

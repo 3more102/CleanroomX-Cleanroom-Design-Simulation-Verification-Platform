@@ -33,7 +33,7 @@ These edge-level uncertainty dimensions apply only to automatic-friction `duct_g
 
 ## Corner solution
 
-For every unique lower/upper combination, CleanroomX:
+For every evaluated scenario/corner combination, CleanroomX:
 
 1. selects either one independently bounded reference fan curve or one explicit whole-curve scenario, with the nominal supplied curve retained as a scenario baseline;
 2. applies the configured fan-speed ratio to that selected reference curve using the existing affinity-law transform;

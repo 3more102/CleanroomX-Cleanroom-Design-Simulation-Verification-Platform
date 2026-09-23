@@ -182,6 +182,37 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ]
         )
 
+    extrema_sources = result.get("operating_point_extrema_sources")
+    if extrema_sources is not None:
+        lines.extend(["", "## Critical evaluated cases", ""])
+        for metric_key, metric_label in (
+            ("airflow_m3_h", "Airflow"),
+            ("fan_pressure_pa", "Fan pressure"),
+            ("system_pressure_pa", "System pressure"),
+        ):
+            for bound in ("lower", "upper"):
+                evidence = extrema_sources[metric_key][bound]
+                sources = []
+                for source in evidence["sources"]:
+                    context = [f"corner {source['corner_index']}"]
+                    if "fan_curve_scenario" in source:
+                        context.append(
+                            f"scenario={source['fan_curve_scenario']}"
+                        )
+                    if "fan_speed_ratio" in source:
+                        context.append(
+                            f"speed={source['fan_speed_ratio']}"
+                        )
+                    context.append(
+                        f"fixed={source['fixed_pressure_pa']} Pa"
+                    )
+                    sources.append("(" + ", ".join(context) + ")")
+                lines.append(
+                    f"- {metric_label} {bound}: "
+                    f"**{evidence['value']} {evidence['unit']}** — "
+                    + ", ".join(sources)
+                )
+
     lines.extend(
         [
             "",

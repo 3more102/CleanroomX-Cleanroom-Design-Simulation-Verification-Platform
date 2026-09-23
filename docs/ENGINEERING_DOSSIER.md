@@ -47,7 +47,7 @@ The dossier preserves component-specific states instead of turning every result 
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked` or a standalone psychrometric analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A solved fan operating point and a completed psychrometric-state envelope are reported as engineering screening, not as equipment acceptance or conformity decisions. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
+A solved fan operating point and a completed psychrometric-state envelope are reported as engineering screening, not as equipment acceptance or conformity decisions. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure, so a missing source record cannot be mistaken for an engineering acceptance failure. HVAC calculations remain preliminary screening.
 
 ## CLI
 

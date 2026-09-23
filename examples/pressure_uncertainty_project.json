@@ -1,0 +1,30 @@
+{
+  "name": "Pressure Uncertainty Demo",
+  "rooms": [
+    {
+      "name": "Process",
+      "length_m": 6.0,
+      "width_m": 5.0,
+      "height_m": 3.0,
+      "supply_airflow_m3_h": 2700.0,
+      "observed_pressure_pa": 20.0,
+      "observed_pressure_uncertainty_pa": 1.5
+    },
+    {
+      "name": "Ante",
+      "length_m": 4.0,
+      "width_m": 3.0,
+      "height_m": 3.0,
+      "supply_airflow_m3_h": 720.0,
+      "observed_pressure_pa": 10.0,
+      "observed_pressure_uncertainty_pa": 1.0
+    }
+  ],
+  "pressure_cascade": [
+    {
+      "higher_pressure_room": "Process",
+      "lower_pressure_room": "Ante",
+      "min_delta_pa": 9.0
+    }
+  ]
+}

@@ -30,7 +30,7 @@ def test_repository_fan_loop_extensions_dossier_builds_end_to_end() -> None:
     assert "Fan/loop-network uncertainty analyses" in report
     assert "Fan-speed / loop-network studies" in report
     assert "Fan/loop uncertainty demo" in report
-    assert "Loop speed sweep" in report
+    assert "Two-path loop fan-speed sweep" in report
 
 
 def test_fan_loop_uncertainty_and_speed_adverse_states_propagate() -> None:

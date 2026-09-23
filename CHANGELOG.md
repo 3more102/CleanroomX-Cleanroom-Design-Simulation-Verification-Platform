@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.23 fixed-resistance looped airflow networks — 2026-09-23
+
+- Added a connected steady-state pressure-node solver for airflow networks with arbitrary loops.
+- Uses explicit fixed quadratic edge laws `ΔP = R·Q·|Q|` with balanced user-supplied node injections.
+- Added spanning-tree initialization plus damped Newton/backtracking for nonlinear node-continuity solution.
+- Reports signed reverse flow, relative node pressures, per-node mass-balance residuals, and per-edge pressure-law residuals.
+- Enforces absolute global injection balance within 1e-6 m³/h, including at very large total flows.
+- Validates finite positive resistances, unique edge names, valid node references, graph connectivity, and solver controls.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-loop-flow` CLI, example data, engineering-scope documentation, and regression tests.
+- Preserves v0.21 automatic Darcy-friction screening and v0.22 HVAC/fan operating-airflow consistency.
+- Keeps geometry-derived loop resistance, variable-friction iteration, leakage, dampers, controls, fan coupling, compressibility, and transient behavior outside this bounded solver.
+- Bumped package/runtime metadata to v0.23.0.
+
 ## v0.22 HVAC / fan operating-airflow consistency — 2026-09-23
 
 - Added dossier-integrated comparison of HVAC total governing airflow against standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed operating points.

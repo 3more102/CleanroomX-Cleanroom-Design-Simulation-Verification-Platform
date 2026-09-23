@@ -32,18 +32,47 @@ def markdown_looped_network_report(result: dict) -> str:
             "",
             "## Edges",
             "",
-            "| Edge | Declared start | Declared end | Solved airflow (m³/h) | Actual direction | Pressure difference (Pa) | R [Pa/(m³/s)²] | Pressure-law residual (Pa) |",
-            "|---|---|---|---:|---|---:|---:|---:|",
+            "| Edge | Declared start | Declared end | Solved airflow (m³/h) | Actual direction | Pressure difference (Pa) | R [Pa/(m³/s)²] | R source | Pressure-law residual (Pa) |",
+            "|---|---|---|---:|---|---:|---:|---|---:|",
         ]
     )
     for edge in result["edges"]:
+        basis = edge.get("resistance_basis") or {}
+        source = basis.get("source", "programmatic")
         lines.append(
             f"| {edge['name']} | {edge['start_node']} | {edge['end_node']} | "
             f"{edge['airflow_m3_h']} | {edge['flow_direction']} | "
             f"{edge['pressure_difference_pa']} | "
-            f"{edge['resistance_pa_per_m3_s_squared']} | "
+            f"{edge['resistance_pa_per_m3_s_squared']} | {source} | "
             f"{edge['pressure_law_residual_pa']} |"
         )
+
+    derived_edges = [
+        edge
+        for edge in result["edges"]
+        if (edge.get("resistance_basis") or {}).get("source") == "duct_geometry"
+    ]
+    if derived_edges:
+        lines.extend(
+            [
+                "",
+                "## Duct-derived resistance evidence",
+                "",
+                "| Edge | Shape | Reference airflow (m³/h) | Reference drop (Pa) | Darcy f | Friction method | Reynolds number |",
+                "|---|---|---:|---:|---:|---|---:|",
+            ]
+        )
+        for edge in derived_edges:
+            basis = edge["resistance_basis"]
+            reynolds = basis.get("reynolds_number")
+            reynolds_text = "" if reynolds is None else str(round(reynolds, 3))
+            lines.append(
+                f"| {edge['name']} | {basis['shape']} | "
+                f"{round(basis['reference_airflow_m3_h'], 3)} | "
+                f"{round(basis['reference_pressure_drop_pa'], 4)} | "
+                f"{round(basis['friction_factor'], 6)} | "
+                f"{basis['friction_factor_method']} | {reynolds_text} |"
+            )
 
     lines.extend(["", "## Engineering note", "", result["scope_note"], ""])
     return "\n".join(lines)

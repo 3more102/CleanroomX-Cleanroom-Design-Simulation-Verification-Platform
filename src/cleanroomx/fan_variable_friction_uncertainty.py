@@ -62,6 +62,7 @@ class FanVariableFrictionLoopUncertaintyStudy:
     fan_curve_airflow_m3_h: dict[int, UncertainValue] = field(
         default_factory=dict
     )
+    fan_curve_scenarios: tuple[FanCurveScenario, ...] = ()
     fan_speed_ratio: UncertainValue | None = None
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256

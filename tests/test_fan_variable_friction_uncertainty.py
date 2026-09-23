@@ -1402,6 +1402,27 @@ def test_solver_quality_summary_preserves_worst_metric_witnesses() -> None:
             check["configured_tolerance"] - check["observed_value"],
             abs=1e-9,
         )
+        assert check["sources"] == quality["worst_metrics"][metric_key]["sources"]
+        assert check["sources"]
+
+    expected_max_utilization = max(
+        check["utilization_ratio"] for check in checks.values()
+        if check["utilization_ratio"] is not None
+    )
+    assert assessment["max_utilization_ratio"] == pytest.approx(
+        expected_max_utilization, abs=1e-9
+    )
+    expected_critical_metrics = [
+        metric_key
+        for metric_key, check in checks.items()
+        if check["utilization_ratio"] is not None
+        and check["utilization_ratio"] == pytest.approx(
+            expected_max_utilization, abs=1e-12
+        )
+    ]
+    assert assessment["critical_metric_keys"] == expected_critical_metrics
+    for metric_key in assessment["critical_metric_keys"]:
+        assert checks[metric_key]["sources"]
 
 
 def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
@@ -1425,8 +1446,11 @@ def test_solver_quality_summary_marks_zero_solved_corner_coverage() -> None:
     )
     assert quality["configured_tolerance_assessment"]["evaluable_check_count"] == 0
     assert quality["configured_tolerance_assessment"]["not_evaluable_count"] == 3
+    assert quality["configured_tolerance_assessment"]["max_utilization_ratio"] is None
+    assert quality["configured_tolerance_assessment"]["critical_metric_keys"] == []
     assert all(
         check["status"] == "not_evaluable"
+        and check["sources"] == []
         for check in quality["configured_tolerance_checks"].values()
     )
 
@@ -1449,3 +1473,6 @@ def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     assert "within_configured_tolerances" in report
     assert "Utilization" in report
     assert "Remaining margin" in report
+    assert "Maximum configured-tolerance utilization ratio" in report
+    assert "Critical configured tolerance metric(s)" in report
+    assert "Witness source corner(s)" in report

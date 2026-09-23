@@ -1,0 +1,12 @@
+{
+  "name": "Example clean suite",
+  "zones": [
+    {"name": "Core", "observed_pressure_pa": 30.0},
+    {"name": "Gowning", "observed_pressure_pa": 18.0},
+    {"name": "Corridor", "observed_pressure_pa": 5.0}
+  ],
+  "relationships": [
+    {"higher_zone": "Core", "lower_zone": "Gowning", "min_delta_pa": 10.0},
+    {"higher_zone": "Gowning", "lower_zone": "Corridor", "min_delta_pa": 10.0}
+  ]
+}

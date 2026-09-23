@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 from .calculations import air_changes_per_hour, room_volume_m3
-from .models import RoomSpec
+from .models import PressureCascadeSpec, RoomSpec
 
 Status = Literal["pass", "fail", "not_checked"]
 
@@ -35,6 +35,25 @@ class VerificationReport:
             "room": self.room,
             "volume_m3": self.volume_m3,
             "ach": self.ach,
+            "passed": self.passed,
+            "findings": [asdict(item) for item in self.findings],
+        }
+
+
+@dataclass(frozen=True)
+class PressureCascadeReport:
+    name: str
+    pressures_pa: dict[str, float]
+    findings: tuple[Finding, ...]
+
+    @property
+    def passed(self) -> bool:
+        return all(item.status != "fail" for item in self.findings)
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "pressures_pa": self.pressures_pa,
             "passed": self.passed,
             "findings": [asdict(item) for item in self.findings],
         }
@@ -92,3 +111,48 @@ def verify_room(room: RoomSpec) -> VerificationReport:
             )
 
     return VerificationReport(room=room.name, volume_m3=volume, ach=ach, findings=tuple(findings))
+
+
+def verify_pressure_cascade(cascade: PressureCascadeSpec) -> PressureCascadeReport:
+    """Verify directional pressure relationships using project-supplied limits.
+
+    For each relationship, actual delta = pressure(higher_zone) - pressure(lower_zone).
+    No regulatory threshold is embedded; every minimum differential comes from the input.
+    """
+    pressures = {zone.name: float(zone.observed_pressure_pa) for zone in cascade.zones}
+    findings: list[Finding] = []
+
+    if not cascade.relationships:
+        findings.append(
+            Finding(
+                "CASCADE",
+                "not_checked",
+                "No pressure relationships configured.",
+                unit="Pa",
+            )
+        )
+    else:
+        for relationship in cascade.relationships:
+            actual = pressures[relationship.higher_zone] - pressures[relationship.lower_zone]
+            ok = actual >= relationship.min_delta_pa
+            code = f"PRESSURE_{relationship.higher_zone}_TO_{relationship.lower_zone}"
+            findings.append(
+                Finding(
+                    code,
+                    "pass" if ok else "fail",
+                    (
+                        f"Pressure cascade {relationship.higher_zone} -> {relationship.lower_zone} "
+                        + ("meets" if ok else "does not meet")
+                        + " the configured differential requirement."
+                    ),
+                    actual=actual,
+                    limit=relationship.min_delta_pa,
+                    unit="Pa",
+                )
+            )
+
+    return PressureCascadeReport(
+        name=cascade.name,
+        pressures_pa=pressures,
+        findings=tuple(findings),
+    )

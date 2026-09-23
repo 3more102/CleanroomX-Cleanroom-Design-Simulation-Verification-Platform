@@ -2,11 +2,12 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, and verification**. The first milestone provides a small, auditable Python core rather than hiding calculations behind a GUI.
 
-## v0.1 foundation
+## v0.2 foundation
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
 - A transparent well-mixed first-order particle decay/recovery screening model.
+- Multi-room directional pressure-cascade verification with project-supplied differential limits.
 - JSON input and a command-line interface.
 - Unit tests and GitHub Actions CI on Python 3.11–3.13.
 
@@ -30,6 +31,14 @@ cleanroomx verify examples/basic_room.json
 
 A failing configured requirement returns exit code `2`, making the verifier usable in automated design pipelines.
 
+## Verify a pressure cascade
+
+```bash
+cleanroomx cascade examples/pressure_cascade.json
+```
+
+Each relationship declares a `higher_zone`, a `lower_zone`, and the project's required minimum differential. CleanroomX calculates `pressure(higher) - pressure(lower)` and reports pass/fail without inventing a regulatory threshold.
+
 ## Run the screening simulation
 
 ```bash
@@ -37,7 +46,7 @@ cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 0.95
 cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
 ```
 
-## Input format
+## Room input format
 
 ```json
 {
@@ -61,9 +70,26 @@ cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
 
 The numeric limits in this example are demonstration project inputs, **not quoted ISO limits**.
 
+## Pressure-cascade input format
+
+```json
+{
+  "name": "Example clean suite",
+  "zones": [
+    {"name": "Core", "observed_pressure_pa": 30.0},
+    {"name": "Gowning", "observed_pressure_pa": 18.0},
+    {"name": "Corridor", "observed_pressure_pa": 5.0}
+  ],
+  "relationships": [
+    {"higher_zone": "Core", "lower_zone": "Gowning", "min_delta_pa": 10.0},
+    {"higher_zone": "Gowning", "lower_zone": "Corridor", "min_delta_pa": 10.0}
+  ]
+}
+```
+
 ## Roadmap
 
-Next milestones are a multi-room pressure-cascade graph, HEPA/filter and fan sizing inputs, heat-load and psychrometric calculations, recovery-test workflows, uncertainty/provenance tracking, report generation, and later a desktop/web UI plus CFD adapters.
+Next milestones are HEPA/filter and fan sizing inputs, heat-load and psychrometric calculations, recovery-test workflows, uncertainty/provenance tracking, report generation, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

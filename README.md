@@ -23,6 +23,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC, recovery, uncertainty, thermal-uncertainty, and fan/system studies.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -178,6 +179,22 @@ Write a Markdown report:
 The v0.10 workflow propagates user-supplied absolute bounds through explicit sensible/latent loads, cleanroom and makeup airflow, and optional supply-air temperature. It reports conservative cooling/heating capacity and governing-airflow intervals, plus optional available-capacity pass/fail/indeterminate checks.
 
 See docs/THERMAL_UNCERTAINTY.md.
+
+## Build an integrated engineering dossier
+
+    cleanroomx-dossier examples/dossier_demo.json
+
+JSON output:
+
+    cleanroomx-dossier examples/dossier_demo.json --format json
+
+Write a Markdown dossier:
+
+    cleanroomx-dossier examples/dossier_demo.json --output dossier.md
+
+The v0.12 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, and no-intersection states. It is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance. Existing manifests can omit the v0.12 thermal-uncertainty and fan-study fields.
+
+See docs/ENGINEERING_DOSSIER.md.
 
 ## Multi-room pressure-cascade JSON
 

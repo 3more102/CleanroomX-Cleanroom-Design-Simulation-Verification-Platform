@@ -28,6 +28,7 @@ class RoomSpec:
     min_ach: float | None = None
     min_pressure_pa: float | None = None
     observed_pressure_pa: float | None = None
+    observed_pressure_uncertainty_pa: float = 0.0
     particle_requirements: tuple[ParticleRequirement, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
@@ -43,6 +44,14 @@ class RoomSpec:
                 raise ValueError(f"{label} must be positive")
         if self.min_ach is not None and self.min_ach <= 0:
             raise ValueError("min_ach must be positive when provided")
+        uncertainty = float(self.observed_pressure_uncertainty_pa)
+        if uncertainty < 0:
+            raise ValueError("observed_pressure_uncertainty_pa cannot be negative")
+        if self.observed_pressure_pa is None and uncertainty != 0:
+            raise ValueError(
+                "observed_pressure_uncertainty_pa requires observed_pressure_pa"
+            )
+        object.__setattr__(self, "observed_pressure_uncertainty_pa", uncertainty)
 
 
 @dataclass(frozen=True)

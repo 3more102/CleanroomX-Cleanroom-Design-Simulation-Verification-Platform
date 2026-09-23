@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16 recovery uncertainty qualification — 2026-09-23
+
+- Added optional absolute concentration uncertainty to every measured recovery sample while preserving zero-uncertainty backward compatibility.
+- Added conservative per-sample concentration intervals and confirmed-above / overlap / confirmed-at-or-below target relations.
+- Added uncertainty-aware PASS/FAIL/INDETERMINATE/INCOMPLETE maximum-time decisions without inventing a project conformity rule.
+- Preserved nominal observed-recovery timing and recovery windows for traceability while separating them from conservative acceptance.
+- Added uncertainty-aware Markdown/JSON reporting, CLI exit code 4 for indeterminate results, updated examples/docs, finite-input validation, and regression coverage.
+- Integrated recovery indeterminate into the engineering dossier as an attention item and surfaced uncertainty-confirmed recovery timing in the dossier report.
+- Kept the log-linear fit nominal-only and explicitly outside the acceptance decision.
+
 ## v0.15 psychrometric state uncertainty — 2026-09-23
 
 - Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.
@@ -27,6 +37,14 @@
 - Added Markdown/JSON dossier output, the `cleanroomx-dossier` CLI, example manifest, documentation, and regression coverage.
 - Kept older dossier manifests compatible by making thermal-uncertainty and standalone fan-study fields optional.
 - Kept the dossier explicitly bounded as a traceability/reporting layer rather than cleanroom certification, regulatory approval, commissioning acceptance, or fan/equipment selection.
+
+## v0.12 HVAC fan-curve duty verification — 2026-09-23
+
+- Integrated bounded fan-curve design-duty verification into HVAC analysis at the governing airflow and required static pressure.
+- Used piecewise-linear interpolation only inside user-supplied fan data and returned outside_supplied_range instead of extrapolating.
+- Reused computed duct or branch-network critical-path pressure loss in the required supply-fan duty when those models are configured.
+- Reported pass/fail/out-of-range status, available fan pressure, pressure margin, and interpolation segment without inferring manufacturer acceptance.
+- Added JSON/Markdown reporting, examples, documentation, tests, and Python 3.11–3.13 CI coverage.
 
 ## v0.11 fan/system operating-point solver — 2026-09-23
 

@@ -29,6 +29,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     pressure_airflow_summary = analysis[
         "pressure_residual_airflow_equivalence_summary"
     ]
+    search_summary = analysis["operating_search_interval_summary"]
     segment_summary = analysis["fan_curve_segment_position_summary"]
     residual_summary = analysis["fan_curve_supplied_point_residual_summary"]
     assert boundary_summary["complete_study_coverage"] is True
@@ -44,6 +45,19 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert pressure_airflow_summary[
         "maximum_solved_residual_equivalent_airflow_m3_h"
     ]["value"] >= 0.0
+    assert search_summary["complete_study_coverage"] is True
+    assert search_summary["search_evidence_corner_count"] == analysis[
+        "corner_count"
+    ]
+    assert (
+        search_summary["bisection_corner_count"]
+        + search_summary["supplied_point_tolerance_contact_corner_count"]
+        == analysis["corner_count"]
+    )
+    if search_summary["bisection_corner_count"]:
+        assert search_summary["maximum_terminal_bracket_span_m3_h"][
+            "value"
+        ] >= 0.0
     assert segment_summary["complete_study_coverage"] is True
     assert segment_summary["segment_position_evidence_corner_count"] == analysis[
         "corner_count"
@@ -111,6 +125,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Max pressure-tolerance airflow equiv m³/h" in report
     assert "Max solved-residual airflow equiv m³/h" in report
     assert "Pressure→airflow evidence" in report
+    assert "Max terminal root-search span m³/h" in report
+    assert "Root-search evidence" in report
     assert "Min segment-point clearance m³/h" in report
     assert "Segment evidence" in report
     assert "Residual topology" in report

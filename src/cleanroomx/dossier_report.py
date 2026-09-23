@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Min segment-point clearance m³/h | Segment evidence | Residual topology | Provenance complete |",
-                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---:|---:|---|---:|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max terminal root-search span m³/h | Root-search evidence | Min segment-point clearance m³/h | Segment evidence | Residual topology | Provenance complete |",
+                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---:|---:|---|---:|---|---:|---|---|---|",
             ]
         )
         for item in result[
@@ -696,6 +696,24 @@ def markdown_dossier_report(result: dict) -> str:
                     solved_residual_airflow_equivalent = (
                         residual_evidence["value"]
                     )
+            search_summary = item.get(
+                "operating_search_interval_summary"
+            )
+            terminal_search_span = "—"
+            root_search_coverage = "—"
+            if search_summary is not None:
+                root_search_coverage = (
+                    f"{search_summary['search_evidence_corner_count']}/"
+                    f"{search_summary['corner_count']}; "
+                    f"bisection {search_summary['bisection_corner_count']}; "
+                    "point-contact "
+                    f"{search_summary['supplied_point_tolerance_contact_corner_count']}"
+                )
+                terminal_span_evidence = search_summary.get(
+                    "maximum_terminal_bracket_span_m3_h"
+                )
+                if terminal_span_evidence is not None:
+                    terminal_search_span = terminal_span_evidence["value"]
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"
             )
@@ -743,6 +761,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{pressure_tolerance_airflow_equivalent} | "
                 f"{solved_residual_airflow_equivalent} | "
                 f"{pressure_airflow_coverage} | "
+                f"{terminal_search_span} | {root_search_coverage} | "
                 f"{segment_clearance} | {segment_coverage} | "
                 f"{residual_topology} | "
                 f"{item['traceability']['complete']} |"

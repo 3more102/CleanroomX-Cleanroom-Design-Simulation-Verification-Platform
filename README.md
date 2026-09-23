@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.56 engineering core
+## v0.57 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -36,6 +36,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Nominal-centered evaluated-corner excursion evidence for complete nonlinear uncertainty studies, reporting lower/upper absolute and percentage departures for operating airflow, fan/system pressure, air power, and available power-chain metrics without presenting them as sensitivity coefficients.
 - Supplied-fan-curve boundary-clearance evidence for nonlinear uncertainty corners, retaining each solved corner's exact supplied or speed-transformed airflow range and reporting absolute/normalized distance to the nearest no-extrapolation endpoint with tied source-corner provenance.
 - No-intersection supplied-endpoint diagnostics for unresolved nonlinear uncertainty corners, identifying the limiting lower/upper supplied airflow endpoint and preserving signed fan-minus-system pressure mismatch with exact source-corner context, without extrapolating a missing operating point.
+- Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
 - Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
@@ -43,7 +44,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
 - Deterministic bounded fan/system operating-point uncertainty across user-supplied fixed-pressure and quadratic-resistance intervals, with a complete airflow/pressure envelope only when every bounded corner is solved.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty workflows, fixed-resistance fan/network workflows, fan/variable-friction loop studies, fan-speed/variable-friction loop studies, nonlinear fan/variable-friction uncertainty analyses, and optional cross-module consistency.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty workflows, fixed-resistance fan/network workflows, fan/variable-friction loop studies, fan-speed/variable-friction loop studies, nonlinear fan/variable-friction uncertainty analyses, and optional cross-module consistency, plus v0.57 exact-result SHA-256 identity for nonlinear uncertainty outputs.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
 - Dossier-integrated HVAC-to-fan operating-airflow consistency across fixed-resistance and variable-friction fan/network workflows plus evaluated nonlinear-uncertainty corners, using an explicit user-supplied absolute tolerance and preserving no-intersection or numerical non-convergence cases as unresolved/not-comparable.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.

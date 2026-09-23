@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from .air_balance import analyze_air_balance
 from .hvac_models import HVACProject
 from .thermal import analyze_thermal_design
 
@@ -12,6 +13,9 @@ def analyze_hvac_project(project: HVACProject) -> dict:
     total_governing_airflow = 0.0
     total_cooling_kw = 0.0
     total_heating_kw = 0.0
+    total_balance_residual = 0.0
+    rooms_with_air_balance = 0
+    rooms_balanced = 0
 
     for room in project.rooms:
         thermal = analyze_thermal_design(
@@ -27,6 +31,14 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             design_airflow_per_filter = project.filter_unit.design_airflow_m3_h
             filter_units = math.ceil(governing_airflow / design_airflow_per_filter)
             delivered_airflow = filter_units * design_airflow_per_filter
+
+        air_balance = None
+        if room.air_balance is not None:
+            air_balance = analyze_air_balance(room.air_balance, governing_airflow)
+            rooms_with_air_balance += 1
+            total_balance_residual += air_balance["balance_residual_m3_h"]
+            if air_balance["status"] == "balanced":
+                rooms_balanced += 1
 
         room_results.append(
             {
@@ -45,6 +57,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
                     else None
                 ),
                 "thermal": thermal,
+                "air_balance": air_balance,
             }
         )
         total_cleanroom_airflow += room.cleanroom_airflow_m3_h
@@ -59,9 +72,16 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         "total_governing_airflow_m3_h": round(total_governing_airflow, 3),
         "total_preliminary_cooling_capacity_kw": round(total_cooling_kw, 4),
         "total_preliminary_heating_capacity_kw": round(total_heating_kw, 4),
+        "air_balance_summary": {
+            "rooms_configured": rooms_with_air_balance,
+            "rooms_balanced": rooms_balanced,
+            "rooms_out_of_balance": rooms_with_air_balance - rooms_balanced,
+            "sum_room_balance_residual_m3_h": round(total_balance_residual, 3),
+        },
         "engineering_note": (
             "Thermal/HVAC results are preliminary calculations from explicit project "
             "inputs. Cleanroom airflow is supplied independently; no ISO class is mapped "
-            "to a fixed ACH or airflow."
+            "to a fixed ACH or airflow. Air-balance closure is a steady-state volumetric "
+            "check and does not infer room pressure from airflow surplus."
         ),
     }

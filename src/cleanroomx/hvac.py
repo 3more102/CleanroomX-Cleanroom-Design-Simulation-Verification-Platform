@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from .airflow import analyze_air_balance
+from .branched_duct import analyze_branched_duct_network
 from .duct import analyze_duct_network
 from .fan import analyze_supply_fan
 from .hvac_models import HVACProject
@@ -11,6 +12,7 @@ from .thermal import analyze_thermal_design
 
 def analyze_hvac_project(project: HVACProject) -> dict:
     room_results: list[dict] = []
+    governing_airflow_by_room: dict[str, float] = {}
     total_cleanroom_airflow = 0.0
     total_governing_airflow = 0.0
     total_return_airflow = 0.0
@@ -26,6 +28,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             room.cleanroom_airflow_m3_h,
         )
         governing_airflow = thermal["governing_supply_airflow_m3_h"]
+        governing_airflow_by_room[room.name] = governing_airflow
         air_balance = analyze_air_balance(governing_airflow, room.air_balance)
         all_air_balances_pass = (
             all_air_balances_pass
@@ -74,6 +77,14 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         if project.duct_network is not None
         else None
     )
+    branched_duct_network = (
+        analyze_branched_duct_network(
+            project.branched_duct_network,
+            governing_airflow_by_room,
+        )
+        if project.branched_duct_network is not None
+        else None
+    )
 
     supply_fan = None
     if project.fan_system is not None:
@@ -82,16 +93,23 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             if project.filter_unit is not None
             else 0.0
         )
-        duct_override = (
-            duct_network["critical_path_pressure_drop_pa"]
-            if duct_network is not None
-            else None
-        )
+        duct_override = None
+        duct_source = None
+        if branched_duct_network is not None:
+            duct_override = branched_duct_network[
+                "critical_path_pressure_drop_pa"
+            ]
+            duct_source = "computed_branched_duct_network"
+        elif duct_network is not None:
+            duct_override = duct_network["critical_path_pressure_drop_pa"]
+            duct_source = "computed_duct_network"
+
         supply_fan = analyze_supply_fan(
             total_governing_airflow,
             project.fan_system,
             terminal_filter_pressure_drop_pa=filter_drop,
             duct_pressure_drop_override_pa=duct_override,
+            duct_pressure_drop_source=duct_source,
         )
 
     return {
@@ -104,6 +122,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         "total_net_surplus_m3_h": round(total_net_surplus, 3),
         "all_air_balances_pass": all_air_balances_pass,
         "duct_network": duct_network,
+        "branched_duct_network": branched_duct_network,
         "supply_fan": supply_fan,
         "total_preliminary_cooling_capacity_kw": round(total_cooling_kw, 4),
         "total_preliminary_heating_capacity_kw": round(total_heating_kw, 4),

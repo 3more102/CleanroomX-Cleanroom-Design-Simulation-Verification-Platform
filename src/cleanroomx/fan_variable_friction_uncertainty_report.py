@@ -788,6 +788,13 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_corner_count']}**",
                 "- Supplied-point tolerance-contact corners: "
                 f"**{search_summary['supplied_point_contact_corner_count']}**",
+                "- Bisection corners with invariant evidence: "
+                f"**{search_summary['bisection_invariant_evidence_corner_count']}/"
+                f"{search_summary['bisection_corner_count']}**",
+                "- Strict sign-bracket violations: "
+                f"**{search_summary['strict_sign_change_violation_corner_indices']}**",
+                "- Midpoint-centering violations: "
+                f"**{search_summary['selected_midpoint_violation_corner_indices']}**",
                 f"- Complete-study coverage: **{coverage_label}**",
             ]
         )
@@ -808,6 +815,18 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_bracket['half_width_m3_h']} m³/h**",
                     ]
                 )
+                nominal_invariant = nominal_bracket.get("invariant_audit")
+                if nominal_invariant is not None:
+                    lines.extend(
+                        [
+                            "- Nominal strict sign bracket preserved: "
+                            f"**{nominal_invariant['strict_sign_change_preserved']}**",
+                            "- Nominal selected airflow is bracket midpoint: "
+                            f"**{nominal_invariant['selected_airflow_is_bracket_midpoint']}**",
+                            "- Nominal binary-width consistency error: "
+                            f"**{nominal_invariant['absolute_width_fraction_consistency_error']}**",
+                        ]
+                    )
 
         lines.extend(
             [
@@ -849,6 +868,24 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             lines.append(
                 f"| {label} | {evidence['value']} | {evidence['unit']} | "
                 f"{' / '.join(source_texts)} |"
+            )
+        invariant_error = search_summary.get(
+            "maximum_absolute_width_fraction_consistency_error"
+        )
+        if invariant_error is not None:
+            invariant_sources = []
+            for source in invariant_error["sources"]:
+                invariant = source["invariant_audit"]
+                invariant_sources.append(
+                    _fmt_extreme_source(source)
+                    + f"; iterations={source['operating_iterations']}"
+                    + f"; expected-fraction={invariant['expected_width_fraction_of_supplied_segment']}"
+                    + f"; actual-fraction={invariant['actual_width_fraction_of_supplied_segment']}"
+                )
+            lines.append(
+                "| Maximum absolute binary-width consistency error | "
+                f"{invariant_error['value']} | {invariant_error['unit']} | "
+                f"{' / '.join(invariant_sources)} |"
             )
         lines.extend(["", search_summary["scope_note"]])
 

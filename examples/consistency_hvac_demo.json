@@ -1,0 +1,16 @@
+{
+  "name": "Consistency HVAC Demo",
+  "rooms": [
+    {
+      "name": "Process",
+      "cleanroom_airflow_m3_h": 2700.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        },
+        "loads": {}
+      }
+    }
+  ]
+}

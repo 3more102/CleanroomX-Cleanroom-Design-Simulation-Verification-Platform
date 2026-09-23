@@ -1,4 +1,16 @@
 # Changelog
+## v0.53 bounded power-efficiency uncertainty — 2026-09-24
+
+- Adds explicit absolute uncertainty bounds for supplied fan, motor, and VFD efficiencies while keeping `power_efficiencies` as the single nominal source.
+- Propagates efficiency endpoint combinations across every solved nonlinear hydraulic uncertainty corner without re-solving or perturbing the hydraulic operating point.
+- Reports deterministic evaluated-case ranges for fluid air power, shaft power, electrical input, and specific fan power with tie-aware hydraulic/efficiency witness provenance.
+- Validates every configured efficiency interval inside (0, 1], rejects uncertainty for a missing nominal efficiency, and never invents efficiency values.
+- Adds `max_power_cases` (default 2048) to bound the hydraulic × efficiency Cartesian evidence space before power cases are materialized.
+- Includes efficiency-uncertainty provenance in traceability and exposes dedicated JSON/Markdown power-case evidence.
+- Preserves the v0.52 configured solver-tolerance utilization audit alongside the new power-only uncertainty layer.
+- Adds standalone and dossier examples plus regression coverage for hydraulic invariance, exact extrema witnesses, invalid bounds, case limiting, report output, and coexistence with the solver-tolerance audit.
+- Bumped package/runtime metadata to v0.53.0.
+
 ## v0.52 configured solver-tolerance utilization audit — 2026-09-24
 
 - Extends nonlinear fan/variable-friction uncertainty solver-quality evidence with explicit checks against the operating-pressure, resistance-closure, and mass-balance tolerances already configured for the solver.

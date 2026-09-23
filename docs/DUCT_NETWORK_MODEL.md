@@ -1,12 +1,12 @@
 # Duct critical-path pressure-loss model
 
-CleanroomX v0.6 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design. v0.6.1 hardens numeric validation so non-finite inputs are rejected before analysis.
+CleanroomX v0.6 adds a transparent, path-based duct pressure-loss calculation for preliminary cleanroom HVAC design. v0.6.1 hardens numeric validation so non-finite inputs are rejected before analysis. v0.7 optionally links a duct section to a solved rooted supply branch.
 
 ## Section calculation
 
 Each duct section requires explicit project inputs for:
 
-- airflow;
+- configured airflow, used directly unless a v0.7 supply-branch mapping overrides it;
 - air density;
 - Darcy friction factor;
 - length;
@@ -39,7 +39,9 @@ A duct path is a user-defined series of sections. CleanroomX sums section losses
 
 When a duct network is present in an HVAC project, its critical-path pressure drop replaces the manually entered duct-pressure-drop component for preliminary supply-fan power sizing. Other fan components such as coil, terminal-filter, and explicitly entered miscellaneous pressure drops remain separate.
 
-This is intentionally a **critical-path comparison**, not a full nonlinear airflow-network solver. Branch flow distribution is not inferred.
+In v0.7, a duct section may name a `flow_source_branch`. If the HVAC project also has a rooted supply network, CleanroomX uses that solved branch airflow for the section calculation and reports the airflow source. The configured section airflow remains the standalone/fallback value.
+
+This remains intentionally a **critical-path comparison**, not a full nonlinear pressure-balanced airflow-network solver. The rooted supply model aggregates specified downstream demand; it does not infer flow from duct resistance.
 
 ## Input validation
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_loop_network import FanLoopNetworkStudy
 from .loop_network import LoopedFlowNetwork
+from .pressure_power import FanPowerEfficiencies, analyze_fan_pressure_power
 from .variable_friction_loop import solve_variable_friction_looped_network
 
 
@@ -44,6 +45,7 @@ class FanVariableFrictionLoopStudy:
     fan_discharge_node: str
     fan_suction_node: str
     fixed_pressure_pa: float = 0.0
+    power_efficiencies: FanPowerEfficiencies | None = None
     resistance_relative_tolerance: float = 1e-6
     relaxation: float = 0.5
     near_zero_airflow_m3_h: float = 1e-6
@@ -63,6 +65,13 @@ class FanVariableFrictionLoopStudy:
             "fixed_pressure_pa",
             _nonnegative(self.fixed_pressure_pa, "fixed_pressure_pa"),
         )
+        if (
+            self.power_efficiencies is not None
+            and not isinstance(self.power_efficiencies, FanPowerEfficiencies)
+        ):
+            raise ValueError(
+                "power_efficiencies must be FanPowerEfficiencies or None"
+            )
         object.__setattr__(
             self,
             "resistance_relative_tolerance",
@@ -247,6 +256,7 @@ def _nonconverged_result(
         "fan_operating_point": None,
         "operating_network_solution": None,
         "system_pressure_check": None,
+        "power_evidence": None,
         "solver_diagnostics": {
             "converged": False,
             "termination_reason": "network_solver_non_convergence",
@@ -272,7 +282,8 @@ def _scope_note() -> str:
         "This is a steady incompressible engineering screening model, not "
         "CFD. It does not infer dampers, leakage, controls, system effect, "
         "acoustics, stall/surge limits, motor/VFD limits, transients, or "
-        "manufacturer acceptance."
+        "manufacturer acceptance. Fluid pressure power is reported directly; "
+        "shaft/electrical power is reported only from explicit efficiencies."
     )
 
 
@@ -439,6 +450,7 @@ def solve_fan_variable_friction_loop(
             "fan_operating_point": None,
             "operating_network_solution": None,
             "system_pressure_check": None,
+            "power_evidence": None,
             "solver_diagnostics": {
                 "converged": True,
                 "termination_reason": termination_reason,
@@ -458,6 +470,36 @@ def solve_fan_variable_friction_loop(
     left = points[selected_segment]
     right = points[selected_segment + 1]
     vf = selected_network["variable_friction"]
+    power_evidence = analyze_fan_pressure_power(
+        selected_airflow,
+        selected_fan_pressure,
+        study.power_efficiencies,
+    )
+    network_pressure_power_w = (
+        airflow_m3_s * selected_network_pressure
+    )
+    fixed_pressure_power_w = airflow_m3_s * study.fixed_pressure_pa
+    edge_dissipation_w = selected_network["pressure_power"][
+        "total_edge_dissipation_w"
+    ]
+    fan_to_system_power_residual_w = (
+        power_evidence["fluid_air_power_w"]
+        - fixed_pressure_power_w
+        - edge_dissipation_w
+    )
+    power_evidence["system_components"] = {
+        "fixed_pressure_power_w": round(fixed_pressure_power_w, 9),
+        "loop_network_terminal_pressure_power_w": round(
+            network_pressure_power_w, 9
+        ),
+        "loop_network_edge_dissipation_w": edge_dissipation_w,
+        "loop_network_energy_balance_residual_w": selected_network[
+            "pressure_power"
+        ]["balance_residual_w"],
+        "fan_to_fixed_plus_edge_loss_residual_w": round(
+            fan_to_system_power_residual_w, 9
+        ),
+    }
 
     return {
         **base,
@@ -477,6 +519,7 @@ def solve_fan_variable_friction_loop(
             },
         },
         "operating_network_solution": selected_network,
+        "power_evidence": power_evidence,
         "system_pressure_check": {
             "fixed_pressure_pa": round(study.fixed_pressure_pa, 6),
             "loop_network_pressure_pa": round(

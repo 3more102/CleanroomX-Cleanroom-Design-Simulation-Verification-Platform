@@ -12,9 +12,10 @@ A dossier manifest can reference:
 - zero or more uncertainty-aware qualification analyses;
 - zero or more uncertainty/provenance room inputs;
 - zero or more thermal/HVAC uncertainty analyses;
-- zero or more fan/system operating-point studies.
+- zero or more fan/system operating-point studies;
+- an optional verification/HVAC airflow consistency check with an explicit project-supplied tolerance.
 
-Paths are resolved relative to the manifest file. Existing manifests that omit the v0.13 fields remain valid.
+Paths are resolved relative to the manifest file. Existing manifests that omit the consistency block remain valid.
 
 Example:
 
@@ -29,9 +30,29 @@ Example:
   "qualification_analyses": ["qualification_uncertainty_demo.json"],
   "uncertainty_rooms": ["uncertainty_room_demo.json"],
   "thermal_uncertainty_analyses": ["thermal_uncertainty_demo.json"],
-  "fan_operating_point_studies": ["fan_operating_point_demo.json"]
+  "fan_operating_point_studies": ["fan_operating_point_demo.json"],
+  "consistency_checks": {
+    "verification_hvac_airflow": {
+      "airflow_tolerance_percent": 1.0,
+      "room_map": {
+        "Process": "Process Bay"
+      },
+      "require_all_verification_rooms": false,
+      "require_all_hvac_rooms": false
+    }
+  }
 }
 ```
+
+## Cross-module consistency
+
+The optional `verification_hvac_airflow` check reconciles the supply airflow implied by each verification result (`volume × ACH`) with the HVAC module's independently entered `cleanroom_airflow_m3_h`.
+
+No tolerance is embedded. When the check is configured, `airflow_tolerance_percent` is mandatory and must come from the project design or QA basis. Room pairs use exact-name matching by default. `room_map` can explicitly pair differently named rooms, and the two `require_all_...` flags can make unmapped rooms attention items.
+
+A configured check reports `pass`, `fail`, or `not_checked`. It checks internal data consistency only; it does not determine whether the airflow itself is adequate.
+
+See `docs/CROSS_MODULE_CONSISTENCY.md`.
 
 ## Traceability
 

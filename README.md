@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.6 engineering core
+## v0.7 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -19,7 +19,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
 - Path-based duct pressure-loss analysis using Darcy-Weisbach friction plus explicit local loss coefficients.
 - Circular and rectangular duct geometry with hydraulic-diameter reporting.
-- Critical-path selection across user-defined duct paths and direct integration into fan duty.
+- Critical-path selection across user-defined duct paths and direct integration into fan duty.\n- Passive airflow distribution across simple parallel duct paths using equal pressure loss and total-flow conservation.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -76,6 +76,22 @@ Write a Markdown report:
     cleanroomx-hvac examples/duct_network_demo.json --output hvac-report.md
 
 The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data, a preliminary supply-fan model, and an optional path-based duct network. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, docs/DUCT_NETWORK_MODEL.md, and docs/STANDARDS.md.
+
+## Solve parallel duct branch flows
+
+    cleanroomx-duct-flow examples/parallel_flow_demo.json
+
+JSON output:
+
+    cleanroomx-duct-flow examples/parallel_flow_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-duct-flow examples/parallel_flow_demo.json --output parallel-flow-report.md
+
+The v0.7 solver distributes a specified total airflow across simple passive parallel paths. With fixed friction factors, geometry, density, and local-loss coefficients, each path follows a quadratic pressure-loss relation; all parallel paths share the solved pressure drop and their solved flows sum to the requested total.
+
+See docs/PARALLEL_FLOW_SOLVER.md.
 
 ## Analyze a measured particle-recovery test
 
@@ -146,7 +162,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, branch-flow/network solving, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, arbitrary graph/network solving and balancing, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

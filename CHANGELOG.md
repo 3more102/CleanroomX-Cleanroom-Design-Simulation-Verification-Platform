@@ -1,4 +1,15 @@
 # Changelog
+## v0.65 bounded operating-point root-search geometry — 2026-09-24
+
+- Retains the final active signed-residual bisection interval immediately before a bounded nonlinear fan/system midpoint satisfies the configured operating-pressure tolerance.
+- Records final bracket low/high airflow, signed endpoint residuals, width, half-width, selected midpoint/residual, iteration number, and width normalized by the original supplied interpolation-segment span.
+- Distinguishes bounded-bisection solutions from direct supplied-point tolerance contacts; direct contacts preserve their selected supplied-point index and do not fabricate bisection evidence.
+- Propagates operating-point search evidence through nonlinear uncertainty corners and aggregates method counts, complete solved-corner coverage, and worst final bracket width/half-width/normalized width with exact tied source-corner provenance.
+- Surfaces final root-search geometry in standalone fan-loop, nonlinear uncertainty, and engineering-dossier Markdown.
+- Adds direct solver, uncertainty, partial-coverage, and dossier regression coverage.
+- Treats bracket width and half-width strictly as numerical search-geometry evidence, not physical airflow uncertainty, interpolation-error bounds, continuous worst-case guarantees, or equipment-acceptance limits.
+- Bumped package/runtime metadata to v0.65.0.
+
 ## v0.64 pressure-residual airflow-equivalence audit — 2026-09-24
 
 - Maps the already configured operating-pressure solver tolerance through each solved corner's local fan-minus-system secant gradient into an equivalent airflow magnitude.

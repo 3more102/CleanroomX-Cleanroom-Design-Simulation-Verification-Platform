@@ -26,6 +26,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         f"- Fixed pressure: **{fixed['lower']} to {fixed['upper']} Pa** "
         f"(nominal {fixed['nominal']} Pa)"
     )
+    for airflow, interval in result["input_intervals"].get(
+        "fan_curve_pressure_pa", {}
+    ).items():
+        lines.append(
+            f"- Fan pressure at `{airflow} m³/h`: "
+            f"**{interval['lower']} to {interval['upper']} Pa** "
+            f"(nominal {interval['nominal']} Pa)"
+        )
     for name, interval in result["input_intervals"][
         "edge_local_loss_coefficient"
     ].items():
@@ -131,12 +139,18 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             "",
             "## Corner results",
             "",
-            "| Fixed pressure Pa | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
-            "|---:|---|---|---|---:|---:|",
+            "| Fixed pressure Pa | Fan-point pressures Pa | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
+            "|---:|---|---|---|---|---:|---:|",
         ]
     )
     for corner in result["corners"]:
         point = corner["operating_point"]
+        fan_pressures = ", ".join(
+            f"{airflow}={value}"
+            for airflow, value in corner.get(
+                "fan_curve_pressure_pa", {}
+            ).items()
+        )
         local_losses = ", ".join(
             f"{name}={value}"
             for name, value in corner[
@@ -158,7 +172,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"{name} {label}={value} {unit}"
                 )
         lines.append(
-            f"| {corner['fixed_pressure_pa']} | {local_losses or '—'} | "
+            f"| {corner['fixed_pressure_pa']} | {fan_pressures or '—'} | "
+            f"{local_losses or '—'} | "
             f"{', '.join(physical_values) or '—'} | {corner['status']} | "
             f"{_fmt(None if point is None else point['airflow_m3_h'])} | "
             f"{_fmt(None if point is None else point['system_pressure_pa'])} |"

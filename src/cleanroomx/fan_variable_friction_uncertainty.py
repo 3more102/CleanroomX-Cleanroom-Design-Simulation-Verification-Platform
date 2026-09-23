@@ -13,10 +13,7 @@ from .fan_variable_friction_loop import (
 )
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from .loop_resistance import LoopedDuctResistanceInput, derive_loop_edge_resistance
-from .pressure_power import (
-    FanPowerEfficiencies,
-    analyze_fan_pressure_power,
-)
+from .pressure_power import FanPowerEfficiencies
 from .uncertainty_models import Provenance, UncertainValue
 
 
@@ -1359,17 +1356,55 @@ def _power_uncertainty_evidence(
     cases: list[dict] = []
     for corner_index, corner in enumerate(corners):
         point = corner["operating_point"]
-        if point is None:
+        base_power = corner.get("power_evidence")
+        if point is None or base_power is None:
             continue
         for values in combinations:
             efficiency_values = dict(nominal_efficiencies)
             for (key, _item), value in zip(dimensions, values):
                 efficiency_values[key] = value
             efficiencies = FanPowerEfficiencies(**efficiency_values)
-            power = analyze_fan_pressure_power(
-                point["airflow_m3_h"],
-                point["fan_pressure_pa"],
-                efficiencies,
+
+            # Efficiency uncertainty is power-only in this model. Preserve the
+            # solved aerodynamic evidence exactly and recompute only the
+            # downstream efficiency-chain metrics from that same fluid power.
+            fluid_power_w = float(base_power["fluid_air_power_w"])
+            airflow_m3_s = float(base_power["airflow_m3_s"])
+            shaft_power_w = (
+                fluid_power_w / efficiencies.fan_efficiency
+                if efficiencies.fan_efficiency is not None
+                else None
+            )
+            electrical_input_w = (
+                shaft_power_w
+                / efficiencies.motor_efficiency
+                / efficiencies.vfd_efficiency
+                if (
+                    shaft_power_w is not None
+                    and efficiencies.motor_efficiency is not None
+                    and efficiencies.vfd_efficiency is not None
+                )
+                else None
+            )
+            sfp = (
+                electrical_input_w / airflow_m3_s
+                if electrical_input_w is not None and airflow_m3_s > 0.0
+                else None
+            )
+            power = dict(base_power)
+            power["efficiencies"] = efficiencies.to_dict()
+            power["shaft_power_kw"] = (
+                None
+                if shaft_power_w is None
+                else round(shaft_power_w / 1000.0, 9)
+            )
+            power["electrical_input_kw"] = (
+                None
+                if electrical_input_w is None
+                else round(electrical_input_w / 1000.0, 9)
+            )
+            power["specific_fan_power_w_per_m3_s"] = (
+                None if sfp is None else round(sfp, 9)
             )
             cases.append(
                 {
@@ -1565,12 +1600,19 @@ def analyze_fan_variable_friction_loop_uncertainty(
         * fan_curve_case_count
         * len(fan_speed_values)
     )
-    efficiency_case_count = prod(
-        len(sorted({item.lower, item.upper}))
-        for item in study.power_efficiency_uncertainty.values()
+    efficiency_case_count = (
+        prod(
+            len(sorted({item.lower, item.upper}))
+            for item in study.power_efficiency_uncertainty.values()
+        )
+        if study.power_efficiency_uncertainty
+        else 0
     )
     combined_power_case_count = corner_count * efficiency_case_count
-    if combined_power_case_count > study.max_power_cases:
+    if (
+        study.power_efficiency_uncertainty
+        and combined_power_case_count > study.max_power_cases
+    ):
         raise ValueError(
             "fan/variable-friction power uncertainty case count "
             f"{combined_power_case_count} is exceeding "

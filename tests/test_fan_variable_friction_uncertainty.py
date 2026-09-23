@@ -1603,3 +1603,80 @@ def test_motor_efficiency_uncertainty_requires_complete_electrical_chain() -> No
         match="motor_efficiency uncertainty requires an explicit vfd_efficiency",
     ):
         fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+
+def test_max_power_cases_is_inactive_without_efficiency_uncertainty() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_efficiency_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data.pop("power_efficiency_uncertainty")
+    data["max_power_cases"] = 1
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "complete"
+    assert result["corner_count"] == 2
+    assert result["power_efficiency_case_count"] == 0
+    assert result["power_uncertainty_case_count"] == 0
+    assert result["power_uncertainty_cases"] is None
+
+
+def test_power_efficiency_uncertainty_preserves_aerodynamic_power_evidence() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_efficiency_uncertainty_demo.json"
+        )
+    )
+
+    assert result["power_uncertainty_cases"]
+    for case in result["power_uncertainty_cases"]:
+        corner = result["corners"][case["corner_index"]]
+        base = corner["power_evidence"]
+        propagated = case["power_evidence"]
+        assert base is not None
+        assert propagated["airflow_m3_h"] == base["airflow_m3_h"]
+        assert propagated["airflow_m3_s"] == base["airflow_m3_s"]
+        assert propagated["pressure_pa"] == base["pressure_pa"]
+        assert propagated["fluid_air_power_w"] == base["fluid_air_power_w"]
+        assert propagated["fluid_air_power_kw"] == base["fluid_air_power_kw"]
+        assert propagated["system_components"] == base["system_components"]
+
+
+def test_power_efficiency_uncertainty_rejects_unknown_fields() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_efficiency_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["power_efficiency_uncertainty"]["fan_efficiency"][
+        "confidence"
+    ] = 0.95
+
+    with pytest.raises(
+        ValueError,
+        match="unsupported power efficiency uncertainty field",
+    ):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_power_efficiency_uncertainty_rejects_boolean_bound() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_efficiency_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["power_efficiency_uncertainty"]["fan_efficiency"] = True
+
+    with pytest.raises(
+        ValueError,
+        match="must be a number or object",
+    ):
+        fan_variable_friction_loop_uncertainty_from_dict(data)

@@ -259,14 +259,16 @@ def _power_efficiency_uncertainty(
                 f"power efficiency uncertainty for {key!r} requires "
                 "that nominal efficiency in power_efficiencies"
             )
-        if isinstance(spec, (int, float)):
+        if isinstance(spec, (int, float)) and not isinstance(spec, bool):
             uncertainty_abs = float(spec)
             provenance = None
         elif isinstance(spec, dict):
-            if "value" in spec:
+            allowed_fields = {"uncertainty_abs", "provenance"}
+            unknown_fields = set(spec) - allowed_fields
+            if unknown_fields:
                 raise ValueError(
-                    "power_efficiency_uncertainty must not repeat nominal "
-                    "efficiency values; power_efficiencies is the nominal source"
+                    f"unsupported power efficiency uncertainty field(s) for "
+                    f"{key!r}: " + ", ".join(sorted(unknown_fields))
                 )
             uncertainty_abs = spec.get("uncertainty_abs", 0.0)
             provenance = _provenance_from_dict(spec.get("provenance"))

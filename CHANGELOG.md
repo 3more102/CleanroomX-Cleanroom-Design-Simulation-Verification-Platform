@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16 recovery uncertainty qualification — 2026-09-23
+
+- Added optional absolute concentration uncertainty to every measured recovery sample while preserving zero-uncertainty backward compatibility.
+- Added conservative per-sample concentration intervals with confirmed-above, overlaps-target, and confirmed-at-or-below target states.
+- Added uncertainty-aware PASS/FAIL/INDETERMINATE/INCOMPLETE maximum-recovery-time decisions without inventing a project conformity rule.
+- Preserved nominal observed recovery timing and recovery windows separately for traceability.
+- Added recovery-indeterminate attention tracking to the integrated engineering dossier.
+- Added uncertainty-aware Markdown/JSON reporting, CLI exit code 4 for indeterminate results, updated example data, finite-input validation, and regression coverage.
+- Kept the log-linear recovery fit nominal-only and explicitly outside the acceptance decision.
+
 ## v0.16 recovery acceptance uncertainty — 2026-09-23
 
 - Added optional absolute concentration uncertainty to measured recovery samples while preserving zero-uncertainty backward compatibility.

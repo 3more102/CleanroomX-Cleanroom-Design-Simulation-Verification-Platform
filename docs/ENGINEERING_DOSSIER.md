@@ -13,9 +13,12 @@ A dossier manifest can reference:
 - zero or more uncertainty/provenance room inputs;
 - zero or more thermal/HVAC uncertainty analyses;
 - zero or more standalone psychrometric-state uncertainty analyses;
-- zero or more fan/system operating-point studies.
+- zero or more fan/system operating-point studies;
+- zero or more fan/duct-network operating-point studies;
+- zero or more fan-driven passive parallel-network studies;
+- an optional cross-module verification/HVAC consistency check.
 
-Paths are resolved relative to the manifest file. Existing manifests that omit optional v0.13/v0.14 analysis lists remain valid.
+Paths are resolved relative to the manifest file. Existing manifests that omit the optional v0.18 fan-network and consistency fields remain valid.
 
 Example:
 
@@ -31,9 +34,26 @@ Example:
   "uncertainty_rooms": ["uncertainty_room_demo.json"],
   "thermal_uncertainty_analyses": ["thermal_uncertainty_demo.json"],
   "psychrometric_uncertainty_analyses": ["psychrometric_uncertainty_demo.json"],
-  "fan_operating_point_studies": ["fan_operating_point_demo.json"]
+  "fan_operating_point_studies": ["fan_operating_point_demo.json"],
+  "fan_duct_network_studies": ["fan_duct_network_demo.json"],
+  "fan_parallel_network_studies": ["fan_parallel_network_demo.json"]
 }
 ```
+
+An optional consistency block reuses the dossier's top-level verification and HVAC inputs:
+
+```json
+{
+  "verification_project": "facility_project.json",
+  "hvac_project": "consistency_hvac_demo.json",
+  "cross_module_consistency": {
+    "room_airflow_abs_tolerance_m3_h": 0.0,
+    "require_same_room_set": true
+  }
+}
+```
+
+No airflow tolerance is inferred by CleanroomX. The configured value is an explicit duplicated-input consistency tolerance, not an engineering acceptance limit.
 
 ## Traceability
 
@@ -43,11 +63,11 @@ Each referenced source file is hashed byte-for-byte with SHA-256. The report rec
 
 The dossier preserves component-specific states instead of turning every result into a certification verdict:
 
-- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, or a fan/system study has no intersection inside the supplied fan-curve range;
-- `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked` or a standalone psychrometric analysis has incomplete provenance;
+- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a cross-module consistency check fails, or a standalone/integrated fan study has no intersection inside the supplied fan-curve range;
+- `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a standalone psychrometric analysis has incomplete provenance, or an enabled cross-module consistency check is `not_comparable`;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. A solved fan operating point and a completed psychrometric-state envelope are reported as engineering screening, not as equipment acceptance or conformity decisions. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Cross-module consistency preserves fail and not-comparable states without inventing a tolerance. Solved standalone, fan/duct-network, and fan-driven parallel-network operating points plus completed psychrometric-state envelopes are reported as engineering screening, not as equipment acceptance or conformity decisions. Missing psychrometric provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
 
 ## CLI
 

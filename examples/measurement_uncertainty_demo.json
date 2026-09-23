@@ -1,0 +1,35 @@
+{
+  "measurand": "Process-to-ante-room differential pressure",
+  "value": 12.0,
+  "unit": "Pa",
+  "coverage_factor": 2.0,
+  "requirement": {
+    "kind": "lower",
+    "lower_limit": 10.0,
+    "reference": "Project URS CR-URS-001"
+  },
+  "provenance": {
+    "instrument_id": "DP-01",
+    "calibration_reference": "CAL-DP-2026-017",
+    "calibration_due_date": "2027-03-01",
+    "procedure_reference": "SOP-CR-05",
+    "operator": "Qualification technician",
+    "sample_location": "Process room to ante-room",
+    "measured_at": "2026-09-23T10:00:00+03:00",
+    "source_document": "Qualification record QR-CR-014"
+  },
+  "components": [
+    {
+      "name": "Manometer calibration",
+      "standard_uncertainty": 0.4,
+      "evaluation_type": "B",
+      "source": "Calibration certificate CAL-DP-2026-017"
+    },
+    {
+      "name": "Repeatability",
+      "standard_uncertainty": 0.3,
+      "evaluation_type": "A",
+      "source": "Project repeatability study"
+    }
+  ]
+}

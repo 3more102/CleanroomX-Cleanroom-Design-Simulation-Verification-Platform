@@ -2199,6 +2199,123 @@ def _pressure_residual_airflow_equivalence_summary(
     }
 
 
+def _operating_point_search_resolution_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    solved_corner_count = sum(corner["status"] == "solved" for corner in corners)
+    cases = [
+        (
+            corner_index,
+            corner,
+            corner["operating_point_search_evidence"],
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get("operating_point_search_evidence") is not None
+    ]
+    bisection_cases = [
+        (corner_index, corner, evidence)
+        for corner_index, corner, evidence in cases
+        if evidence["method"] == "bounded_bisection"
+        and evidence.get("final_bisection_bracket") is not None
+    ]
+    supplied_point_cases = [
+        (corner_index, corner, evidence)
+        for corner_index, corner, evidence in cases
+        if evidence["method"] == "supplied_point_tolerance_contact"
+    ]
+
+    def _maximum_bracket_evidence(
+        key: str,
+        unit: str,
+    ) -> dict | None:
+        if not bisection_cases:
+            return None
+        maximum = max(
+            float(evidence["final_bisection_bracket"][key])
+            for _corner_index, _corner, evidence in bisection_cases
+        )
+        sources = []
+        for corner_index, corner, evidence in bisection_cases:
+            bracket = evidence["final_bisection_bracket"]
+            if not math.isclose(
+                float(bracket[key]),
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "supplied_segment_low_airflow_m3_h": evidence[
+                        "supplied_segment_low_airflow_m3_h"
+                    ],
+                    "supplied_segment_high_airflow_m3_h": evidence[
+                        "supplied_segment_high_airflow_m3_h"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "final_bisection_bracket": bracket,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "solved_corner_count": solved_corner_count,
+        "search_evidence_corner_count": len(cases),
+        "bisection_corner_count": len(bisection_cases),
+        "bisection_corner_indices": [
+            corner_index
+            for corner_index, _corner, _evidence in bisection_cases
+        ],
+        "supplied_point_contact_corner_count": len(supplied_point_cases),
+        "supplied_point_contact_corner_indices": [
+            corner_index
+            for corner_index, _corner, _evidence in supplied_point_cases
+        ],
+        "complete_solved_corner_evidence": (
+            len(cases) == solved_corner_count
+        ),
+        "complete_study_coverage": (
+            nominal_status == "solved"
+            and solved_corner_count == len(corners)
+            and len(cases) == len(corners)
+        ),
+        "maximum_final_bisection_bracket_width_m3_h": (
+            _maximum_bracket_evidence("width_m3_h", "m3/h")
+        ),
+        "maximum_final_bisection_half_width_m3_h": (
+            _maximum_bracket_evidence("half_width_m3_h", "m3/h")
+        ),
+        "maximum_final_bisection_width_fraction_of_supplied_segment": (
+            _maximum_bracket_evidence(
+                "width_fraction_of_supplied_segment",
+                "1",
+            )
+        ),
+        "scope_note": (
+            "Search evidence distinguishes direct supplied-point tolerance "
+            "contacts from bounded bisection. For bisection cases, the final "
+            "active signed-residual bracket is the interval immediately "
+            "before the selected midpoint satisfies the configured pressure "
+            "tolerance. Bracket width and half-width are numerical search-"
+            "geometry evidence only; they are not physical airflow "
+            "uncertainty, interpolation-error bounds, continuous worst-case "
+            "guarantees, or equipment-acceptance limits."
+        ),
+    }
+
+
 def _fan_curve_segment_position_diagnostic(result: dict) -> dict | None:
     bracket = _fan_curve_intersection_bracket_diagnostic(result)
     if bracket is None:
@@ -2816,6 +2933,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                 "edge_rectangular_height_m"
                             ],
                             "status": result["status"],
+                            "operating_point_search_evidence": result.get(
+                                "operating_point_search_evidence"
+                            ),
                             "fan_curve_no_intersection_diagnostic": (
                                 _fan_curve_no_intersection_diagnostic(result)
                             ),
@@ -2891,6 +3011,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     pressure_residual_airflow_equivalence_summary = (
         _pressure_residual_airflow_equivalence_summary(
+            corners,
+            nominal["status"],
+        )
+    )
+    nominal_operating_point_search_evidence = nominal.get(
+        "operating_point_search_evidence"
+    )
+    operating_point_search_resolution_summary = (
+        _operating_point_search_resolution_summary(
             corners,
             nominal["status"],
         )
@@ -3300,6 +3429,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "pressure_residual_airflow_equivalence_summary": (
             pressure_residual_airflow_equivalence_summary
+        ),
+        "nominal_operating_point_search_evidence": (
+            nominal_operating_point_search_evidence
+        ),
+        "operating_point_search_resolution_summary": (
+            operating_point_search_resolution_summary
         ),
         "nominal_fan_curve_segment_position": (
             nominal_fan_curve_segment_position

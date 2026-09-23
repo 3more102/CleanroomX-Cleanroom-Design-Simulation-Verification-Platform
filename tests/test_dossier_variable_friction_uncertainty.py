@@ -49,6 +49,9 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Air-power envelope kW" in report
     assert "Electrical-input corner range kW" in report
     assert "SFP corner range W/(m³/s)" in report
+    assert "Solver tolerance audit" in report
+    assert "within_configured_tolerances" in report
+    assert "Airflow excursion from nominal %" in report
     assert "8" in report
 
 

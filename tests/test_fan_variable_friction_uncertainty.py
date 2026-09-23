@@ -1483,11 +1483,15 @@ def test_nominal_relative_corner_excursions_are_auditable() -> None:
         )
         if abs(nominal[key]) > 1e-15:
             assert evidence["lower_percent"] == pytest.approx(
-                evidence["lower_delta"] / abs(nominal[key]) * 100.0,
+                (envelope[key]["lower"] - nominal[key])
+                / abs(nominal[key])
+                * 100.0,
                 abs=1e-6,
             )
             assert evidence["upper_percent"] == pytest.approx(
-                evidence["upper_delta"] / abs(nominal[key]) * 100.0,
+                (envelope[key]["upper"] - nominal[key])
+                / abs(nominal[key])
+                * 100.0,
                 abs=1e-6,
             )
 

@@ -20,7 +20,7 @@ def markdown_fan_speed_report(result: dict) -> str:
             "",
             "## Speed sweep",
             "",
-            "| Speed ratio | Speed rpm | Status | Airflow m³/h | Pressure Pa | Air power kW | Affinity power ratio |",
+            "| Speed ratio | Speed rpm | Status | Airflow m³/h | Pressure Pa | Air power kW | Homologous input-power factor |",
             "|---:|---:|---|---:|---:|---:|---:|",
         ]
     )
@@ -36,7 +36,7 @@ def markdown_fan_speed_report(result: dict) -> str:
         lines.append(
             f"| {case['speed_ratio']} | {rpm} | {case['status']} | "
             f"{airflow} | {pressure} | {air_power} | "
-            f"{case['affinity_scaling']['power_ratio']} |"
+            f"{case['affinity_scaling']['homologous_input_power_factor']} |"
         )
 
     unresolved = [

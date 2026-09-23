@@ -1,0 +1,80 @@
+{
+  "name": "Branch Flow Network Demo",
+  "fan_system": {
+    "name": "Supply AHU",
+    "coil_pressure_drop_pa": 160.0,
+    "other_pressure_drop_pa": 90.0,
+    "fan_efficiency": 0.7,
+    "motor_efficiency": 0.92
+  },
+  "branch_flow_network": {
+    "source_node": "AHU",
+    "branches": [
+      {
+        "name": "Main trunk",
+        "upstream_node": "AHU",
+        "downstream_node": "J1",
+        "length_m": 12.0,
+        "friction_factor": 0.02,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 1.0,
+        "width_m": 0.6,
+        "height_m": 0.4
+      },
+      {
+        "name": "Process branch",
+        "upstream_node": "J1",
+        "downstream_node": "Process",
+        "length_m": 8.0,
+        "friction_factor": 0.02,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 2.0,
+        "width_m": 0.4,
+        "height_m": 0.3
+      },
+      {
+        "name": "Gowning branch",
+        "upstream_node": "J1",
+        "downstream_node": "Gowning",
+        "length_m": 6.0,
+        "friction_factor": 0.02,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 1.5,
+        "width_m": 0.3,
+        "height_m": 0.25
+      }
+    ],
+    "terminal_demands": [
+      {
+        "node": "Process",
+        "airflow_m3_h": 1800.0
+      },
+      {
+        "node": "Gowning",
+        "airflow_m3_h": 600.0
+      }
+    ]
+  },
+  "rooms": [
+    {
+      "name": "Process",
+      "cleanroom_airflow_m3_h": 1800.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    },
+    {
+      "name": "Gowning",
+      "cleanroom_airflow_m3_h": 600.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        }
+      }
+    }
+  ]
+}

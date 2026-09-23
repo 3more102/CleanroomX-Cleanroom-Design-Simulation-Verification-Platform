@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.27 bounded damper case studies — 2026-09-23
+
+- Added explicit damper-case sweeps on the fixed-resistance looped airflow-network solver.
+- Each configured damper adds a user-supplied fixed quadratic resistance to a named edge while preserving the base edge resistance and provenance evidence.
+- Optional damper position percentages and setting labels are stored only as traceability metadata; no position-to-loss relationship is inferred.
+- Reports baseline and case pressure span, per-edge airflow redistribution, solved damper-edge flow/direction, damper-only pressure contribution, and loop residuals.
+- Keeps baseline node injections unchanged across cases so each result is a deterministic resistance-sensitivity comparison.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-damper-study` CLI, example data, documentation, and focused regression tests.
+- Keeps automatic balancing/control, damper optimization, variable-friction iteration, fan coupling, leakage, system effect, compressibility, transients, and commissioning acceptance outside this workflow.
+- Bumped package/runtime metadata to v0.27.0.
+
 ## v0.26 bounded fan / loop-network coupling — 2026-09-23
 
 - Added two-terminal coupling between supplied fan curves and connected fixed-resistance loop networks.

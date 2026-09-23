@@ -1,5 +1,5 @@
 # Changelog
-## v0.57 complete per-metric power-coverage audit — 2026-09-24
+## v0.58 complete per-metric power-coverage audit — 2026-09-24
 
 - Requires every evaluated solved corner to provide a power metric before CleanroomX emits that metric's min/max range, extrema provenance, or nominal-relative excursion.
 - Adds explicit `complete`, `partial`, and `unavailable` coverage states with available/total corner counts and exact missing corner indices for fluid air power, shaft power, electrical input, and specific fan power.
@@ -8,7 +8,15 @@
 - Surfaces electrical-input and SFP coverage states in engineering-dossier Markdown and all power-metric coverage states in standalone uncertainty reports.
 - Preserves v0.56 solver-iteration budget evidence and all prior no-extrapolation, solver-quality, excursion, boundary-clearance, and no-intersection diagnostics.
 - Adds regression coverage for partial metric coverage, missing explicit efficiencies, complete coverage, nominal power evidence, and report output.
-- Bumped package/runtime metadata to v0.57.0.
+- Bumped package/runtime metadata to v0.58.0.
+
+## v0.57 deterministic nonlinear result integrity — 2026-09-24
+
+- Adds a deterministic SHA-256 digest to each fan/variable-friction nonlinear uncertainty result.
+- Canonicalizes the result payload with sorted keys, compact UTF-8 JSON, and finite numeric values before hashing.
+- Defines the digest scope as the complete result before the `result_integrity` field is attached, avoiding self-referential hashing.
+- Surfaces the digest in standalone uncertainty Markdown and engineering dossiers for audit/reproduction workflows.
+- Adds regression coverage for deterministic repeated-result hashing and dossier propagation.
 
 ## v0.56 configured solver-iteration budget audit — 2026-09-24
 

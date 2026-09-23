@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.19 fan/system operating-point uncertainty — 2026-09-23
+
+- Added deterministic bounded uncertainty analysis for fixed system pressure and quadratic system resistance using the existing no-extrapolation fan/system solver.
+- Evaluates every unique lower/upper system-curve corner and reports airflow, pressure, and air-power envelopes only when the complete bounded box is solved.
+- Preserves unresolved fan-curve coverage as `indeterminate` instead of reporting a partial corner min/max as a complete uncertainty envelope.
+- Added fan-curve and system-input provenance tracking, Markdown/JSON reporting, the `cleanroomx-fan-uncertainty` CLI, example data, documentation, and regression tests.
+- Integrated fan/system uncertainty analyses into engineering dossiers with SHA-256 source traceability, attention-state handling, and missing-provenance tracking.
+- Fixed dossier source validation so manifests containing only integrated fan studies are checked after all configured fan sources are loaded.
+- Bumped package/runtime metadata to v0.19.0.
+
 ## v0.18 complete engineering dossier — 2026-09-23
 
 - Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.

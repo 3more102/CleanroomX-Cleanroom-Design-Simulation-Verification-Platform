@@ -1,0 +1,8 @@
+{
+  "name": "Nonlinear Fan-Loop Uncertainty Engineering Dossier",
+  "project_reference": "CRX-V038",
+  "revision": "A",
+  "fan_variable_friction_uncertainty_analyses": [
+    "fan_variable_friction_uncertainty_demo.json"
+  ]
+}

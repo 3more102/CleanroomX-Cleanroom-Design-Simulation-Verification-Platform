@@ -18,6 +18,17 @@ from .uncertainty_models import Provenance, UncertainValue
 
 
 @dataclass(frozen=True)
+class FanCurveScenario:
+    name: str
+    fan_curve: FanCurve
+    provenance: Provenance | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("fan-curve scenario name cannot be empty")
+
+
+@dataclass(frozen=True)
 class FanVariableFrictionLoopUncertaintyStudy:
     name: str
     fan_curve: FanCurve
@@ -89,6 +100,23 @@ class FanVariableFrictionLoopUncertaintyStudy:
             or self.max_corner_cases <= 0
         ):
             raise ValueError("max_corner_cases must be an integer > 0")
+
+        scenarios = tuple(self.fan_curve_scenarios)
+        object.__setattr__(self, "fan_curve_scenarios", scenarios)
+        scenario_names: set[str] = set()
+        for scenario in scenarios:
+            if scenario.name in scenario_names:
+                raise ValueError(
+                    f"duplicate fan-curve scenario name {scenario.name!r}"
+                )
+            scenario_names.add(scenario.name)
+        if scenarios and (
+            self.fan_curve_pressure_pa or self.fan_curve_airflow_m3_h
+        ):
+            raise ValueError(
+                "fan-curve scenarios cannot be combined with independent "
+                "fan-curve pressure or airflow-coordinate uncertainty"
+            )
 
         normalized_fan_airflow: dict[int, UncertainValue] = {}
         for point_index, item in self.fan_curve_airflow_m3_h.items():
@@ -1103,6 +1131,22 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "fan_speed_ratio",
         study.fan_speed_ratio,
     )
+    scenario_records = [
+        {
+            "name": f"fan_curve_scenario:{scenario.name}",
+            "value": scenario.name,
+            "unit": "curve",
+            "uncertainty_abs": None,
+            "lower": None,
+            "upper": None,
+            "provenance": (
+                asdict(scenario.provenance)
+                if scenario.provenance is not None
+                else None
+            ),
+        }
+        for scenario in study.fan_curve_scenarios
+    ]
     edge_records = [
         *[
             _input_record(f"edge_local_loss:{name}", item)
@@ -1144,6 +1188,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
             fan_speed_record,
             *fan_pressure_records,
             *fan_airflow_records,
+            *scenario_records,
             *edge_records,
         ]
         if record["provenance"] is None
@@ -1158,6 +1203,25 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "loop_network": study.loop_network.name,
         "fan_discharge_node": study.fan_discharge_node,
         "fan_suction_node": study.fan_suction_node,
+        "fan_curve_scenarios": [
+            {
+                "name": scenario.name,
+                "fan_curve": scenario.fan_curve.name,
+                "points": [
+                    {
+                        "airflow_m3_h": point.airflow_m3_h,
+                        "pressure_pa": point.pressure_pa,
+                    }
+                    for point in scenario.fan_curve.points
+                ],
+                "provenance": (
+                    asdict(scenario.provenance)
+                    if scenario.provenance is not None
+                    else None
+                ),
+            }
+            for scenario in study.fan_curve_scenarios
+        ],
         "input_intervals": {
             "fixed_pressure_pa": {
                 "nominal": study.fixed_pressure_pa.value,
@@ -1288,6 +1352,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 fan_speed_record,
                 *fan_pressure_records,
                 *fan_airflow_records,
+                *scenario_records,
                 *edge_records,
             ],
         },
@@ -1314,7 +1379,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "operating-point search. Reported min/max values are ranges across "
             "evaluated corners only and are not claimed as guaranteed extrema "
             "for all interior combinations. No probability distribution, "
-            "covariance, fan-curve point-to-point uncertainty dependence, "
+            "covariance beyond explicitly supplied whole-curve scenarios, "
             "unconfigured geometry tolerance inference, "
             "damper/control inference, leakage, system effect, acoustics, "
             "stall/surge assessment, motor/VFD limits, compressibility, "

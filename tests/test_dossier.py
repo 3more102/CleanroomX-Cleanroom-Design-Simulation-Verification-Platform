@@ -1,4 +1,5 @@
 import hashlib
+import json
 
 from cleanroomx.dossier import _source_record, build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
@@ -162,3 +163,45 @@ def test_unsolved_fan_speed_case_is_attention_item() -> None:
     assert summary["components"]["fan_speed_studies"]["study_count"] == 1
     assert summary["components"]["fan_speed_studies"]["speed_case_count"] == 2
     assert summary["adverse_items"]["fan_speed_studies_unsolved"] == 1
+
+
+def test_fan_speed_only_dossier_is_valid(tmp_path) -> None:
+    fan_study = {
+        "name": "Fan-only dossier sweep",
+        "reference_speed_rpm": 1800.0,
+        "speed_ratios": [0.75, 1.0],
+        "reference_fan_curve": {
+            "name": "Reference fan",
+            "points": [
+                {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+                {"airflow_m3_h": 3000.0, "pressure_pa": 500.0},
+                {"airflow_m3_h": 6000.0, "pressure_pa": 300.0},
+                {"airflow_m3_h": 8000.0, "pressure_pa": 100.0},
+            ],
+        },
+        "system_curve": {
+            "name": "System",
+            "fixed_pressure_pa": 80.0,
+            "resistance_pa_per_m3_s_squared": 100.0,
+        },
+    }
+    (tmp_path / "fan.json").write_text(
+        json.dumps(fan_study),
+        encoding="utf-8",
+    )
+    (tmp_path / "dossier.json").write_text(
+        json.dumps(
+            {
+                "name": "Fan-only dossier",
+                "fan_speed_studies": ["fan.json"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_dossier(tmp_path / "dossier.json")
+
+    assert len(result["source_files"]) == 1
+    assert result["source_files"][0]["kind"] == "fan_speed_study"
+    assert len(result["fan_speed_studies"]) == 1
+    assert result["fan_speed_studies"][0]["status"] == "screening_complete"

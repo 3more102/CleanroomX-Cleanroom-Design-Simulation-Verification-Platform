@@ -766,6 +766,93 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             )
         lines.extend(["", pressure_airflow_summary["scope_note"]])
 
+    search_summary = result.get("operating_search_interval_summary")
+    nominal_search = result.get("nominal_operating_search_interval")
+    if search_summary:
+        coverage_label = (
+            "complete"
+            if search_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Operating-point terminal root-search interval",
+                "",
+                "- Corners with search-interval evidence: "
+                f"**{search_summary['search_evidence_corner_count']}/"
+                f"{search_summary['corner_count']}**",
+                "- Corners solved by bounded bisection: "
+                f"**{search_summary['bisection_corner_count']}**",
+                "- Corners solved at supplied-point tolerance contacts: "
+                f"**{search_summary['supplied_point_tolerance_contact_corner_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_search is None:
+            lines.append("- Nominal search interval: **not available**")
+        elif nominal_search["bisection_performed"]:
+            initial = nominal_search["initial_bracket"]
+            terminal = nominal_search["terminal_bracket"]
+            lines.extend(
+                [
+                    "- Nominal search method: "
+                    f"**{nominal_search['method']}**",
+                    "- Nominal initial sign-change span: "
+                    f"**{initial['span_m3_h']} m³/h**",
+                    "- Nominal terminal retained span: "
+                    f"**{terminal['span_m3_h']} m³/h**",
+                    "- Nominal bracket contraction ratio: "
+                    f"**{nominal_search['bracket_contraction_ratio']}**",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "- Nominal search method: "
+                    f"**{nominal_search['method']}**",
+                    "- Nominal bisection span: **not applicable**",
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "| Metric | Maximum | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        search_rows = (
+            (
+                "maximum_terminal_bracket_span_m3_h",
+                "Terminal retained bisection span",
+            ),
+            (
+                "maximum_bracket_contraction_ratio",
+                "Terminal / initial bisection-span ratio",
+            ),
+        )
+        for key, label in search_rows:
+            evidence = search_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                terminal = source["terminal_bracket"]
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; method={source['search_method']}"
+                    + f"; selected={source['selected_airflow_m3_h']} m³/h"
+                    + f"; terminal={terminal['low_airflow_m3_h']}–"
+                    + f"{terminal['high_airflow_m3_h']} m³/h"
+                    + f"; contraction={source['bracket_contraction_ratio']}"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", search_summary["scope_note"]])
+
     segment_summary = result.get("fan_curve_segment_position_summary")
     nominal_segment = result.get("nominal_fan_curve_segment_position")
     if segment_summary:

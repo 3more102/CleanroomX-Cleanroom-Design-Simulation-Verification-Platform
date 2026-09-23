@@ -766,6 +766,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "- Corners monotonic non-increasing within tolerance: "
                 f"**{residual_summary['monotonic_non_increasing_corner_count']}/"
                 f"{residual_summary['corner_count']}**",
+                "- Solved corners with selected-candidate provenance: "
+                f"**{residual_summary['selected_candidate_feature_corner_count']}/"
+                f"{residual_summary['solved_corner_count']}**",
+                "- Solved corners selecting first-priority candidate: "
+                f"**{residual_summary['selected_first_priority_candidate_corner_count']}/"
+                f"{residual_summary['solved_corner_count']}**",
+                "- Solved corners with additional discrete candidates: "
+                f"**{residual_summary['solved_with_additional_candidate_feature_corner_count']}**",
                 "- Corners with residual-increase transitions: "
                 f"**{residual_summary['residual_increase_corner_count']}**",
                 "- Corners with multiple discrete candidate crossing features: "
@@ -778,6 +786,18 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             lines.append(
                 "- Nominal discrete candidate crossing features: "
                 f"**{nominal_residual_audit['candidate_crossing_feature_count']}**"
+            )
+        if residual_summary[
+            "solved_with_additional_candidate_feature_corner_indices"
+        ]:
+            lines.append(
+                "- Solved corner indices with additional discrete candidates: "
+                + ", ".join(
+                    str(index)
+                    for index in residual_summary[
+                        "solved_with_additional_candidate_feature_corner_indices"
+                    ]
+                )
             )
         if residual_summary["residual_increase_corner_indices"]:
             lines.append(

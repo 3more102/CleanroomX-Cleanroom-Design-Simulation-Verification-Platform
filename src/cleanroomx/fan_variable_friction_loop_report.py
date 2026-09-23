@@ -123,5 +123,49 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
             f"{row['pressure_margin_pa']} | {row['network_outer_iterations']} |"
         )
 
+    audit = result.get("fan_curve_supplied_point_residual_audit")
+    if audit:
+        lines.extend(
+            [
+                "",
+                "## Supplied-point residual topology audit",
+                "",
+                "- Supplied-point coverage: "
+                f"**{audit['evaluated_supplied_point_count']}/"
+                f"{audit['expected_supplied_point_count']}** "
+                f"({'complete' if audit['complete_supplied_point_coverage'] else 'partial'})",
+                "- Residual monotonic non-increasing within configured tolerance: "
+                f"**{audit['residual_monotonic_non_increasing_with_tolerance']}**",
+                "- Tolerance-contact supplied points: "
+                f"**{audit['tolerance_contact_point_count']}**",
+                "- Strict sign-change supplied segments: "
+                f"**{audit['strict_sign_change_segment_count']}**",
+                "- Candidate crossing features: "
+                f"**{audit['candidate_crossing_feature_count']}**",
+                "- Residual-increase transitions: "
+                f"**{audit['residual_increase_transition_count']}**",
+                "- Largest positive residual increase: "
+                f"**{audit['largest_positive_residual_increase_pa']} Pa**",
+            ]
+        )
+        if audit["residual_transitions"]:
+            lines.extend(
+                [
+                    "",
+                    "| Low point | High point | Airflow span (m³/h) | Residual change (Pa) | Classification |",
+                    "|---:|---:|---|---:|---|",
+                ]
+            )
+            for transition in audit["residual_transitions"]:
+                lines.append(
+                    f"| {transition['low_point_index']} | "
+                    f"{transition['high_point_index']} | "
+                    f"{transition['low_airflow_m3_h']}–"
+                    f"{transition['high_airflow_m3_h']} | "
+                    f"{transition['residual_change_pa']} | "
+                    f"{transition['classification']} |"
+                )
+        lines.extend(["", audit["scope_note"]])
+
     lines.extend(["", "## Engineering note", "", result["scope_note"], ""])
     return "\n".join(lines)

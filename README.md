@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.34 engineering core
+## v0.35 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -38,9 +38,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
 - Deterministic bounded fan/system operating-point uncertainty across user-supplied fixed-pressure and quadratic-resistance intervals, with a complete airflow/pressure envelope only when every bounded corner is solved.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric/fan-system uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, fan/loop-network studies, fan/loop-network uncertainty analyses, loop damper-resistance scenarios, standalone fan-speed studies, fan-speed/loop-network studies, and optional cross-module consistency.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty workflows, fixed-resistance fan/network workflows, fan/variable-friction loop studies, fan-speed/variable-friction loop studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
-- Dossier-integrated HVAC-to-fan operating-airflow consistency across standalone fan/system, reference-flow fan/duct, passive parallel-network, fan/loop-network, standalone fan-speed, and fan-speed/loop-network cases, using an explicit user-supplied absolute tolerance and preserving unsolved studies as unresolved.
+- Dossier-integrated HVAC-to-fan operating-airflow consistency across fixed-resistance and variable-friction fan/network workflows, using an explicit user-supplied absolute tolerance and preserving no-intersection or numerical non-convergence cases as unresolved/not-comparable.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -80,6 +80,8 @@ v0.32 integrates v0.31 fan/loop-network uncertainty and v0.29 fan-speed/loop stu
 v0.33 couples supplied fan data directly to the v0.30 variable-friction loop solver. Every fan-curve endpoint check and every bounded root-search airflow re-solves the complete network and iterates automatic Darcy friction to the configured resistance-closure tolerance. Fan pressure remains piecewise-linear only inside supplied data. A network iteration failure is reported as `non_converged`; no operating point is fabricated. The workflow remains a steady engineering network model rather than CFD and does not infer fan/VFD limits, controls, leakage, system effect, stall/surge acceptance, or equipment selection.
 
 v0.34 applies the existing affinity-law fan-curve transform to each explicit speed ratio and then delegates each transformed curve to the v0.33 variable-friction coupling solver. Each speed case preserves transformed supplied-data bounds, complete network re-solving, Darcy resistance closure, fan/system residuals, and independent solved/no-intersection/non-converged status. No acceptable VFD range or motor limit is inferred.
+
+v0.35 integrates the v0.33 and v0.34 nonlinear fan/loop workflows into engineering dossiers. Inputs are SHA-256 fingerprinted, solver diagnostics and convergence evidence are preserved in JSON and Markdown, HVAC operating-airflow consistency includes solved nonlinear cases, and `non_converged` cases always propagate as dossier attention rather than PASS.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 

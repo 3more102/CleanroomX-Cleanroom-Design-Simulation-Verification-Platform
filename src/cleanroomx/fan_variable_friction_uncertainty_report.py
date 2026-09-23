@@ -668,6 +668,83 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             )
         lines.extend(["", conditioning_summary["scope_note"]])
 
+
+    segment_summary = result.get("fan_curve_segment_position_summary")
+    nominal_segment = result.get("nominal_fan_curve_segment_position")
+    if segment_summary:
+        coverage_label = (
+            "complete"
+            if segment_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Fan-curve interpolation segment position",
+                "",
+                "- Evaluated corners with segment-position evidence: "
+                f"**{segment_summary['segment_position_evidence_corner_count']}/"
+                f"{segment_summary['corner_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_segment is None:
+            lines.append("- Nominal segment position: **not available**")
+        else:
+            lines.extend(
+                [
+                    "- Nominal interpolation segment: "
+                    f"**{nominal_segment['segment_low_airflow_m3_h']} to "
+                    f"{nominal_segment['segment_high_airflow_m3_h']} m³/h**",
+                    "- Nominal normalized segment position: "
+                    f"**{nominal_segment['normalized_segment_position_fraction']}**",
+                    "- Nominal nearest supplied segment endpoint: "
+                    f"**{nominal_segment['nearest_segment_endpoint']}**, "
+                    f"clearance **{nominal_segment['nearest_segment_endpoint_clearance_m3_h']} "
+                    "m³/h**",
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                "| Metric | Extreme | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        segment_rows = (
+            (
+                "minimum_nearest_segment_endpoint_clearance_m3_h",
+                "Minimum nearest segment-endpoint clearance",
+            ),
+            (
+                "minimum_normalized_nearest_segment_endpoint_clearance_fraction",
+                "Minimum normalized segment-endpoint clearance",
+            ),
+            (
+                "maximum_segment_airflow_span_m3_h",
+                "Maximum active interpolation-segment span",
+            ),
+        )
+        for key, label in segment_rows:
+            evidence = segment_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; segment={source['segment_low_airflow_m3_h']}"
+                    + f"–{source['segment_high_airflow_m3_h']} m³/h"
+                    + f"; nearest={source['nearest_segment_endpoint']}"
+                    + f"; clearance={source['nearest_segment_endpoint_clearance_m3_h']} m³/h"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", segment_summary["scope_note"]])
+
     residual_summary = result.get(
         "fan_curve_supplied_point_residual_summary"
     )

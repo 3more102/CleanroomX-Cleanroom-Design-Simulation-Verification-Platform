@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.20 fan-speed engineering-dossier integration — 2026-09-23
+
+- Integrated v0.19 bounded fan-speed affinity-law studies into engineering dossier manifests.
+- Added SHA-256 source fingerprints and Markdown/JSON dossier evidence for every referenced fan-speed study.
+- Preserved per-speed `no_intersection_in_supplied_range` states as dossier attention items rather than promoting them to success.
+- Added fan-speed-only dossier regression coverage and moved the source-presence validation after all supported fan-study inputs, fixing valid fan-only manifests that could previously be rejected.
+- Added a screening-complete fan-speed fixture to the canonical integrated dossier demo while retaining separate no-intersection coverage.
+- Kept existing dossier manifests backward compatible because `fan_speed_studies` is optional.
+- Bumped package/runtime metadata to v0.20.0.
+
 ## v0.20 fan-speed dossier integration — 2026-09-23
 
 - Integrated v0.19 fan-speed affinity-law studies into engineering dossier manifests, executive summaries, Markdown/JSON output, and SHA-256 source traceability.

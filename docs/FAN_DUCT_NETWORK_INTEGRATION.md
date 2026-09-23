@@ -91,6 +91,10 @@ It therefore does not replace:
 A section reference airflow greater than the reference total system
 airflow is rejected.
 
+## Engineering dossier integration
+
+CleanroomX v0.16 can include one or more fan/duct-network studies in an engineering dossier through `fan_duct_network_studies`. The dossier fingerprints each study input, reports its critical path and solved operating point, and surfaces a no-intersection result as an attention item without extrapolating the fan curve.
+
 ## JSON input
 
     {

@@ -230,7 +230,7 @@ def test_physical_uncertainty_nominal_matches_existing_nonlinear_solver() -> Non
         (
             "edge_absolute_roughness_uncertainty",
             0.5,
-            "upper uncertainty bound",
+            "lower uncertainty bound",
         ),
         (
             "edge_kinematic_viscosity_uncertainty",
@@ -257,6 +257,24 @@ def test_physical_uncertainty_rejects_nonphysical_bounds(
     )
     data[block_name]["Direct"]["uncertainty_abs"] = uncertainty_abs
     with pytest.raises(ValueError, match=message):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+
+def test_physical_uncertainty_rejects_roughness_above_hydraulic_diameter() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_physical_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["loop_network"]["edges"][0]["duct_geometry"][
+        "absolute_roughness_m"
+    ] = 0.3
+    data["edge_absolute_roughness_uncertainty"]["Direct"][
+        "uncertainty_abs"
+    ] = 0.16
+    with pytest.raises(ValueError, match="smaller than the hydraulic diameter"):
         fan_variable_friction_loop_uncertainty_from_dict(data)
 
 

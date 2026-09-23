@@ -1012,6 +1012,9 @@ def _solver_quality_summary(
     nominal_status: str,
 ) -> dict:
     solved_corner_count = sum(corner["status"] == "solved" for corner in corners)
+    complete_study_coverage = (
+        nominal_status == "solved" and solved_corner_count == len(corners)
+    )
 
     def _diagnostic(key: str):
         return lambda corner: (
@@ -1020,65 +1023,146 @@ def _solver_quality_summary(
             else None
         )
 
+    configured_tolerances = {
+        "operating_pressure_tolerance_pa": study.operating_pressure_tolerance_pa,
+        "resistance_relative_tolerance": study.resistance_relative_tolerance,
+        "mass_balance_tolerance_m3_h": study.mass_balance_tolerance_m3_h,
+    }
+    worst_metrics = {
+        "absolute_operating_pressure_residual_pa": _maximum_corner_metric_sources(
+            corners,
+            lambda corner: (
+                corner["operating_point"].get("pressure_residual_pa")
+                if corner.get("operating_point") is not None
+                else None
+            ),
+            "Pa",
+            absolute=True,
+        ),
+        "network_max_relative_resistance_closure_error": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("network_max_relative_resistance_closure_error"),
+            "1",
+        ),
+        "max_abs_mass_balance_residual_m3_h": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("max_abs_mass_balance_residual_m3_h"),
+            "m3/h",
+        ),
+        "max_abs_pressure_law_residual_pa": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("max_abs_pressure_law_residual_pa"),
+            "Pa",
+        ),
+        "network_outer_iterations": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("network_outer_iterations"),
+            "iterations",
+        ),
+        "operating_iterations": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("operating_iterations"),
+            "iterations",
+        ),
+    }
+
+    tolerance_specs = (
+        (
+            "absolute_operating_pressure_residual_pa",
+            "operating_pressure_tolerance_pa",
+        ),
+        (
+            "network_max_relative_resistance_closure_error",
+            "resistance_relative_tolerance",
+        ),
+        (
+            "max_abs_mass_balance_residual_m3_h",
+            "mass_balance_tolerance_m3_h",
+        ),
+    )
+    configured_tolerance_checks = {}
+    for metric_key, tolerance_key in tolerance_specs:
+        evidence = worst_metrics[metric_key]
+        tolerance = float(configured_tolerances[tolerance_key])
+        if evidence is None:
+            configured_tolerance_checks[metric_key] = {
+                "status": "not_evaluable",
+                "observed_value": None,
+                "unit": None,
+                "configured_tolerance": tolerance,
+                "utilization_ratio": None,
+                "remaining_margin": None,
+            }
+            continue
+
+        observed = float(evidence["value"])
+        configured_tolerance_checks[metric_key] = {
+            "status": (
+                "within_tolerance"
+                if observed <= tolerance
+                else "exceeds_tolerance"
+            ),
+            "observed_value": round(observed, 9),
+            "unit": evidence["unit"],
+            "configured_tolerance": tolerance,
+            "utilization_ratio": (
+                None if tolerance == 0.0 else round(observed / tolerance, 9)
+            ),
+            "remaining_margin": round(tolerance - observed, 9),
+        }
+
+    within_tolerance_count = sum(
+        check["status"] == "within_tolerance"
+        for check in configured_tolerance_checks.values()
+    )
+    exceeded_tolerance_count = sum(
+        check["status"] == "exceeds_tolerance"
+        for check in configured_tolerance_checks.values()
+    )
+    not_evaluable_count = sum(
+        check["status"] == "not_evaluable"
+        for check in configured_tolerance_checks.values()
+    )
+    evaluable_check_count = (
+        len(configured_tolerance_checks) - not_evaluable_count
+    )
+    if exceeded_tolerance_count:
+        tolerance_assessment_status = "configured_tolerance_exceeded"
+    elif not complete_study_coverage:
+        tolerance_assessment_status = "incomplete_coverage"
+    elif not_evaluable_count:
+        tolerance_assessment_status = "not_evaluable"
+    else:
+        tolerance_assessment_status = "within_configured_tolerances"
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
         "complete_evaluated_corner_coverage": solved_corner_count == len(corners),
         "nominal_status": nominal_status,
-        "complete_study_coverage": (
-            nominal_status == "solved" and solved_corner_count == len(corners)
-        ),
-        "configured_tolerances": {
-            "operating_pressure_tolerance_pa": study.operating_pressure_tolerance_pa,
-            "resistance_relative_tolerance": study.resistance_relative_tolerance,
-            "mass_balance_tolerance_m3_h": study.mass_balance_tolerance_m3_h,
-        },
-        "worst_metrics": {
-            "absolute_operating_pressure_residual_pa": _maximum_corner_metric_sources(
-                corners,
-                lambda corner: (
-                    corner["operating_point"].get("pressure_residual_pa")
-                    if corner.get("operating_point") is not None
-                    else None
-                ),
-                "Pa",
-                absolute=True,
-            ),
-            "network_max_relative_resistance_closure_error": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("network_max_relative_resistance_closure_error"),
-                "1",
-            ),
-            "max_abs_mass_balance_residual_m3_h": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("max_abs_mass_balance_residual_m3_h"),
-                "m3/h",
-            ),
-            "max_abs_pressure_law_residual_pa": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("max_abs_pressure_law_residual_pa"),
-                "Pa",
-            ),
-            "network_outer_iterations": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("network_outer_iterations"),
-                "iterations",
-            ),
-            "operating_iterations": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("operating_iterations"),
-                "iterations",
-            ),
+        "complete_study_coverage": complete_study_coverage,
+        "configured_tolerances": configured_tolerances,
+        "worst_metrics": worst_metrics,
+        "configured_tolerance_checks": configured_tolerance_checks,
+        "configured_tolerance_assessment": {
+            "status": tolerance_assessment_status,
+            "configured_check_count": len(configured_tolerance_checks),
+            "evaluable_check_count": evaluable_check_count,
+            "within_tolerance_count": within_tolerance_count,
+            "exceeded_tolerance_count": exceeded_tolerance_count,
+            "not_evaluable_count": not_evaluable_count,
+            "complete_study_coverage": complete_study_coverage,
         },
         "scope_note": (
             "Worst metrics aggregate solved evaluated corners only. "
             "complete_study_coverage is false if the nominal case or any "
-            "evaluated corner is unresolved. Pressure-law residual and "
-            "iteration maxima are reported as diagnostics without inventing "
-            "an acceptance threshold."
+            "evaluated corner is unresolved. Configured-tolerance utilization "
+            "and remaining margin are numerical solver-audit evidence only, "
+            "using the solver tolerances already supplied to this study. "
+            "Pressure-law residual and iteration maxima are reported as "
+            "diagnostics without inventing an acceptance threshold."
         ),
     }
-
 
 def _edge_airflow_extrema_sources(
     study: FanVariableFrictionLoopUncertaintyStudy,

@@ -4,7 +4,7 @@ CleanroomX v0.30 adds an optional outer iteration around the existing looped-net
 
 ## Purpose
 
-The v0.25 geometry loader can derive an edge resistance from duct geometry and either a user-supplied Darcy friction factor or automatic friction inputs. Before v0.27, automatic friction was resolved once at the declared reference airflow and then held fixed.
+The v0.25 geometry loader can derive an edge resistance from duct geometry and either a user-supplied Darcy friction factor or automatic friction inputs. Through v0.29, automatic friction was resolved once at the declared reference airflow and then held fixed.
 
 The v0.30 workflow is for loop-network inputs that already use automatic friction from explicit:
 

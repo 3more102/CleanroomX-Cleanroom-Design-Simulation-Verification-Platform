@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.18 engineering core
+## v0.19 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -28,6 +28,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, fan-driven passive parallel-network studies, and optional cross-module consistency.
 - Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
+- Dossier-integrated HVAC-to-fan operating-airflow consistency checks across standalone fan/system, reference-flow fan/duct, and fan-driven parallel-network studies, using an explicit user-supplied absolute tolerance and preserving unsolved studies as unresolved.
 - Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
 - Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -164,6 +165,24 @@ Write a Markdown report:
 The recovery workflow uses measured time/concentration samples directly and optionally accepts an absolute concentration uncertainty for each sample. PASS requires a complete sample uncertainty interval at or below the target by the configured maximum time; target overlap at the deadline is INDETERMINATE. The original nominal recovery time/window remains reported for traceability. The log-linear fit uses nominal values only and remains diagnostic.
 
 See docs/RECOVERY_TEST.md.
+
+## Cross-check HVAC governing airflow against fan operating-point studies
+
+Add this optional block to an engineering-dossier manifest:
+
+    "consistency_checks": {
+      "hvac_fan_operating_airflow": {
+        "airflow_abs_tolerance_m3_h": 1500.0
+      }
+    }
+
+The check compares the analyzed HVAC total governing airflow with every included solved fan operating-point study. Unsolved fan studies remain `not_comparable`; they are not converted into failures. The tolerance is a project input, not a built-in engineering or standards limit.
+
+Example:
+
+    cleanroomx-dossier examples/dossier_fan_airflow_consistency_demo.json
+
+See docs/HVAC_FAN_AIRFLOW_CONSISTENCY.md.
 
 ## Analyze uncertainty and input provenance
 

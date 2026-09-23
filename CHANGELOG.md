@@ -1,4 +1,15 @@
 # Changelog
+## v0.66 alternative crossing-candidate separation audit — 2026-09-24
+
+- Extends solved nonlinear fan/variable-friction crossing provenance with airflow separation to every additional discrete supplied-point candidate feature.
+- Treats supplied-point tolerance contacts as point intervals and strict sign-change candidates as their exact supplied-point airflow intervals.
+- Reports the selected airflow's gap to every alternative discrete candidate interval, including explicit zero-gap overlap, while retaining solver-priority rank and tied nearest alternatives.
+- Aggregates alternative-separation coverage, overlap corner indices, and the minimum selected-to-alternative interval gap with exact tied source-corner provenance.
+- Preserves v0.65 bounded root-search geometry and v0.64 pressure-residual airflow-equivalence evidence in standalone, uncertainty, and dossier reporting.
+- Adds deterministic solver, uncertainty, and dossier regression coverage across Python 3.11, 3.12, and 3.13.
+- Treats this as discrete sampled-data numerical topology evidence only; it does not estimate another continuous root, prove multiple physical intersections, or define stability, stall/surge, manufacturer-region, commissioning, certification, or equipment-acceptance criteria.
+- Bumped package/runtime metadata to v0.66.0.
+
 ## v0.65 bounded operating-point root-search geometry — 2026-09-24
 
 - Retains the final active signed-residual bisection interval immediately before a bounded nonlinear fan/system midpoint satisfies the configured operating-pressure tolerance.

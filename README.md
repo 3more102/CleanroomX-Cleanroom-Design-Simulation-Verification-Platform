@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.11 engineering core
+## v0.12 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -24,7 +24,8 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
-- Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
+- Optional per-sample absolute concentration uncertainty with conservative threshold-overlap handling.
+- Recovery traceability metadata plus pass/fail/indeterminate/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
@@ -127,7 +128,7 @@ Write a Markdown report:
 
     cleanroomx-recovery-test examples/recovery_test_demo.json --output recovery-report.md
 
-The recovery workflow uses measured time/concentration samples directly. It records the first measured sample at or below the configured target, the measurement interval in which recovery occurred, optional traceability fields, and an optional maximum-time criterion. The log-linear fit is diagnostic only and does not replace the measured qualification result.
+The recovery workflow uses measured time/concentration samples directly and optionally accepts an absolute concentration uncertainty for each sample. PASS requires a complete sample uncertainty interval at or below the target by the configured maximum time; threshold overlap at the deadline is INDETERMINATE. The original nominal recovery time/window remains reported for traceability. The log-linear fit uses nominal values only and remains diagnostic.
 
 See docs/RECOVERY_TEST.md.
 
@@ -216,7 +217,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer engineering reports, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan-curve integration with duct-network models, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, general looped-network solving research, fan-curve integration with duct-network models, broader psychrometric uncertainty, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

@@ -34,7 +34,11 @@ def markdown_dossier_report(result: dict) -> str:
     for name, component in summary["components"].items():
         detail = _fmt_counts(component.get("counts", {}))
         if name == "hvac" and component["status"] != "not_included":
-            detail = f"failed_air_balances={component['failed_air_balances']}"
+            detail = (
+                f"failed_air_balances={component['failed_air_balances']}, "
+                f"fan_curve_duty_failures={component['fan_curve_duty_failures']}, "
+                f"fan_curve_duty_unresolved={component['fan_curve_duty_unresolved']}"
+            )
         lines.append(f"| {name} | {component['status']} | {detail} |")
 
     verification = result["verification"]
@@ -155,6 +159,28 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
             )
 
+    if result["psychrometric_uncertainty_analyses"]:
+        lines.extend(
+            [
+                "",
+                "## Psychrometric-state uncertainty screening",
+                "",
+                "| Analysis | Corners | Dry bulb C | RH % | Humidity ratio g/kg dry air | Provenance complete |",
+                "|---|---:|---:|---:|---:|---|",
+            ]
+        )
+        for item in result["psychrometric_uncertainty_analyses"]:
+            state = item["input_state"]
+            humidity = item["psychrometric_properties"]["humidity_ratio_g_kg_da"]
+            lines.append(
+                f"| {item['analysis']} | {item['corner_count']} | "
+                f"{state['dry_bulb_c']['lower']} to {state['dry_bulb_c']['upper']} | "
+                f"{state['relative_humidity_percent']['lower']} to "
+                f"{state['relative_humidity_percent']['upper']} | "
+                f"{humidity['lower']} to {humidity['upper']} | "
+                f"{'yes' if item['traceability']['complete'] else 'no'} |"
+            )
+
     if result["thermal_uncertainty_analyses"]:
         lines.extend(
             [
@@ -191,6 +217,25 @@ def markdown_dossier_report(result: dict) -> str:
             pressure = "—" if point is None else point["system_pressure_pa"]
             lines.append(
                 f"| {item['study']} | {item['status']} | {airflow} | {pressure} |"
+            )
+
+    if result["fan_duct_network_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan/duct-network operating-point studies",
+                "",
+                "| Study | Status | Critical path | Operating airflow m³/h | System pressure Pa |",
+                "|---|---|---|---:|---:|",
+            ]
+        )
+        for item in result["fan_duct_network_studies"]:
+            point = item["operating_point"]
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = "—" if point is None else point["system_pressure_pa"]
+            lines.append(
+                f"| {item['study']} | {item['status']} | {item['critical_path']} | "
+                f"{airflow} | {pressure} |"
             )
 
     lines.extend(

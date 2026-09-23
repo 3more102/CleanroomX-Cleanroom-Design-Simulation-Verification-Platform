@@ -1,0 +1,95 @@
+{
+  "name": "Geometry-derived cleanroom supply loop",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 5400.0,
+    "Junction A": 0.0,
+    "Junction B": 0.0,
+    "Return": -5400.0
+  },
+  "edges": [
+    {
+      "name": "Supply to A",
+      "start_node": "Supply",
+      "end_node": "Junction A",
+      "reference_airflow_m3_h": 3000.0,
+      "sections": [
+        {
+          "name": "SA round duct",
+          "length_m": 12.0,
+          "friction_factor": 0.020,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.4,
+          "diameter_m": 0.55
+        }
+      ]
+    },
+    {
+      "name": "A to Return",
+      "start_node": "Junction A",
+      "end_node": "Return",
+      "reference_airflow_m3_h": 3000.0,
+      "sections": [
+        {
+          "name": "AR rectangular duct",
+          "length_m": 15.0,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.8,
+          "width_m": 0.65,
+          "height_m": 0.40,
+          "absolute_roughness_m": 0.00009,
+          "kinematic_viscosity_m2_s": 0.000015
+        }
+      ]
+    },
+    {
+      "name": "Supply to B",
+      "start_node": "Supply",
+      "end_node": "Junction B",
+      "reference_airflow_m3_h": 3000.0,
+      "sections": [
+        {
+          "name": "SB round duct",
+          "length_m": 14.0,
+          "friction_factor": 0.021,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.6,
+          "diameter_m": 0.55
+        }
+      ]
+    },
+    {
+      "name": "B to Return",
+      "start_node": "Junction B",
+      "end_node": "Return",
+      "reference_airflow_m3_h": 3000.0,
+      "sections": [
+        {
+          "name": "BR rectangular duct",
+          "length_m": 13.0,
+          "friction_factor": 0.022,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 1.5,
+          "width_m": 0.65,
+          "height_m": 0.40
+        }
+      ]
+    },
+    {
+      "name": "Cross-link A to B",
+      "start_node": "Junction A",
+      "end_node": "Junction B",
+      "reference_airflow_m3_h": 900.0,
+      "sections": [
+        {
+          "name": "AB cross-link",
+          "length_m": 8.0,
+          "friction_factor": 0.022,
+          "air_density_kg_m3": 1.2,
+          "local_loss_coefficient": 2.0,
+          "diameter_m": 0.30
+        }
+      ]
+    }
+  ]
+}

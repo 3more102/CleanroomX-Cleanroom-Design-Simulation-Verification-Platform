@@ -957,6 +957,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"{residual_summary['solved_corner_count']}**",
                 "- Solved corners with additional discrete candidates: "
                 f"**{residual_summary['solved_with_additional_candidate_feature_corner_count']}**",
+                "- Solved corners with alternative-candidate separation evidence: "
+                f"**{residual_summary['alternative_candidate_separation_evidence_corner_count']}**",
+                "- Solved corners whose selected airflow overlaps an alternative candidate interval: "
+                f"**{residual_summary['selected_airflow_overlap_alternative_interval_corner_count']}**",
                 "- Corners with residual-increase transitions: "
                 f"**{residual_summary['residual_increase_corner_count']}**",
                 "- Corners with multiple discrete candidate crossing features: "
@@ -981,6 +985,31 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         "solved_with_additional_candidate_feature_corner_indices"
                     ]
                 )
+            )
+        if residual_summary[
+            "selected_airflow_overlap_alternative_interval_corner_indices"
+        ]:
+            lines.append(
+                "- Selected-airflow overlap corner indices: "
+                + ", ".join(
+                    str(index)
+                    for index in residual_summary[
+                        "selected_airflow_overlap_alternative_interval_corner_indices"
+                    ]
+                )
+            )
+        alternative_gap = residual_summary.get(
+            "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
+        )
+        if alternative_gap is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                for source in alternative_gap["sources"]
+            ]
+            lines.append(
+                "- Minimum selected-to-alternative candidate interval gap: "
+                f"**{alternative_gap['value']} {alternative_gap['unit']}** "
+                f"({' / '.join(source_texts)})"
             )
         if residual_summary["residual_increase_corner_indices"]:
             lines.append(

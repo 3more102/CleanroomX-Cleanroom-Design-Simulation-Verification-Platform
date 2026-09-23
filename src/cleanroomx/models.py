@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 
@@ -28,6 +29,7 @@ class RoomSpec:
     min_ach: float | None = None
     min_pressure_pa: float | None = None
     observed_pressure_pa: float | None = None
+    observed_pressure_uncertainty_pa: float = 0.0
     particle_requirements: tuple[ParticleRequirement, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
@@ -43,6 +45,24 @@ class RoomSpec:
                 raise ValueError(f"{label} must be positive")
         if self.min_ach is not None and self.min_ach <= 0:
             raise ValueError("min_ach must be positive when provided")
+        uncertainty = float(self.observed_pressure_uncertainty_pa)
+        if not math.isfinite(uncertainty) or uncertainty < 0:
+            raise ValueError(
+                "observed_pressure_uncertainty_pa must be finite and cannot be negative"
+            )
+        if self.observed_pressure_pa is None and uncertainty != 0:
+            raise ValueError(
+                "observed_pressure_uncertainty_pa requires observed_pressure_pa"
+            )
+        if self.observed_pressure_pa is not None and not math.isfinite(
+            float(self.observed_pressure_pa)
+        ):
+            raise ValueError("observed_pressure_pa must be finite when provided")
+        if self.min_pressure_pa is not None and not math.isfinite(
+            float(self.min_pressure_pa)
+        ):
+            raise ValueError("min_pressure_pa must be finite when provided")
+        object.__setattr__(self, "observed_pressure_uncertainty_pa", uncertainty)
 
 
 @dataclass(frozen=True)

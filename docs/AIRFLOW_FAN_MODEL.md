@@ -30,9 +30,13 @@ An optional pressure drop can be supplied for the project filter/FFU definition.
 
 ## Supply-fan duty
 
-If a fan system is configured, CleanroomX sums these explicit pressure-drop components:
+If a fan system is configured, CleanroomX sums these pressure-drop components:
 
     total static = duct + coil + terminal filter + other
+
+In v0.6, the duct component can come from an explicit `supply_duct_network`. CleanroomX analyzes each configured candidate path and uses the highest calculated path loss as the preliminary fan duct-pressure component. If no duct network is configured, the existing manual `fan_system.duct_pressure_drop_pa` input remains the backward-compatible fallback.
+
+The duct calculation uses Darcy-Weisbach friction with hydraulic diameter and a Darcy friction factor, plus user-entered local loss coefficients referenced to section velocity pressure. See `docs/DUCT_NETWORK_MODEL.md`.
 
 Air power is:
 
@@ -45,6 +49,6 @@ with airflow converted to m³/s. Shaft power and estimated electrical input are 
 
 ## Limits
 
-This model is for preliminary engineering screening. It does not infer duct geometry, fittings, system effect, velocity pressure, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, sound limits, fan curves, operating point, leakage coefficients, or final equipment selection.
+This model is for preliminary engineering screening. It does not automatically solve duct geometry, network airflow distribution/balancing, duct leakage, fitting coefficients, fan system effect, terminal velocity pressure recovery, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, sound limits, fan curves, operating point, or final equipment selection.
 
 Use project specifications, licensed standards, local regulations, manufacturer data, and qualified engineering review for real designs.

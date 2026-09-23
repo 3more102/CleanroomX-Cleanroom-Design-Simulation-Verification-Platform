@@ -1,4 +1,14 @@
 # Changelog
+## v0.54 supplied fan-curve boundary-clearance audit — 2026-09-24
+
+- Adds per-solved-corner airflow distance from the operating point to both endpoints of that corner's exact supplied or speed-transformed fan-curve airflow range.
+- Reports lower, upper, and nearest endpoint headroom in m³/h together with normalized airflow position, normalized nearest-boundary headroom, and the nearest endpoint identity.
+- Aggregates the minimum nearest-boundary headroom across solved evaluated corners with tie-aware source-corner provenance and preserves the exact active fan/system/duct uncertainty context.
+- Keeps boundary-clearance evidence explicitly diagnostic: no minimum acceptable headroom, stall/surge margin, manufacturer operating region, or equipment-acceptance criterion is inferred.
+- Marks complete versus partial study coverage independently, so indeterminate analyses may retain solved-corner diagnostic evidence without fabricating a complete uncertainty envelope.
+- Surfaces the new evidence in standalone Markdown reports and engineering-dossier tables, with regression coverage for exact arithmetic, provenance, zero-solved-corner behavior, and dossier integration.
+- Bumped package/runtime metadata to v0.54.0.
+
 ## v0.53 nominal-relative corner excursion evidence — 2026-09-24
 
 - Adds nominal-centered absolute and percentage excursion evidence for complete nonlinear fan/variable-friction uncertainty operating-point envelopes.

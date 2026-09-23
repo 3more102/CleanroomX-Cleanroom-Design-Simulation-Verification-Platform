@@ -32,6 +32,8 @@ Paths are resolved relative to the manifest file. Existing manifests that omit o
 
 For complete fan/variable-friction-loop uncertainty analyses, v0.49 dossier Markdown includes both the operating-airflow evaluated-corner envelope and the fan air-power evaluated-corner envelope. Indeterminate analyses show no complete air-power envelope.
 
+v0.55 dossier Markdown also surfaces the nonlinear uncertainty solver's configured outer/Newton/operating iteration-budget audit beside the existing residual-tolerance audit; these statuses are numerical convergence evidence only and are not equipment or cleanroom acceptance decisions.
+
 Example:
 
 ```json

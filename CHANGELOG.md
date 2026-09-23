@@ -1,12 +1,16 @@
 # Changelog
 
-## Unreleased — consistency-integrated dossier
+## v0.18 complete engineering dossier — 2026-09-23
 
 - Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.
 - Reuses the standalone checker's exact-name matching, absolute airflow tolerance, identical-room-set option, statuses, and scope boundary.
 - Propagates consistency failures into dossier attention tracking and preserves `not_comparable` as an unresolved state.
 - Adds consistency evidence to Markdown dossiers plus an end-to-end example and regression tests.
 - Requires both verification and HVAC project inputs when a dossier consistency check is configured.
+- Added reference-flow fan/duct-network studies to dossier manifests, executive summaries, Markdown reports, SHA-256 source traceability, and end-to-end regression coverage.
+- Added fan-driven passive parallel-network studies to the same dossier workflow while preserving bounded no-extrapolation/no-intersection states.
+- Promotes unresolved integrated fan-network intersections to dossier attention items rather than collapsing them into a generic success state.
+- Bumped package/runtime metadata to v0.18.0 while keeping all new dossier fields optional for backward-compatible manifests.
 
 ## v0.17 cross-module input consistency — 2026-09-23
 

@@ -14,6 +14,7 @@ from .hvac_models import (
     ThermalDesign,
     ThermalLoads,
 )
+from .supply_network import SupplyBranch, SupplyNetwork, SupplyNode
 
 
 def thermal_design_from_dict(data: dict) -> ThermalDesign:
@@ -42,6 +43,14 @@ def duct_network_from_dict(data: dict) -> DuctNetwork:
     )
 
 
+def supply_network_from_dict(data: dict) -> SupplyNetwork:
+    return SupplyNetwork(
+        source_node=data["source_node"],
+        nodes=tuple(SupplyNode(**node) for node in data["nodes"]),
+        branches=tuple(SupplyBranch(**branch) for branch in data.get("branches", [])),
+    )
+
+
 def hvac_project_from_dict(data: dict) -> HVACProject:
     rooms = tuple(
         HVACRoom(
@@ -60,12 +69,17 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
     duct_network = (
         duct_network_from_dict(duct_data) if duct_data is not None else None
     )
+    supply_data = data.get("supply_network")
+    supply_network = (
+        supply_network_from_dict(supply_data) if supply_data is not None else None
+    )
     return HVACProject(
         name=data["name"],
         rooms=rooms,
         filter_unit=filter_unit,
         fan_system=fan_system,
         duct_network=duct_network,
+        supply_network=supply_network,
     )
 
 

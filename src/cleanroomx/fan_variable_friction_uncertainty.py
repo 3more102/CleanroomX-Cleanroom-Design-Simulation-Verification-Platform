@@ -1237,6 +1237,44 @@ def _solver_quality_summary(
     else:
         iteration_assessment_status = "within_configured_iteration_limits"
 
+    def _maximum_invariant_error_evidence() -> dict | None:
+        if not invariant_cases:
+            return None
+        maximum = max(
+            float(invariant["absolute_width_fraction_consistency_error"])
+            for _corner_index, _corner, _evidence, invariant
+            in invariant_cases
+        )
+        sources = []
+        for corner_index, corner, evidence, invariant in invariant_cases:
+            error = float(
+                invariant["absolute_width_fraction_consistency_error"]
+            )
+            if not math.isclose(
+                error,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "invariant_audit": invariant,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": "1",
+            "sources": sources,
+        }
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -2300,6 +2338,28 @@ def _operating_point_search_resolution_summary(
         if evidence["method"] == "supplied_point_tolerance_contact"
     ]
 
+    invariant_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence["final_bisection_bracket"].get("invariant_audit"),
+        )
+        for corner_index, corner, evidence in bisection_cases
+        if evidence["final_bisection_bracket"].get("invariant_audit")
+        is not None
+    ]
+    sign_change_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, invariant in invariant_cases
+        if not invariant["strict_sign_change_preserved"]
+    ]
+    midpoint_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, invariant in invariant_cases
+        if not invariant["selected_airflow_is_bracket_midpoint"]
+    ]
+
     def _maximum_bracket_evidence(
         key: str,
         unit: str,
@@ -2358,6 +2418,24 @@ def _operating_point_search_resolution_summary(
             corner_index
             for corner_index, _corner, _evidence in supplied_point_cases
         ],
+        "bisection_invariant_evidence_corner_count": len(invariant_cases),
+        "strict_sign_change_preserved_corner_count": (
+            len(invariant_cases)
+            - len(sign_change_violation_corner_indices)
+        ),
+        "strict_sign_change_violation_corner_indices": (
+            sign_change_violation_corner_indices
+        ),
+        "selected_midpoint_centered_corner_count": (
+            len(invariant_cases)
+            - len(midpoint_violation_corner_indices)
+        ),
+        "selected_midpoint_violation_corner_indices": (
+            midpoint_violation_corner_indices
+        ),
+        "maximum_absolute_width_fraction_consistency_error": (
+            _maximum_invariant_error_evidence()
+        ),
         "complete_solved_corner_evidence": (
             len(cases) == solved_corner_count
         ),
@@ -2386,7 +2464,11 @@ def _operating_point_search_resolution_summary(
             "tolerance. Bracket width and half-width are numerical search-"
             "geometry evidence only; they are not physical airflow "
             "uncertainty, interpolation-error bounds, continuous worst-case "
-            "guarantees, or equipment-acceptance limits."
+            "guarantees, or equipment-acceptance limits. v0.67 additionally "
+            "audits implementation invariants using the unrounded live "
+            "bisection state: strict residual-sign bracketing, selected "
+            "midpoint centering, and the absolute discrepancy between actual "
+            "and iteration-implied binary width contraction."
         ),
     }
 

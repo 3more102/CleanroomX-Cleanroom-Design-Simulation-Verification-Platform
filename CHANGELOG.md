@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14 psychrometric state uncertainty — 2026-09-23
+
+- Added uncertain dry-bulb temperature, relative humidity, and total-pressure inputs with strict interval-domain validation.
+- Added deterministic evaluation of every unique rectangular uncertainty-box corner using the existing CleanroomX psychrometric equations.
+- Added bounded vapor-pressure, humidity-ratio, enthalpy, specific-volume, dew-point, and moist-air specific-heat results.
+- Added provenance completeness reporting without inventing uncertainty magnitudes, distributions, covariance, or acceptance limits.
+- Added JSON loading, Markdown/JSON reporting, the `cleanroomx-psychrometric-uncertainty` CLI, example data, documentation, and regression coverage.
+- Preserved the v0.13 integrated engineering dossier and kept psychrometric uncertainty standalone until explicit thermal-sizing coupling is implemented.
+
 ## v0.13 integrated engineering dossier — 2026-09-23
 
 - Added a manifest-driven engineering dossier that aggregates room/cascade verification, HVAC/duct screening, v0.12 HVAC fan-curve design-duty verification, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and standalone fan/system operating-point studies.

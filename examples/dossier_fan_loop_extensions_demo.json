@@ -1,0 +1,11 @@
+{
+  "name": "Fan/Loop Extended Engineering Dossier",
+  "project_reference": "CRX-V032",
+  "revision": "A",
+  "fan_loop_uncertainty_analyses": [
+    "fan_loop_uncertainty_demo.json"
+  ],
+  "fan_loop_speed_studies": [
+    "fan_loop_speed_demo.json"
+  ]
+}

@@ -1,8 +1,8 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, preliminary HVAC analysis, and room air-balance checking**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.2 engineering core
+## v0.3 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -16,16 +16,21 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Makeup-air load and preliminary cooling/heating capacity calculations.
 - Governing airflow comparison between cleanroom airflow, makeup air, and sensible-load airflow.
 - Optional FFU/filter-unit count from rated airflow and explicit design utilization.
+- Explicit return, exhaust, transfer, and leakage airflow accounting.
+- Steady-state room air-balance closure with user-entered tolerance.
+- Mechanical-surplus, passive-net-outflow, and unmodeled inflow/outflow reporting.
 
 ## Important engineering boundary
 
-CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
+CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, an airflow surplus, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
 
 CleanroomX therefore does not embed unofficial ISO classification, ACH, or pressure-cascade limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, or regulator.
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, CFD, commissioning, certification, TAB, or qualified HVAC/cleanroom engineering review.
+
+The room air-balance module is a steady-state volumetric accounting check. A supply/return surplus is **not converted into room pressure**; actual pressure depends on leakage paths, transfer openings, envelope characteristics, controls, and network behavior.
 
 ## Install
 
@@ -60,7 +65,13 @@ Write a Markdown report:
 
     cleanroomx-hvac examples/semiconductor_thermal_demo.json --output hvac-report.md
 
-The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. See docs/THERMAL_MODEL.md and docs/STANDARDS.md.
+## Run the room air-balance example
+
+    cleanroomx-hvac examples/air_balance_demo.json
+
+The air-balance block can define return, exhaust, transfer-in/out, leakage-in/out, and an explicit tolerance. The balance uses the room's governing total supply airflow. Makeup/outdoor air is already a component of total supply and is not added twice.
+
+See docs/THERMAL_MODEL.md, docs/AIR_BALANCE.md, and docs/STANDARDS.md.
 
 ## Multi-room pressure-cascade JSON
 
@@ -99,7 +110,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are supply/return/exhaust air-balance modeling, expanded filter/fan sizing, recovery-test workflows, uncertainty/provenance tracking, richer report generation, and later a desktop/web UI plus CFD adapters.
+Next milestones are inter-room transfer-network consistency checks, expanded filter/fan pressure-drop and sizing models, recovery-test workflows, uncertainty/provenance tracking, richer report generation, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

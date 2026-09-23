@@ -56,6 +56,62 @@ def markdown_hvac_report(result: dict) -> str:
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
             )
 
+    tree = result.get("duct_tree_network")
+    if tree is not None:
+        lines.extend(
+            [
+                "",
+                "## Duct tree airflow and critical path",
+                "",
+                f"- Root node: **{tree['root_node']}**.",
+                f"- Aggregated root airflow: **{tree['root_airflow_m3_h']} m³/h**.",
+                f"- Critical terminal: **{tree['critical_terminal_node']}**.",
+                f"- Critical-path pressure drop: **{tree['critical_path_pressure_drop_pa']} Pa**.",
+                "",
+                "| Section | From | To | Aggregated airflow m³/h | Pressure drop Pa |",
+                "|---|---|---|---:|---:|",
+            ]
+        )
+        for section in tree["sections"]:
+            lines.append(
+                f"| {section['name']} | {section['from_node']} | "
+                f"{section['to_node']} | {section['airflow_m3_h']} | "
+                f"{section['total_pressure_drop_pa']} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "| Terminal | Demand m³/h | Path | Pressure drop Pa |",
+                "|---|---:|---|---:|",
+            ]
+        )
+        for path in tree["terminal_paths"]:
+            route = " → ".join(path["sections"])
+            lines.append(
+                f"| {path['terminal_node']} | {path['terminal_airflow_m3_h']} | "
+                f"{route} | {path['total_pressure_drop_pa']} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "### Node flow balances",
+                "",
+                "| Node | Incoming/source m³/h | Outgoing m³/h | Terminal demand m³/h | Residual m³/h |",
+                "|---|---:|---:|---:|---:|",
+            ]
+        )
+        for balance in tree["node_balances"]:
+            lines.append(
+                f"| {balance['node']} | "
+                f"{balance['incoming_or_source_airflow_m3_h']} | "
+                f"{balance['outgoing_airflow_m3_h']} | "
+                f"{balance['terminal_demand_m3_h']} | "
+                f"{balance['balance_residual_m3_h']} |"
+            )
+        lines.extend(["", tree["scope_note"]])
+
     if result["duct_network"] is not None:
         network = result["duct_network"]
         lines.extend(

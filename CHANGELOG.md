@@ -1,4 +1,15 @@
 # Changelog
+## v0.37 nonlinear fan / variable-friction uncertainty — 2026-09-23
+
+- Added deterministic bounded corner analysis around the v0.33 nonlinear fan/variable-friction loop solver.
+- Supports explicit absolute uncertainty on fixed system pressure and selected automatic-friction duct local-loss coefficients without duplicating nominal K values outside the loop geometry.
+- Rebuilds affected geometry-edge evidence and re-solves the complete Darcy-friction network at every bounded fan/system evaluation for every corner.
+- Preserves strict supplied-range fan behavior; no-intersection and numerical non-convergence make the uncertainty result indeterminate and suppress complete operating-point/edge-flow envelopes.
+- Tracks fan-curve, fixed-pressure, and local-loss uncertainty provenance separately from numerical solution status.
+- Deduplicates zero-width uncertainty dimensions and enforces an explicit max_corner_cases limit instead of silently truncating combinations.
+- Added JSON loading, Markdown/JSON reporting, the cleanroomx-fan-loop-friction-uncertainty CLI, reproducible example data, documentation, and regression coverage.
+- Bumped package/runtime metadata to v0.37.0.
+
 ## v0.36 nonlinear-network validation hardening — 2026-09-23
 
 - Added pre-solve validation for every loop edge identified as automatic Darcy-friction geometry.

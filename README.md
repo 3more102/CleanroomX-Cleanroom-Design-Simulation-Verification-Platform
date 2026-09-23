@@ -23,7 +23,6 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
-- General connected looped-network airflow solving from balanced node injections and explicit fixed quadratic edge resistances, with node-continuity and pressure-law residuals.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
@@ -57,8 +56,6 @@ The HVAC module is also a preliminary engineering model. The v0.8 branch-flow so
 v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
 
 The v0.22 looped-network solver handles arbitrary connected graph topology only when every edge already has an explicit fixed quadratic resistance and all node injections are specified and balanced. It solves relative node pressures and signed edge flows numerically; it does not yet derive those loop resistances from geometry, couple fan curves into the mesh, infer damper/control behavior, or model variable resistance.
-
-v0.22 looped-network solving uses fixed edge resistances supplied directly by the user. It does not yet derive those loop-edge resistances from geometry/roughness inputs or couple a fan curve into the nonlinear mesh solve.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. These workflows do not model covariance, hourly weather/load behavior, or equipment selection.
 

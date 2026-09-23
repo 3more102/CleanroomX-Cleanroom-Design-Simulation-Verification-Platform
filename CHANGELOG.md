@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — engineering dossier
+
+- Added a manifest-driven combined engineering dossier for room/cascade verification, HVAC/duct screening, recovery qualification, uncertainty-aware qualification, and uncertainty/provenance analyses.
+- Added component-aware executive states that preserve fail, incomplete, indeterminate, and not-checked conditions rather than collapsing them into a certification verdict.
+- Added SHA-256 fingerprints for every referenced input file to improve report traceability.
+- Added Markdown/JSON dossier output, a dedicated CLI, example manifest, tests, and documentation.
+- Kept the dossier explicitly scoped as a reporting/traceability layer; it does not create acceptance limits or claim cleanroom certification.
+
 ## v0.7 qualification uncertainty — 2026-09-23
 
 - Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.

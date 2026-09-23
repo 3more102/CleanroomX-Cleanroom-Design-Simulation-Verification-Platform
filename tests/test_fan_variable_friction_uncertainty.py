@@ -1881,3 +1881,96 @@ def test_power_report_surfaces_metric_coverage_and_withholding_rule() -> None:
     assert "Availability" in report
     assert "complete (" in report
     assert "partial coverage is withheld" in report
+
+
+
+def test_fan_curve_intersection_bracket_evidence_is_auditable() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    nominal = result["nominal_fan_curve_intersection_bracket"]
+    summary = result["fan_curve_intersection_bracket_summary"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["bracket_evidence_corner_count"] == result["corner_count"]
+    assert summary["bounded_intersection_supported_count"] == (
+        result["corner_count"]
+    )
+
+    nearest_gaps = []
+    residual_spans = []
+    for corner in result["corners"]:
+        diagnostic = corner["fan_curve_intersection_bracket"]
+        assert diagnostic is not None
+        point = corner["operating_point"]
+        segment = point["interpolation_segment"]
+        low = diagnostic["low_endpoint"]
+        high = diagnostic["high_endpoint"]
+        tolerance = diagnostic["operating_pressure_tolerance_pa"]
+
+        assert low["airflow_m3_h"] == pytest.approx(
+            segment["low_airflow_m3_h"], abs=1e-6
+        )
+        assert high["airflow_m3_h"] == pytest.approx(
+            segment["high_airflow_m3_h"], abs=1e-6
+        )
+        assert low["fan_minus_system_pressure_pa"] >= -tolerance
+        assert high["fan_minus_system_pressure_pa"] <= tolerance
+        assert diagnostic["bounded_intersection_supported"] is True
+
+        expected_nearest = min(
+            abs(low["fan_minus_system_pressure_pa"]),
+            abs(high["fan_minus_system_pressure_pa"]),
+        )
+        expected_span = abs(
+            low["fan_minus_system_pressure_pa"]
+            - high["fan_minus_system_pressure_pa"]
+        )
+        assert diagnostic[
+            "nearest_endpoint_absolute_pressure_gap_pa"
+        ] == pytest.approx(expected_nearest, abs=1e-9)
+        assert diagnostic["endpoint_pressure_residual_span_pa"] == pytest.approx(
+            expected_span,
+            abs=1e-9,
+        )
+        nearest_gaps.append(expected_nearest)
+        residual_spans.append(expected_span)
+
+    minimum_gap = summary[
+        "minimum_nearest_endpoint_absolute_pressure_gap_pa"
+    ]
+    minimum_span = summary["minimum_endpoint_pressure_residual_span_pa"]
+    assert minimum_gap["value"] == pytest.approx(min(nearest_gaps), abs=1e-9)
+    assert minimum_span["value"] == pytest.approx(min(residual_spans), abs=1e-9)
+    assert minimum_gap["sources"]
+    assert minimum_span["sources"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Fan/system supplied-curve intersection brackets" in report
+    assert "Bounded intersection supported by endpoint residuals" in report
+    assert "numerical root-bracketing provenance only" in report
+
+
+def test_fan_curve_intersection_bracket_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["fan_curve_intersection_bracket_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_fan_curve_intersection_bracket"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["bracket_evidence_corner_count"] == 0
+    assert summary["bounded_intersection_supported_count"] == 0
+    assert summary["minimum_nearest_endpoint_absolute_pressure_gap_pa"] is None
+    assert summary["minimum_endpoint_pressure_residual_span_pa"] is None
+    assert all(
+        corner["fan_curve_intersection_bracket"] is None
+        for corner in result["corners"]
+    )

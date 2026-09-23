@@ -499,6 +499,84 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             )
         lines.extend(["", no_intersection["scope_note"]])
 
+    bracket_summary = result.get("fan_curve_intersection_bracket_summary")
+    nominal_bracket = result.get("nominal_fan_curve_intersection_bracket")
+    if bracket_summary:
+        coverage_label = (
+            "complete"
+            if bracket_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Fan/system supplied-curve intersection brackets",
+                "",
+                "- Evaluated corners with bracket evidence: "
+                f"**{bracket_summary['bracket_evidence_corner_count']}/"
+                f"{bracket_summary['corner_count']}**",
+                "- Bounded intersection supported by endpoint residuals: "
+                f"**{bracket_summary['bounded_intersection_supported_count']}**",
+                "- Strict sign-change brackets: "
+                f"**{bracket_summary['strict_sign_change_count']}**",
+                "- Endpoint root/tolerance contacts: "
+                f"**{bracket_summary['endpoint_within_tolerance_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_bracket is None:
+            lines.append("- Nominal intersection bracket: **not available**")
+        else:
+            low = nominal_bracket["low_endpoint"]
+            high = nominal_bracket["high_endpoint"]
+            lines.append(
+                "- Nominal supplied-point bracket: "
+                f"**{low['airflow_m3_h']} m³/h "
+                f"({low['fan_minus_system_pressure_pa']} Pa) to "
+                f"{high['airflow_m3_h']} m³/h "
+                f"({high['fan_minus_system_pressure_pa']} Pa)**"
+            )
+
+        lines.extend(
+            [
+                "",
+                "| Metric | Minimum | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        bracket_rows = (
+            (
+                "minimum_nearest_endpoint_absolute_pressure_gap_pa",
+                "Nearest endpoint absolute fan-system pressure gap",
+            ),
+            (
+                "minimum_endpoint_pressure_residual_span_pa",
+                "Endpoint fan-system residual span",
+            ),
+        )
+        for key, label in bracket_rows:
+            evidence = bracket_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                low = source["low_endpoint"]
+                high = source["high_endpoint"]
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; low={low['airflow_m3_h']} m³/h:"
+                    + f"{low['fan_minus_system_pressure_pa']} Pa"
+                    + f"; high={high['airflow_m3_h']} m³/h:"
+                    + f"{high['fan_minus_system_pressure_pa']} Pa"
+                    + f"; termination={source['termination_reason']}"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", bracket_summary["scope_note"]])
+
     quality = result.get("solver_quality_summary")
     if quality:
         coverage_label = (

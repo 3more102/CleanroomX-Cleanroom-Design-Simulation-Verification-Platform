@@ -1514,6 +1514,168 @@ def _fan_curve_no_intersection_summary(corners: list[dict]) -> dict:
     }
 
 
+def _fan_curve_intersection_bracket_diagnostic(result: dict) -> dict | None:
+    if result.get("status") != "solved":
+        return None
+
+    point = result.get("fan_operating_point") or {}
+    segment = point.get("interpolation_segment")
+    checks = result.get("fan_curve_point_checks") or []
+    if segment is None or len(checks) < 2:
+        return None
+
+    low_airflow = float(segment["low_airflow_m3_h"])
+    high_airflow = float(segment["high_airflow_m3_h"])
+
+    def _matching_check(target_airflow: float) -> dict | None:
+        for check in checks:
+            if math.isclose(
+                float(check["airflow_m3_h"]),
+                target_airflow,
+                rel_tol=1e-12,
+                abs_tol=1e-6,
+            ):
+                return check
+        return None
+
+    low_check = _matching_check(low_airflow)
+    high_check = _matching_check(high_airflow)
+    if low_check is None or high_check is None:
+        return None
+
+    tolerance = float(
+        (result.get("solver_diagnostics") or {}).get(
+            "operating_pressure_tolerance_pa",
+            0.0,
+        )
+    )
+    low_margin = float(low_check["pressure_margin_pa"])
+    high_margin = float(high_check["pressure_margin_pa"])
+
+    def _endpoint(check: dict) -> dict:
+        return {
+            "airflow_m3_h": round(float(check["airflow_m3_h"]), 6),
+            "fan_pressure_pa": round(float(check["fan_pressure_pa"]), 9),
+            "system_pressure_pa": round(float(check["system_pressure_pa"]), 9),
+            "fan_minus_system_pressure_pa": round(
+                float(check["pressure_margin_pa"]),
+                9,
+            ),
+        }
+
+    return {
+        "low_endpoint": _endpoint(low_check),
+        "high_endpoint": _endpoint(high_check),
+        "operating_pressure_tolerance_pa": tolerance,
+        "strict_sign_change": low_margin > 0.0 and high_margin < 0.0,
+        "endpoint_within_tolerance": (
+            abs(low_margin) <= tolerance or abs(high_margin) <= tolerance
+        ),
+        "bounded_intersection_supported": (
+            low_margin >= -tolerance and high_margin <= tolerance
+        ),
+        "nearest_endpoint_absolute_pressure_gap_pa": round(
+            min(abs(low_margin), abs(high_margin)),
+            9,
+        ),
+        "endpoint_pressure_residual_span_pa": round(
+            abs(low_margin - high_margin),
+            9,
+        ),
+        "termination_reason": (
+            (result.get("solver_diagnostics") or {}).get(
+                "termination_reason",
+                "unspecified",
+            )
+        ),
+    }
+
+
+def _fan_curve_intersection_bracket_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    cases = [
+        (corner_index, corner, corner["fan_curve_intersection_bracket"])
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_intersection_bracket") is not None
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(cases) == len(corners)
+    )
+
+    def _minimum_evidence(key: str) -> dict | None:
+        if not cases:
+            return None
+        minimum = min(
+            float(diagnostic[key])
+            for _corner_index, _corner, diagnostic in cases
+        )
+        sources = []
+        for corner_index, corner, diagnostic in cases:
+            if not math.isclose(
+                float(diagnostic[key]),
+                minimum,
+                rel_tol=1e-12,
+                abs_tol=1e-9,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "low_endpoint": diagnostic["low_endpoint"],
+                    "high_endpoint": diagnostic["high_endpoint"],
+                    "termination_reason": diagnostic["termination_reason"],
+                    "strict_sign_change": diagnostic["strict_sign_change"],
+                    "endpoint_within_tolerance": diagnostic[
+                        "endpoint_within_tolerance"
+                    ],
+                    "bounded_intersection_supported": diagnostic[
+                        "bounded_intersection_supported"
+                    ],
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(minimum, 9),
+            "unit": "Pa",
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "bracket_evidence_corner_count": len(cases),
+        "bounded_intersection_supported_count": sum(
+            diagnostic["bounded_intersection_supported"]
+            for _index, _corner, diagnostic in cases
+        ),
+        "strict_sign_change_count": sum(
+            diagnostic["strict_sign_change"]
+            for _index, _corner, diagnostic in cases
+        ),
+        "endpoint_within_tolerance_count": sum(
+            diagnostic["endpoint_within_tolerance"]
+            for _index, _corner, diagnostic in cases
+        ),
+        "complete_study_coverage": complete_study_coverage,
+        "minimum_nearest_endpoint_absolute_pressure_gap_pa": (
+            _minimum_evidence("nearest_endpoint_absolute_pressure_gap_pa")
+        ),
+        "minimum_endpoint_pressure_residual_span_pa": (
+            _minimum_evidence("endpoint_pressure_residual_span_pa")
+        ),
+        "scope_note": (
+            "This evidence reuses the already evaluated supplied fan-curve "
+            "points that bound each solved operating point. Signed fan-minus-"
+            "system pressure at the interpolation endpoints documents how the "
+            "bounded root was enclosed without fan-curve extrapolation. It is "
+            "numerical root-bracketing provenance only; no acceptable pressure "
+            "margin, stall/surge boundary, manufacturer operating region, or "
+            "equipment acceptance threshold is inferred."
+        ),
+    }
+
+
 def _fan_curve_boundary_clearance(result: dict) -> dict | None:
     if result.get("status") != "solved":
         return None
@@ -1963,6 +2125,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "fan_curve_no_intersection_diagnostic": (
                                 _fan_curve_no_intersection_diagnostic(result)
                             ),
+                            "fan_curve_intersection_bracket": (
+                                _fan_curve_intersection_bracket_diagnostic(
+                                    result
+                                )
+                            ),
                             "fan_curve_airflow_range_m3_h": result[
                                 "fan_curve_airflow_range_m3_h"
                             ],
@@ -1986,6 +2153,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
     corner_outcome_diagnostics = _corner_outcome_diagnostics(corners)
     fan_curve_no_intersection_summary = (
         _fan_curve_no_intersection_summary(corners)
+    )
+    nominal_fan_curve_intersection_bracket = (
+        _fan_curve_intersection_bracket_diagnostic(nominal)
+    )
+    fan_curve_intersection_bracket_summary = (
+        _fan_curve_intersection_bracket_summary(
+            corners,
+            nominal["status"],
+        )
     )
     solver_quality_summary = _solver_quality_summary(
         study,
@@ -2356,6 +2532,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "corner_outcome_diagnostics": corner_outcome_diagnostics,
         "fan_curve_no_intersection_summary": (
             fan_curve_no_intersection_summary
+        ),
+        "nominal_fan_curve_intersection_bracket": (
+            nominal_fan_curve_intersection_bracket
+        ),
+        "fan_curve_intersection_bracket_summary": (
+            fan_curve_intersection_bracket_summary
         ),
         "solver_quality_summary": solver_quality_summary,
         "nominal_fan_curve_boundary_clearance": (

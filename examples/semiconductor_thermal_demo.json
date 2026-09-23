@@ -1,0 +1,65 @@
+{
+  "name": "Semiconductor Thermal Demo",
+  "filter_unit": {
+    "name": "Example FFU",
+    "rated_airflow_m3_h": 1200.0,
+    "design_utilization": 0.9
+  },
+  "rooms": [
+    {
+      "name": "Process Bay",
+      "cleanroom_airflow_m3_h": 5376.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0,
+          "pressure_kpa": 101.325
+        },
+        "outdoor_air": {
+          "dry_bulb_c": 35.0,
+          "relative_humidity_percent": 55.0,
+          "pressure_kpa": 101.325
+        },
+        "makeup_air_m3_h": 1200.0,
+        "supply_air_temp_c": 16.0,
+        "capacity_margin_percent": 10.0,
+        "loads": {
+          "occupants": 6,
+          "sensible_w_per_person": 75.0,
+          "latent_w_per_person": 55.0,
+          "lighting_w": 1800.0,
+          "equipment_w": 12000.0,
+          "envelope_sensible_w": 1200.0,
+          "other_sensible_w": 500.0,
+          "process_latent_w": 1000.0,
+          "other_latent_w": 200.0
+        }
+      }
+    },
+    {
+      "name": "Gowning",
+      "cleanroom_airflow_m3_h": 720.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        },
+        "outdoor_air": {
+          "dry_bulb_c": 35.0,
+          "relative_humidity_percent": 55.0
+        },
+        "makeup_air_m3_h": 300.0,
+        "supply_air_temp_c": 16.0,
+        "capacity_margin_percent": 10.0,
+        "loads": {
+          "occupants": 3,
+          "sensible_w_per_person": 75.0,
+          "latent_w_per_person": 55.0,
+          "lighting_w": 300.0,
+          "equipment_w": 300.0,
+          "envelope_sensible_w": 250.0
+        }
+      }
+    }
+  ]
+}

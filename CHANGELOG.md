@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.7 qualification uncertainty — 2026-09-23
+
+- Added uncertainty-aware minimum and maximum qualification checks for project-configured measured quantities.
+- Added conservative room-to-room pressure-cascade interval propagation using uncertain pressure measurements.
+- Added pass/fail/indeterminate overall qualification status with failure taking precedence over ambiguity.
+- Preserved requirement references and input provenance while keeping traceability completeness separate from numerical acceptance.
+- Added JSON loading, Markdown/JSON reports, a dedicated `cleanroomx-qualification` CLI, example data, tests, and documentation.
+- Kept the workflow explicitly bounded as deterministic interval screening; no ISO class, pressure, particle, or conformity threshold is embedded.
+
+## v0.6.1 duct-input hardening — 2026-09-23
+
+- Rejected non-finite duct inputs (NaN and positive/negative infinity) before pressure-loss analysis.
+- Added regression coverage for airflow, air density, friction factor, local-loss coefficient, length, and circular/rectangular geometry dimensions.
+- Synchronized package runtime metadata with the v0.6 release line.
+- Corrected duct-model documentation that still referred to v0.5.
+
 ## v0.6 duct critical-path pressure loss — 2026-09-23
 
 - Added circular and rectangular duct-section models with strict input validation.

@@ -1,14 +1,59 @@
 {
   "name": "Semiconductor bay thermal uncertainty",
   "room_air": {
-    "dry_bulb_c": 22.0,
-    "relative_humidity_percent": 45.0,
+    "dry_bulb_c": {
+      "value": 22.0,
+      "uncertainty_abs": 0.5,
+      "provenance": {
+        "source_type": "design_setpoint",
+        "source_name": "Room temperature setpoint",
+        "reference": "DEMO-HVAC-ROOM-T-01",
+        "uncertainty_basis": "Demonstration control/design bound"
+      }
+    },
+    "relative_humidity_percent": {
+      "value": 45.0,
+      "uncertainty_abs": 3.0,
+      "provenance": {
+        "source_type": "design_setpoint",
+        "source_name": "Room RH setpoint",
+        "reference": "DEMO-HVAC-ROOM-RH-01",
+        "uncertainty_basis": "Demonstration control/design bound"
+      }
+    },
     "pressure_kpa": 101.325
   },
   "outdoor_air": {
-    "dry_bulb_c": 34.0,
-    "relative_humidity_percent": 55.0,
-    "pressure_kpa": 101.325
+    "dry_bulb_c": {
+      "value": 34.0,
+      "uncertainty_abs": 2.0,
+      "provenance": {
+        "source_type": "weather_design",
+        "source_name": "Outdoor dry-bulb design range",
+        "reference": "DEMO-WEATHER-T-01",
+        "uncertainty_basis": "Demonstration design range"
+      }
+    },
+    "relative_humidity_percent": {
+      "value": 55.0,
+      "uncertainty_abs": 5.0,
+      "provenance": {
+        "source_type": "weather_design",
+        "source_name": "Outdoor RH design range",
+        "reference": "DEMO-WEATHER-RH-01",
+        "uncertainty_basis": "Demonstration design range"
+      }
+    },
+    "pressure_kpa": {
+      "value": 101.325,
+      "uncertainty_abs": 0.5,
+      "provenance": {
+        "source_type": "site_condition",
+        "source_name": "Outdoor pressure basis",
+        "reference": "DEMO-WEATHER-P-01",
+        "uncertainty_basis": "Demonstration absolute bound"
+      }
+    }
   },
   "cleanroom_airflow_m3_h": {
     "value": 3600.0,

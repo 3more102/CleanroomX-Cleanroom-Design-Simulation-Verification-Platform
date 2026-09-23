@@ -1,6 +1,6 @@
 # Looped airflow-network solver
 
-CleanroomX v0.23 adds a steady-state pressure-node solver for connected networks that may contain arbitrary loops.
+CleanroomX v0.25 retains the steady-state pressure-node solver for connected networks with arbitrary loops and adds auditable derivation of fixed edge resistance from explicit duct geometry.
 
 ## Model
 
@@ -29,9 +29,30 @@ CleanroomX:
 
 The edge direction in the input is only the positive sign convention. A solved negative airflow is valid and is reported with its actual physical direction.
 
+## Resistance input
+
+Each edge must use exactly one resistance source:
+
+- `resistance_pa_per_m3_s_squared` for an explicitly supplied fixed resistance; or
+- `duct_geometry` to derive a fixed resistance from Darcy-Weisbach straight-duct friction plus an explicit local-loss coefficient.
+
+With an explicit Darcy factor, no reference airflow is needed because the factor is already fixed. For automatic friction, `absolute_roughness_m`, `kinematic_viscosity_m2_s`, and `reference_airflow_m3_h` are all required. CleanroomX resolves the Darcy factor once at that reference airflow and then holds the derived resistance fixed during loop solving.
+
+The derived fixed quadratic coefficient is
+
+    R = 0.5 * rho * (f * L / Dh + K) / A^2
+
+so that `deltaP = R * Q * abs(Q)`.
+
 ## Example
 
+Explicit-resistance network:
+
     cleanroomx-loop-flow examples/looped_network_demo.json
+
+Geometry-derived fixed-resistance network:
+
+    cleanroomx-loop-flow examples/looped_network_geometry_demo.json
 
 JSON output:
 
@@ -47,6 +68,6 @@ Optional numerical controls:
 
 ## Scope boundary
 
-This is a fixed-resistance steady-state network solver. It does not infer duct geometry, Darcy friction factors, fitting coefficients, leakage, dampers, controls, fan curves, fan/system operating points, density changes, compressibility, or transient behavior.
+This remains a fixed-resistance steady-state network solver. v0.25 can derive that fixed resistance from explicit geometry, density, Darcy factor, and local-loss coefficient. Automatic friction is resolved only at an explicit reference airflow and is not iterated as solved loop flow changes.
 
-The solver therefore does not replace detailed HVAC network design or commissioning. A later integration can derive edge resistances from explicit duct geometry and couple the network to bounded fan models while preserving the same residual reporting.
+The workflow does not infer fitting coefficients, damper positions, controls, leakage, fan curves, fan/system operating points, density changes, compressibility, or transient behavior. It does not replace detailed HVAC network design or commissioning.

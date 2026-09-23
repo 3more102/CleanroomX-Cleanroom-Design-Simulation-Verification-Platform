@@ -209,3 +209,9 @@ def test_hvac_rejects_branch_flow_total_that_differs_from_governing_airflow() ->
 
     with pytest.raises(ValueError, match="source airflow must match"):
         analyze_hvac_project(project)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_terminal_airflow_must_be_finite(value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        TerminalDemand("Process", value)

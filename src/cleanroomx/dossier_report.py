@@ -282,6 +282,50 @@ def markdown_dossier_report(result: dict) -> str:
                 f"| {item['study']} | {item['status']} | {airflow} | {pressure} |"
             )
 
+    if result["fan_duct_network_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan/duct-network operating-point studies",
+                "",
+                "| Study | Status | Critical path | Operating airflow m³/h | System pressure Pa |",
+                "|---|---|---|---:|---:|",
+            ]
+        )
+        for item in result["fan_duct_network_studies"]:
+            point = item["operating_point"]
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = "—" if point is None else point["system_pressure_pa"]
+            lines.append(
+                f"| {item['study']} | {item['status']} | {item['critical_path']} | "
+                f"{airflow} | {pressure} |"
+            )
+
+    if result["fan_parallel_network_studies"]:
+        lines.extend(
+            [
+                "",
+                "## Fan-driven parallel-network studies",
+                "",
+                "| Study | Status | Equivalent R Pa/(m³/s)² | Operating airflow m³/h | System pressure Pa |",
+                "|---|---|---:|---:|---:|",
+            ]
+        )
+        for item in result["fan_parallel_network_studies"]:
+            point = item["fan_operating_point"]
+            pressure_check = item["system_pressure_check"]
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = (
+                "—"
+                if pressure_check is None
+                else pressure_check["total_system_pressure_pa"]
+            )
+            lines.append(
+                f"| {item['study']} | {item['status']} | "
+                f"{item['equivalent_network_resistance_pa_per_m3_s_squared']} | "
+                f"{airflow} | {pressure} |"
+            )
+
     lines.extend(
         [
             "",

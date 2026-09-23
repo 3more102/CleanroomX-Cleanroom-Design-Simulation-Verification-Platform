@@ -87,25 +87,36 @@ def test_symmetric_geometry_loop_splits_flow_equally():
         reference_node="Supply",
         node_injections_m3_h={
             "Supply": 3600.0,
-            "A": 0.0,
-            "B": 0.0,
+            "Mid": 0.0,
             "Return": -3600.0,
         },
         edges=(
-            GeometryLoopEdge("SA", "Supply", "A", (section("SA"),)),
-            GeometryLoopEdge("AR", "A", "Return", (section("AR"),)),
-            GeometryLoopEdge("SB", "Supply", "B", (section("SB"),)),
-            GeometryLoopEdge("BR", "B", "Return", (section("BR"),)),
-            GeometryLoopEdge("AB", "A", "B", (section("AB"),)),
+            GeometryLoopEdge(
+                "Direct",
+                "Supply",
+                "Return",
+                (section("Direct-1"), section("Direct-2")),
+            ),
+            GeometryLoopEdge(
+                "Upper 1",
+                "Supply",
+                "Mid",
+                (section("Upper-1"),),
+            ),
+            GeometryLoopEdge(
+                "Upper 2",
+                "Mid",
+                "Return",
+                (section("Upper-2"),),
+            ),
         ),
     )
     result = solve_geometry_looped_network(network)
     edge = {item["name"]: item for item in result["edges"]}
-    assert edge["SA"]["airflow_m3_h"] == pytest.approx(1800.0, abs=1e-4)
-    assert edge["SB"]["airflow_m3_h"] == pytest.approx(1800.0, abs=1e-4)
-    assert edge["AB"]["airflow_m3_h"] == pytest.approx(0.0, abs=1e-4)
+    assert edge["Direct"]["airflow_m3_h"] == pytest.approx(1800.0, abs=1e-4)
+    assert edge["Upper 1"]["airflow_m3_h"] == pytest.approx(1800.0, abs=1e-4)
+    assert edge["Upper 2"]["airflow_m3_h"] == pytest.approx(1800.0, abs=1e-4)
     assert result["max_abs_mass_balance_residual_m3_h"] <= 1e-6
-
 
 def test_section_pressure_sum_matches_solved_edge_pressure():
     network = GeometryLoopNetwork(
@@ -174,92 +185,42 @@ def test_zero_fixed_resistance_is_rejected():
 
 
 def test_loader_and_markdown_report(tmp_path):
+    section = {
+        "length_m": 4.0,
+        "diameter_m": 0.35,
+        "friction_factor": 0.02,
+        "air_density_kg_m3": 1.2,
+        "local_loss_coefficient": 0.8,
+    }
     data = {
         "name": "Loaded geometry loop",
         "reference_node": "Supply",
         "node_injections_m3_h": {
             "Supply": 1200.0,
-            "A": 0.0,
-            "B": 0.0,
+            "Mid": 0.0,
             "Return": -1200.0,
         },
         "edges": [
             {
-                "name": "SA",
+                "name": "Direct",
                 "start_node": "Supply",
-                "end_node": "A",
-                "sections": [
-                    {
-                        "name": "SA-1",
-                        "length_m": 4.0,
-                        "diameter_m": 0.35,
-                        "friction_factor": 0.02,
-                        "air_density_kg_m3": 1.2,
-                        "local_loss_coefficient": 0.8,
-                    }
-                ],
-            },
-            {
-                "name": "AR",
-                "start_node": "A",
                 "end_node": "Return",
                 "sections": [
-                    {
-                        "name": "AR-1",
-                        "length_m": 4.0,
-                        "diameter_m": 0.35,
-                        "friction_factor": 0.02,
-                        "air_density_kg_m3": 1.2,
-                        "local_loss_coefficient": 0.8,
-                    }
+                    {"name": "Direct-1", **section},
+                    {"name": "Direct-2", **section},
                 ],
             },
             {
-                "name": "SB",
+                "name": "Upper 1",
                 "start_node": "Supply",
-                "end_node": "B",
-                "sections": [
-                    {
-                        "name": "SB-1",
-                        "length_m": 5.0,
-                        "width_m": 0.5,
-                        "height_m": 0.3,
-                        "friction_factor": 0.021,
-                        "air_density_kg_m3": 1.2,
-                        "local_loss_coefficient": 0.9,
-                    }
-                ],
+                "end_node": "Mid",
+                "sections": [{"name": "Upper-1", **section}],
             },
             {
-                "name": "BR",
-                "start_node": "B",
+                "name": "Upper 2",
+                "start_node": "Mid",
                 "end_node": "Return",
-                "sections": [
-                    {
-                        "name": "BR-1",
-                        "length_m": 5.0,
-                        "width_m": 0.5,
-                        "height_m": 0.3,
-                        "friction_factor": 0.021,
-                        "air_density_kg_m3": 1.2,
-                        "local_loss_coefficient": 0.9,
-                    }
-                ],
-            },
-            {
-                "name": "AB",
-                "start_node": "A",
-                "end_node": "B",
-                "sections": [
-                    {
-                        "name": "AB-1",
-                        "length_m": 2.0,
-                        "diameter_m": 0.25,
-                        "friction_factor": 0.02,
-                        "air_density_kg_m3": 1.2,
-                        "local_loss_coefficient": 1.2,
-                    }
-                ],
+                "sections": [{"name": "Upper-2", **section}],
             },
         ],
     }
@@ -272,3 +233,4 @@ def test_loader_and_markdown_report(tmp_path):
     assert "Geometry-Derived Looped-Duct Report" in markdown
     assert "Section evidence" in markdown
     assert "explicit duct geometry" in result["scope_note"]
+

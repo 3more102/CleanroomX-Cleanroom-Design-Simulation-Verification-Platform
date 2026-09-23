@@ -501,6 +501,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ("max_abs_mass_balance_residual_m3_h", "Mass-balance residual", "mass_balance_tolerance_m3_h"),
             ("max_abs_pressure_law_residual_pa", "Pressure-law residual", None),
             ("network_outer_iterations", "Network outer iterations", None),
+            ("network_newton_iterations", "Network Newton iterations", None),
             ("operating_iterations", "Operating-point iterations", None),
         )
         for metric_key, label, tolerance_key in metric_rows:
@@ -573,6 +574,52 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"| {label} | {observed} | "
                     f"{check['configured_tolerance']} | {utilization} | "
                     f"{margin} | {check['status']} |"
+                )
+
+        iteration_assessment = quality.get("configured_iteration_assessment")
+        iteration_checks = quality.get("configured_iteration_checks", {})
+        if iteration_assessment:
+            lines.extend(
+                [
+                    "",
+                    "### Configured solver-iteration checks",
+                    "",
+                    f"- Assessment: **{iteration_assessment['status']}**",
+                    "- Evaluable configured checks: "
+                    f"**{iteration_assessment['evaluable_check_count']}/"
+                    f"{iteration_assessment['configured_check_count']}**",
+                    "",
+                    "| Metric | Worst iterations | Configured limit | Utilization | Remaining iterations | Result |",
+                    "|---|---:|---:|---:|---:|---|",
+                ]
+            )
+            for metric_key, label in (
+                ("network_outer_iterations", "Network outer iterations"),
+                ("network_newton_iterations", "Network Newton iterations"),
+                ("operating_iterations", "Operating-point iterations"),
+            ):
+                check = iteration_checks.get(metric_key)
+                if not check:
+                    continue
+                observed = (
+                    "—"
+                    if check["observed_iterations"] is None
+                    else check["observed_iterations"]
+                )
+                utilization = (
+                    "—"
+                    if check["utilization_ratio"] is None
+                    else check["utilization_ratio"]
+                )
+                remaining = (
+                    "—"
+                    if check["remaining_iterations"] is None
+                    else check["remaining_iterations"]
+                )
+                lines.append(
+                    f"| {label} | {observed} | "
+                    f"{check['configured_limit']} | {utilization} | "
+                    f"{remaining} | {check['status']} |"
                 )
 
         lines.extend(["", quality["scope_note"]])

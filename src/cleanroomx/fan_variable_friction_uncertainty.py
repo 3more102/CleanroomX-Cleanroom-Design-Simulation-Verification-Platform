@@ -13,7 +13,7 @@ from .fan_variable_friction_loop import (
 )
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from .loop_resistance import LoopedDuctResistanceInput, derive_loop_edge_resistance
-from .pressure_power import FanPowerEfficiencies
+from .pressure_power import FanPowerEfficiencies, analyze_fan_pressure_power
 from .uncertainty_models import Provenance, UncertainValue
 
 
@@ -67,6 +67,10 @@ class FanVariableFrictionLoopUncertaintyStudy:
     fan_curve_provenance: Provenance | None = None
     max_corner_cases: int = 256
     power_efficiencies: FanPowerEfficiencies | None = None
+    power_efficiency_uncertainty: dict[str, UncertainValue] = field(
+        default_factory=dict
+    )
+    max_power_cases: int = 2048
     resistance_relative_tolerance: float = 1e-6
     relaxation: float = 0.5
     near_zero_airflow_m3_h: float = 1e-6
@@ -100,6 +104,67 @@ class FanVariableFrictionLoopUncertaintyStudy:
             or self.max_corner_cases <= 0
         ):
             raise ValueError("max_corner_cases must be an integer > 0")
+        if (
+            isinstance(self.max_power_cases, bool)
+            or not isinstance(self.max_power_cases, int)
+            or self.max_power_cases <= 0
+        ):
+            raise ValueError("max_power_cases must be an integer > 0")
+
+        efficiency_uncertainty = dict(self.power_efficiency_uncertainty)
+        allowed_efficiencies = {
+            "fan_efficiency",
+            "motor_efficiency",
+            "vfd_efficiency",
+        }
+        unknown_efficiencies = set(efficiency_uncertainty) - allowed_efficiencies
+        if unknown_efficiencies:
+            raise ValueError(
+                "unsupported power efficiency uncertainty field(s): "
+                + ", ".join(sorted(unknown_efficiencies))
+            )
+        if efficiency_uncertainty and self.power_efficiencies is None:
+            raise ValueError(
+                "power_efficiency_uncertainty requires explicit power_efficiencies"
+            )
+        nominal_efficiencies = (
+            {}
+            if self.power_efficiencies is None
+            else self.power_efficiencies.to_dict()
+        )
+        normalized_efficiency_uncertainty: dict[str, UncertainValue] = {}
+        for name, item in efficiency_uncertainty.items():
+            if item.unit != "1":
+                raise ValueError(
+                    f"power efficiency uncertainty for {name!r} must use unit '1'"
+                )
+            nominal = nominal_efficiencies.get(name)
+            if nominal is None:
+                raise ValueError(
+                    f"power efficiency uncertainty for {name!r} requires an "
+                    "explicit nominal efficiency"
+                )
+            if not math.isclose(
+                item.value,
+                float(nominal),
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError(
+                    f"power efficiency uncertainty nominal for {name!r} must "
+                    "match power_efficiencies"
+                )
+            if item.lower <= 0.0 or item.upper > 1.0:
+                raise ValueError(
+                    f"power efficiency uncertainty bounds for {name!r} must "
+                    "remain within (0, 1]"
+                )
+            normalized_efficiency_uncertainty[name] = item
+        object.__setattr__(
+            self,
+            "power_efficiency_uncertainty",
+            normalized_efficiency_uncertainty,
+        )
 
         scenarios = tuple(self.fan_curve_scenarios)
         object.__setattr__(self, "fan_curve_scenarios", scenarios)
@@ -1015,47 +1080,119 @@ def _edge_airflow_extrema_sources(
     return rows
 
 
-def _power_metric_corner_range(
+def _power_case_summary(power_case: dict, corners: list[dict]) -> dict:
+    summary = _critical_case_summary(
+        power_case["corner_index"],
+        corners[power_case["corner_index"]],
+    )
+    if power_case.get("efficiencies") is not None:
+        summary["power_efficiencies"] = power_case["efficiencies"]
+    summary["power_case_index"] = power_case["power_case_index"]
+    return summary
+
+
+def _build_power_cases(
+    study: FanVariableFrictionLoopUncertaintyStudy,
     corners: list[dict],
+) -> list[dict]:
+    dimensions = sorted(study.power_efficiency_uncertainty.items())
+    value_sets = [
+        sorted({item.lower, item.upper}) for _name, item in dimensions
+    ]
+    efficiency_case_count = prod(len(values) for values in value_sets)
+    total_case_count = len(corners) * efficiency_case_count
+    if total_case_count > study.max_power_cases:
+        raise ValueError(
+            "fan/variable-friction uncertainty power case count "
+            f"{total_case_count} exceeds max_power_cases={study.max_power_cases}"
+        )
+
+    nominal_efficiencies = (
+        None
+        if study.power_efficiencies is None
+        else study.power_efficiencies.to_dict()
+    )
+    combinations = list(product(*value_sets)) if value_sets else [()]
+    cases = []
+    for corner_index, corner in enumerate(corners):
+        base_power = corner.get("power_evidence")
+        if base_power is None:
+            continue
+        for values in combinations:
+            efficiency_values = (
+                None
+                if nominal_efficiencies is None
+                else dict(nominal_efficiencies)
+            )
+            if efficiency_values is not None:
+                for (name, _item), value in zip(dimensions, values):
+                    efficiency_values[name] = value
+                efficiencies = FanPowerEfficiencies(**efficiency_values)
+            else:
+                efficiencies = None
+            evidence = analyze_fan_pressure_power(
+                base_power["airflow_m3_h"],
+                base_power["pressure_pa"],
+                efficiencies,
+            )
+            cases.append(
+                {
+                    "power_case_index": len(cases),
+                    "corner_index": corner_index,
+                    "efficiencies": (
+                        None
+                        if efficiencies is None
+                        else efficiencies.to_dict()
+                    ),
+                    "power_evidence": evidence,
+                }
+            )
+    return cases
+
+
+def _power_metric_corner_range(
+    power_cases: list[dict],
     key: str,
     unit: str,
 ) -> dict | None:
-    values = [
-        float(corner["power_evidence"][key])
-        for corner in corners
-        if corner.get("power_evidence") is not None
-        and corner["power_evidence"].get(key) is not None
-    ]
+    values = []
+    for power_case in power_cases:
+        value = power_case["power_evidence"].get(key)
+        if value is None:
+            return None
+        values.append(float(value))
     if not values:
         return None
     return {
         "lower": round(min(values), 6),
         "upper": round(max(values), 6),
         "unit": unit,
+        "evaluated_power_case_count": len(values),
     }
 
 
 def _power_metric_extrema_sources(
+    power_cases: list[dict],
     corners: list[dict],
     key: str,
     unit: str,
 ) -> dict | None:
-    values = [
-        (corner_index, float(corner["power_evidence"][key]))
-        for corner_index, corner in enumerate(corners)
-        if corner.get("power_evidence") is not None
-        and corner["power_evidence"].get(key) is not None
-    ]
+    values = []
+    for power_case in power_cases:
+        value = power_case["power_evidence"].get(key)
+        if value is None:
+            return None
+        values.append((power_case, float(value)))
     if not values:
         return None
 
-    lower = min(value for _corner_index, value in values)
-    upper = max(value for _corner_index, value in values)
+    lower = min(value for _power_case, value in values)
+    upper = max(value for _power_case, value in values)
 
     def _sources(target: float) -> list[dict]:
         return [
-            _critical_case_summary(corner_index, corners[corner_index])
-            for corner_index, value in values
+            _power_case_summary(power_case, corners)
+            for power_case, value in values
             if math.isclose(value, target, rel_tol=1e-12, abs_tol=1e-9)
         ]
 
@@ -1386,6 +1523,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
     edge_airflow_extrema_sources = None
     power_evidence_corner_ranges = None
     power_evidence_extrema_sources = None
+    power_cases = None
     if all_corners_solved:
         operating_point_envelope = {
             "airflow_m3_h": _metric_envelope(
@@ -1454,12 +1592,18 @@ def analyze_fan_variable_friction_loop_uncertainty(
             ("electrical_input_kw", "kW"),
             ("specific_fan_power_w_per_m3_s", "W/(m3/s)"),
         )
+        power_cases = _build_power_cases(study, corners)
         power_evidence_corner_ranges = {
-            key: _power_metric_corner_range(corners, key, unit)
+            key: _power_metric_corner_range(power_cases, key, unit)
             for key, unit in power_metric_specs
         }
         power_evidence_extrema_sources = {
-            key: _power_metric_extrema_sources(corners, key, unit)
+            key: _power_metric_extrema_sources(
+                power_cases,
+                corners,
+                key,
+                unit,
+            )
             for key, unit in power_metric_specs
         }
 
@@ -1501,6 +1645,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
             ),
         }
         for scenario in study.fan_curve_scenarios
+    ]
+    efficiency_records = [
+        _input_record(f"power_efficiency:{name}", item)
+        for name, item in sorted(study.power_efficiency_uncertainty.items())
     ]
     edge_records = [
         *[
@@ -1544,6 +1692,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
             *fan_pressure_records,
             *fan_airflow_records,
             *scenario_records,
+            *efficiency_records,
             *edge_records,
         ]
         if record["provenance"] is None
@@ -1691,6 +1840,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
         },
         "nominal_status": nominal["status"],
         "nominal_operating_point": nominal["fan_operating_point"],
+        "nominal_power_evidence": nominal["power_evidence"],
         "nominal_result": nominal,
         "corner_count": len(corners),
         "solved_corner_count": len(solved_points),
@@ -1707,6 +1857,19 @@ def analyze_fan_variable_friction_loop_uncertainty(
             if study.power_efficiencies is None
             else study.power_efficiencies.to_dict()
         ),
+        "power_efficiency_uncertainty": {
+            name: {
+                "nominal": item.value,
+                "lower": item.lower,
+                "upper": item.upper,
+                "unit": item.unit,
+            }
+            for name, item in sorted(
+                study.power_efficiency_uncertainty.items()
+            )
+        },
+        "power_case_count": 0 if power_cases is None else len(power_cases),
+        "power_cases": power_cases,
         "power_evidence_corner_ranges": power_evidence_corner_ranges,
         "power_evidence_extrema_sources": power_evidence_extrema_sources,
         "traceability": {
@@ -1723,6 +1886,7 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 *fan_pressure_records,
                 *fan_airflow_records,
                 *scenario_records,
+                *efficiency_records,
                 *edge_records,
             ],
         },

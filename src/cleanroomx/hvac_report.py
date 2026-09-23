@@ -56,6 +56,31 @@ def markdown_hvac_report(result: dict) -> str:
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
             )
 
+    if result["duct_network"] is not None:
+        network = result["duct_network"]
+        lines.extend(
+            [
+                "",
+                "## Duct critical-path pressure loss",
+                "",
+                "| Path | Calculated pressure drop Pa |",
+                "|---|---:|",
+            ]
+        )
+        for path in network["paths"]:
+            lines.append(
+                f"| {path['name']} | {path['total_pressure_drop_pa']} |"
+            )
+        lines.extend(
+            [
+                "",
+                f"Critical path: **{network['critical_path']}**.",
+                f"Critical-path duct pressure drop: **{network['critical_path_pressure_drop_pa']} Pa**.",
+                "",
+                network["scope_note"],
+            ]
+        )
+
     if result["supply_fan"] is not None:
         fan = result["supply_fan"]
         lines.extend(
@@ -64,7 +89,8 @@ def markdown_hvac_report(result: dict) -> str:
                 "## Preliminary supply-fan duty",
                 "",
                 f"- Airflow: **{fan['airflow_m3_h']} m³/h**.",
-                f"- Total entered static pressure: **{fan['total_static_pressure_pa']} Pa**.",
+                f"- Total entered/computed static pressure: **{fan['total_static_pressure_pa']} Pa**.",
+                f"- Duct pressure source: **{fan['duct_pressure_drop_source']}**.",
                 f"- Estimated electrical input: **{fan['estimated_electrical_input_kw']} kW**.",
                 f"- {fan['scope_note']}",
             ]

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 duct critical-path pressure loss — 2026-09-23
+
+- Added circular and rectangular duct-section models with strict input validation.
+- Added velocity, velocity-pressure, hydraulic-diameter, Darcy-Weisbach friction-loss, and local-loss calculations.
+- Added user-defined duct paths and critical-path pressure-loss selection.
+- Added explicit air-density, Darcy friction-factor, and local loss-coefficient inputs; no hidden fitting or roughness assumptions.
+- Integrated computed critical-path duct loss into preliminary supply-fan sizing while preserving legacy manual duct-loss input when no network is configured.
+- Added duct-network JSON loading, Markdown reporting, example data, tests, and engineering-scope documentation.
+- Documented ASHRAE duct-design references and kept the model explicitly preliminary rather than a branch-flow/network solver.
+
 ## v0.5 uncertainty/provenance foundation — 2026-09-23
 
 - Added explicit provenance records for engineering inputs, including source type/name, reference, revision, date, uncertainty basis, and notes.
@@ -27,7 +37,7 @@
 - Added explicit minimum airflow-surplus verification and margin reporting.
 - Added optional filter/FFU pressure-drop input.
 - Added preliminary central supply-fan static-pressure, air-power, shaft-power, and electrical-input calculations.
-- Added airflow/fan report sections, example inputs, tests, and engineering-scope documentation.
+- Added airflow/fan report sections, example inputs, tests, and documentation.
 - Kept all limits and pressure-drop values requirement-driven; no ISO class is mapped to airflow surplus or fan sizing.
 
 ## v0.2 HVAC extension — 2026-09-23

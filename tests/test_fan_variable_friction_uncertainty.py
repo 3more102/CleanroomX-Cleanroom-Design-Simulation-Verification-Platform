@@ -1450,3 +1450,21 @@ def test_power_efficiency_uncertainty_report_surfaces_bounds_and_witnesses() -> 
     assert "power-case=" in report
     assert "eff[fan_efficiency=" in report
     assert "do not alter the hydraulic operating point" in report
+
+
+
+def test_motor_efficiency_uncertainty_requires_complete_electrical_chain() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_efficiency_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["power_efficiencies"].pop("vfd_efficiency")
+    data["power_efficiency_uncertainty"].pop("vfd_efficiency")
+
+    with pytest.raises(
+        ValueError,
+        match="motor_efficiency uncertainty requires an explicit vfd_efficiency",
+    ):
+        fan_variable_friction_loop_uncertainty_from_dict(data)

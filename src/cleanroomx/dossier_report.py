@@ -445,14 +445,16 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "| Study | Status | Operating airflow m³/h | System pressure Pa | "
                 "Outer iterations | Resistance closure | Continuity residual m³/h | "
-                "Edge-law residual Pa | Fan-system residual Pa | Termination |",
-                "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
+                "Edge-law residual Pa | Fan-system residual Pa | Fluid air power kW | "
+                "Electrical input kW | Edge dissipation W | Termination |",
+                "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
             ]
         )
         for item in result["fan_variable_friction_loop_studies"]:
             point = item.get("fan_operating_point")
             check = item.get("system_pressure_check")
             diagnostics = item.get("solver_diagnostics", {})
+            power = item.get("power_evidence")
             airflow = "—" if point is None else point["airflow_m3_h"]
             pressure = (
                 "—" if check is None else check["total_system_pressure_pa"]
@@ -460,13 +462,30 @@ def markdown_dossier_report(result: dict) -> str:
             residual = (
                 "—" if check is None else check["fan_minus_system_pressure_pa"]
             )
+            fluid_power = (
+                "—" if power is None else power["fluid_air_power_kw"]
+            )
+            electrical_power = (
+                "—"
+                if power is None or power["electrical_input_kw"] is None
+                else power["electrical_input_kw"]
+            )
+            edge_dissipation = (
+                "—"
+                if power is None
+                else power["system_components"][
+                    "loop_network_edge_dissipation_w"
+                ]
+            )
             lines.append(
                 f"| {item['study']} | {item['status']} | {airflow} | "
                 f"{pressure} | {diagnostics.get('network_outer_iterations', '—')} | "
                 f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
                 f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
                 f"{diagnostics.get('max_abs_pressure_law_residual_pa', '—')} | "
-                f"{residual} | {diagnostics.get('termination_reason', '—')} |"
+                f"{residual} | {fluid_power} | {electrical_power} | "
+                f"{edge_dissipation} | "
+                f"{diagnostics.get('termination_reason', '—')} |"
             )
 
     if result.get("fan_loop_uncertainty_analyses"):
@@ -538,8 +557,9 @@ def markdown_dossier_report(result: dict) -> str:
                 "| Study | Speed ratio | Speed rpm | Status | Operating airflow m³/h | "
                 "System pressure Pa | Outer iterations | Resistance closure | "
                 "Continuity residual m³/h | Edge-law residual Pa | "
-                "Fan-system residual Pa | Termination |",
-                "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|",
+                "Fan-system residual Pa | Fluid air power kW | "
+                "Electrical input kW | Edge dissipation W | Termination |",
+                "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
             ]
         )
         for study in result["fan_variable_friction_speed_studies"]:
@@ -547,6 +567,7 @@ def markdown_dossier_report(result: dict) -> str:
                 point = case.get("fan_operating_point")
                 check = case.get("system_pressure_check")
                 diagnostics = case.get("solver_diagnostics", {})
+                power = case.get("power_evidence")
                 airflow = "—" if point is None else point["airflow_m3_h"]
                 pressure = (
                     "—" if check is None else check["total_system_pressure_pa"]
@@ -555,6 +576,21 @@ def markdown_dossier_report(result: dict) -> str:
                     "—"
                     if check is None
                     else check["fan_minus_system_pressure_pa"]
+                )
+                fluid_power = (
+                    "—" if power is None else power["fluid_air_power_kw"]
+                )
+                electrical_power = (
+                    "—"
+                    if power is None or power["electrical_input_kw"] is None
+                    else power["electrical_input_kw"]
+                )
+                edge_dissipation = (
+                    "—"
+                    if power is None
+                    else power["system_components"][
+                        "loop_network_edge_dissipation_w"
+                    ]
                 )
                 rpm = (
                     "—" if case.get("speed_rpm") is None else case["speed_rpm"]
@@ -566,7 +602,9 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
                     f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
                     f"{diagnostics.get('max_abs_pressure_law_residual_pa', '—')} | "
-                    f"{residual} | {diagnostics.get('termination_reason', '—')} |"
+                    f"{residual} | {fluid_power} | {electrical_power} | "
+                    f"{edge_dissipation} | "
+                    f"{diagnostics.get('termination_reason', '—')} |"
                 )
 
     if result.get("damper_studies"):

@@ -1,4 +1,14 @@
 # Changelog
+## v0.47 uncertainty corner outcome diagnostics — 2026-09-24
+
+- Added deterministic status accounting across every evaluated nonlinear fan/variable-friction uncertainty corner.
+- Records solver termination-reason counts directly from each corner's existing solver diagnostics.
+- Adds exact unresolved corner indices plus their fixed-pressure, fan-speed/scenario, fan-point, and duct uncertainty input context.
+- Keeps unresolved-corner evidence diagnostic only: indeterminate studies still emit no complete operating-point or internal edge-flow envelope.
+- Markdown reports now surface status/termination summaries and a compact unresolved-corner table.
+- Added regression coverage for both all-solved accounting and indeterminate corner traceability.
+- Bumped package/runtime metadata to v0.47.0.
+
 ## v0.46 uncertainty envelope witness provenance — 2026-09-23
 
 - Added exact evaluated-corner witnesses for nonlinear uncertainty operating-point minima and maxima.

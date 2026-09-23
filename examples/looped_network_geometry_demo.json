@@ -1,0 +1,59 @@
+{
+  "name": "Geometry-derived quadratic loop demo",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 3600.0,
+    "Junction": 0.0,
+    "Return": -3600.0
+  },
+  "edges": [
+    {
+      "name": "Direct",
+      "start_node": "Supply",
+      "end_node": "Return",
+      "sections": [
+        {
+          "name": "Direct round duct",
+          "length_m": 20.0,
+          "airflow_m3_h": 1800.0,
+          "air_density_kg_m3": 1.2,
+          "diameter_m": 0.5,
+          "absolute_roughness_m": 0.00009,
+          "kinematic_viscosity_m2_s": 0.000015
+        }
+      ]
+    },
+    {
+      "name": "Upper 1",
+      "start_node": "Supply",
+      "end_node": "Junction",
+      "sections": [
+        {
+          "name": "Upper first round duct",
+          "length_m": 10.0,
+          "airflow_m3_h": 1800.0,
+          "air_density_kg_m3": 1.2,
+          "diameter_m": 0.5,
+          "absolute_roughness_m": 0.00009,
+          "kinematic_viscosity_m2_s": 0.000015
+        }
+      ]
+    },
+    {
+      "name": "Upper 2",
+      "start_node": "Junction",
+      "end_node": "Return",
+      "sections": [
+        {
+          "name": "Upper second round duct",
+          "length_m": 10.0,
+          "airflow_m3_h": 1800.0,
+          "air_density_kg_m3": 1.2,
+          "diameter_m": 0.5,
+          "absolute_roughness_m": 0.00009,
+          "kinematic_viscosity_m2_s": 0.000015
+        }
+      ]
+    }
+  ]
+}

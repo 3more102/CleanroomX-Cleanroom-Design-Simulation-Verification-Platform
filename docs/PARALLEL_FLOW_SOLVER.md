@@ -1,6 +1,6 @@
 # Parallel duct branch-flow solver
 
-CleanroomX v0.7 adds a bounded branch-flow solver for parallel duct paths.
+CleanroomX v0.8 adds a bounded branch-flow solver for parallel duct paths.
 
 ## Model
 
@@ -12,7 +12,7 @@ With fixed Darcy friction factor, air density, geometry, and local-loss coeffici
 
 For paths in parallel, the pressure loss is equal and the path flows sum to the specified total airflow. CleanroomX therefore solves the common pressure loss and distributes flow according to each path resistance.
 
-This extends the v0.6 critical-path model: v0.6 evaluates pressure loss for explicitly assigned section flows, while v0.7 can solve the passive flow split for a simple parallel network.
+This extends the v0.6 critical-path model: v0.6 evaluates pressure loss for explicitly assigned section flows, while v0.8 can solve the passive flow split for a simple parallel network.
 
 ## Inputs
 

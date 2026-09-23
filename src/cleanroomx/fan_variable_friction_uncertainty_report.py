@@ -113,6 +113,18 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             f"(nominal {interval['nominal']} m)"
         )
 
+    scenarios = result.get("fan_curve_scenarios", [])
+    if scenarios:
+        lines.extend(["", "## Whole fan-curve scenarios", ""])
+        for scenario in scenarios:
+            point_text = ", ".join(
+                f"{point['airflow_m3_h']} m³/h @ {point['pressure_pa']} Pa"
+                for point in scenario["points"]
+            )
+            lines.append(
+                f"- `{scenario['name']}`: {point_text}"
+            )
+
     lines.extend(["", "## Nominal operating point", ""])
     nominal = result["nominal_operating_point"]
     if nominal is None:
@@ -153,8 +165,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             "",
             "## Corner results",
             "",
-            "| Fixed pressure Pa | Speed ratio | Fan-point pressures Pa | Fan-point airflows m³/h | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
-            "|---:|---:|---|---|---|---|---|---:|---:|",
+            "| Fixed pressure Pa | Speed ratio | Fan-curve scenario | Fan-point pressures Pa | Fan-point airflows m³/h | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
+            "|---:|---:|---|---|---|---|---|---|---:|---:|",
         ]
     )
     for corner in result["corners"]:
@@ -194,6 +206,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         lines.append(
             f"| {corner['fixed_pressure_pa']} | "
             f"{corner.get('fan_speed_ratio', '—')} | "
+            f"{corner.get('fan_curve_scenario', '—')} | "
             f"{fan_pressures or '—'} | {fan_airflows or '—'} | "
             f"{local_losses or '—'} | "
             f"{', '.join(physical_values) or '—'} | {corner['status']} | "

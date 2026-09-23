@@ -1290,6 +1290,107 @@ def _power_metric_extrema_sources(
 
 
 
+
+def _fan_curve_no_intersection_diagnostic(result: dict) -> dict | None:
+    if result.get("status") != "no_intersection_in_supplied_range":
+        return None
+
+    checks = result.get("fan_curve_point_checks") or []
+    if not checks:
+        return None
+
+    lower_check = checks[0]
+    upper_check = checks[-1]
+    lower_margin = float(lower_check["pressure_margin_pa"])
+
+    if lower_margin < 0.0:
+        selected = lower_check
+        boundary = "lower"
+        mismatch_kind = "fan_pressure_deficit"
+    else:
+        selected = upper_check
+        boundary = "upper"
+        mismatch_kind = "fan_pressure_surplus"
+
+    signed_margin = float(selected["pressure_margin_pa"])
+    return {
+        "boundary": boundary,
+        "mismatch_kind": mismatch_kind,
+        "airflow_m3_h": round(float(selected["airflow_m3_h"]), 6),
+        "fan_pressure_pa": round(float(selected["fan_pressure_pa"]), 9),
+        "system_pressure_pa": round(
+            float(selected["system_pressure_pa"]),
+            9,
+        ),
+        "fan_minus_system_pressure_pa": round(signed_margin, 9),
+        "absolute_boundary_pressure_gap_pa": round(
+            abs(signed_margin),
+            9,
+        ),
+    }
+
+
+def _fan_curve_no_intersection_summary(corners: list[dict]) -> dict:
+    cases = [
+        (
+            corner_index,
+            corner,
+            corner["fan_curve_no_intersection_diagnostic"],
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_no_intersection_diagnostic") is not None
+    ]
+
+    lower_count = sum(
+        diagnostic["boundary"] == "lower"
+        for _index, _corner, diagnostic in cases
+    )
+    upper_count = sum(
+        diagnostic["boundary"] == "upper"
+        for _index, _corner, diagnostic in cases
+    )
+
+    largest_gap = None
+    if cases:
+        maximum_gap = max(
+            float(diagnostic["absolute_boundary_pressure_gap_pa"])
+            for _index, _corner, diagnostic in cases
+        )
+        sources = []
+        for corner_index, corner, diagnostic in cases:
+            gap = float(diagnostic["absolute_boundary_pressure_gap_pa"])
+            if not math.isclose(
+                gap,
+                maximum_gap,
+                rel_tol=1e-12,
+                abs_tol=1e-9,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(diagnostic)
+            sources.append(source)
+        largest_gap = {
+            "value": round(maximum_gap, 9),
+            "unit": "Pa",
+            "sources": sources,
+        }
+
+    return {
+        "no_intersection_corner_count": len(cases),
+        "lower_boundary_corner_count": lower_count,
+        "upper_boundary_corner_count": upper_count,
+        "largest_absolute_boundary_pressure_gap_pa": largest_gap,
+        "scope_note": (
+            "This diagnostic reports the fan-minus-system pressure mismatch "
+            "at the supplied fan-curve endpoint that bounds each "
+            "no-intersection case. It does not extrapolate the fan curve, "
+            "estimate the missing operating point, or infer fan capacity, "
+            "stall/surge margin, manufacturer acceptance, or an acceptable "
+            "pressure-gap threshold."
+        ),
+    }
+
+
 def _fan_curve_boundary_clearance(result: dict) -> dict | None:
     if result.get("status") != "solved":
         return None
@@ -1736,6 +1837,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                 "edge_rectangular_height_m"
                             ],
                             "status": result["status"],
+                            "fan_curve_no_intersection_diagnostic": (
+                                _fan_curve_no_intersection_diagnostic(result)
+                            ),
                             "fan_curve_airflow_range_m3_h": result[
                                 "fan_curve_airflow_range_m3_h"
                             ],
@@ -1757,6 +1861,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         and unresolved_corner_count == 0
     )
     corner_outcome_diagnostics = _corner_outcome_diagnostics(corners)
+    fan_curve_no_intersection_summary = (
+        _fan_curve_no_intersection_summary(corners)
+    )
     solver_quality_summary = _solver_quality_summary(
         study,
         corners,
@@ -2118,6 +2225,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "solved_corner_count": len(solved_points),
         "unresolved_corner_count": unresolved_corner_count,
         "corner_outcome_diagnostics": corner_outcome_diagnostics,
+        "fan_curve_no_intersection_summary": (
+            fan_curve_no_intersection_summary
+        ),
         "solver_quality_summary": solver_quality_summary,
         "nominal_fan_curve_boundary_clearance": (
             nominal_fan_curve_boundary_clearance
@@ -2191,7 +2301,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "auditability. Corner outcome diagnostics separately retain "
             "status and solver termination-reason counts plus the exact input "
             "context of every unresolved evaluated corner without converting "
-            "partial solved cases into a complete envelope. When explicit "
+            "partial solved cases into a complete envelope. No-intersection "
+            "corners additionally retain the exact supplied endpoint pressure "
+            "mismatch that bounds the case, without fan-curve extrapolation "
+            "or estimating a missing operating point. When explicit "
             "fan/motor/VFD efficiencies are supplied, solved-corner power "
             "evidence also retains fluid, shaft, electrical-input, and "
             "specific-fan-power ranges plus their source corners. The "

@@ -79,10 +79,13 @@ A solved result includes:
 - operating-point termination reason;
 - a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, strict sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features;
 - for solved cases, selected-candidate provenance containing the documented selection policy, selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate.
+- operating-point search provenance that distinguishes direct supplied-point tolerance contacts from bounded bisection; bisection solutions retain the final active signed-residual bracket, width, half-width, selected midpoint/residual, iteration, and width relative to the original supplied interpolation segment.
 
 The reported air power is fluid power, not shaft or electrical input.
 
 The residual-topology audit uses only supplied fan-curve points already evaluated by the bounded nonlinear solver. A candidate feature is a supplied point within the configured root tolerance or a strict positive-to-negative sign-change segment. Candidate-feature counts and sampled monotonicity are diagnostic evidence only: they do not count or prove continuous fan/system intersections, guarantee uniqueness between supplied points, establish dynamic stability, identify stall/surge boundaries, or define manufacturer/equipment acceptance. v0.63 additionally preserves the exact deterministic selection policy and selected discrete feature for solved results so the chosen bounded root is auditable when more than one sampled candidate feature exists.
+
+v0.65 preserves the actual bounded root-search geometry. When a bisection midpoint terminates on the configured pressure tolerance, the result records the active positive/negative-residual airflow interval immediately before termination and its width/half-width. A supplied-point tolerance contact records its exact supplied-point index and leaves bisection evidence unset. These are numerical search diagnostics only, not physical airflow uncertainty, interpolation-error bounds, continuous worst-case guarantees, or equipment-acceptance criteria.
 
 ## CLI
 

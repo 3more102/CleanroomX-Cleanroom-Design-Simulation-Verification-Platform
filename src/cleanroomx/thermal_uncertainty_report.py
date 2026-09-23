@@ -5,11 +5,42 @@ def _fmt(value: float) -> str:
     return f"{value:.6g}"
 
 
-def _interval_text(item: dict, unit: str) -> str:
+def _interval_text(item: dict, unit: str | None = None) -> str:
+    resolved_unit = unit or item["unit"]
     return (
-        f"{_fmt(item['nominal'])} {unit} "
-        f"({_fmt(item['lower'])} to {_fmt(item['upper'])} {unit})"
+        f"{_fmt(item['nominal'])} {resolved_unit} "
+        f"({_fmt(item['lower'])} to {_fmt(item['upper'])} {resolved_unit})"
     )
+
+
+def _append_psychrometric_state(
+    lines: list[str],
+    label: str,
+    state: dict,
+) -> None:
+    lines.extend(
+        [
+            f"### {label}",
+            "",
+            f"- Evaluated corners: **{state['corner_count']}**",
+            "",
+            "| Property | Nominal | Lower | Upper | Unit |",
+            "|---|---:|---:|---:|---|",
+        ]
+    )
+    for key, item in state["input_state"].items():
+        lines.append(
+            f"| {key} | {_fmt(item['nominal'])} | "
+            f"{_fmt(item['lower'])} | {_fmt(item['upper'])} | "
+            f"{item['unit']} |"
+        )
+    for key, item in state["psychrometric_properties"].items():
+        lines.append(
+            f"| {key} | {_fmt(item['nominal'])} | "
+            f"{_fmt(item['lower'])} | {_fmt(item['upper'])} | "
+            f"{item['unit']} |"
+        )
+    lines.append("")
 
 
 def markdown_thermal_uncertainty_report(result: dict) -> str:
@@ -25,28 +56,43 @@ def markdown_thermal_uncertainty_report(result: dict) -> str:
         f"- Method: **{result['method']}**",
         f"- Capacity margin: **{result['capacity_margin_percent']}%**",
         "",
-        "## Capacity intervals",
+        "## Psychrometric state intervals",
         "",
-        f"- Cooling requirement: **{_interval_text(cooling, 'kW')}**",
-        (
-            f"- Available cooling capacity: **{cooling['available']} kW**"
-            if cooling["available"] is not None
-            else "- Available cooling capacity: **not configured**"
-        ),
-        f"- Cooling status: **{cooling['status'].upper()}** — {cooling['message']}",
-        f"- Heating requirement: **{_interval_text(heating, 'kW')}**",
-        (
-            f"- Available heating capacity: **{heating['available']} kW**"
-            if heating["available"] is not None
-            else "- Available heating capacity: **not configured**"
-        ),
-        f"- Heating status: **{heating['status'].upper()}** — {heating['message']}",
-        "",
-        "## Governing airflow interval",
-        "",
-        f"- Cleanroom airflow: **{_interval_text(airflow['cleanroom'], 'm³/h')}**",
-        f"- Makeup airflow: **{_interval_text(airflow['makeup'], 'm³/h')}**",
     ]
+    _append_psychrometric_state(
+        lines,
+        "Room air",
+        result["psychrometric_states"]["room_air"],
+    )
+    outdoor = result["psychrometric_states"]["outdoor_air"]
+    if outdoor is not None:
+        _append_psychrometric_state(lines, "Outdoor air", outdoor)
+
+    lines.extend(
+        [
+            "## Capacity intervals",
+            "",
+            f"- Cooling requirement: **{_interval_text(cooling, 'kW')}**",
+            (
+                f"- Available cooling capacity: **{cooling['available']} kW**"
+                if cooling["available"] is not None
+                else "- Available cooling capacity: **not configured**"
+            ),
+            f"- Cooling status: **{cooling['status'].upper()}** — {cooling['message']}",
+            f"- Heating requirement: **{_interval_text(heating, 'kW')}**",
+            (
+                f"- Available heating capacity: **{heating['available']} kW**"
+                if heating["available"] is not None
+                else "- Available heating capacity: **not configured**"
+            ),
+            f"- Heating status: **{heating['status'].upper()}** — {heating['message']}",
+            "",
+            "## Governing airflow interval",
+            "",
+            f"- Cleanroom airflow: **{_interval_text(airflow['cleanroom'], 'm³/h')}**",
+            f"- Makeup airflow: **{_interval_text(airflow['makeup'], 'm³/h')}**",
+        ]
+    )
 
     thermal = airflow["thermal_for_internal_sensible"]
     if thermal is not None:

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cleanroomx"
 version = "0.43.0"
-description = "Cleanroom design screening, verification, nonlinear fan/loop fan-curve, physical and geometry uncertainty, duct networks, and preliminary HVAC toolkit"
+description = "Cleanroom design screening, verification, nonlinear fan/loop fan-curve coordinate, physical and geometry uncertainty, duct networks, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "CleanroomX contributors"}]

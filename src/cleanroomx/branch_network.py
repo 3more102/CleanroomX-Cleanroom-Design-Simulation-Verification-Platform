@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from .duct import DuctSection, analyze_duct_section
 
@@ -62,6 +63,8 @@ class TerminalDemand:
         if not self.node.strip():
             raise ValueError("terminal node cannot be empty")
         airflow = float(self.airflow_m3_h)
+        if not math.isfinite(airflow):
+            raise ValueError("terminal airflow_m3_h must be finite")
         if airflow <= 0:
             raise ValueError("terminal airflow_m3_h must be > 0")
         object.__setattr__(self, "airflow_m3_h", airflow)

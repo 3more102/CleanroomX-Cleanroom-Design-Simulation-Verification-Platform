@@ -45,7 +45,7 @@ The dossier preserves component-specific states instead of turning every result 
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. A solved fan operating point is reported as completed engineering screening, not as equipment acceptance. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. A solved fan operating point is reported as completed engineering screening, not as equipment acceptance. HVAC calculations remain preliminary screening.
 
 ## CLI
 

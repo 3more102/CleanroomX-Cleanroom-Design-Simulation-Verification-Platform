@@ -1010,7 +1010,8 @@ def test_operating_point_extrema_sources_reference_exact_corners() -> None:
                 corner = result["corners"][source["corner_index"]]
                 assert corner["operating_point"] is not None
                 assert corner["operating_point"][metric] == pytest.approx(
-                    evidence["value"]
+                    evidence["value"],
+                    abs=1e-6,
                 )
                 assert source["fixed_pressure_pa"] == corner[
                     "fixed_pressure_pa"

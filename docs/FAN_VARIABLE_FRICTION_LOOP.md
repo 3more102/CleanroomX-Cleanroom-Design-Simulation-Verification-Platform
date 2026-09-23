@@ -76,9 +76,12 @@ A solved result includes:
 - resistance-closure error;
 - edge Reynolds/friction evidence;
 - supplied fan-point system checks;
-- operating-point termination reason.
+- operating-point termination reason;
+- a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, strict sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features.
 
 The reported air power is fluid power, not shaft or electrical input.
+
+The residual-topology audit uses only supplied fan-curve points already evaluated by the bounded nonlinear solver. A candidate feature is a supplied point within the configured root tolerance or a strict positive-to-negative sign-change segment. Candidate-feature counts and sampled monotonicity are diagnostic evidence only: they do not count or prove continuous fan/system intersections, guarantee uniqueness between supplied points, establish dynamic stability, identify stall/surge boundaries, or define manufacturer/equipment acceptance.
 
 ## CLI
 

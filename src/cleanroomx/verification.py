@@ -30,8 +30,16 @@ class VerificationReport:
     findings: tuple[Finding, ...]
 
     @property
+    def failed(self) -> bool:
+        return any(item.status == "fail" for item in self.findings)
+
+    @property
+    def indeterminate(self) -> bool:
+        return any(item.status == "indeterminate" for item in self.findings)
+
+    @property
     def passed(self) -> bool:
-        return all(item.status not in {"fail", "indeterminate"} for item in self.findings)
+        return not self.failed and not self.indeterminate
 
     def to_dict(self) -> dict:
         return {
@@ -39,6 +47,8 @@ class VerificationReport:
             "volume_m3": self.volume_m3,
             "ach": self.ach,
             "passed": self.passed,
+            "failed": self.failed,
+            "indeterminate": self.indeterminate,
             "findings": [asdict(item) for item in self.findings],
         }
 

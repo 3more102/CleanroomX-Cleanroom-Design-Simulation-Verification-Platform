@@ -1,0 +1,8 @@
+{
+  "name": "Efficiency-Uncertainty Engineering Dossier",
+  "project_reference": "CRX-V052",
+  "revision": "A",
+  "fan_variable_friction_uncertainty_analyses": [
+    "fan_variable_friction_efficiency_uncertainty_demo.json"
+  ]
+}

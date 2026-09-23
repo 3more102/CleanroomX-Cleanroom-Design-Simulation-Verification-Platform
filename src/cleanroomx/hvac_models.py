@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .duct_models import DuctNetwork
+
 
 def _positive(value: float, field_name: str) -> float:
     value = float(value)
@@ -235,6 +237,7 @@ class HVACProject:
     rooms: tuple[HVACRoom, ...]
     filter_unit: FilterUnit | None = None
     fan_system: FanSystem | None = None
+    duct_network: DuctNetwork | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():

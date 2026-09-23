@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .branch_network import BranchDuct, BranchFlowNetwork, TerminalDemand
 from .duct import DuctNetwork, DuctPath, DuctSection
+from .fan_curve import FanCurve, FanCurvePoint
 from .hvac_models import (
     AirBalanceDesign,
     AirState,
@@ -68,6 +69,15 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
     filter_unit = FilterUnit(**filter_data) if filter_data is not None else None
     fan_data = data.get("fan_system")
     fan_system = FanSystem(**fan_data) if fan_data is not None else None
+    fan_curve_data = data.get("fan_curve")
+    fan_curve = (
+        FanCurve(
+            name=fan_curve_data["name"],
+            points=tuple(FanCurvePoint(**point) for point in fan_curve_data["points"]),
+        )
+        if fan_curve_data is not None
+        else None
+    )
     duct_data = data.get("duct_network")
     duct_network = (
         duct_network_from_dict(duct_data) if duct_data is not None else None
@@ -85,6 +95,7 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
         fan_system=fan_system,
         duct_network=duct_network,
         branch_flow_network=branch_flow_network,
+        fan_curve=fan_curve,
     )
 
 

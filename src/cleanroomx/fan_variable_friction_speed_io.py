@@ -6,6 +6,7 @@ from pathlib import Path
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_variable_friction_speed import FanVariableFrictionSpeedStudy
 from .loop_network_io import looped_flow_network_from_dict
+from .pressure_power import fan_power_efficiencies_from_dict
 
 
 _SOLVER_KEYS = {
@@ -48,6 +49,9 @@ def fan_variable_friction_speed_study_from_dict(
         speed_ratios=tuple(data["speed_ratios"]),
         fixed_pressure_pa=data.get("fixed_pressure_pa", 0.0),
         reference_speed_rpm=data.get("reference_speed_rpm"),
+        power_efficiencies=fan_power_efficiencies_from_dict(
+            data.get("power_efficiencies")
+        ),
         **solver,
     )
 

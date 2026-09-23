@@ -2199,3 +2199,105 @@ def test_fan_curve_segment_position_marks_zero_solved_corner_coverage() -> None:
     assert summary["maximum_segment_airflow_span_m3_h"] is None
     assert all(corner["fan_curve_segment_position"] is None for corner in result["corners"])
 
+
+
+def test_fan_curve_root_resolution_maps_pressure_tolerance_to_airflow() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    summary = result["fan_curve_root_resolution_summary"]
+    nominal = result["nominal_fan_curve_root_resolution"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["root_resolution_evidence_corner_count"] == result[
+        "corner_count"
+    ]
+    assert summary["linearized_airflow_equivalent_corner_count"] == result[
+        "corner_count"
+    ]
+    assert summary["unavailable_linearization_corner_indices"] == []
+
+    tolerance_airflow_values = []
+    residual_airflow_values = []
+    tolerance_fraction_values = []
+    residual_fraction_values = []
+    for corner in result["corners"]:
+        diagnostic = corner["fan_curve_root_resolution"]
+        conditioning = corner["fan_curve_crossing_conditioning"]
+        assert diagnostic is not None
+        assert conditioning is not None
+        airflow_per_pa = conditioning["airflow_change_per_pa_m3_h_per_pa"]
+        assert airflow_per_pa is not None
+        tolerance = corner["solver_diagnostics"][
+            "operating_pressure_tolerance_pa"
+        ]
+        residual = abs(corner["operating_point"]["pressure_residual_pa"])
+        span = conditioning["bracket_airflow_span_m3_h"]
+        expected_tolerance_airflow = tolerance * airflow_per_pa
+        expected_residual_airflow = residual * airflow_per_pa
+
+        assert diagnostic[
+            "local_linearized_pressure_tolerance_airflow_equivalent_m3_h"
+        ] == pytest.approx(expected_tolerance_airflow, abs=1e-12)
+        assert diagnostic[
+            "local_linearized_pressure_residual_airflow_equivalent_m3_h"
+        ] == pytest.approx(expected_residual_airflow, abs=1e-12)
+        assert diagnostic[
+            "local_linearized_pressure_tolerance_fraction_of_segment"
+        ] == pytest.approx(expected_tolerance_airflow / span, abs=1e-12)
+        assert diagnostic[
+            "local_linearized_pressure_residual_fraction_of_segment"
+        ] == pytest.approx(expected_residual_airflow / span, abs=1e-12)
+        assert diagnostic["pressure_residual_tolerance_utilization"] == (
+            pytest.approx(residual / tolerance, abs=1e-12)
+        )
+
+        tolerance_airflow_values.append(expected_tolerance_airflow)
+        residual_airflow_values.append(expected_residual_airflow)
+        tolerance_fraction_values.append(expected_tolerance_airflow / span)
+        residual_fraction_values.append(expected_residual_airflow / span)
+
+    assert summary[
+        "maximum_local_linearized_pressure_tolerance_airflow_equivalent_m3_h"
+    ]["value"] == pytest.approx(max(tolerance_airflow_values), abs=1e-12)
+    assert summary[
+        "maximum_local_linearized_pressure_residual_airflow_equivalent_m3_h"
+    ]["value"] == pytest.approx(max(residual_airflow_values), abs=1e-12)
+    assert summary[
+        "maximum_local_linearized_pressure_tolerance_fraction_of_segment"
+    ]["value"] == pytest.approx(max(tolerance_fraction_values), abs=1e-12)
+    assert summary[
+        "maximum_local_linearized_pressure_residual_fraction_of_segment"
+    ]["value"] == pytest.approx(max(residual_fraction_values), abs=1e-12)
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Fan/system local pressure-to-airflow resolution" in report
+    assert "Maximum pressure-tolerance airflow equivalent" in report
+    assert "not rigorous root-error bounds" in report
+
+
+def test_fan_curve_root_resolution_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+    summary = result["fan_curve_root_resolution_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_fan_curve_root_resolution"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["root_resolution_evidence_corner_count"] == 0
+    assert summary["linearized_airflow_equivalent_corner_count"] == 0
+    assert summary["unavailable_linearization_corner_indices"] == []
+    assert summary[
+        "maximum_local_linearized_pressure_tolerance_airflow_equivalent_m3_h"
+    ] is None
+    assert summary[
+        "maximum_local_linearized_pressure_residual_airflow_equivalent_m3_h"
+    ] is None
+    assert all(
+        corner["fan_curve_root_resolution"] is None
+        for corner in result["corners"]
+    )

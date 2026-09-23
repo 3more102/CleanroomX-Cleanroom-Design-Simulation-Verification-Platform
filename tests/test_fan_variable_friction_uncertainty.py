@@ -1211,3 +1211,107 @@ def test_report_surfaces_edge_airflow_witness_provenance() -> None:
     assert "Internal edge-airflow witness provenance" in report
     assert "Source corner input(s)" in report
     assert "scenario=" in report
+
+
+
+def test_power_chain_corner_ranges_preserve_exact_source_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+
+    ranges = result["power_evidence_corner_ranges"]
+    sources = result["power_evidence_extrema_sources"]
+    assert ranges is not None
+    assert sources is not None
+    assert result["power_efficiencies"] == {
+        "fan_efficiency": 0.72,
+        "motor_efficiency": 0.93,
+        "vfd_efficiency": 0.97,
+    }
+
+    metrics = {
+        "fluid_air_power_kw": "kW",
+        "shaft_power_kw": "kW",
+        "electrical_input_kw": "kW",
+        "specific_fan_power_w_per_m3_s": "W/(m3/s)",
+    }
+    for metric, unit in metrics.items():
+        metric_range = ranges[metric]
+        metric_sources = sources[metric]
+        assert metric_range is not None
+        assert metric_sources is not None
+        assert metric_range["unit"] == unit
+        assert metric_range["lower"] <= metric_range["upper"]
+
+        for bound in ("lower", "upper"):
+            evidence = metric_sources[bound]
+            assert evidence["value"] == pytest.approx(
+                metric_range[bound],
+                abs=1e-6,
+            )
+            assert evidence["sources"]
+            for source in evidence["sources"]:
+                corner = result["corners"][source["corner_index"]]
+                assert corner["power_evidence"] is not None
+                assert corner["power_evidence"][metric] == pytest.approx(
+                    evidence["value"],
+                    abs=1e-6,
+                )
+
+
+def test_power_chain_corner_ranges_do_not_infer_missing_efficiencies() -> None:
+    data = _example_data()
+    data.pop("power_efficiencies")
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    ranges = result["power_evidence_corner_ranges"]
+    sources = result["power_evidence_extrema_sources"]
+    assert result["status"] == "complete"
+    assert result["power_efficiencies"] is None
+    assert ranges is not None
+    assert sources is not None
+    assert ranges["fluid_air_power_kw"] is not None
+    assert sources["fluid_air_power_kw"] is not None
+    assert ranges["shaft_power_kw"] is None
+    assert ranges["electrical_input_kw"] is None
+    assert ranges["specific_fan_power_w_per_m3_s"] is None
+    assert sources["shaft_power_kw"] is None
+    assert sources["electrical_input_kw"] is None
+    assert sources["specific_fan_power_w_per_m3_s"] is None
+
+
+def test_indeterminate_analysis_withholds_power_chain_corner_ranges() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {
+        "value": 900.0,
+        "uncertainty_abs": 0.0,
+    }
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["power_evidence_corner_ranges"] is None
+    assert result["power_evidence_extrema_sources"] is None
+
+
+def test_uncertainty_report_surfaces_power_chain_corner_evidence() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Power-chain evaluated-corner ranges" in report
+    assert "Shaft power" in report
+    assert "Electrical input" in report
+    assert "Specific fan power" in report
+    assert "fixed efficiencies" in report
+    assert "not uncertain variables" in report

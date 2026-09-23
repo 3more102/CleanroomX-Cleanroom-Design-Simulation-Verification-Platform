@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.10 bounded fan/system operating-point solver — 2026-09-23
+
+- Added explicit piecewise-linear fan static-pressure curve models with finite input validation.
+- Added a fixed-plus-quadratic system curve model using P_fixed + R·Q².
+- Added analytical segment-by-segment fan/system intersection without extrapolating outside supplied fan data.
+- Added solved airflow, static pressure, air power, interpolation-segment identity, boundary margins, and fan/system pressure residual reporting.
+- Added bounded no-intersection results when the operating point lies outside the supplied fan-curve range.
+- Added JSON loading, Markdown/JSON reporting, the cleanroomx-fan-curve CLI, example data, tests, documentation, and package version 0.10.0.
+- Kept fan efficiency curves, electrical input, speed laws, density correction, system effect, controls, leakage, multiple interacting fans, and transient behavior outside this bounded solver.
+
 ## v0.9 passive parallel-path flow solver — 2026-09-23
 
 - Added analytical airflow distribution across two or more passive duct paths sharing common pressure nodes.

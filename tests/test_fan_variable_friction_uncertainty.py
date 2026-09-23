@@ -10,7 +10,11 @@ from cleanroomx.fan_variable_friction_loop_io import (
     load_fan_variable_friction_loop_study,
 )
 from cleanroomx.fan_variable_friction_uncertainty import (
+    FanVariableFrictionLoopUncertaintyStudy,
     analyze_fan_variable_friction_loop_uncertainty,
+)
+from cleanroomx.fan_variable_friction_uncertainty_models import (
+    FanVariableFrictionLoopUncertaintyStudy as CompatibilityStudy,
 )
 from cleanroomx.fan_variable_friction_uncertainty_cli import (
     main as fan_variable_friction_uncertainty_main,
@@ -279,3 +283,7 @@ def test_physical_uncertainty_report_surfaces_all_bounded_inputs() -> None:
     assert "Kinematic viscosity" in report
     assert "Air density" in report
     assert "Physical-input values" in report
+
+
+def test_uncertainty_model_compatibility_export_is_canonical() -> None:
+    assert CompatibilityStudy is FanVariableFrictionLoopUncertaintyStudy

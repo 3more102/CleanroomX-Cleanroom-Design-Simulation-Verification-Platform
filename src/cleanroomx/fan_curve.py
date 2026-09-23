@@ -107,6 +107,87 @@ def _interpolated_fan_pressure(
     return left.pressure_pa + fraction * (right.pressure_pa - left.pressure_pa)
 
 
+def check_fan_duty_against_curve(
+    fan_curve: FanCurve,
+    required_airflow_m3_h: float,
+    required_pressure_pa: float,
+) -> dict:
+    """Check whether a supplied fan curve meets one explicit HVAC design duty.
+
+    The check interpolates only inside the supplied fan-curve range. It does not
+    construct a system curve, extrapolate fan data, or infer manufacturer limits.
+    """
+    airflow = _positive(required_airflow_m3_h, "required_airflow_m3_h")
+    pressure = _nonnegative(required_pressure_pa, "required_pressure_pa")
+    points = fan_curve.points
+    low = points[0].airflow_m3_h
+    high = points[-1].airflow_m3_h
+
+    base = {
+        "fan_curve": fan_curve.name,
+        "required_airflow_m3_h": round(airflow, 3),
+        "required_pressure_pa": round(pressure, 4),
+        "fan_curve_airflow_range_m3_h": [round(low, 3), round(high, 3)],
+    }
+
+    if airflow < low or airflow > high:
+        return {
+            **base,
+            "status": "outside_supplied_range",
+            "passes_required_duty": None,
+            "available_fan_pressure_pa": None,
+            "pressure_margin_pa": None,
+            "interpolation_segment": None,
+            "message": (
+                "Required airflow lies outside the supplied fan-curve range; "
+                "no fan-curve extrapolation is performed."
+            ),
+            "scope_note": (
+                "This is a design-point pressure-capability screen using only "
+                "piecewise-linear interpolation between supplied fan data points. "
+                "It is not a fan/system operating-point solution and does not infer "
+                "stall/surge limits, fan-law scaling, system effect, controls, or "
+                "manufacturer selection."
+            ),
+        }
+
+    segment_index = len(points) - 2
+    for index, (left, right) in enumerate(zip(points, points[1:])):
+        if left.airflow_m3_h <= airflow <= right.airflow_m3_h:
+            segment_index = index
+            break
+
+    left = points[segment_index]
+    right = points[segment_index + 1]
+    available = _interpolated_fan_pressure(left, right, airflow)
+    margin = available - pressure
+    tolerance_pa = 1e-9
+    passes = margin >= -tolerance_pa
+
+    return {
+        **base,
+        "status": "pass" if passes else "fail",
+        "passes_required_duty": passes,
+        "available_fan_pressure_pa": round(available, 4),
+        "pressure_margin_pa": round(margin, 4),
+        "interpolation_segment": {
+            "low_airflow_m3_h": round(left.airflow_m3_h, 3),
+            "high_airflow_m3_h": round(right.airflow_m3_h, 3),
+        },
+        "message": (
+            "Supplied fan-curve pressure meets the required HVAC design duty."
+            if passes
+            else "Supplied fan-curve pressure is below the required HVAC design duty."
+        ),
+        "scope_note": (
+            "This is a design-point pressure-capability screen using only "
+            "piecewise-linear interpolation between supplied fan data points. It is "
+            "not a fan/system operating-point solution and does not infer stall/surge "
+            "limits, fan-law scaling, system effect, controls, or manufacturer selection."
+        ),
+    }
+
+
 def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
     points = study.fan_curve.points
     residuals = [

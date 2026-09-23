@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from .branch_network import BranchFlowNetwork
 from .duct import DuctNetwork
+from .fan_curve import FanCurve
 
 
 def _positive(value: float, field_name: str) -> float:
@@ -240,6 +241,7 @@ class HVACProject:
     fan_system: FanSystem | None = None
     duct_network: DuctNetwork | None = None
     branch_flow_network: BranchFlowNetwork | None = None
+    fan_curve: FanCurve | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -253,3 +255,5 @@ class HVACProject:
             raise ValueError(
                 "configure either duct_network or branch_flow_network, not both"
             )
+        if self.fan_curve is not None and self.fan_system is None:
+            raise ValueError("fan_curve requires fan_system so the HVAC duty is defined")

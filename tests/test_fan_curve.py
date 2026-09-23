@@ -5,8 +5,11 @@ from cleanroomx.fan_curve import (
     FanCurvePoint,
     FanOperatingPointStudy,
     SystemCurve,
+    check_fan_duty_against_curve,
     solve_fan_operating_point,
 )
+from cleanroomx.hvac import analyze_hvac_project
+from cleanroomx.hvac_io import hvac_project_from_dict
 from cleanroomx.fan_curve_io import fan_operating_point_study_from_dict
 
 
@@ -142,3 +145,114 @@ def test_json_loader_builds_study() -> None:
 def test_zero_or_negative_system_resistance_is_rejected() -> None:
     with pytest.raises(ValueError, match="must be finite and > 0"):
         SystemCurve("Bad", 0, 0)
+
+
+def test_design_duty_check_pass_fail_and_no_extrapolation() -> None:
+    curve = _curve()
+
+    passing = check_fan_duty_against_curve(curve, 3000, 450)
+    assert passing["status"] == "pass"
+    assert passing["passes_required_duty"] is True
+    assert passing["available_fan_pressure_pa"] == 500
+    assert passing["pressure_margin_pa"] == 50
+
+    failing = check_fan_duty_against_curve(curve, 6000, 350)
+    assert failing["status"] == "fail"
+    assert failing["passes_required_duty"] is False
+    assert failing["available_fan_pressure_pa"] == 300
+    assert failing["pressure_margin_pa"] == -50
+
+    outside = check_fan_duty_against_curve(curve, 9000, 50)
+    assert outside["status"] == "outside_supplied_range"
+    assert outside["passes_required_duty"] is None
+    assert outside["available_fan_pressure_pa"] is None
+
+
+def test_hvac_fan_curve_check_uses_computed_branch_network_duty() -> None:
+    project = hvac_project_from_dict(
+        {
+            "name": "Integrated fan duty",
+            "fan_system": {
+                "name": "Supply AHU",
+                "coil_pressure_drop_pa": 100,
+                "other_pressure_drop_pa": 50,
+                "fan_efficiency": 0.7,
+                "motor_efficiency": 0.9,
+            },
+            "fan_curve": {
+                "name": "Selected fan",
+                "points": [
+                    {"airflow_m3_h": 0, "pressure_pa": 700},
+                    {"airflow_m3_h": 900, "pressure_pa": 500},
+                    {"airflow_m3_h": 1800, "pressure_pa": 250},
+                ],
+            },
+            "branch_flow_network": {
+                "source_node": "AHU",
+                "branches": [
+                    {
+                        "name": "Main",
+                        "upstream_node": "AHU",
+                        "downstream_node": "Process",
+                        "length_m": 10,
+                        "friction_factor": 0.02,
+                        "air_density_kg_m3": 1.2,
+                        "local_loss_coefficient": 1.0,
+                        "width_m": 0.5,
+                        "height_m": 0.3,
+                    }
+                ],
+                "terminal_demands": [
+                    {"node": "Process", "airflow_m3_h": 900}
+                ],
+            },
+            "rooms": [
+                {
+                    "name": "Process",
+                    "cleanroom_airflow_m3_h": 900,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22,
+                            "relative_humidity_percent": 45,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    result = analyze_hvac_project(project)
+    check = result["fan_curve_duty_check"]
+
+    assert check is not None
+    assert check["required_airflow_m3_h"] == result["total_governing_airflow_m3_h"]
+    assert check["required_pressure_pa"] == result["supply_fan"]["total_static_pressure_pa"]
+    assert check["status"] == "pass"
+
+
+def test_hvac_fan_curve_requires_fan_system() -> None:
+    with pytest.raises(ValueError, match="fan_curve requires fan_system"):
+        hvac_project_from_dict(
+            {
+                "name": "Missing fan system",
+                "fan_curve": {
+                    "name": "Fan",
+                    "points": [
+                        {"airflow_m3_h": 0, "pressure_pa": 500},
+                        {"airflow_m3_h": 1000, "pressure_pa": 200},
+                    ],
+                },
+                "rooms": [
+                    {
+                        "name": "Room",
+                        "cleanroom_airflow_m3_h": 500,
+                        "thermal_design": {
+                            "room_air": {
+                                "dry_bulb_c": 22,
+                                "relative_humidity_percent": 45,
+                            }
+                        },
+                    }
+                ],
+            }
+        )

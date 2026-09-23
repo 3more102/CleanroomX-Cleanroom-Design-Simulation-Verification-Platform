@@ -43,8 +43,24 @@ with airflow converted to m³/s. Shaft power and estimated electrical input are 
     shaft power = air power / fan efficiency
     electrical input = shaft power / motor efficiency
 
+## Fan-curve design-duty verification (v0.12)
+
+An HVAC project may optionally include a supplied fan curve as airflow/pressure points. After CleanroomX determines the project governing airflow and the preliminary fan static-pressure duty, including a computed duct or branch-network critical-path loss when configured, it checks the fan curve at that exact design airflow.
+
+The fan pressure is piecewise-linearly interpolated only between supplied points. The result is:
+
+- `pass` when interpolated fan pressure is at least the required static pressure;
+- `fail` when interpolated fan pressure is below the required static pressure;
+- `outside_supplied_range` when the design airflow lies outside the supplied curve, with no extrapolation.
+
+The reported pressure margin is:
+
+    pressure margin = interpolated fan pressure - required design static pressure
+
+This design-duty check is intentionally different from the standalone v0.11 fan/system operating-point solver. It verifies one explicit HVAC duty against supplied fan data and does not invent a system curve from HVAC components.
+
 ## Limits
 
-This model is for preliminary engineering screening. It does not infer duct geometry, fittings, system effect, velocity pressure, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, sound limits, fan curves, operating point, leakage coefficients, or final equipment selection.
+This model is for preliminary engineering screening. It does not infer duct geometry, fittings, system effect, velocity pressure, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, sound limits, fan-curve extrapolation, operating point from the HVAC duty check, leakage coefficients, or final equipment selection.
 
 Use project specifications, licensed standards, local regulations, manufacturer data, and qualified engineering review for real designs.

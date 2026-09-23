@@ -6,6 +6,7 @@ from .airflow import analyze_air_balance
 from .branch_network import analyze_branch_flow_network
 from .duct import analyze_duct_network
 from .fan import analyze_supply_fan
+from .fan_curve import check_fan_duty_against_curve
 from .hvac_models import HVACProject
 from .thermal import analyze_thermal_design
 
@@ -96,6 +97,7 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             )
 
     supply_fan = None
+    fan_curve_duty_check = None
     if project.fan_system is not None:
         filter_drop = (
             project.filter_unit.pressure_drop_pa
@@ -118,6 +120,12 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             duct_pressure_drop_override_pa=duct_override,
             duct_pressure_drop_source=duct_source,
         )
+        if project.fan_curve is not None:
+            fan_curve_duty_check = check_fan_duty_against_curve(
+                project.fan_curve,
+                total_governing_airflow,
+                supply_fan["total_static_pressure_pa"],
+            )
 
     return {
         "project": project.name,
@@ -131,12 +139,13 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         "duct_network": duct_network,
         "branch_flow_network": branch_flow_network,
         "supply_fan": supply_fan,
+        "fan_curve_duty_check": fan_curve_duty_check,
         "total_preliminary_cooling_capacity_kw": round(total_cooling_kw, 4),
         "total_preliminary_heating_capacity_kw": round(total_heating_kw, 4),
         "engineering_note": (
             "Thermal/HVAC results are preliminary calculations from explicit project "
             "inputs. Cleanroom airflow is supplied independently; no ISO class is mapped "
             "to a fixed ACH, pressure offset, airflow surplus, filter pressure drop, "
-            "duct friction factor, fitting loss coefficient, branch terminal demand, or fan duty."
+            "duct friction factor, fitting loss coefficient, branch terminal demand, fan duty, or fan curve."
         ),
     }

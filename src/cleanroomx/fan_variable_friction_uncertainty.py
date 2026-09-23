@@ -1289,6 +1289,163 @@ def _power_metric_extrema_sources(
     }
 
 
+
+def _fan_curve_boundary_clearance(result: dict) -> dict | None:
+    if result.get("status") != "solved":
+        return None
+    point = result.get("fan_operating_point")
+    bounds = result.get("fan_curve_airflow_range_m3_h")
+    if point is None or bounds is None or len(bounds) != 2:
+        return None
+
+    lower = float(bounds[0])
+    upper = float(bounds[1])
+    airflow = float(point["airflow_m3_h"])
+    span = upper - lower
+    lower_headroom = airflow - lower
+    upper_headroom = upper - airflow
+    nearest_headroom = min(lower_headroom, upper_headroom)
+
+    if math.isclose(
+        lower_headroom,
+        upper_headroom,
+        rel_tol=1e-12,
+        abs_tol=1e-9,
+    ):
+        nearest_boundary = "both"
+    elif lower_headroom < upper_headroom:
+        nearest_boundary = "lower"
+    else:
+        nearest_boundary = "upper"
+
+    return {
+        "operating_airflow_m3_h": round(airflow, 6),
+        "fan_curve_airflow_range_m3_h": [
+            round(lower, 6),
+            round(upper, 6),
+        ],
+        "lower_boundary_headroom_m3_h": round(lower_headroom, 6),
+        "upper_boundary_headroom_m3_h": round(upper_headroom, 6),
+        "nearest_boundary_headroom_m3_h": round(nearest_headroom, 6),
+        "normalized_airflow_position": (
+            None if span <= 0.0 else round((airflow - lower) / span, 9)
+        ),
+        "nearest_boundary_headroom_fraction": (
+            None if span <= 0.0 else round(nearest_headroom / span, 9)
+        ),
+        "nearest_boundary": nearest_boundary,
+    }
+
+
+def _fan_curve_boundary_clearance_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    solved = [
+        (corner_index, corner, corner["fan_curve_boundary_clearance"])
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_boundary_clearance") is not None
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(solved) == len(corners)
+    )
+
+    absolute_evidence = None
+    normalized_evidence = None
+    if solved:
+        minimum_absolute = min(
+            float(clearance["nearest_boundary_headroom_m3_h"])
+            for _index, _corner, clearance in solved
+        )
+        normalized_values = [
+            (
+                corner_index,
+                corner,
+                clearance,
+                clearance["nearest_boundary_headroom_fraction"],
+            )
+            for corner_index, corner, clearance in solved
+            if clearance["nearest_boundary_headroom_fraction"] is not None
+        ]
+
+        def _source(
+            corner_index: int,
+            corner: dict,
+            clearance: dict,
+        ) -> dict:
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "operating_airflow_m3_h": clearance[
+                        "operating_airflow_m3_h"
+                    ],
+                    "fan_curve_airflow_range_m3_h": clearance[
+                        "fan_curve_airflow_range_m3_h"
+                    ],
+                    "nearest_boundary": clearance["nearest_boundary"],
+                    "nearest_boundary_headroom_m3_h": clearance[
+                        "nearest_boundary_headroom_m3_h"
+                    ],
+                    "nearest_boundary_headroom_fraction": clearance[
+                        "nearest_boundary_headroom_fraction"
+                    ],
+                }
+            )
+            return source
+
+        absolute_evidence = {
+            "value": round(minimum_absolute, 6),
+            "unit": "m3/h",
+            "sources": [
+                _source(corner_index, corner, clearance)
+                for corner_index, corner, clearance in solved
+                if math.isclose(
+                    float(clearance["nearest_boundary_headroom_m3_h"]),
+                    minimum_absolute,
+                    rel_tol=1e-12,
+                    abs_tol=1e-9,
+                )
+            ],
+        }
+
+        if normalized_values:
+            minimum_normalized = min(
+                float(value)
+                for _index, _corner, _clearance, value in normalized_values
+            )
+            normalized_evidence = {
+                "value": round(minimum_normalized, 9),
+                "unit": "fraction_of_supplied_airflow_span",
+                "sources": [
+                    _source(corner_index, corner, clearance)
+                    for corner_index, corner, clearance, value
+                    in normalized_values
+                    if math.isclose(
+                        float(value),
+                        minimum_normalized,
+                        rel_tol=1e-12,
+                        abs_tol=1e-12,
+                    )
+                ],
+            }
+
+    return {
+        "corner_count": len(corners),
+        "solved_corner_count": len(solved),
+        "complete_study_coverage": complete_study_coverage,
+        "minimum_nearest_boundary_headroom_m3_h": absolute_evidence,
+        "minimum_nearest_boundary_headroom_fraction": normalized_evidence,
+        "scope_note": (
+            "Boundary clearance is geometric distance in airflow from each "
+            "solved operating point to the nearest endpoint of that corner's "
+            "actual supplied/transformed fan-curve range. It is a "
+            "no-extrapolation audit diagnostic only; no minimum acceptable "
+            "headroom, stall/surge margin, manufacturer operating region, or "
+            "equipment acceptance criterion is inferred."
+        ),
+    }
+
+
 def analyze_fan_variable_friction_loop_uncertainty(
     study: FanVariableFrictionLoopUncertaintyStudy,
 ) -> dict:
@@ -1579,6 +1736,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                 "edge_rectangular_height_m"
                             ],
                             "status": result["status"],
+                            "fan_curve_airflow_range_m3_h": result[
+                                "fan_curve_airflow_range_m3_h"
+                            ],
+                            "fan_curve_boundary_clearance": (
+                                _fan_curve_boundary_clearance(result)
+                            ),
                             "operating_point": point,
                             "edge_airflows_m3_h": edge_airflows,
                             "power_evidence": result["power_evidence"],
@@ -1598,6 +1761,16 @@ def analyze_fan_variable_friction_loop_uncertainty(
         study,
         corners,
         nominal["status"],
+    )
+
+    nominal_fan_curve_boundary_clearance = _fan_curve_boundary_clearance(
+        nominal
+    )
+    fan_curve_boundary_clearance_summary = (
+        _fan_curve_boundary_clearance_summary(
+            corners,
+            nominal["status"],
+        )
     )
 
     operating_point_envelope = None
@@ -1946,6 +2119,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "unresolved_corner_count": unresolved_corner_count,
         "corner_outcome_diagnostics": corner_outcome_diagnostics,
         "solver_quality_summary": solver_quality_summary,
+        "nominal_fan_curve_boundary_clearance": (
+            nominal_fan_curve_boundary_clearance
+        ),
+        "fan_curve_boundary_clearance_summary": (
+            fan_curve_boundary_clearance_summary
+        ),
         "corners": corners,
         "operating_point_envelope": operating_point_envelope,
         "operating_point_extreme_cases": operating_point_extreme_cases,
@@ -2015,7 +2194,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "partial solved cases into a complete envelope. When explicit "
             "fan/motor/VFD efficiencies are supplied, solved-corner power "
             "evidence also retains fluid, shaft, electrical-input, and "
-            "specific-fan-power ranges plus their source corners. Those "
+            "specific-fan-power ranges plus their source corners. The "
+            "fan-curve boundary-clearance audit also retains each solved "
+            "corner's actual supplied/transformed airflow range and reports "
+            "the closest evaluated operating point to a no-extrapolation "
+            "endpoint without inventing a minimum acceptable margin. Those "
             "efficiencies remain fixed user inputs in this workflow; no "
             "efficiency value or efficiency uncertainty is inferred. These "
             "are not claimed as guaranteed extrema for all interior "

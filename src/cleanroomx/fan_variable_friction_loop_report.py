@@ -31,6 +31,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
         network = result["operating_network_solution"]
         check = result["system_pressure_check"]
         variable = network["variable_friction"]
+        power = result["power_evidence"]
+        components = power["system_components"]
         lines.extend(
             [
                 "",
@@ -43,7 +45,19 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 f"- Total system pressure: **{check['total_system_pressure_pa']} Pa**",
                 "- Fan-system pressure residual: "
                 f"**{check['fan_minus_system_pressure_pa']} Pa**",
-                f"- Fluid air power: **{point['air_power_kw']} kW**",
+                f"- Fluid air power: **{power['fluid_air_power_kw']} kW**",
+                "- Loop edge pressure-power dissipation: "
+                f"**{components['loop_network_edge_dissipation_w']} W**",
+                "- Loop pressure-power balance residual: "
+                f"**{components['loop_network_energy_balance_residual_w']} W**",
+                "- Fan-to-fixed-plus-edge-loss power residual: "
+                f"**{components['fan_to_fixed_plus_edge_loss_residual_w']} W**",
+                "- Shaft power: "
+                f"**{power['shaft_power_kw'] if power['shaft_power_kw'] is not None else 'not reported (no explicit fan efficiency)'}**",
+                "- Electrical input: "
+                f"**{power['electrical_input_kw'] if power['electrical_input_kw'] is not None else 'not reported (explicit fan/motor/VFD efficiencies required)'}**",
+                "- Specific fan power: "
+                f"**{power['specific_fan_power_w_per_m3_s'] if power['specific_fan_power_w_per_m3_s'] is not None else 'not reported'}**",
                 "- Network outer iterations: "
                 f"**{variable['outer_iterations']}**",
                 "- Maximum relative resistance closure error: "
@@ -55,15 +69,16 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 "",
                 "### Operating loop edges",
                 "",
-                "| Edge | Basis | Airflow (m³/h) | Direction | Resistance Pa/(m³/s)² |",
-                "|---|---|---:|---|---:|",
+                "| Edge | Basis | Airflow (m³/h) | Direction | Resistance Pa/(m³/s)² | Dissipated pressure power W |",
+                "|---|---|---:|---|---:|---:|",
             ]
         )
         for edge in network["edges"]:
             lines.append(
                 f"| {edge['name']} | {edge['resistance_basis']} | "
                 f"{edge['airflow_m3_h']} | {edge['flow_direction']} | "
-                f"{edge['resistance_pa_per_m3_s_squared']} |"
+                f"{edge['resistance_pa_per_m3_s_squared']} | "
+                f"{edge['dissipated_pressure_power_w']} |"
             )
 
         lines.extend(

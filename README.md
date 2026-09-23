@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.21 engineering core
+## v0.22 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -23,6 +23,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Critical-path selection across user-defined duct paths and direct integration into fan duty.
 - Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
+- Connected looped-network airflow solving from explicit balanced node injections and fixed quadratic edge resistances, with signed reverse-flow and continuity/pressure-law residuals.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
@@ -50,7 +51,7 @@ CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. The v0.19 fan-speed workflow applies user-requested affinity-law speed ratios to supplied reference fan-curve points and reuses the bounded operating-point solver at each transformed speed. These are bounded models rather than a general nonlinear duct-network/control solver; CleanroomX does not infer arbitrary looped-network flows, variable friction factors, damper positions, leakage, system effect, acoustics, stall/surge limits, motor/VFD limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. The v0.19 fan-speed workflow applies user-requested affinity-law speed ratios to supplied reference fan-curve points and reuses the bounded operating-point solver at each transformed speed. The v0.22 looped-network workflow solves connected meshes from explicit balanced node injections and fixed edge laws `ΔP = R·Q·|Q|`, allowing solved flow to reverse relative to an edge's declared sign convention. These remain bounded engineering models: CleanroomX does not infer loop-edge resistance from geometry, iterate variable friction factors while solving the mesh, infer damper positions or leakage, couple the loop solver to fan curves or controls, model system effect/acoustics/compressibility/transients, establish stall/surge or motor/VFD limits, or make commissioning acceptance decisions. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
 v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
 
@@ -114,6 +115,20 @@ Write a Markdown report:
     cleanroomx-duct-flow examples/parallel_flow_demo.json --output parallel-flow-report.md
 
 The v0.9 solver applies only to passive duct paths that share the same upstream and downstream pressure nodes. It solves the flow split from explicit fixed path resistances and reports both mass-balance and equal-pressure residuals. See docs/PARALLEL_FLOW_SOLVER.md.
+
+## Solve a fixed-resistance looped airflow network
+
+    cleanroomx-loop-flow examples/looped_network_demo.json
+
+JSON output:
+
+    cleanroomx-loop-flow examples/looped_network_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-loop-flow examples/looped_network_demo.json --output looped-network-report.md
+
+The v0.22 solver accepts a connected graph with explicit balanced node injections/withdrawals and fixed positive edge resistances using `ΔP = R·Q·|Q|`. It solves relative node pressures and signed edge flows with a damped Newton method, reports continuity and pressure-law residuals, and permits flow reversal relative to the declared edge direction. It does not infer loop resistance from geometry or couple the mesh to fan/control models. See docs/LOOPED_NETWORK_SOLVER.md.
 
 ## Solve a fan/system operating point
 
@@ -322,7 +337,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are general looped-network solving research, closed-loop control studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are integrating looped-network studies into engineering dossiers, deriving loop-edge resistance from explicit duct geometry, coupling looped networks to bounded fan studies, closed-loop control studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Provenance complete |",
-                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | Whole fan-curve scenarios | Operating airflow envelope m³/h | Air-power envelope kW | Electrical-input corner range kW | SFP corner range W/(m³/s) | Nominal state | Solver tolerance audit | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -576,12 +576,18 @@ def markdown_dossier_report(result: dict) -> str:
                 scenario["name"]
                 for scenario in item.get("fan_curve_scenarios", [])
             ) or "—"
+            solver_tolerance_audit = (
+                item.get("solver_quality_summary", {})
+                .get("configured_tolerance_assessment", {})
+                .get("status", "—")
+            )
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | {scenario_names} | "
                 f"{airflow_envelope} | {air_power} | {electrical_input} | "
                 f"{specific_fan_power} | {item['nominal_status']} | "
+                f"{solver_tolerance_audit} | "
                 f"{item['traceability']['complete']} |"
             )
             power_uncertainty_ranges = item.get(

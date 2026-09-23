@@ -35,6 +35,15 @@ def markdown_dossier_report(result: dict) -> str:
         detail = _fmt_counts(component.get("counts", {}))
         if name == "hvac" and component["status"] != "not_included":
             detail = f"failed_air_balances={component['failed_air_balances']}"
+        elif (
+            name == "cross_module_consistency"
+            and component["status"] != "not_configured"
+        ):
+            detail = (
+                f"comparisons={component['comparison_count']}, "
+                f"failed={component['failed_comparisons']}, "
+                f"required_unmapped={component['required_unmapped_rooms']}"
+            )
         lines.append(f"| {name} | {component['status']} | {detail} |")
 
     verification = result["verification"]
@@ -99,6 +108,54 @@ def markdown_dossier_report(result: dict) -> str:
                 lines.append(
                     f"- Fan-curve pressure margin: **{check['pressure_margin_pa']} Pa**"
                 )
+
+    consistency = result.get("consistency_checks", {}).get(
+        "verification_hvac_airflow"
+    )
+    if consistency is not None and consistency["status"] != "not_configured":
+        lines.extend(
+            [
+                "",
+                "## Cross-module verification / HVAC airflow consistency",
+                "",
+                f"- Status: **{consistency['status']}**",
+                (
+                    "- User-supplied airflow tolerance: "
+                    f"**{consistency['airflow_tolerance_percent']}%**"
+                ),
+                f"- Mapping mode: **{consistency['room_mapping_mode']}**",
+                f"- Result: {consistency['reason']}",
+            ]
+        )
+        if consistency["comparisons"]:
+            lines.extend(
+                [
+                    "",
+                    (
+                        "| Verification room | HVAC room | Verification airflow m³/h | "
+                        "HVAC airflow m³/h | Deviation % | Status |"
+                    ),
+                    "|---|---|---:|---:|---:|---|",
+                ]
+            )
+            for item in consistency["comparisons"]:
+                lines.append(
+                    f"| {item['verification_room']} | {item['hvac_room']} | "
+                    f"{item['verification_airflow_m3_h']} | "
+                    f"{item['hvac_cleanroom_airflow_m3_h']} | "
+                    f"{item['absolute_deviation_percent']} | {item['status']} |"
+                )
+        if consistency["required_unmapped_verification_rooms"]:
+            lines.append(
+                "- Required verification rooms not mapped: "
+                + ", ".join(consistency["required_unmapped_verification_rooms"])
+            )
+        if consistency["required_unmapped_hvac_rooms"]:
+            lines.append(
+                "- Required HVAC rooms not mapped: "
+                + ", ".join(consistency["required_unmapped_hvac_rooms"])
+            )
+        lines.extend(["", consistency["scope_note"]])
 
     if result["recovery_tests"]:
         lines.extend(

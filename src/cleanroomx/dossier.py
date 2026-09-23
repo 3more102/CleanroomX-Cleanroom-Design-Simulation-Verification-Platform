@@ -300,6 +300,7 @@ def summarize_dossier_components(
     fan_duct_networks: list[dict] | None = None,
     fan_parallel_networks: list[dict] | None = None,
     fan_loop_networks: list[dict] | None = None,
+    fan_loop_speed_studies: list[dict] | None = None,
     damper_studies: list[dict] | None = None,
     fan_speed_studies: list[dict] | None = None,
     consistency: dict | None = None,
@@ -315,6 +316,7 @@ def summarize_dossier_components(
     fan_duct_networks = fan_duct_networks or []
     fan_parallel_networks = fan_parallel_networks or []
     fan_loop_networks = fan_loop_networks or []
+    fan_loop_speed_studies = fan_loop_speed_studies or []
     damper_studies = damper_studies or []
     fan_speed_studies = fan_speed_studies or []
 
@@ -335,6 +337,7 @@ def summarize_dossier_components(
         "fan_duct_networks": _fan_duct_network_summary(fan_duct_networks),
         "fan_parallel_networks": _fan_parallel_network_summary(fan_parallel_networks),
         "fan_loop_networks": _fan_loop_network_summary(fan_loop_networks),
+        "fan_loop_speed_studies": _fan_speed_summary(fan_loop_speed_studies),
         "damper_studies": _damper_study_summary(damper_studies),
         "fan_speed_studies": _fan_speed_summary(fan_speed_studies),
         "cross_module_consistency": _consistency_summary(consistency),
@@ -370,6 +373,9 @@ def summarize_dossier_components(
             "no_intersection_in_supplied_range", 0
         ),
         "fan_loop_networks_unsolved": components["fan_loop_networks"]["counts"].get(
+            "no_intersection_in_supplied_range", 0
+        ),
+        "fan_loop_speed_studies_unsolved": components["fan_loop_speed_studies"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
         "fan_speed_studies_unsolved": components["fan_speed_studies"]["counts"].get(
@@ -479,6 +485,8 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .fan_network_io import load_fan_driven_parallel_network_study
     from .fan_loop_network import solve_fan_loop_network
     from .fan_loop_network_io import load_fan_loop_network_study
+    from .fan_loop_speed import analyze_fan_loop_speed_study
+    from .fan_loop_speed_io import load_fan_loop_speed_study
     from .damper_study import solve_loop_damper_study
     from .damper_study_io import load_loop_damper_study
     from .fan_speed import analyze_fan_speed_study
@@ -619,6 +627,16 @@ def build_dossier(manifest_path: str | Path) -> dict:
             solve_fan_loop_network(load_fan_loop_network_study(source["_resolved_path"]))
         )
 
+    fan_loop_speed_studies: list[dict] = []
+    for item in data.get("fan_loop_speed_studies", []):
+        source = _source_record("fan_loop_speed_study", item, manifest_dir)
+        source_records.append(source)
+        fan_loop_speed_studies.append(
+            analyze_fan_loop_speed_study(
+                load_fan_loop_speed_study(source["_resolved_path"])
+            )
+        )
+
     damper_studies: list[dict] = []
     for item in data.get("damper_studies", []):
         source = _source_record("damper_study", item, manifest_dir)
@@ -692,6 +710,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
             or fan_duct_networks
             or fan_parallel_networks
             or fan_loop_networks
+            or fan_loop_speed_studies
             or fan_speed_studies
         ):
             raise ValueError(
@@ -711,6 +730,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
             fan_duct_networks=fan_duct_networks,
             fan_parallel_networks=fan_parallel_networks,
             fan_loop_networks=fan_loop_networks,
+            fan_loop_speed_studies=fan_loop_speed_studies,
             fan_speed_studies=fan_speed_studies,
             airflow_abs_tolerance_m3_h=fan_airflow_config.get(
                 "airflow_abs_tolerance_m3_h", 0.0
@@ -730,6 +750,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         fan_duct_networks=fan_duct_networks,
         fan_parallel_networks=fan_parallel_networks,
         fan_loop_networks=fan_loop_networks,
+        fan_loop_speed_studies=fan_loop_speed_studies,
         damper_studies=damper_studies,
         fan_speed_studies=fan_speed_studies,
         consistency=consistency,
@@ -757,6 +778,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "fan_duct_network_studies": fan_duct_networks,
         "fan_parallel_network_studies": fan_parallel_networks,
         "fan_loop_network_studies": fan_loop_networks,
+        "fan_loop_speed_studies": fan_loop_speed_studies,
         "damper_studies": damper_studies,
         "fan_speed_studies": fan_speed_studies,
         "consistency_checks": {

@@ -1,0 +1,9 @@
+{
+  "name": "CleanroomX Fan-Speed Loop Dossier Demo",
+  "project_reference": "CRX-FAN-LOOP-SPEED-001",
+  "revision": "A",
+  "notes": "Demonstration manifest only; fan speed ratios and network inputs are engineering screening inputs.",
+  "fan_loop_speed_studies": [
+    "fan_loop_speed_demo.json"
+  ]
+}

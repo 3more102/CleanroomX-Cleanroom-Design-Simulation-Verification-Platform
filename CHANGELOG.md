@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.31 dossier-integrated fan-speed / loop-network studies — 2026-09-23
+
+- Integrated v0.29 fan-speed/loop-network studies into engineering dossier manifests as an optional analysis list.
+- Added SHA-256 source fingerprinting, executive study/case counts, unresolved-case attention tracking, and detailed Markdown evidence for loop operating airflow, pressure, and continuity residuals.
+- Extended HVAC/fan operating-airflow consistency so every configured fan-speed/loop case is compared independently against HVAC governing airflow using the existing explicit user-supplied absolute tolerance.
+- Preserved unresolved bounded speed cases as not-comparable rather than converting missing operating points into failures.
+- Added an end-to-end dossier example and regression coverage for solved, unresolved, and consistency states.
+- Bumped package/runtime metadata to v0.31.0 while preserving the v0.30 variable-friction loop solver unchanged.
+
 ## v0.30 variable-friction loop solving — 2026-09-23
 
 - Added an optional outer iteration around the validated fixed-resistance loop solver for geometry-derived edges configured with automatic Darcy friction.

@@ -46,7 +46,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"missing_provenance={component['missing_provenance_analyses']}, "
                 f"indeterminate={component['counts'].get('indeterminate', 0)}"
             )
-        elif name == "fan_speed_studies" and component["status"] != "not_included":
+        elif name in {"fan_speed_studies", "fan_loop_speed_studies"} and component["status"] != "not_included":
             detail = (
                 f"studies={component['study_count']}, "
                 f"speed_cases={component['speed_case_count']}, "
@@ -398,6 +398,30 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{item['equivalent_network_resistance_pa_per_m3_s_squared']} | "
                 f"{airflow} | {pressure} |"
             )
+
+    if result.get("fan_loop_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan-speed / loop-network studies",
+                "",
+                "| Study | Study status | Speed ratio | Speed rpm | Case status | Airflow m³/h | System pressure Pa | Continuity residual m³/h |",
+                "|---|---|---:|---:|---|---:|---:|---:|",
+            ]
+        )
+        for item in result["fan_loop_speed_studies"]:
+            for case in item["speed_cases"]:
+                point = case["fan_operating_point"]
+                network = case["operating_network_solution"]
+                pressure_check = case["system_pressure_check"]
+                speed_rpm = "—" if case["speed_rpm"] is None else case["speed_rpm"]
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = "—" if pressure_check is None else pressure_check["total_system_pressure_pa"]
+                continuity = "—" if network is None else network["max_abs_mass_balance_residual_m3_h"]
+                lines.append(
+                    f"| {item['study']} | {item['status']} | {case['speed_ratio']} | "
+                    f"{speed_rpm} | {case['status']} | {airflow} | {pressure} | {continuity} |"
+                )
 
     if result.get("fan_loop_network_studies"):
         lines.extend(["", "## Fan/loop-network operating-point studies", "", "| Study | Status | Equivalent R Pa/(m³/s)² | Operating airflow m³/h | System pressure Pa |", "|---|---|---:|---:|---:|"])

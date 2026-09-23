@@ -53,12 +53,13 @@ A complete result reports:
 - the explicit bounded input intervals;
 - evaluated corner count and per-corner state;
 - airflow, fan-pressure, and system-pressure min/max across solved corners;
-- the exact zero-based corner index that produced each operating-point lower/upper bound;
+- a compact exact zero-based first-witness corner index for each operating-point lower/upper bound;
+- tie-aware operating-point extrema-source evidence listing every matching witness corner together with its active fixed-pressure, fan-speed/scenario, fan-point, and duct uncertainty inputs;
 - internal edge-airflow ranges plus the exact lower/upper witness corner indices for each edge;
 - solver diagnostics for every corner; and
 - provenance completeness for the fan curve and every bounded input.
 
-These min/max values are evaluated-corner ranges only. The v0.46 witness indices make each reported bound traceable to an exact evaluated case; ties resolve deterministically to the first matching corner. They are not claimed to be sensitivity coefficients or mathematically guaranteed continuous-interval extrema for every interior combination.
+These min/max values are evaluated-corner ranges only. The v0.46 compact witness index resolves deterministically to the first matching corner for backward-compatible single-witness access, while `operating_point_extrema_sources` preserves every numerically matching tie and the bounded inputs that define those cases. The Markdown report surfaces the same operating-point source evidence plus edge-flow witness corner indices. These records are not sensitivity coefficients and are not claimed to be mathematically guaranteed continuous-interval extrema for every interior combination.
 
 ## Input and CLI
 

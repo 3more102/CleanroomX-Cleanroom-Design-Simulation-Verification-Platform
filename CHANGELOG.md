@@ -1,4 +1,15 @@
 # Changelog
+## v0.62 fan-curve interpolation segment-position audit — 2026-09-24
+
+- Adds per-solved-corner evidence for the exact supplied fan-curve interpolation segment containing the nonlinear operating point.
+- Reports segment airflow span, lower/upper supplied-point clearance, nearest supplied segment endpoint, normalized segment position, and normalized nearest-endpoint clearance.
+- Aggregates minimum absolute/normalized supplied-point clearance and maximum active segment span with exact tied source-corner provenance.
+- Preserves complete-versus-partial coverage explicitly; unresolved corners do not receive fabricated segment-position evidence.
+- Surfaces the same evidence in standalone nonlinear uncertainty Markdown and engineering-dossier tables.
+- Adds regression coverage for arithmetic, extrema provenance, reporting, dossier propagation, and zero-solved-corner behavior.
+- Treats supplied-point proximity as interpolation-geometry provenance only; it is not an interpolation-error estimate, uncertainty bound, stall/surge margin, manufacturer operating region, or equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.62.0.
+
 ## v0.61 supplied-point residual-topology audit — 2026-09-24
 
 - Adds a discrete fan-minus-system residual-topology audit to the nonlinear fan/variable-friction operating-point solver using the supplied fan-curve points already evaluated during bounded root search.

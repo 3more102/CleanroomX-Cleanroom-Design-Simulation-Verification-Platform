@@ -106,3 +106,106 @@ def analyze_project_consistency(
             "for engineering review."
         ),
     }
+
+def analyze_hvac_fan_airflow_consistency(
+    hvac_result: dict,
+    *,
+    fan_operating_points: list[dict] | None = None,
+    fan_duct_networks: list[dict] | None = None,
+    fan_parallel_networks: list[dict] | None = None,
+    airflow_abs_tolerance_m3_h: float = 0.0,
+) -> dict:
+    """Compare solved fan-study airflow against the HVAC governing airflow."""
+    tolerance = float(airflow_abs_tolerance_m3_h)
+    if not math.isfinite(tolerance) or tolerance < 0:
+        raise ValueError("airflow_abs_tolerance_m3_h must be finite and >= 0")
+
+    required_airflow = _finite_positive(
+        hvac_result["total_governing_airflow_m3_h"],
+        "HVAC total governing airflow",
+    )
+
+    checks: list[dict] = []
+
+    def add_check(kind: str, item: dict, point_key: str) -> None:
+        point = item.get(point_key)
+        study_name = str(item.get("study", "")).strip() or "unnamed"
+        if point is None:
+            checks.append(
+                {
+                    "study_kind": kind,
+                    "study": study_name,
+                    "study_status": item.get("status"),
+                    "hvac_governing_airflow_m3_h": round(required_airflow, 6),
+                    "fan_operating_airflow_m3_h": None,
+                    "difference_m3_h": None,
+                    "absolute_difference_m3_h": None,
+                    "status": "not_comparable",
+                }
+            )
+            return
+
+        operating_airflow = _finite_positive(
+            point["airflow_m3_h"],
+            f"fan operating airflow for study {study_name!r}",
+        )
+        difference = operating_airflow - required_airflow
+        absolute_difference = abs(difference)
+        checks.append(
+            {
+                "study_kind": kind,
+                "study": study_name,
+                "study_status": item.get("status"),
+                "hvac_governing_airflow_m3_h": round(required_airflow, 6),
+                "fan_operating_airflow_m3_h": round(operating_airflow, 6),
+                "difference_m3_h": round(difference, 6),
+                "absolute_difference_m3_h": round(absolute_difference, 6),
+                "status": (
+                    "match" if absolute_difference <= tolerance else "mismatch"
+                ),
+            }
+        )
+
+    for item in fan_operating_points or []:
+        add_check("fan_operating_point", item, "operating_point")
+    for item in fan_duct_networks or []:
+        add_check("fan_duct_network", item, "operating_point")
+    for item in fan_parallel_networks or []:
+        add_check("fan_parallel_network", item, "fan_operating_point")
+
+    if not checks:
+        raise ValueError(
+            "HVAC/fan airflow consistency requires at least one fan study result"
+        )
+
+    mismatch_count = sum(item["status"] == "mismatch" for item in checks)
+    unresolved_count = sum(item["status"] == "not_comparable" for item in checks)
+    solved_count = len(checks) - unresolved_count
+
+    if mismatch_count:
+        status = "fail"
+    elif solved_count == 0:
+        status = "not_comparable"
+    elif unresolved_count:
+        status = "pass_with_unresolved_studies"
+    else:
+        status = "pass"
+
+    return {
+        "status": status,
+        "hvac_governing_airflow_m3_h": round(required_airflow, 6),
+        "airflow_abs_tolerance_m3_h": round(tolerance, 6),
+        "study_count": len(checks),
+        "solved_study_count": solved_count,
+        "mismatch_count": mismatch_count,
+        "unresolved_study_count": unresolved_count,
+        "study_airflow_checks": checks,
+        "scope_note": (
+            "This is a cross-study airflow consistency check. The absolute airflow "
+            "tolerance is supplied by the user. Unsolved fan studies are preserved as "
+            "not comparable rather than failed. This check does not establish airflow "
+            "adequacy, fan selection, commissioning acceptance, cleanroom certification, "
+            "or a standards-derived tolerance."
+        ),
+    }
+

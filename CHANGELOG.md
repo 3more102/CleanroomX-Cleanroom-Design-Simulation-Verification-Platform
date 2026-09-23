@@ -1,4 +1,15 @@
 # Changelog
+## v0.49 evaluated power ranges and extrema provenance — 2026-09-24
+
+- Retains each solved nonlinear uncertainty corner's existing fan pressure/power evidence at the uncertainty layer instead of discarding it.
+- Adds complete-study evaluated-corner ranges for fluid air power and, only when the explicit efficiency chain is supplied, shaft power, electrical input, and specific fan power.
+- Adds tie-aware power extrema-source records that resolve every reported power lower/upper value back to all matching evaluated corner inputs.
+- Preserves the no-inference rule: missing fan/motor/VFD efficiencies do not fabricate shaft, electrical, or SFP evidence.
+- Suppresses complete power ranges and power extrema-source attribution whenever any uncertainty corner is unresolved.
+- Labels power ranges as evaluated-corner diagnostics only; Q×ΔP may have an interior extremum, so these are not claimed as guaranteed continuous-box power extrema.
+- Added Markdown reporting plus regressions for complete efficiencies, missing efficiencies, exact witness lookup, report evidence, and indeterminate withholding.
+- Bumped package/runtime metadata to v0.49.0.
+
 ## v0.48 tie-aware internal edge-flow extrema provenance — 2026-09-24
 
 - Added tie-aware source attribution for every internal edge-airflow lower/upper extremum in complete nonlinear uncertainty studies.

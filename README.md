@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.16 engineering core
+## v0.17 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -26,7 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
+- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct studies, and fan-driven passive parallel-network studies.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -240,7 +240,7 @@ Write a Markdown dossier:
 
     cleanroomx-dossier examples/dossier_demo.json --output dossier.md
 
-The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. HVAC fan-curve duty checks from v0.12 are carried into the dossier automatically when present. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
+The v0.17 dossier hashes every referenced input with SHA-256 and covers the current fan workflows, including v0.14 reference-flow fan/duct studies and v0.16 fan-driven passive parallel networks, alongside v0.15 psychrometric uncertainty and the earlier analyses. It preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, no-intersection, and unresolved-traceability states. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
 
 See docs/ENGINEERING_DOSSIER.md.
 

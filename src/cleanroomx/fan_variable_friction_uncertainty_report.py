@@ -766,6 +766,92 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             )
         lines.extend(["", pressure_airflow_summary["scope_note"]])
 
+    search_summary = result.get(
+        "operating_point_search_resolution_summary"
+    )
+    nominal_search = result.get("nominal_operating_point_search_evidence")
+    if search_summary:
+        coverage_label = (
+            "complete"
+            if search_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Bounded operating-point search geometry",
+                "",
+                "- Corners with operating-point search evidence: "
+                f"**{search_summary['search_evidence_corner_count']}/"
+                f"{search_summary['solved_corner_count']} solved**",
+                "- Bounded-bisection corners: "
+                f"**{search_summary['bisection_corner_count']}**",
+                "- Supplied-point tolerance-contact corners: "
+                f"**{search_summary['supplied_point_contact_corner_count']}**",
+                f"- Complete-study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_search is None:
+            lines.append("- Nominal search evidence: **not available**")
+        else:
+            lines.append(
+                f"- Nominal search method: **{nominal_search['method']}**"
+            )
+            nominal_bracket = nominal_search.get("final_bisection_bracket")
+            if nominal_bracket is not None:
+                lines.extend(
+                    [
+                        "- Nominal final bisection bracket: "
+                        f"**{nominal_bracket['low_airflow_m3_h']}–"
+                        f"{nominal_bracket['high_airflow_m3_h']} m³/h**",
+                        "- Nominal final bisection half-width: "
+                        f"**{nominal_bracket['half_width_m3_h']} m³/h**",
+                    ]
+                )
+
+        lines.extend(
+            [
+                "",
+                "| Metric | Maximum | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        search_rows = (
+            (
+                "maximum_final_bisection_bracket_width_m3_h",
+                "Final bisection bracket width",
+            ),
+            (
+                "maximum_final_bisection_half_width_m3_h",
+                "Final bisection bracket half-width",
+            ),
+            (
+                "maximum_final_bisection_width_fraction_of_supplied_segment",
+                "Final bracket width / supplied-segment span",
+            ),
+        )
+        for key, label in search_rows:
+            evidence = search_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                bracket = source["final_bisection_bracket"]
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; segment={source['supplied_segment_low_airflow_m3_h']}"
+                    + f"–{source['supplied_segment_high_airflow_m3_h']} m³/h"
+                    + f"; final-bracket={bracket['low_airflow_m3_h']}"
+                    + f"–{bracket['high_airflow_m3_h']} m³/h"
+                    + f"; iterations={source['operating_iterations']}"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", search_summary["scope_note"]])
+
     segment_summary = result.get("fan_curve_segment_position_summary")
     nominal_segment = result.get("nominal_fan_curve_segment_position")
     if segment_summary:

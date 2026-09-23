@@ -34,6 +34,8 @@ If a fan system is configured, CleanroomX sums these explicit pressure-drop comp
 
     total static = duct + coil + terminal filter + other
 
+The duct component can be supplied manually, computed from a v0.6 user-defined critical-path model, or computed from a v0.8 rooted tree with fixed terminal demands. For the tree workflow, terminal demands are aggregated upstream and the highest root-to-terminal path loss is used for preliminary fan sizing.
+
 Air power is:
 
     air power = volumetric airflow × total static pressure
@@ -45,6 +47,6 @@ with airflow converted to m³/s. Shaft power and estimated electrical input are 
 
 ## Limits
 
-This model is for preliminary engineering screening. It does not infer duct geometry, fittings, system effect, velocity pressure, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, sound limits, fan curves, operating point, leakage coefficients, or final equipment selection.
+This model is for preliminary engineering screening. The v0.8 tree workflow aggregates fixed terminal demands but does not solve pressure-driven branch distribution, looped networks, balancing-damper positions, fan operating point, system effect, leakage, acoustics, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, or final equipment selection.
 
 Use project specifications, licensed standards, local regulations, manufacturer data, and qualified engineering review for real designs.

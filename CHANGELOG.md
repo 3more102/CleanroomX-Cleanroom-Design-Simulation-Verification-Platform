@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3 air-balance extension — 2026-09-23
+
+- Added explicit return, exhaust, transfer, and leakage airflow inputs per HVAC room.
+- Added steady-state room air-balance closure with user-defined tolerance.
+- Added mechanical-surplus and passive-net-outflow reporting.
+- Added explicit unmodeled inflow/outflow requirements when a balance does not close.
+- Integrated air-balance results into HVAC JSON analysis and Markdown reports.
+- Added an air-balance example, engineering documentation, and regression tests.
+- Kept room pressure verification separate; airflow surplus is not converted into pressure.
+
 ## v0.2 HVAC extension — 2026-09-23
 
 - Added psychrometric air-state calculations.

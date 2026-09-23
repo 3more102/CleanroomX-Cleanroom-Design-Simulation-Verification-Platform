@@ -610,6 +610,74 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             ]
         )
 
+    boundary_summary = result.get("fan_curve_boundary_clearance_summary")
+    nominal_boundary = result.get("nominal_fan_curve_boundary_clearance")
+    if boundary_summary:
+        coverage_label = (
+            "complete"
+            if boundary_summary["complete_study_coverage"]
+            else "partial"
+        )
+        lines.extend(
+            [
+                "",
+                "## Supplied fan-curve boundary clearance",
+                "",
+                "- Solved evaluated corners with boundary evidence: "
+                f"**{boundary_summary['solved_corner_count']}/"
+                f"{boundary_summary['corner_count']}**",
+                f"- Study coverage: **{coverage_label}**",
+            ]
+        )
+        if nominal_boundary is None:
+            lines.append("- Nominal boundary clearance: **not available**")
+        else:
+            lines.append(
+                "- Nominal nearest-boundary headroom: "
+                f"**{nominal_boundary['nearest_boundary_headroom_m3_h']} "
+                "m³/h** "
+                f"({nominal_boundary['nearest_boundary']} endpoint; "
+                "normalized fraction "
+                f"{nominal_boundary['nearest_boundary_headroom_fraction']})"
+            )
+
+        lines.extend(
+            [
+                "",
+                "| Metric | Minimum | Unit | Source corner input(s) |",
+                "|---|---:|---|---|",
+            ]
+        )
+        boundary_rows = (
+            (
+                "minimum_nearest_boundary_headroom_m3_h",
+                "Nearest endpoint airflow headroom",
+            ),
+            (
+                "minimum_nearest_boundary_headroom_fraction",
+                "Nearest endpoint normalized headroom",
+            ),
+        )
+        for key, label in boundary_rows:
+            evidence = boundary_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                bounds = source["fan_curve_airflow_range_m3_h"]
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; Q={source['operating_airflow_m3_h']} m³/h"
+                    + f"; range={bounds[0]}–{bounds[1]} m³/h"
+                    + f"; nearest={source['nearest_boundary']}"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        lines.extend(["", boundary_summary["scope_note"]])
+
     edge_sources = result.get("edge_airflow_extrema_sources")
     if edge_sources:
         lines.extend(

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14 recovery acceptance uncertainty — 2026-09-23
+
+- Added uncertainty-aware measured particle-recovery acceptance using user-supplied absolute concentration bounds.
+- Added conservative sample classification as at/below target, above target, or indeterminate when the uncertainty interval overlaps the target.
+- Added maximum recovery-time decisions with pass/fail/indeterminate/incomplete/not-checked states.
+- Added first possible and first definite recovery-sample reporting without inventing an exact between-sample crossing time.
+- Added per-sample provenance completeness reporting, JSON loading, Markdown/JSON reports, CLI, example data, documentation, and regression coverage.
+- Kept the workflow explicitly bounded as deterministic interval screening rather than a statistical uncertainty budget or embedded ISO/conformity rule.
+
 ## v0.13 integrated engineering dossier — 2026-09-23
 
 - Added a manifest-driven engineering dossier that aggregates room/cascade verification, HVAC/duct screening, v0.12 HVAC fan-curve design-duty verification, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and standalone fan/system operating-point studies.
@@ -9,6 +18,13 @@
 - Added Markdown/JSON dossier output, the `cleanroomx-dossier` CLI, example manifest, documentation, and regression coverage.
 - Kept older dossier manifests compatible by making thermal-uncertainty and standalone fan-study fields optional.
 - Kept the dossier explicitly bounded as a traceability/reporting layer rather than cleanroom certification, regulatory approval, commissioning acceptance, or fan/equipment selection.
+
+## v0.12 HVAC fan-curve duty verification — 2026-09-23
+
+- Integrated bounded supplied fan-curve interpolation into the preliminary HVAC workflow.
+- Added verification of required governing airflow and static pressure against supplied fan performance without extrapolation.
+- Added fan-curve duty results to HVAC loading, analysis, reports, example data, tests, and documentation.
+- Kept the duty check distinct from the standalone v0.11 fan/system operating-point solver and from manufacturer fan selection.
 
 ## v0.11 fan/system operating-point solver — 2026-09-23
 

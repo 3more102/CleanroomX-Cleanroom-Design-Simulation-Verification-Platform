@@ -193,7 +193,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 )
         lines.append(
             f"| {corner['fixed_pressure_pa']} | "
-            f"{corner.get('fan_speed_ratio', 1.0)} | "
+            f"{corner.get('fan_speed_ratio', '—')} | "
             f"{fan_pressures or '—'} | {fan_airflows or '—'} | "
             f"{local_losses or '—'} | "
             f"{', '.join(physical_values) or '—'} | {corner['status']} | "

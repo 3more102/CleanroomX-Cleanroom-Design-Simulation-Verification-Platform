@@ -729,3 +729,135 @@ def test_fan_speed_ratio_uncertainty_counts_toward_corner_limit() -> None:
     with pytest.raises(ValueError, match="corner count 2"):
         analyze_fan_variable_friction_loop_uncertainty(study)
 
+
+
+def test_whole_fan_curve_scenarios_preserve_correlated_cases() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 3
+    assert result["solved_corner_count"] == 3
+    assert result["unresolved_corner_count"] == 0
+    assert result["traceability"]["complete"] is True
+    assert result["operating_point_envelope"] is not None
+    assert {
+        corner["fan_curve_scenario"] for corner in result["corners"]
+    } == {"nominal", "lower_envelope", "upper_envelope"}
+    assert [scenario["name"] for scenario in result["fan_curve_scenarios"]] == [
+        "lower_envelope",
+        "upper_envelope",
+    ]
+    assert all(
+        corner["fan_curve_pressure_pa"] == {}
+        and corner["fan_curve_airflow_m3_h"] == {}
+        for corner in result["corners"]
+    )
+
+
+def test_whole_fan_curve_scenario_report_surfaces_named_curves() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Whole fan-curve scenarios" in report
+    assert "lower_envelope" in report
+    assert "upper_envelope" in report
+    assert "Fan-curve scenario" in report
+
+
+def test_whole_fan_curve_scenarios_combine_with_speed_ratio() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_speed_ratio"] = {
+        "value": 1.0,
+        "uncertainty_abs": 0.05,
+        "provenance": {
+            "source_type": "design_basis",
+            "source_name": "Illustrative speed-ratio interval",
+        },
+    }
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "complete"
+    assert result["corner_count"] == 6
+    assert {
+        (corner["fan_curve_scenario"], corner["fan_speed_ratio"])
+        for corner in result["corners"]
+    } == {
+        ("nominal", 0.95),
+        ("nominal", 1.05),
+        ("lower_envelope", 0.95),
+        ("lower_envelope", 1.05),
+        ("upper_envelope", 0.95),
+        ("upper_envelope", 1.05),
+    }
+
+
+def test_whole_fan_curve_scenarios_reject_independent_point_bounds() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_pressure_uncertainty"] = [
+        {"airflow_m3_h": 5400, "uncertainty_abs": 10}
+    ]
+
+    with pytest.raises(ValueError, match="cannot be combined with independent"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_whole_fan_curve_scenarios_reject_duplicate_names() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_scenarios"][1]["name"] = "lower_envelope"
+
+    with pytest.raises(ValueError, match="duplicate fan-curve scenario name"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_whole_fan_curve_scenarios_reject_reserved_nominal_name() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_scenarios"][0]["name"] = "nominal"
+
+    with pytest.raises(ValueError, match="name 'nominal' is reserved"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_whole_fan_curve_scenarios_count_toward_corner_limit() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["max_corner_cases"] = 2
+    study = fan_variable_friction_loop_uncertainty_from_dict(data)
+
+    with pytest.raises(ValueError, match="corner count 3"):
+        analyze_fan_variable_friction_loop_uncertainty(study)

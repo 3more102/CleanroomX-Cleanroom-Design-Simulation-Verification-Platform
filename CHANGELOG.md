@@ -2,7 +2,7 @@
 ## v0.38 dossier-integrated nonlinear fan / loop uncertainty — 2026-09-23
 
 - Integrated v0.37 fan/variable-friction loop uncertainty analyses into engineering dossier manifests.
-- Added SHA-256 source fingerprints, executive-summary analysis/corner counts, full JSON evidence retention, and Markdown corner-envelope reporting.
+- Added SHA-256 source fingerprints, executive-summary analysis/corner counts, full JSON evidence retention, and Markdown corner-envelope reporting.\n- Extended HVAC-to-fan operating-airflow consistency to every evaluated nonlinear uncertainty corner; unresolved corners remain `not_comparable` and never receive fabricated airflow values.
 - Propagates indeterminate nonlinear uncertainty analyses into dossier attention while tracking missing uncertainty provenance separately as unresolved traceability.
 - Preserves the v0.37 numerical boundary: every corner still uses the complete nonlinear Darcy-friction fan/loop solver, and unresolved corners never produce a complete envelope.
 - Added a reproducible dossier manifest plus end-to-end, adverse-state, missing-provenance, missing-source, and deterministic-output regression coverage.

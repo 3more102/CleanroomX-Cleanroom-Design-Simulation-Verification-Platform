@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.30 engineering core
+## v0.31 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -25,6 +25,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
 - Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
 - Bounded fan/loop-network operating-point coupling for passive two-terminal fixed-resistance meshes, with no fan-curve extrapolation and full operating-flow re-solve.
+- Deterministic bounded fan/loop-network uncertainty over explicit fixed-pressure and named edge-resistance intervals, with complete operating ranges only when every evaluated corner remains inside supplied fan data.
 - Bounded fan-speed/VFD sweeps over fixed-resistance loop networks, re-solving the full mesh at each transformed fan-curve operating point.
 - Explicit loop-network damper-resistance scenario studies using user-supplied per-edge resistance multipliers, with baseline/case flow redistribution and residual evidence.
 - Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
@@ -70,7 +71,9 @@ v0.29 fan-speed/loop studies apply the existing affinity-law transformation to s
 
 v0.30 variable-friction loop solving re-evaluates automatic Darcy friction from each edge's absolute solved airflow, relaxes geometry-derived resistance updates, and repeats the validated fixed-resistance loop solve until resistance closure is reached. Direct resistance inputs and user-supplied friction factors remain fixed; zero-flow branches are not assigned invented Reynolds values.
 
-The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
+v0.31 fan/loop-network uncertainty evaluates explicit absolute bounds on fixed pressure and selected fixed quadratic edge resistances around the bounded fan/loop workflow. It re-derives equivalent loop resistance at every unique configured corner, refuses fan-curve extrapolation, and withholds operating-point and branch-flow ranges if any corner is unresolved. Internal branch-flow min/max values are diagnostic evaluated-corner ranges rather than asserted continuous-interval extrema.
+
+The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. Fan/loop uncertainty similarly evaluates explicit fixed-pressure and edge-resistance corners while preserving loop-network residual evidence and withholding incomplete operating ranges. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
 ## Install
 
@@ -190,6 +193,20 @@ Write a Markdown report:
     cleanroomx-fan-loop-speed examples/fan_loop_speed_demo.json --output fan-loop-speed-report.md
 
 The v0.29 workflow applies explicit fan-speed ratios to the supplied reference fan curve using the existing affinity-law transform, solves each transformed curve against the same passive fixed-resistance two-terminal loop, and re-solves the full mesh at every bounded operating point. See docs/FAN_LOOP_SPEED_STUDY.md.
+
+## Analyze bounded fan/loop-network uncertainty
+
+    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json
+
+JSON output:
+
+    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json --output fan-loop-uncertainty-report.md
+
+The v0.31 workflow evaluates every unique lower/upper corner of user-supplied fixed-pressure and named loop-edge resistance bounds around the passive two-terminal fan/loop model. A complete operating-point range is reported only when the nominal case and every configured corner intersect the supplied fan curve without extrapolation. Internal branch-flow ranges are explicitly diagnostic corner ranges. See docs/FAN_LOOP_UNCERTAINTY.md.
 
 ## Run loop damper-resistance scenarios
 
@@ -432,7 +449,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are fan/loop uncertainty integration, dossier integration for fan-loop and damper studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are dossier integration for fan/loop uncertainty, fan coupling for variable-friction loops, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

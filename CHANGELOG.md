@@ -1,4 +1,14 @@
 # Changelog
+## v0.40 bounded nonlinear duct-geometry uncertainty — 2026-09-23
+
+- Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute bounds on automatic-friction duct length and circular-duct diameter.
+- Rebuilds affected duct geometry and Darcy evidence at every geometry corner before every complete nonlinear fan/network solve; no fixed-equivalent-resistance shortcut is introduced.
+- Keeps nominal geometry single-sourced in loop-network evidence and rejects repeated nominal values in uncertainty blocks.
+- Rejects nonpositive bounded lengths/diameters and diameter ranges that would make the maximum bounded roughness reach or exceed the minimum bounded diameter.
+- Keeps rectangular width/height uncertainty outside scope because current stored rectangular evidence does not preserve an unambiguous dimension orientation.
+- Added interval/provenance reporting, per-corner geometry evidence, Markdown output, a reproducible geometry example, and regression coverage.
+- Bumped package/runtime metadata to v0.40.0.
+
 ## v0.39 bounded physical Darcy-input uncertainty — 2026-09-23
 
 - Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute bounds on automatic-friction edge roughness, kinematic viscosity, and air density while retaining fixed-pressure and local-loss K uncertainty.

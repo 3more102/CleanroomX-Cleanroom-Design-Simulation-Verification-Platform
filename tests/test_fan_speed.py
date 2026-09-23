@@ -61,7 +61,7 @@ def test_speed_sweep_preserves_bounded_no_intersection_state() -> None:
     assert low["status"] == "no_intersection_in_supplied_range"
     assert half["speed_rpm"] == pytest.approx(900)
     assert half["affinity_scaling"]["pressure_ratio"] == pytest.approx(0.25)
-    assert half["affinity_scaling"]["power_ratio"] == pytest.approx(0.125)
+    assert half["affinity_scaling"]["homologous_input_power_factor"] == pytest.approx(0.125)
     assert half["operating_point"]["airflow_m3_h"] < full["operating_point"]["airflow_m3_h"]
 
 
@@ -125,5 +125,5 @@ def test_loader_and_markdown_report() -> None:
 
     assert study.reference_speed_rpm == 1800
     assert "Fan-Speed Study" in text
-    assert "Affinity power ratio" in text
+    assert "Homologous input-power factor" in text
     assert "900.0" in text

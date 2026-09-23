@@ -1676,6 +1676,115 @@ def _fan_curve_intersection_bracket_summary(
     }
 
 
+def _fan_curve_supplied_point_residual_summary(
+    corners: list[dict],
+    nominal_audit: dict | None,
+) -> dict:
+    cases = [
+        (
+            corner_index,
+            corner,
+            corner["fan_curve_supplied_point_residual_audit"],
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_supplied_point_residual_audit") is not None
+    ]
+    complete_corner_coverage = sum(
+        audit["complete_supplied_point_coverage"]
+        for _corner_index, _corner, audit in cases
+    )
+    monotonic_count = sum(
+        audit["residual_monotonic_non_increasing_with_tolerance"]
+        for _corner_index, _corner, audit in cases
+    )
+    residual_increase_indices = [
+        corner_index
+        for corner_index, _corner, audit in cases
+        if audit["residual_increase_transition_count"] > 0
+    ]
+    multiple_candidate_indices = [
+        corner_index
+        for corner_index, _corner, audit in cases
+        if audit["candidate_crossing_feature_count"] > 1
+    ]
+    complete_study_coverage = (
+        nominal_audit is not None
+        and nominal_audit["complete_supplied_point_coverage"]
+        and len(cases) == len(corners)
+        and complete_corner_coverage == len(corners)
+    )
+
+    positive_cases = [
+        (corner_index, corner, audit)
+        for corner_index, corner, audit in cases
+        if float(audit["largest_positive_residual_increase_pa"]) > 0.0
+    ]
+    maximum_positive_increase = None
+    if positive_cases:
+        maximum = max(
+            float(audit["largest_positive_residual_increase_pa"])
+            for _corner_index, _corner, audit in positive_cases
+        )
+        sources = []
+        for corner_index, corner, audit in positive_cases:
+            if not math.isclose(
+                float(audit["largest_positive_residual_increase_pa"]),
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-9,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "candidate_crossing_feature_count": audit[
+                        "candidate_crossing_feature_count"
+                    ],
+                    "residual_increase_transition_count": audit[
+                        "residual_increase_transition_count"
+                    ],
+                    "residual_monotonic_non_increasing_with_tolerance": audit[
+                        "residual_monotonic_non_increasing_with_tolerance"
+                    ],
+                }
+            )
+            sources.append(source)
+        maximum_positive_increase = {
+            "value": round(maximum, 9),
+            "unit": "Pa",
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "audit_evidence_corner_count": len(cases),
+        "complete_supplied_point_coverage_corner_count": (
+            complete_corner_coverage
+        ),
+        "monotonic_non_increasing_corner_count": monotonic_count,
+        "residual_increase_corner_count": len(residual_increase_indices),
+        "residual_increase_corner_indices": residual_increase_indices,
+        "multiple_candidate_feature_corner_count": len(
+            multiple_candidate_indices
+        ),
+        "multiple_candidate_feature_corner_indices": (
+            multiple_candidate_indices
+        ),
+        "complete_study_coverage": complete_study_coverage,
+        "maximum_positive_residual_increase_pa": maximum_positive_increase,
+        "scope_note": (
+            "This aggregate preserves the base solver's discrete supplied-point "
+            "fan-minus-system residual topology audit across uncertainty "
+            "corners. Complete coverage means every supplied point was "
+            "evaluated for the nominal case and every corner. Sampled "
+            "monotonicity and candidate crossing features do not prove "
+            "continuous uniqueness or dynamic stability and do not define "
+            "stall/surge, manufacturer-region, commissioning, certification, "
+            "or equipment-acceptance criteria."
+        ),
+    }
+
+
 def _fan_curve_crossing_conditioning_diagnostic(result: dict) -> dict | None:
     bracket = _fan_curve_intersection_bracket_diagnostic(result)
     if bracket is None:
@@ -2332,6 +2441,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                     result
                                 )
                             ),
+                            "fan_curve_supplied_point_residual_audit": result.get(
+                                "fan_curve_supplied_point_residual_audit"
+                            ),
                             "fan_curve_airflow_range_m3_h": result[
                                 "fan_curve_airflow_range_m3_h"
                             ],
@@ -2372,6 +2484,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
         _fan_curve_crossing_conditioning_summary(
             corners,
             nominal["status"],
+        )
+    )
+    nominal_fan_curve_supplied_point_residual_audit = nominal.get(
+        "fan_curve_supplied_point_residual_audit"
+    )
+    fan_curve_supplied_point_residual_summary = (
+        _fan_curve_supplied_point_residual_summary(
+            corners,
+            nominal_fan_curve_supplied_point_residual_audit,
         )
     )
     solver_quality_summary = _solver_quality_summary(
@@ -2756,6 +2877,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "fan_curve_crossing_conditioning_summary": (
             fan_curve_crossing_conditioning_summary
         ),
+        "nominal_fan_curve_supplied_point_residual_audit": (
+            nominal_fan_curve_supplied_point_residual_audit
+        ),
+        "fan_curve_supplied_point_residual_summary": (
+            fan_curve_supplied_point_residual_summary
+        ),
         "solver_quality_summary": solver_quality_summary,
         "nominal_fan_curve_boundary_clearance": (
             nominal_fan_curve_boundary_clearance
@@ -2847,8 +2974,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "local crossing-conditioning audit reuses each supplied-point "
             "intersection bracket to report fan, system, and residual secant "
             "slopes plus secant-root agreement without inferring a stability "
-            "or acceptance threshold. Those efficiencies remain fixed user "
-            "inputs in this workflow; no "
+            "or acceptance threshold. The supplied-point residual-topology "
+            "audit also propagates discrete monotonicity and candidate-crossing "
+            "features from every nonlinear solver case without presenting "
+            "sampled behavior as proof of continuous uniqueness. Those "
+            "efficiencies remain fixed user inputs in this workflow; no "
             "efficiency value or efficiency uncertainty is inferred. These "
             "are not claimed as guaranteed extrema for all interior "
             "combinations. "

@@ -56,8 +56,6 @@ The HVAC module is also a preliminary engineering model. The v0.8 branch-flow so
 
 v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
 
-v0.23 adds a connected steady-state looped-network solver using explicit fixed quadratic edge resistances and balanced node injections. It supports signed reverse flow and reports node-continuity and edge pressure-law residuals, but it still does not infer geometry-derived resistance, variable friction during the solve, dampers, controls, leakage, or fan/network coupling.
-
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. These workflows do not model covariance, hourly weather/load behavior, or equipment selection.
 
 ## Install

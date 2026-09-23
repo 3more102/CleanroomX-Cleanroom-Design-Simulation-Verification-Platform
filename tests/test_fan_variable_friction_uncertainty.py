@@ -661,3 +661,106 @@ def test_corner_limit_rejects_before_cartesian_product_materialization(
     )
     with pytest.raises(ValueError, match="corner count 4.*max_corner_cases=1"):
         analyze_fan_variable_friction_loop_uncertainty(study)
+
+def test_correlated_fan_curve_scenarios_compose_with_speed_uncertainty() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_fan_curve_scenarios_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 6
+    assert result["solved_corner_count"] == 6
+    assert result["unresolved_corner_count"] == 0
+    assert result["operating_point_envelope"] is not None
+    assert result["traceability"]["complete"] is True
+    assert {item["name"] for item in result["fan_curve_scenarios"]} == {
+        "low-performance",
+        "high-performance",
+    }
+    assert {corner["fan_curve_scenario"] for corner in result["corners"]} == {
+        None,
+        "low-performance",
+        "high-performance",
+    }
+    assert {corner["fan_speed_ratio"] for corner in result["corners"]} == {
+        0.95,
+        1.05,
+    }
+
+
+def test_correlated_fan_curve_scenario_report_surfaces_case_evidence() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_fan_curve_scenarios_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Correlated fan-curve scenarios" in report
+    assert "low-performance" in report
+    assert "high-performance" in report
+    assert "Fan-curve scenario" in report
+    assert "nominal reference" in report
+
+
+def test_correlated_fan_curve_scenarios_reject_independent_point_bounds() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_pressure_uncertainty"] = [
+        {
+            "airflow_m3_h": 5400,
+            "uncertainty_abs": 10,
+        }
+    ]
+
+    with pytest.raises(
+        ValueError,
+        match="cannot be combined with independent fan-curve pressure",
+    ):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_correlated_fan_curve_scenarios_reject_duplicate_names() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_scenarios"][1]["name"] = data["fan_curve_scenarios"][0][
+        "name"
+    ]
+
+    with pytest.raises(ValueError, match="duplicate fan-curve scenario name"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_scenario_corner_limit_rejects_before_product_materialization(
+    monkeypatch,
+) -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_fan_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["max_corner_cases"] = 5
+    study = fan_variable_friction_loop_uncertainty_from_dict(data)
+
+    def _unexpected_product(*args, **kwargs):
+        raise AssertionError("Cartesian product must not be materialized")
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty.product",
+        _unexpected_product,
+    )
+    with pytest.raises(ValueError, match="corner count 6.*max_corner_cases=5"):
+        analyze_fan_variable_friction_loop_uncertainty(study)
+

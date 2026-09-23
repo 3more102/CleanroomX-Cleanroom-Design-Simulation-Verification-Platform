@@ -99,6 +99,7 @@ def test_unresolved_corners_do_not_emit_complete_envelope() -> None:
     assert result["unresolved_corner_count"] == result["corner_count"]
     assert result["operating_point_envelope"] is None
     assert result["operating_point_extreme_cases"] is None
+    assert result["operating_point_extrema_sources"] is None
     assert result["edge_airflow_corner_ranges"] is None
 
 
@@ -875,7 +876,9 @@ def test_complete_envelope_extrema_reference_exact_corner_witnesses() -> None:
     )
 
     witnesses = result["operating_point_extreme_cases"]
+    sources = result["operating_point_extrema_sources"]
     assert witnesses is not None
+    assert sources is not None
     for metric in (
         "airflow_m3_h",
         "fan_pressure_pa",
@@ -883,6 +886,7 @@ def test_complete_envelope_extrema_reference_exact_corner_witnesses() -> None:
     ):
         envelope = result["operating_point_envelope"][metric]
         metric_witnesses = witnesses[metric]
+        metric_sources = sources[metric]
         for bound in ("lower", "upper"):
             witness = metric_witnesses[bound]
             corner = result["corners"][witness["corner_index"]]
@@ -891,6 +895,25 @@ def test_complete_envelope_extrema_reference_exact_corner_witnesses() -> None:
                 witness["value"],
                 abs=1e-6,
             )
+
+            source_group = metric_sources[bound]
+            assert source_group["value"] == pytest.approx(
+                envelope[bound],
+                abs=1e-6,
+            )
+            assert source_group["sources"]
+            for source in source_group["sources"]:
+                source_corner = result["corners"][source["corner_index"]]
+                assert source_corner["operating_point"][metric] == pytest.approx(
+                    source_group["value"],
+                    abs=1e-6,
+                )
+                assert source["fixed_pressure_pa"] == source_corner[
+                    "fixed_pressure_pa"
+                ]
+                assert source["fan_curve_scenario"] == source_corner[
+                    "fan_curve_scenario"
+                ]
 
 
 def test_edge_airflow_ranges_reference_exact_corner_witnesses() -> None:
@@ -924,6 +947,9 @@ def test_uncertainty_report_surfaces_extreme_corner_witnesses() -> None:
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
 
     assert "corner indices" in report
+    assert "Envelope witness provenance" in report
+    assert "Internal edge-airflow corner ranges" in report
+    assert "scenario=" in report
 
 
 def test_operating_point_extrema_sources_reference_exact_corners() -> None:

@@ -87,16 +87,19 @@ def test_no_bounded_fan_intersection_preserves_reference_evidence() -> None:
 
 def test_coupling_rejects_nonzero_third_party_injection() -> None:
     network = LoopedFlowNetwork(
-        name="Three-terminal reference",
+        name="Four-terminal reference",
         node_injections_m3_h={
             "Supply": 3600.0,
-            "Process": -1000.0,
-            "Return": -2600.0,
+            "Process": 100.0,
+            "Relief": -100.0,
+            "Return": -3600.0,
         },
         edges=(
             QuadraticFlowEdge("SP", "Supply", "Process", 100.0),
             QuadraticFlowEdge("PR", "Process", "Return", 100.0),
             QuadraticFlowEdge("SR", "Supply", "Return", 200.0),
+            QuadraticFlowEdge("RL", "Relief", "Return", 150.0),
+            QuadraticFlowEdge("PL", "Process", "Relief", 150.0),
         ),
         reference_node="Supply",
     )

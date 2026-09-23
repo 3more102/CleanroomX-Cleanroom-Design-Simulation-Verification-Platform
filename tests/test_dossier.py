@@ -120,3 +120,9 @@ def test_markdown_report_includes_new_v013_sections() -> None:
     assert "Psychrometric-state uncertainty screening" in text
     assert "Fan/system operating-point studies" in text
     assert "Source-file fingerprints" in text
+    assert "Confirmed recovery min" in text
+    confirmed = result["recovery_tests"][0]["uncertainty_assessment"][
+        "first_confirmed_recovery_sample_time_minutes"
+    ]
+    assert confirmed is not None
+    assert f"| {confirmed} |" in text

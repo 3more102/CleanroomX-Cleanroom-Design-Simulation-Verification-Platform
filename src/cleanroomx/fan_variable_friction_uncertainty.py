@@ -842,6 +842,52 @@ def _metric_extreme_case_witnesses(points: list[dict], key: str) -> dict:
     }
 
 
+def _critical_case_summary(corner_index: int, corner: dict) -> dict:
+    summary = {
+        "corner_index": corner_index,
+        "fixed_pressure_pa": corner["fixed_pressure_pa"],
+    }
+    if "fan_speed_ratio" in corner:
+        summary["fan_speed_ratio"] = corner["fan_speed_ratio"]
+    if "fan_curve_scenario" in corner:
+        summary["fan_curve_scenario"] = corner["fan_curve_scenario"]
+    return summary
+
+
+def _metric_extrema_sources(
+    corners: list[dict],
+    key: str,
+    unit: str,
+) -> dict:
+    values = [
+        (index, float(corner["operating_point"][key]))
+        for index, corner in enumerate(corners)
+        if corner["operating_point"] is not None
+    ]
+    lower = min(value for _index, value in values)
+    upper = max(value for _index, value in values)
+
+    def _sources(target: float) -> list[dict]:
+        return [
+            _critical_case_summary(index, corners[index])
+            for index, value in values
+            if math.isclose(value, target, rel_tol=1e-12, abs_tol=1e-9)
+        ]
+
+    return {
+        "lower": {
+            "value": round(lower, 6),
+            "unit": unit,
+            "sources": _sources(lower),
+        },
+        "upper": {
+            "value": round(upper, 6),
+            "unit": unit,
+            "sources": _sources(upper),
+        },
+    }
+
+
 def _edge_airflow_corner_ranges(
     study: FanVariableFrictionLoopUncertaintyStudy,
     solved_networks: list[dict],
@@ -1204,6 +1250,23 @@ def analyze_fan_variable_friction_loop_uncertainty(
                 "system_pressure_pa",
             )
         }
+        operating_point_extrema_sources = {
+            "airflow_m3_h": _metric_extrema_sources(
+                corners,
+                "airflow_m3_h",
+                "m3/h",
+            ),
+            "fan_pressure_pa": _metric_extrema_sources(
+                corners,
+                "fan_pressure_pa",
+                "Pa",
+            ),
+            "system_pressure_pa": _metric_extrema_sources(
+                corners,
+                "system_pressure_pa",
+                "Pa",
+            ),
+        }
         edge_airflow_corner_ranges = _edge_airflow_corner_ranges(
             study,
             solved_networks,
@@ -1483,7 +1546,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "geometry-edge evidence and re-solves the complete Darcy-friction "
             "network at every fan/system airflow evaluated by the bounded "
             "operating-point search. Reported min/max values are ranges across "
-            "evaluated corners only and are not claimed as guaranteed extrema "
+            "evaluated corners only; when complete, their source corner indices "
+            "and fan scenario/speed/fixed-pressure context are retained for "
+            "auditability. These are not claimed as guaranteed extrema "
             "for all interior combinations. No probability distribution, "
             "covariance beyond explicitly supplied whole-curve scenarios, "
             "unconfigured geometry tolerance inference, "

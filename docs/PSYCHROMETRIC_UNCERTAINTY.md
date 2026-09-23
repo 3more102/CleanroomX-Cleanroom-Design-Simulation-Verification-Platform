@@ -52,7 +52,7 @@ This is deterministic interval screening. It is not a statistical measurement-un
 
 The workflow does not create project acceptance limits. Use calibrated instruments, project qualification procedures, applicable standards, and qualified engineering judgment for real measurements and design decisions.
 
-The v0.15 workflow is standalone. The existing thermal-uncertainty workflow continues to hold room and outdoor psychrometric states fixed until those models are explicitly coupled in a later milestone.
+The standalone v0.15 workflow remains available for direct air-state envelope analysis. The thermal-uncertainty workflow can also accept uncertain room/outdoor dry-bulb temperature, relative humidity, and pressure and propagate those corner states into makeup-air load and sensible-load airflow. See `docs/THERMAL_UNCERTAINTY.md` for the coupled screening model.
 
 ## CLI
 

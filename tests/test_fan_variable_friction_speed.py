@@ -112,6 +112,13 @@ def test_variable_friction_speed_example_converges_with_residual_evidence() -> N
             "network_max_relative_resistance_closure_error"
         ] <= 1e-6
         assert network["variable_friction"]["automatic_friction_edge_count"] == 3
+        assert case["power_evidence"]["shaft_power_kw"] is not None
+        assert case["power_evidence"]["electrical_input_kw"] is not None
+        assert abs(
+            case["power_evidence"]["system_components"][
+                "fan_to_fixed_plus_edge_loss_residual_w"
+            ]
+        ) <= 1e-6
 
 
 def test_high_fixed_pressure_produces_bounded_unresolved_cases() -> None:
@@ -198,6 +205,8 @@ def test_markdown_report_surfaces_each_case_and_diagnostics() -> None:
     assert "Speed sweep" in report
     assert "Resistance closure" in report
     assert "Variable-friction fan-speed loop sweep" in report
+    assert "Fluid air power kW" in report
+    assert "Electrical input kW" in report
 
 
 def test_cli_json_example_succeeds(monkeypatch, capsys) -> None:

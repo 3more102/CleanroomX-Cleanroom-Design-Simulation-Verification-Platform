@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleanroomx"
-version = "0.18.0"
-description = "Cleanroom design screening, verification, cross-module consistency, psychrometric uncertainty, engineering-dossier, duct-network, fan-curve integration, fan-network, and preliminary HVAC toolkit"
+version = "0.19.0"
+description = "Cleanroom design screening, verification, uncertainty, engineering-dossier, duct/fan-network, fan-speed control-law, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "CleanroomX contributors"}]
@@ -24,8 +24,11 @@ cleanroomx-duct-flow = "cleanroomx.duct_flow_cli:main"
 cleanroomx-thermal-uncertainty = "cleanroomx.thermal_uncertainty_cli:main"
 cleanroomx-psychrometric-uncertainty = "cleanroomx.psychrometric_uncertainty_cli:main"
 cleanroomx-fan-curve = "cleanroomx.fan_curve_cli:main"
+cleanroomx-fan-speed = "cleanroomx.fan_speed_cli:main"
 cleanroomx-fan-duct = "cleanroomx.fan_duct_network_cli:main"
 cleanroomx-fan-network = "cleanroomx.fan_network_cli:main"
+cleanroomx-fan-control = "cleanroomx.fan_control_cli:main"
+
 cleanroomx-dossier = "cleanroomx.dossier_cli:main"
 cleanroomx-consistency = "cleanroomx.consistency_cli:main"
 

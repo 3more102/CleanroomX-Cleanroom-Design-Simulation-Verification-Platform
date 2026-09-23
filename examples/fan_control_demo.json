@@ -1,0 +1,45 @@
+{
+  "name": "Supply fan discrete control-state demo",
+  "system_curve": {
+    "name": "Example cleanroom duct system",
+    "fixed_pressure_pa": 0.0,
+    "resistance_pa_per_m3_s_squared": 100.0
+  },
+  "target_airflow_m3_h": 5400.0,
+  "target_tolerance_m3_h": 100.0,
+  "states": [
+    {
+      "name": "Low command",
+      "control_signal_percent": 40.0,
+      "fan_curve": {
+        "name": "Explicit 40% fan curve",
+        "points": [
+          {"airflow_m3_h": 0.0, "pressure_pa": 300.0},
+          {"airflow_m3_h": 3600.0, "pressure_pa": 100.0}
+        ]
+      }
+    },
+    {
+      "name": "Mid command",
+      "control_signal_percent": 60.0,
+      "fan_curve": {
+        "name": "Explicit 60% fan curve",
+        "points": [
+          {"airflow_m3_h": 0.0, "pressure_pa": 425.0},
+          {"airflow_m3_h": 5400.0, "pressure_pa": 225.0}
+        ]
+      }
+    },
+    {
+      "name": "High command",
+      "control_signal_percent": 80.0,
+      "fan_curve": {
+        "name": "Explicit 80% fan curve",
+        "points": [
+          {"airflow_m3_h": 0.0, "pressure_pa": 600.0},
+          {"airflow_m3_h": 7200.0, "pressure_pa": 400.0}
+        ]
+      }
+    }
+  ]
+}

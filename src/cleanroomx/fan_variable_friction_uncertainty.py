@@ -1006,6 +1006,28 @@ def _maximum_corner_metric_sources(
     }
 
 
+def _metric_limit_utilization(
+    evidence: dict | None,
+    configured_limit: float | int,
+    limit_unit: str,
+) -> dict | None:
+    if evidence is None:
+        return None
+    limit = float(configured_limit)
+    if limit <= 0.0:
+        return None
+    ratio = float(evidence["value"]) / limit
+    return {
+        "metric_value": evidence["value"],
+        "metric_unit": evidence["unit"],
+        "configured_limit": configured_limit,
+        "limit_unit": limit_unit,
+        "ratio": round(ratio, 9),
+        "percent": round(100.0 * ratio, 6),
+        "sources": evidence["sources"],
+    }
+
+
 def _solver_quality_summary(
     study: FanVariableFrictionLoopUncertaintyStudy,
     corners: list[dict],
@@ -1020,6 +1042,91 @@ def _solver_quality_summary(
             else None
         )
 
+    tolerances = {
+        "operating_pressure_tolerance_pa": study.operating_pressure_tolerance_pa,
+        "resistance_relative_tolerance": study.resistance_relative_tolerance,
+        "mass_balance_tolerance_m3_h": study.mass_balance_tolerance_m3_h,
+    }
+    iteration_limits = {
+        "max_outer_iterations": study.max_outer_iterations,
+        "max_newton_iterations": study.max_newton_iterations,
+        "max_operating_iterations": study.max_operating_iterations,
+    }
+    worst_metrics = {
+        "absolute_operating_pressure_residual_pa": _maximum_corner_metric_sources(
+            corners,
+            lambda corner: (
+                corner["operating_point"].get("pressure_residual_pa")
+                if corner.get("operating_point") is not None
+                else None
+            ),
+            "Pa",
+            absolute=True,
+        ),
+        "network_max_relative_resistance_closure_error": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("network_max_relative_resistance_closure_error"),
+            "1",
+        ),
+        "max_abs_mass_balance_residual_m3_h": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("max_abs_mass_balance_residual_m3_h"),
+            "m3/h",
+        ),
+        "max_abs_pressure_law_residual_pa": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("max_abs_pressure_law_residual_pa"),
+            "Pa",
+        ),
+        "network_outer_iterations": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("network_outer_iterations"),
+            "iterations",
+        ),
+        "network_newton_iterations": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("network_newton_iterations"),
+            "iterations",
+        ),
+        "operating_iterations": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("operating_iterations"),
+            "iterations",
+        ),
+    }
+    limit_utilization = {
+        "absolute_operating_pressure_residual_pa": _metric_limit_utilization(
+            worst_metrics["absolute_operating_pressure_residual_pa"],
+            tolerances["operating_pressure_tolerance_pa"],
+            "Pa",
+        ),
+        "network_max_relative_resistance_closure_error": _metric_limit_utilization(
+            worst_metrics["network_max_relative_resistance_closure_error"],
+            tolerances["resistance_relative_tolerance"],
+            "1",
+        ),
+        "max_abs_mass_balance_residual_m3_h": _metric_limit_utilization(
+            worst_metrics["max_abs_mass_balance_residual_m3_h"],
+            tolerances["mass_balance_tolerance_m3_h"],
+            "m3/h",
+        ),
+        "network_outer_iterations": _metric_limit_utilization(
+            worst_metrics["network_outer_iterations"],
+            iteration_limits["max_outer_iterations"],
+            "iterations",
+        ),
+        "network_newton_iterations": _metric_limit_utilization(
+            worst_metrics["network_newton_iterations"],
+            iteration_limits["max_newton_iterations"],
+            "iterations",
+        ),
+        "operating_iterations": _metric_limit_utilization(
+            worst_metrics["operating_iterations"],
+            iteration_limits["max_operating_iterations"],
+            "iterations",
+        ),
+    }
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -1028,54 +1135,19 @@ def _solver_quality_summary(
         "complete_study_coverage": (
             nominal_status == "solved" and solved_corner_count == len(corners)
         ),
-        "configured_tolerances": {
-            "operating_pressure_tolerance_pa": study.operating_pressure_tolerance_pa,
-            "resistance_relative_tolerance": study.resistance_relative_tolerance,
-            "mass_balance_tolerance_m3_h": study.mass_balance_tolerance_m3_h,
-        },
-        "worst_metrics": {
-            "absolute_operating_pressure_residual_pa": _maximum_corner_metric_sources(
-                corners,
-                lambda corner: (
-                    corner["operating_point"].get("pressure_residual_pa")
-                    if corner.get("operating_point") is not None
-                    else None
-                ),
-                "Pa",
-                absolute=True,
-            ),
-            "network_max_relative_resistance_closure_error": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("network_max_relative_resistance_closure_error"),
-                "1",
-            ),
-            "max_abs_mass_balance_residual_m3_h": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("max_abs_mass_balance_residual_m3_h"),
-                "m3/h",
-            ),
-            "max_abs_pressure_law_residual_pa": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("max_abs_pressure_law_residual_pa"),
-                "Pa",
-            ),
-            "network_outer_iterations": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("network_outer_iterations"),
-                "iterations",
-            ),
-            "operating_iterations": _maximum_corner_metric_sources(
-                corners,
-                _diagnostic("operating_iterations"),
-                "iterations",
-            ),
-        },
+        "configured_tolerances": tolerances,
+        "configured_iteration_limits": iteration_limits,
+        "worst_metrics": worst_metrics,
+        "limit_utilization": limit_utilization,
         "scope_note": (
             "Worst metrics aggregate solved evaluated corners only. "
             "complete_study_coverage is false if the nominal case or any "
-            "evaluated corner is unresolved. Pressure-law residual and "
-            "iteration maxima are reported as diagnostics without inventing "
-            "an acceptance threshold."
+            "evaluated corner is unresolved. Limit utilization normalizes "
+            "only against solver tolerances and iteration limits that are "
+            "already configured by the study; it is numerical solver-budget "
+            "evidence, not an equipment or cleanroom acceptance margin. "
+            "Pressure-law residual remains a raw diagnostic because this "
+            "workflow does not define a separate acceptance threshold for it."
         ),
     }
 

@@ -26,8 +26,8 @@ def test_repository_fan_speed_dossier_builds_end_to_end() -> None:
     assert len(result["source_files"]) == 1
     assert len(result["fan_speed_studies"]) == 1
     study = result["fan_speed_studies"][0]
-    assert study["speed_case_count"] == 3
-    assert study["counts"]["solved"] == 2
+    assert study["speed_case_count"] == 4
+    assert study["counts"]["solved"] == 3
     assert study["counts"]["no_intersection_in_supplied_range"] == 1
     assert result["executive_summary"]["state"] == "attention_required"
 

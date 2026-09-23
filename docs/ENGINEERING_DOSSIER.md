@@ -30,7 +30,7 @@ A dossier manifest can reference:
 
 Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
 
-For complete fan/variable-friction-loop uncertainty analyses, v0.49 dossier Markdown includes both the operating-airflow evaluated-corner envelope and the fan air-power evaluated-corner envelope. Indeterminate analyses show no complete air-power envelope.
+For complete fan/variable-friction-loop uncertainty analyses, v0.49 dossier Markdown includes both the operating-airflow evaluated-corner envelope and the fan air-power evaluated-corner envelope. Indeterminate analyses show no complete air-power envelope. v0.52 also surfaces the configured residual-tolerance audit state, and v0.53 adds a separate configured solver-iteration budget audit state covering outer Darcy-friction, selected-network Newton, and operating-point iterations. Both audits are numerical convergence evidence only and do not create equipment, commissioning, certification, or cleanroom acceptance criteria.
 
 Example:
 

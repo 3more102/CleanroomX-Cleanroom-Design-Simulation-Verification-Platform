@@ -87,6 +87,8 @@ The residual-topology audit uses only supplied fan-curve points already evaluate
 
 v0.65 preserves the actual bounded root-search geometry. When a bisection midpoint terminates on the configured pressure tolerance, the result records the active positive/negative-residual airflow interval immediately before termination and its width/half-width. A supplied-point tolerance contact records its exact supplied-point index and leaves bisection evidence unset. These are numerical search diagnostics only, not physical airflow uncertainty, interpolation-error bounds, continuous worst-case guarantees, or equipment-acceptance criteria.
 
+v0.66 audits the retained bisection geometry against implementation invariants using the unrounded live search state. It records whether the active interval still has a strict positive/negative residual sign change, whether the accepted airflow is the active interval midpoint, the number of completed binary contraction steps, the expected width fraction from that iteration count, the actual width fraction, and their absolute floating-point discrepancy. This is solver self-verification evidence only and does not add an engineering acceptance threshold.
+
 ## CLI
 
 ```text

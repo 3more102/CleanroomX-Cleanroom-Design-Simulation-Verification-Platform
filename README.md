@@ -1,8 +1,8 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, preliminary HVAC analysis, and measured recovery-test analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.3 engineering core
+## v0.4 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -18,14 +18,16 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional FFU/filter-unit count from rated airflow and explicit design utilization.
 - Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
+- Measured recovery-test time-series analysis with first target crossing, log-linear fit, effective removal rate, half-life, and R².
+- Optional configured maximum recovery-time check and comparison with the ACH screening model.
 
 ## Important engineering boundary
 
-CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
+CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, a simple decay fit, or recovery-test regression determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, test-method, and regulatory requirements can add other criteria.
 
-CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, or fan-sizing limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, manufacturer data, or regulator.
+CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, fan-sizing, or recovery-time acceptance limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, validated test method, manufacturer data, or regulator.
 
-The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
+The decay/recovery screening function is **not CFD**. The measured recovery-test workflow is descriptive analysis of supplied observations; it does not define challenge generation, sample locations, instrument requirements, background correction, or certification procedure.
 
 The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
@@ -49,6 +51,24 @@ A failing configured requirement returns exit code 2, making both verification c
 
     cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 0.95
     cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
+
+## Analyze a measured recovery test
+
+JSON output:
+
+    cleanroomx recovery-test examples/recovery_test_demo.json
+
+Markdown output:
+
+    cleanroomx recovery-test examples/recovery_test_demo.json --format markdown
+
+Write a Markdown report:
+
+    cleanroomx recovery-test examples/recovery_test_demo.json --format markdown --output recovery-report.md
+
+If the input configures a maximum recovery time and the measured target crossing is later than that limit, or is not reached in the supplied samples, the command returns exit code 2.
+
+See docs/RECOVERY_TEST.md for the equations, interpolation method, fit outputs, and engineering boundaries.
 
 ## Run the HVAC / psychrometric analysis
 
@@ -101,7 +121,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are recovery-test workflows, uncertainty/provenance tracking, richer report generation, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
+Next milestones are uncertainty/provenance tracking, richer report generation, duct/network pressure-loss modeling, measured-data import adapters, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
@@ -110,4 +130,4 @@ Next milestones are recovery-test workflows, uncertainty/provenance tracking, ri
 - ASHRAE Handbook—Fundamentals — psychrometrics.
 - ASHRAE Design Guide for Cleanrooms.
 
-Always use the applicable purchased standard, local regulations, client URS/specification, manufacturer data, and qualified engineering judgment for real projects.
+Always use the applicable purchased standard, local regulations, client URS/specification, validated test methods, manufacturer data, and qualified engineering judgment for real projects.

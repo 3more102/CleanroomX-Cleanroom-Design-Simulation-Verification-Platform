@@ -26,6 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
+- Combined engineering dossier with component-aware status summaries and SHA-256 source-file fingerprints.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -108,6 +109,22 @@ Write a Markdown report:
 The uncertainty workflow propagates user-supplied absolute bounds through room volume and supply ACH using deterministic conservative intervals. A configured minimum ACH is reported as pass only when the complete interval meets it, fail only when the complete interval is below it, and indeterminate when the requirement lies inside the interval.
 
 See docs/UNCERTAINTY_PROVENANCE.md.
+
+## Build a combined engineering dossier
+
+    cleanroomx-dossier examples/dossier_demo.json
+
+JSON output:
+
+    cleanroomx-dossier examples/dossier_demo.json --format json
+
+Write a Markdown dossier:
+
+    cleanroomx-dossier examples/dossier_demo.json --output dossier.md
+
+The dossier can combine room/cascade verification, HVAC and duct screening, measured recovery tests, and uncertainty/provenance analyses. It preserves component-specific states and fingerprints every referenced source file with SHA-256. Its executive state is a workflow summary, not a certification verdict.
+
+See docs/ENGINEERING_DOSSIER.md.
 
 ## Multi-room pressure-cascade JSON
 

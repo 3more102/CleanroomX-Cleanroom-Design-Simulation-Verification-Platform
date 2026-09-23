@@ -1,0 +1,9 @@
+{
+  "name": "CleanroomX Fan-Speed Dossier Demo",
+  "project_reference": "CRX-FAN-SPEED-DOSSIER-001",
+  "revision": "A",
+  "notes": "Demonstration only. Fan-speed ratios and system data are project inputs, not universal acceptance limits.",
+  "fan_speed_studies": [
+    "fan_speed_sweep_demo.json"
+  ]
+}

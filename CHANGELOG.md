@@ -1,4 +1,16 @@
 # Changelog
+## v0.65 terminal root-search interval provenance — 2026-09-24
+
+- Retains the actual operating-point search geometry for solved nonlinear fan/variable-friction cases.
+- Bounded-bisection cases preserve the initial supplied-point sign-change bracket, the final sign-consistent bracket after the accepted midpoint evaluation, terminal bracket span, and terminal-to-initial span contraction ratio.
+- Direct supplied-point tolerance contacts are identified separately and intentionally carry no fabricated bisection-width or contraction evidence.
+- Preserves terminal search-interval evidence on operating-iteration-limit failures so unresolved numerical searches remain auditable.
+- Propagates solved search evidence through nonlinear uncertainty corners and aggregates bisection/contact counts plus tied source-corner provenance for the largest terminal span and contraction ratio.
+- Surfaces the same evidence in standalone nonlinear-loop reports, uncertainty reports, and engineering dossiers.
+- Adds regression coverage for solved search provenance, one-iteration non-convergence, uncertainty aggregation, dossier propagation, and zero-solved-corner behavior.
+- Treats bracket span/contraction strictly as numerical search diagnostics, not physical uncertainty, interpolation-error bounds, stability or stall/surge margins, manufacturer operating regions, commissioning/certification criteria, or equipment-acceptance limits.
+- Bumped package/runtime metadata to v0.65.0.
+
 ## v0.64 pressure-residual airflow-equivalence audit — 2026-09-24
 
 - Maps the already configured operating-pressure solver tolerance through each solved corner's local fan-minus-system secant gradient into an equivalent airflow magnitude.

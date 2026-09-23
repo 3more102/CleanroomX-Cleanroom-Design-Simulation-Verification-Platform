@@ -479,7 +479,9 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
 
     quality = result.get("solver_quality_summary")
     if quality:
-        coverage_label = "complete" if quality["complete_study_coverage"] else "incomplete"
+        coverage_label = (
+            "complete" if quality["complete_study_coverage"] else "incomplete"
+        )
         lines.extend(
             [
                 "",
@@ -496,16 +498,47 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         )
         tolerances = quality["configured_tolerances"]
         metric_rows = (
-            ("absolute_operating_pressure_residual_pa", "Absolute operating pressure residual", "operating_pressure_tolerance_pa"),
-            ("network_max_relative_resistance_closure_error", "Resistance closure error", "resistance_relative_tolerance"),
-            ("max_abs_mass_balance_residual_m3_h", "Mass-balance residual", "mass_balance_tolerance_m3_h"),
-            ("max_abs_pressure_law_residual_pa", "Pressure-law residual", None),
-            ("network_outer_iterations", "Network outer iterations", None),
-            ("operating_iterations", "Operating-point iterations", None),
+            (
+                "absolute_operating_pressure_residual_pa",
+                "Absolute operating pressure residual",
+                "operating_pressure_tolerance_pa",
+            ),
+            (
+                "network_max_relative_resistance_closure_error",
+                "Resistance closure error",
+                "resistance_relative_tolerance",
+            ),
+            (
+                "max_abs_mass_balance_residual_m3_h",
+                "Mass-balance residual",
+                "mass_balance_tolerance_m3_h",
+            ),
+            (
+                "max_abs_pressure_law_residual_pa",
+                "Pressure-law residual",
+                None,
+            ),
+            (
+                "network_outer_iterations",
+                "Network outer iterations",
+                None,
+            ),
+            (
+                "network_newton_iterations",
+                "Network Newton iterations",
+                None,
+            ),
+            (
+                "operating_iterations",
+                "Operating-point iterations",
+                None,
+            ),
         )
         for metric_key, label, tolerance_key in metric_rows:
             evidence = quality["worst_metrics"].get(metric_key)
-            tolerance = "—" if tolerance_key is None else tolerances[tolerance_key]
+            tolerance = (
+                "—" if tolerance_key is None else tolerances[tolerance_key]
+            )
             if evidence is None:
                 lines.append(f"| {label} | — | — | {tolerance} | — |")
                 continue
@@ -519,6 +552,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"| {label} | {evidence['value']} | {evidence['unit']} | "
                 f"{tolerance} | {' / '.join(source_texts)} |"
             )
+
         assessment = quality.get("configured_tolerance_assessment")
         checks = quality.get("configured_tolerance_checks", {})
         if assessment:
@@ -573,6 +607,53 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     f"| {label} | {observed} | "
                     f"{check['configured_tolerance']} | {utilization} | "
                     f"{margin} | {check['status']} |"
+                )
+
+        iteration_assessment = quality.get("configured_iteration_assessment")
+        iteration_checks = quality.get("configured_iteration_checks", {})
+        if iteration_assessment:
+            lines.extend(
+                [
+                    "",
+                    "### Configured solver-iteration checks",
+                    "",
+                    f"- Assessment: **{iteration_assessment['status']}**",
+                    "- Evaluable configured checks: "
+                    f"**{iteration_assessment['evaluable_check_count']}/"
+                    f"{iteration_assessment['configured_check_count']}**",
+                    "",
+                    "| Metric | Worst iterations | Configured limit | Utilization | Remaining iterations | Result |",
+                    "|---|---:|---:|---:|---:|---|",
+                ]
+            )
+            iteration_rows = (
+                ("network_outer_iterations", "Network outer iterations"),
+                ("network_newton_iterations", "Network Newton iterations"),
+                ("operating_iterations", "Operating-point iterations"),
+            )
+            for metric_key, label in iteration_rows:
+                check = iteration_checks.get(metric_key)
+                if not check:
+                    continue
+                observed = (
+                    "—"
+                    if check["observed_iterations"] is None
+                    else check["observed_iterations"]
+                )
+                utilization = (
+                    "—"
+                    if check["utilization_ratio"] is None
+                    else check["utilization_ratio"]
+                )
+                remaining = (
+                    "—"
+                    if check["remaining_iterations"] is None
+                    else check["remaining_iterations"]
+                )
+                lines.append(
+                    f"| {label} | {observed} | "
+                    f"{check['configured_limit']} | {utilization} | "
+                    f"{remaining} | {check['status']} |"
                 )
 
         lines.extend(["", quality["scope_note"]])

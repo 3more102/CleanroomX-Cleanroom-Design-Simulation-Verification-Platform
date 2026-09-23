@@ -272,6 +272,15 @@ def test_supply_temperature_must_be_below_uncertain_room_lower_bound() -> None:
         )
 
 
+def test_uncertain_air_state_rejects_nonphysical_vapor_pressure_corner() -> None:
+    with pytest.raises(ValueError, match="partial pressure"):
+        UncertainAirState(
+            dry_bulb_c=uv(60.0, "C"),
+            relative_humidity_percent=uv(100.0, "%"),
+            pressure_kpa=uv(10.0, "kPa"),
+        )
+
+
 def test_fixed_air_state_remains_supported() -> None:
     result = analyze_thermal_uncertainty(base_design())
 

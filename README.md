@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.40 engineering core
+## v0.41 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -31,7 +31,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
 - Optional variable-friction loop iteration for automatic roughness/viscosity geometry edges, with Reynolds/Darcy recomputation at solved edge flow, relaxation, closure reporting, explicit near-zero-flow handling, and pre-solve validation of stored automatic-friction evidence.
 - Bounded fan/variable-friction loop coupling that re-solves the complete Darcy-friction network at every candidate fan/system airflow, with no fan-curve extrapolation, convergence diagnostics, and explicit non-converged states.
-- Deterministic bounded uncertainty for fan/variable-friction loop coupling over explicit fixed-pressure plus selected automatic-friction local-loss, absolute-roughness, kinematic-viscosity, air-density, duct-length, and circular-diameter bounds, with full nonlinear re-solving at every corner and no envelope when any corner is unresolved.
+- Deterministic bounded uncertainty for fan/variable-friction loop coupling over explicit fixed-pressure plus selected automatic-friction local-loss, absolute-roughness, kinematic-viscosity, air-density, duct-length, circular-diameter, and rectangular width/height bounds, with full nonlinear re-solving at every corner and no envelope when any corner is unresolved.
 - Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
 - Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
@@ -93,6 +93,8 @@ v0.38 integrates the v0.37 nonlinear uncertainty workflow into engineering dossi
 v0.39 extends nonlinear fan/variable-friction uncertainty from fixed pressure and local-loss K to user-bounded absolute roughness, kinematic viscosity, and air density on automatic-friction geometry edges. Every physical-input corner rebuilds the affected duct evidence before the complete Darcy-friction fan/network solve; nominal values continue to come only from the loop geometry, invalid physical bounds are rejected, and the corner limit remains explicit.
 
 v0.40 extends the same nonlinear corner engine to user-bounded automatic-friction duct length and circular-duct diameter. Each geometry corner reconstructs the duct resistance evidence before the full Darcy-friction network/fan solve. Diameter bounds are rejected when they would collide with the maximum bounded roughness. Rectangular width/height uncertainty remains outside this release because the stored evidence does not preserve an unambiguous width/height orientation.
+
+v0.41 preserves the original explicit circular diameter or rectangular width/height inside geometry-derived resistance evidence. That removes the prior rectangular orientation ambiguity and enables user-bounded rectangular width/height uncertainty with the same complete nonlinear corner re-solving. Geometry bounds are rejected when their minimum implied hydraulic diameter would reach or fall below the maximum bounded roughness.
 
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The conservative fan/system envelope is limited to airflow and pressure; air-power corner extrema are not claimed as a complete bound. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 

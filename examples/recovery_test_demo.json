@@ -4,25 +4,35 @@
   "target_concentration_per_m3": 100000.0,
   "max_recovery_time_minutes": 12.0,
   "instrument_id": "ParticleCounter-PC-01",
+  "instrument_serial_number": "SN-PC01-2026",
+  "calibration_certificate_id": "CAL-PC01-2026-08",
+  "calibration_date": "2026-08-15",
+  "calibration_due_date": "2027-08-15",
   "sample_location": "Process Bay - center working height",
   "occupancy_state": "at-rest",
   "method_reference": "Project qualification protocol QP-CR-001",
+  "data_source": "qualification-run-001.csv",
+  "analyst": "Cleanroom qualification team",
   "samples": [
     {
       "time_minutes": 0.0,
-      "concentration_per_m3": 1000000.0
+      "concentration_per_m3": 1000000.0,
+      "uncertainty_percent": 5.0
     },
     {
       "time_minutes": 4.0,
-      "concentration_per_m3": 500000.0
+      "concentration_per_m3": 500000.0,
+      "uncertainty_percent": 5.0
     },
     {
       "time_minutes": 8.0,
-      "concentration_per_m3": 200000.0
+      "concentration_per_m3": 200000.0,
+      "uncertainty_percent": 5.0
     },
     {
       "time_minutes": 10.0,
-      "concentration_per_m3": 90000.0
+      "concentration_per_m3": 90000.0,
+      "uncertainty_percent": 5.0
     }
   ]
 }

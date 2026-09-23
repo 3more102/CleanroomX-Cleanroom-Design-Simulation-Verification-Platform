@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.2 engineering core
+## v0.3 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -16,16 +16,18 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Makeup-air load and preliminary cooling/heating capacity calculations.
 - Governing airflow comparison between cleanroom airflow, makeup air, and sensible-load airflow.
 - Optional FFU/filter-unit count from rated airflow and explicit design utilization.
+- Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
+- Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
 
 ## Important engineering boundary
 
-CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
+CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. Project, process, safety, and regulatory requirements can add other criteria.
 
-CleanroomX therefore does not embed unofficial ISO classification, ACH, or pressure-cascade limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, or regulator.
+CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, or fan-sizing limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, process design basis, manufacturer data, or regulator.
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
 ## Install
 
@@ -60,7 +62,7 @@ Write a Markdown report:
 
     cleanroomx-hvac examples/semiconductor_thermal_demo.json --output hvac-report.md
 
-The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. See docs/THERMAL_MODEL.md and docs/STANDARDS.md.
+The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data and a preliminary supply-fan model. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, and docs/STANDARDS.md.
 
 ## Multi-room pressure-cascade JSON
 
@@ -99,7 +101,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are supply/return/exhaust air-balance modeling, expanded filter/fan sizing, recovery-test workflows, uncertainty/provenance tracking, richer report generation, and later a desktop/web UI plus CFD adapters.
+Next milestones are recovery-test workflows, uncertainty/provenance tracking, richer report generation, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
@@ -108,4 +110,4 @@ Next milestones are supply/return/exhaust air-balance modeling, expanded filter/
 - ASHRAE Handbook—Fundamentals — psychrometrics.
 - ASHRAE Design Guide for Cleanrooms.
 
-Always use the applicable purchased standard, local regulations, client URS/specification, and qualified engineering judgment for real projects.
+Always use the applicable purchased standard, local regulations, client URS/specification, manufacturer data, and qualified engineering judgment for real projects.

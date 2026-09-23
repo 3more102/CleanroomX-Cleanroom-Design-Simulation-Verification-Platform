@@ -3,12 +3,28 @@
   "filter_unit": {
     "name": "Example FFU",
     "rated_airflow_m3_h": 1200.0,
-    "design_utilization": 0.9
+    "design_utilization": 0.9,
+    "pressure_drop_pa": 180.0
+  },
+  "fan_system": {
+    "name": "Example Supply AHU",
+    "duct_pressure_drop_pa": 450.0,
+    "coil_pressure_drop_pa": 180.0,
+    "other_pressure_drop_pa": 90.0,
+    "fan_efficiency": 0.68,
+    "motor_efficiency": 0.92
   },
   "rooms": [
     {
       "name": "Process Bay",
       "cleanroom_airflow_m3_h": 5376.0,
+      "air_balance": {
+        "return_airflow_m3_h": 4500.0,
+        "exhaust_airflow_m3_h": 500.0,
+        "transfer_in_airflow_m3_h": 0.0,
+        "transfer_out_airflow_m3_h": 100.0,
+        "minimum_surplus_m3_h": 200.0
+      },
       "thermal_design": {
         "room_air": {
           "dry_bulb_c": 22.0,
@@ -39,6 +55,13 @@
     {
       "name": "Gowning",
       "cleanroom_airflow_m3_h": 720.0,
+      "air_balance": {
+        "return_airflow_m3_h": 600.0,
+        "exhaust_airflow_m3_h": 0.0,
+        "transfer_in_airflow_m3_h": 0.0,
+        "transfer_out_airflow_m3_h": 40.0,
+        "minimum_surplus_m3_h": 50.0
+      },
       "thermal_design": {
         "room_air": {
           "dry_bulb_c": 22.0,

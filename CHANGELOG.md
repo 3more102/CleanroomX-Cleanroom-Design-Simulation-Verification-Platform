@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3 airflow/fan extension — 2026-09-23
+
+- Added per-room supply/return/exhaust/transfer airflow balance.
+- Added explicit minimum airflow-surplus verification and margin reporting.
+- Added optional filter/FFU pressure-drop input.
+- Added preliminary central supply-fan static-pressure, air-power, shaft-power, and electrical-input calculations.
+- Added airflow/fan report sections, example inputs, tests, and engineering-scope documentation.
+- Kept all limits and pressure-drop values requirement-driven; no ISO class is mapped to airflow surplus or fan sizing.
+
 ## v0.2 HVAC extension — 2026-09-23
 
 - Added psychrometric air-state calculations.

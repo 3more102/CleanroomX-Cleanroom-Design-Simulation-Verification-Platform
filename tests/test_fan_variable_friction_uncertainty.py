@@ -2312,3 +2312,87 @@ def test_fan_curve_segment_position_marks_zero_solved_corner_coverage() -> None:
     assert summary["maximum_segment_airflow_span_m3_h"] is None
     assert all(corner["fan_curve_segment_position"] is None for corner in result["corners"])
 
+
+
+def test_operating_search_interval_propagates_across_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    summary = result["operating_search_interval_summary"]
+    nominal = result["nominal_operating_search_interval"]
+    assert nominal is not None
+    assert summary["complete_study_coverage"] is True
+    assert summary["search_evidence_corner_count"] == result["corner_count"]
+    assert (
+        summary["bisection_corner_count"]
+        + summary["supplied_point_tolerance_contact_corner_count"]
+        == result["corner_count"]
+    )
+
+    terminal_spans = []
+    contraction_ratios = []
+    for corner in result["corners"]:
+        search = corner["operating_search_interval"]
+        assert search is not None
+        assert search["selected_airflow_m3_h"] == pytest.approx(
+            corner["operating_point"]["airflow_m3_h"],
+            abs=1e-6,
+        )
+        if search["bisection_performed"]:
+            assert search["method"] == "bounded_bisection"
+            initial = search["initial_bracket"]
+            terminal = search["terminal_bracket"]
+            assert initial is not None
+            assert terminal is not None
+            assert initial["span_m3_h"] > 0.0
+            assert 0.0 <= terminal["span_m3_h"] <= initial["span_m3_h"]
+            assert terminal["low_pressure_residual_pa"] >= -1e-6
+            assert terminal["high_pressure_residual_pa"] <= 1e-6
+            terminal_spans.append(search["terminal_bracket_span_m3_h"])
+            contraction_ratios.append(search["bracket_contraction_ratio"])
+        else:
+            assert search["method"] == "supplied_point_tolerance_contact"
+            assert search["terminal_bracket_span_m3_h"] is None
+            assert search["bracket_contraction_ratio"] is None
+
+    if terminal_spans:
+        assert summary["maximum_terminal_bracket_span_m3_h"][
+            "value"
+        ] == pytest.approx(max(terminal_spans), abs=1e-12)
+        assert summary["maximum_bracket_contraction_ratio"][
+            "value"
+        ] == pytest.approx(max(contraction_ratios), abs=1e-12)
+        assert summary["maximum_terminal_bracket_span_m3_h"]["sources"]
+    else:
+        assert summary["maximum_terminal_bracket_span_m3_h"] is None
+        assert summary["maximum_bracket_contraction_ratio"] is None
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Operating-point terminal root-search interval" in report
+    assert "Terminal retained bisection span" in report
+    assert "do not receive a fabricated bisection width" in report
+
+
+def test_operating_search_interval_marks_zero_solved_corner_coverage() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["operating_search_interval_summary"]
+    assert result["status"] == "indeterminate"
+    assert result["nominal_operating_search_interval"] is None
+    assert summary["complete_study_coverage"] is False
+    assert summary["search_evidence_corner_count"] == 0
+    assert summary["bisection_corner_count"] == 0
+    assert summary["supplied_point_tolerance_contact_corner_count"] == 0
+    assert summary["maximum_terminal_bracket_span_m3_h"] is None
+    assert summary["maximum_bracket_contraction_ratio"] is None
+    assert all(
+        corner["operating_search_interval"] is None
+        for corner in result["corners"]
+    )

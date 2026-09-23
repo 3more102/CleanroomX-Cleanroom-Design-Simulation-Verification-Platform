@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.17 fan-network dossier integration — 2026-09-23
+
+- Extended the engineering dossier to include v0.14 reference-flow fan/duct-network studies and v0.16 fan-driven passive parallel-network studies.
+- Added SHA-256 source fingerprints and dedicated Markdown dossier sections for both integrated network workflows.
+- Added attention tracking when either integrated fan/network study has no fan/system intersection inside the supplied fan-curve range.
+- Updated the end-to-end dossier example, documentation, package/runtime version metadata, and regression coverage.
+- Kept both new manifest study lists optional for backward compatibility and preserved bounded no-extrapolation behavior.
+
 ## v0.16 fan-driven passive parallel-network integration — 2026-09-23
 
 - Coupled the bounded fan/system operating-point solver to the passive common-pressure-node parallel-path model.

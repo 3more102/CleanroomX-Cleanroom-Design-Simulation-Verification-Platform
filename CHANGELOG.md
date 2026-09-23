@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.19 fan affinity-law speed sweep — 2026-09-23
+
+- Added a steady-state fan-speed sweep from one explicit reference fan curve and user-supplied speed ratios.
+- Scales reference fan airflow with N2/N1 and pressure with (N2/N1)^2 before reusing the bounded fan/system operating-point solver.
+- Reports the ideal cubic fan-law power ratio to the reference condition without converting it into shaft, motor, VFD, or electrical input power.
+- Preserves the existing no-extrapolation behavior independently for every scaled speed case.
+- Adds optional reference-rpm reporting, JSON loading, Markdown/JSON output, the cleanroomx-fan-speed CLI, example data, documentation, and regression tests.
+- Keeps the workflow explicitly static and bounded: no dynamic VFD/PID behavior, efficiency map, motor/VFD losses, damper action, system effect, stall/surge acceptance, manufacturer speed limit, or equipment selection is inferred.
+- Bumped package/runtime metadata to v0.19.0.
+
 ## v0.18 complete engineering dossier — 2026-09-23
 
 - Integrated the v0.17 verification/HVAC duplicated-airflow consistency checker into engineering dossier manifests.

@@ -1676,6 +1676,203 @@ def _fan_curve_intersection_bracket_summary(
     }
 
 
+def _fan_curve_crossing_conditioning_diagnostic(result: dict) -> dict | None:
+    bracket = _fan_curve_intersection_bracket_diagnostic(result)
+    if bracket is None:
+        return None
+
+    point = result.get("fan_operating_point") or {}
+    operating_airflow = point.get("airflow_m3_h")
+    if operating_airflow is None:
+        return None
+
+    low = bracket["low_endpoint"]
+    high = bracket["high_endpoint"]
+    low_airflow = float(low["airflow_m3_h"])
+    high_airflow = float(high["airflow_m3_h"])
+    airflow_span = high_airflow - low_airflow
+    if airflow_span <= 0.0:
+        return None
+
+    fan_slope = (
+        float(high["fan_pressure_pa"]) - float(low["fan_pressure_pa"])
+    ) / airflow_span
+    system_slope = (
+        float(high["system_pressure_pa"]) - float(low["system_pressure_pa"])
+    ) / airflow_span
+    residual_slope = (
+        float(high["fan_minus_system_pressure_pa"])
+        - float(low["fan_minus_system_pressure_pa"])
+    ) / airflow_span
+    absolute_residual_slope = abs(residual_slope)
+
+    secant_root_airflow = None
+    secant_root_error = None
+    normalized_secant_root_error = None
+    airflow_per_pa = None
+    if not math.isclose(
+        residual_slope,
+        0.0,
+        rel_tol=1e-12,
+        abs_tol=1e-15,
+    ):
+        secant_root_airflow = low_airflow - (
+            float(low["fan_minus_system_pressure_pa"]) / residual_slope
+        )
+        secant_root_error = abs(float(operating_airflow) - secant_root_airflow)
+        normalized_secant_root_error = secant_root_error / airflow_span
+        airflow_per_pa = 1.0 / absolute_residual_slope
+
+    return {
+        "bracket_airflow_span_m3_h": round(airflow_span, 9),
+        "fan_pressure_slope_pa_per_m3_h": round(fan_slope, 12),
+        "system_pressure_secant_slope_pa_per_m3_h": round(
+            system_slope,
+            12,
+        ),
+        "fan_minus_system_slope_pa_per_m3_h": round(
+            residual_slope,
+            12,
+        ),
+        "absolute_fan_minus_system_slope_pa_per_m3_h": round(
+            absolute_residual_slope,
+            12,
+        ),
+        "airflow_change_per_pa_m3_h_per_pa": (
+            None if airflow_per_pa is None else round(airflow_per_pa, 12)
+        ),
+        "secant_root_airflow_m3_h": (
+            None
+            if secant_root_airflow is None
+            else round(secant_root_airflow, 9)
+        ),
+        "solved_operating_airflow_m3_h": round(float(operating_airflow), 9),
+        "secant_root_absolute_error_m3_h": (
+            None if secant_root_error is None else round(secant_root_error, 9)
+        ),
+        "normalized_secant_root_error_fraction": (
+            None
+            if normalized_secant_root_error is None
+            else round(normalized_secant_root_error, 12)
+        ),
+    }
+
+
+def _fan_curve_crossing_conditioning_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    cases = [
+        (corner_index, corner, corner["fan_curve_crossing_conditioning"])
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_crossing_conditioning") is not None
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(cases) == len(corners)
+    )
+
+    def _extreme_evidence(
+        key: str,
+        *,
+        mode: str,
+        unit: str,
+    ) -> dict | None:
+        available = [
+            (corner_index, corner, diagnostic)
+            for corner_index, corner, diagnostic in cases
+            if diagnostic.get(key) is not None
+        ]
+        if not available:
+            return None
+        chooser = min if mode == "min" else max
+        extreme = chooser(
+            float(diagnostic[key]) for _, _, diagnostic in available
+        )
+        sources = []
+        for corner_index, corner, diagnostic in available:
+            if not math.isclose(
+                float(diagnostic[key]),
+                extreme,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "fan_pressure_slope_pa_per_m3_h": diagnostic[
+                        "fan_pressure_slope_pa_per_m3_h"
+                    ],
+                    "system_pressure_secant_slope_pa_per_m3_h": diagnostic[
+                        "system_pressure_secant_slope_pa_per_m3_h"
+                    ],
+                    "fan_minus_system_slope_pa_per_m3_h": diagnostic[
+                        "fan_minus_system_slope_pa_per_m3_h"
+                    ],
+                    "secant_root_absolute_error_m3_h": diagnostic[
+                        "secant_root_absolute_error_m3_h"
+                    ],
+                    "normalized_secant_root_error_fraction": diagnostic[
+                        "normalized_secant_root_error_fraction"
+                    ],
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(extreme, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "conditioning_evidence_corner_count": len(cases),
+        "secant_root_evidence_corner_count": sum(
+            diagnostic["secant_root_airflow_m3_h"] is not None
+            for _index, _corner, diagnostic in cases
+        ),
+        "complete_study_coverage": complete_study_coverage,
+        "minimum_absolute_fan_minus_system_slope_pa_per_m3_h": (
+            _extreme_evidence(
+                "absolute_fan_minus_system_slope_pa_per_m3_h",
+                mode="min",
+                unit="Pa/(m3/h)",
+            )
+        ),
+        "maximum_airflow_change_per_pa_m3_h_per_pa": (
+            _extreme_evidence(
+                "airflow_change_per_pa_m3_h_per_pa",
+                mode="max",
+                unit="(m3/h)/Pa",
+            )
+        ),
+        "maximum_secant_root_absolute_error_m3_h": (
+            _extreme_evidence(
+                "secant_root_absolute_error_m3_h",
+                mode="max",
+                unit="m3/h",
+            )
+        ),
+        "maximum_normalized_secant_root_error_fraction": (
+            _extreme_evidence(
+                "normalized_secant_root_error_fraction",
+                mode="max",
+                unit="1",
+            )
+        ),
+        "scope_note": (
+            "This diagnostic derives local secant gradients only from the "
+            "already evaluated supplied fan-curve interpolation endpoints. "
+            "The fan-minus-system gradient and its reciprocal describe local "
+            "numerical root conditioning, while the secant-root difference "
+            "compares a straight-line endpoint estimate with the solved "
+            "nonlinear operating airflow. No stability criterion, stall/surge "
+            "boundary, acceptable conditioning threshold, manufacturer "
+            "operating region, or equipment acceptance limit is inferred."
+        ),
+    }
+
+
 def _fan_curve_boundary_clearance(result: dict) -> dict | None:
     if result.get("status") != "solved":
         return None
@@ -2130,6 +2327,11 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                     result
                                 )
                             ),
+                            "fan_curve_crossing_conditioning": (
+                                _fan_curve_crossing_conditioning_diagnostic(
+                                    result
+                                )
+                            ),
                             "fan_curve_airflow_range_m3_h": result[
                                 "fan_curve_airflow_range_m3_h"
                             ],
@@ -2159,6 +2361,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     fan_curve_intersection_bracket_summary = (
         _fan_curve_intersection_bracket_summary(
+            corners,
+            nominal["status"],
+        )
+    )
+    nominal_fan_curve_crossing_conditioning = (
+        _fan_curve_crossing_conditioning_diagnostic(nominal)
+    )
+    fan_curve_crossing_conditioning_summary = (
+        _fan_curve_crossing_conditioning_summary(
             corners,
             nominal["status"],
         )
@@ -2539,6 +2750,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "fan_curve_intersection_bracket_summary": (
             fan_curve_intersection_bracket_summary
         ),
+        "nominal_fan_curve_crossing_conditioning": (
+            nominal_fan_curve_crossing_conditioning
+        ),
+        "fan_curve_crossing_conditioning_summary": (
+            fan_curve_crossing_conditioning_summary
+        ),
         "solver_quality_summary": solver_quality_summary,
         "nominal_fan_curve_boundary_clearance": (
             nominal_fan_curve_boundary_clearance
@@ -2626,8 +2843,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "fan-curve boundary-clearance audit also retains each solved "
             "corner's actual supplied/transformed airflow range and reports "
             "the closest evaluated operating point to a no-extrapolation "
-            "endpoint without inventing a minimum acceptable margin. Those "
-            "efficiencies remain fixed user inputs in this workflow; no "
+            "endpoint without inventing a minimum acceptable margin. The "
+            "local crossing-conditioning audit reuses each supplied-point "
+            "intersection bracket to report fan, system, and residual secant "
+            "slopes plus secant-root agreement without inferring a stability "
+            "or acceptance threshold. Those efficiencies remain fixed user "
+            "inputs in this workflow; no "
             "efficiency value or efficiency uncertainty is inferred. These "
             "are not claimed as guaranteed extrema for all interior "
             "combinations. "

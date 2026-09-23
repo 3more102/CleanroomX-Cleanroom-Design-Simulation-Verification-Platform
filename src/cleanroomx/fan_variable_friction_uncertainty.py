@@ -2014,6 +2014,221 @@ def _fan_curve_crossing_conditioning_summary(
     }
 
 
+def _fan_curve_root_resolution_diagnostic(result: dict) -> dict | None:
+    conditioning = _fan_curve_crossing_conditioning_diagnostic(result)
+    if conditioning is None:
+        return None
+
+    point = result.get("fan_operating_point") or {}
+    solver = result.get("solver_diagnostics") or {}
+    tolerance = solver.get("operating_pressure_tolerance_pa")
+    residual = point.get("pressure_residual_pa")
+    if tolerance is None or residual is None:
+        return None
+
+    tolerance_pa = float(tolerance)
+    signed_residual_pa = float(residual)
+    absolute_residual_pa = abs(signed_residual_pa)
+    airflow_per_pa = conditioning.get(
+        "airflow_change_per_pa_m3_h_per_pa"
+    )
+    segment_span = float(conditioning["bracket_airflow_span_m3_h"])
+
+    tolerance_airflow = None
+    residual_airflow = None
+    tolerance_fraction = None
+    residual_fraction = None
+    if airflow_per_pa is not None:
+        local_airflow_per_pa = float(airflow_per_pa)
+        tolerance_airflow = tolerance_pa * local_airflow_per_pa
+        residual_airflow = absolute_residual_pa * local_airflow_per_pa
+        tolerance_fraction = tolerance_airflow / segment_span
+        residual_fraction = residual_airflow / segment_span
+
+    tolerance_utilization = None
+    if tolerance_pa > 0.0:
+        tolerance_utilization = absolute_residual_pa / tolerance_pa
+
+    return {
+        "configured_operating_pressure_tolerance_pa": round(
+            tolerance_pa,
+            12,
+        ),
+        "observed_pressure_residual_pa": round(signed_residual_pa, 9),
+        "observed_absolute_pressure_residual_pa": round(
+            absolute_residual_pa,
+            9,
+        ),
+        "pressure_residual_tolerance_utilization": (
+            None
+            if tolerance_utilization is None
+            else round(tolerance_utilization, 12)
+        ),
+        "local_absolute_fan_minus_system_slope_pa_per_m3_h": (
+            conditioning[
+                "absolute_fan_minus_system_slope_pa_per_m3_h"
+            ]
+        ),
+        "local_airflow_change_per_pa_m3_h_per_pa": airflow_per_pa,
+        "active_segment_airflow_span_m3_h": round(segment_span, 9),
+        "local_linearized_pressure_tolerance_airflow_equivalent_m3_h": (
+            None
+            if tolerance_airflow is None
+            else round(tolerance_airflow, 12)
+        ),
+        "local_linearized_pressure_residual_airflow_equivalent_m3_h": (
+            None
+            if residual_airflow is None
+            else round(residual_airflow, 12)
+        ),
+        "local_linearized_pressure_tolerance_fraction_of_segment": (
+            None
+            if tolerance_fraction is None
+            else round(tolerance_fraction, 12)
+        ),
+        "local_linearized_pressure_residual_fraction_of_segment": (
+            None
+            if residual_fraction is None
+            else round(residual_fraction, 12)
+        ),
+    }
+
+
+def _fan_curve_root_resolution_summary(
+    corners: list[dict],
+    nominal_status: str,
+) -> dict:
+    cases = [
+        (corner_index, corner, corner["fan_curve_root_resolution"])
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_root_resolution") is not None
+    ]
+    linearized_cases = [
+        (corner_index, corner, diagnostic)
+        for corner_index, corner, diagnostic in cases
+        if diagnostic.get(
+            "local_linearized_pressure_tolerance_airflow_equivalent_m3_h"
+        )
+        is not None
+    ]
+    complete_study_coverage = (
+        nominal_status == "solved" and len(cases) == len(corners)
+    )
+    unavailable_linearization_corner_indices = [
+        corner_index
+        for corner_index, _corner, diagnostic in cases
+        if diagnostic.get(
+            "local_linearized_pressure_tolerance_airflow_equivalent_m3_h"
+        )
+        is None
+    ]
+
+    def _extreme_evidence(
+        key: str,
+        *,
+        mode: str,
+        unit: str,
+    ) -> dict | None:
+        available = [
+            (corner_index, corner, diagnostic)
+            for corner_index, corner, diagnostic in cases
+            if diagnostic.get(key) is not None
+        ]
+        if not available:
+            return None
+        chooser = min if mode == "min" else max
+        extreme = chooser(
+            float(diagnostic[key]) for _, _, diagnostic in available
+        )
+        sources = []
+        for corner_index, corner, diagnostic in available:
+            if not math.isclose(
+                float(diagnostic[key]),
+                extreme,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "configured_operating_pressure_tolerance_pa": diagnostic[
+                        "configured_operating_pressure_tolerance_pa"
+                    ],
+                    "observed_pressure_residual_pa": diagnostic[
+                        "observed_pressure_residual_pa"
+                    ],
+                    "local_absolute_fan_minus_system_slope_pa_per_m3_h": (
+                        diagnostic[
+                            "local_absolute_fan_minus_system_slope_pa_per_m3_h"
+                        ]
+                    ),
+                    "local_airflow_change_per_pa_m3_h_per_pa": diagnostic[
+                        "local_airflow_change_per_pa_m3_h_per_pa"
+                    ],
+                    "active_segment_airflow_span_m3_h": diagnostic[
+                        "active_segment_airflow_span_m3_h"
+                    ],
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(extreme, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    return {
+        "corner_count": len(corners),
+        "root_resolution_evidence_corner_count": len(cases),
+        "linearized_airflow_equivalent_corner_count": len(linearized_cases),
+        "unavailable_linearization_corner_indices": (
+            unavailable_linearization_corner_indices
+        ),
+        "complete_study_coverage": complete_study_coverage,
+        "maximum_local_linearized_pressure_tolerance_airflow_equivalent_m3_h": (
+            _extreme_evidence(
+                "local_linearized_pressure_tolerance_airflow_equivalent_m3_h",
+                mode="max",
+                unit="m3/h",
+            )
+        ),
+        "maximum_local_linearized_pressure_tolerance_fraction_of_segment": (
+            _extreme_evidence(
+                "local_linearized_pressure_tolerance_fraction_of_segment",
+                mode="max",
+                unit="1",
+            )
+        ),
+        "maximum_local_linearized_pressure_residual_airflow_equivalent_m3_h": (
+            _extreme_evidence(
+                "local_linearized_pressure_residual_airflow_equivalent_m3_h",
+                mode="max",
+                unit="m3/h",
+            )
+        ),
+        "maximum_local_linearized_pressure_residual_fraction_of_segment": (
+            _extreme_evidence(
+                "local_linearized_pressure_residual_fraction_of_segment",
+                mode="max",
+                unit="1",
+            )
+        ),
+        "scope_note": (
+            "This diagnostic maps the already configured operating-pressure "
+            "tolerance and the observed solved pressure residual through the "
+            "local supplied-bracket fan-minus-system secant slope. The "
+            "reported airflow equivalents are local linearized numerical "
+            "resolution indicators only. They are not rigorous root-error "
+            "bounds, interpolation-error estimates, physical uncertainty, "
+            "dynamic-stability margins, stall/surge limits, manufacturer "
+            "operating regions, or equipment-acceptance criteria. If the "
+            "local residual slope is effectively zero, the airflow-equivalent "
+            "mapping is left unavailable rather than reported as infinite."
+        ),
+    }
+
+
 def _fan_curve_segment_position_diagnostic(result: dict) -> dict | None:
     bracket = _fan_curve_intersection_bracket_diagnostic(result)
     if bracket is None:
@@ -2644,6 +2859,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                     result
                                 )
                             ),
+                            "fan_curve_root_resolution": (
+                                _fan_curve_root_resolution_diagnostic(result)
+                            ),
                             "fan_curve_segment_position": (
                                 _fan_curve_segment_position_diagnostic(result)
                             ),
@@ -2688,6 +2906,15 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     fan_curve_crossing_conditioning_summary = (
         _fan_curve_crossing_conditioning_summary(
+            corners,
+            nominal["status"],
+        )
+    )
+    nominal_fan_curve_root_resolution = (
+        _fan_curve_root_resolution_diagnostic(nominal)
+    )
+    fan_curve_root_resolution_summary = (
+        _fan_curve_root_resolution_summary(
             corners,
             nominal["status"],
         )
@@ -3091,6 +3318,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "fan_curve_crossing_conditioning_summary": (
             fan_curve_crossing_conditioning_summary
+        ),
+        "nominal_fan_curve_root_resolution": (
+            nominal_fan_curve_root_resolution
+        ),
+        "fan_curve_root_resolution_summary": (
+            fan_curve_root_resolution_summary
         ),
         "nominal_fan_curve_segment_position": (
             nominal_fan_curve_segment_position

@@ -1,4 +1,15 @@
 # Changelog
+## v0.50 efficiency-aware evaluated power evidence — 2026-09-24
+
+- Retains the full nonlinear solver pressure/power evidence for every solved uncertainty corner and exposes the nominal power record directly.
+- Adds evaluated-corner ranges for fluid air power and, only when the explicit efficiency chain is configured, shaft power, electrical input, and specific fan power.
+- Adds tie-aware source-corner attribution for every available power-range lower/upper value using the same auditable input context as operating-point extrema.
+- Preserves the no-inference rule: missing fan/motor/VFD efficiencies never fabricate shaft, electrical, or specific-fan-power evidence.
+- Withholds complete power ranges and power witnesses whenever any uncertainty corner is unresolved.
+- Keeps power min/max explicitly scoped to evaluated corners; Q*deltaP and derived metrics can attain interior extrema, so no continuous-box extremum is claimed.
+- Added Markdown reporting and regression coverage for explicit-efficiency, missing-efficiency, exact witness, and indeterminate cases.
+- Bumped package/runtime metadata to v0.50.0.
+
 ## v0.49 evaluated-corner air-power envelope and provenance — 2026-09-24
 
 - Added fan air-power min/max across every solved nonlinear uncertainty corner in complete studies.

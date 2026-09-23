@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14 fan/duct-network operating-point integration — 2026-09-23
+
+- Added a reference-flow fan/duct-network study that derives path quadratic resistance from explicit duct geometry, Darcy friction factors, air density, local-loss coefficients, and section reference airflow fractions.
+- Added critical-path selection from the derived path resistances and direct reuse of the bounded fan/system operating-point solver.
+- Added per-path and per-section reference/operating airflow and pressure-drop reporting.
+- Added validation that section reference airflow does not exceed the declared reference system airflow, plus rejection of zero-resistance paths.
+- Added JSON loading, Markdown/JSON reporting, the cleanroomx-fan-duct CLI, example data, documentation, and regression tests.
+- Kept the workflow explicitly bounded: section flow fractions, density, friction factor, geometry, and local-loss coefficients remain fixed while total airflow varies; no general network balancing, variable-friction iteration, leakage, system effect, stall/surge, or controls are inferred.
+
 ## v0.13 integrated engineering dossier — 2026-09-23
 
 - Added a manifest-driven engineering dossier that aggregates room/cascade verification, HVAC/duct screening, v0.12 HVAC fan-curve design-duty verification, measured recovery, uncertainty/provenance, qualification uncertainty, thermal/HVAC uncertainty, and standalone fan/system operating-point studies.

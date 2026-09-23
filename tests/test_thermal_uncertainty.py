@@ -3,7 +3,10 @@ import pytest
 from cleanroomx.hvac_models import AirState
 from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
 from cleanroomx.thermal_uncertainty_io import thermal_uncertainty_from_dict
-from cleanroomx.thermal_uncertainty_models import (\n    UncertainAirState,\n    UncertainThermalDesign,\n)
+from cleanroomx.thermal_uncertainty_models import (
+    UncertainAirState,
+    UncertainThermalDesign,
+)
 from cleanroomx.uncertainty_models import Provenance, UncertainValue
 
 

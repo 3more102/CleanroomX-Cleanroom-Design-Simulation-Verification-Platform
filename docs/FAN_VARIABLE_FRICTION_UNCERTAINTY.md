@@ -1,6 +1,6 @@
 # Fan / variable-friction loop uncertainty
 
-CleanroomX v0.37 introduced deterministic bounded uncertainty for the nonlinear fan/variable-friction loop workflow, v0.39 extended the same corner engine to selected physical Darcy inputs, v0.40 added duct length/circular diameter, v0.41 preserved explicit rectangular dimensions, v0.42 added selected fan-point pressure bounds, v0.43 added bounded airflow coordinates at selected supplied fan-curve points, v0.44 added bounded fan-speed ratio uncertainty, and v0.45 adds explicit correlated whole fan-curve scenarios without extrapolation or freezing the airflow-dependent resistance model.
+CleanroomX v0.37 introduced deterministic bounded uncertainty for the nonlinear fan/variable-friction loop workflow, v0.39 extended the same corner engine to selected physical Darcy inputs, v0.40 added duct length/circular diameter, v0.41 preserved explicit rectangular dimensions, v0.42 added selected fan-point pressure bounds, v0.43 added bounded airflow coordinates at selected supplied fan-curve points, v0.44 added bounded fan-speed ratio uncertainty, and v0.45 adds explicit correlated whole fan-curve scenarios without extrapolation or freezing the airflow-dependent resistance model. v0.46 retains solved-corner power evidence and summarizes evaluated power ranges without promoting corner extrema to guaranteed continuous uncertainty bounds.
 
 The analysis deliberately avoids assigning one fixed equivalent resistance to a network whose Darcy friction changes with branch airflow. Each uncertainty corner rebuilds the affected geometry evidence and then reuses the complete nonlinear fan/loop solver.
 
@@ -54,10 +54,12 @@ A complete result reports:
 - evaluated corner count and per-corner state;
 - airflow, fan-pressure, and system-pressure min/max across solved corners;
 - internal edge-airflow ranges across evaluated corners;
+- per-corner fan pressure/power evidence;
+- evaluated-corner fluid-air-power ranges plus shaft/electrical/SFP ranges only when the corresponding explicit efficiencies are supplied;
 - solver diagnostics for every corner; and
 - provenance completeness for the fan curve and every bounded input.
 
-These min/max values are evaluated-corner ranges only. They are not claimed to be mathematically guaranteed continuous-interval extrema for every interior combination.
+These min/max values are evaluated-corner ranges only. They are not claimed to be mathematically guaranteed continuous-interval extrema for every interior combination. This qualification applies explicitly to power metrics as well: `Q × ΔP` can have an interior extremum, so reported power values are diagnostic evaluated-corner ranges rather than a conservative continuous-box power envelope. Shaft/electrical/SFP evidence remains unavailable unless the required explicit efficiency chain is provided.
 
 ## Input and CLI
 

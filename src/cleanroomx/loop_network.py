@@ -24,6 +24,8 @@ class QuadraticFlowEdge:
     start_node: str
     end_node: str
     resistance_pa_per_m3_s_squared: float
+    resistance_basis: str = "explicit"
+    resistance_evidence: dict | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -40,6 +42,14 @@ class QuadraticFlowEdge:
                 "resistance_pa_per_m3_s_squared",
             ),
         )
+        if self.resistance_basis not in {"explicit", "duct_geometry"}:
+            raise ValueError(
+                "resistance_basis must be 'explicit' or 'duct_geometry'"
+            )
+        if self.resistance_evidence is not None:
+            object.__setattr__(
+                self, "resistance_evidence", dict(self.resistance_evidence)
+            )
 
 
 @dataclass(frozen=True)
@@ -341,6 +351,8 @@ def solve_looped_network(
                 "resistance_pa_per_m3_s_squared": round(
                     edge.resistance_pa_per_m3_s_squared, 9
                 ),
+                "resistance_basis": edge.resistance_basis,
+                "resistance_evidence": edge.resistance_evidence,
                 "airflow_m3_s": round(airflow_m3_s, 12),
                 "airflow_m3_h": round(airflow_m3_s * 3600.0, 6),
                 "flow_direction": direction,
@@ -378,7 +390,9 @@ def solve_looped_network(
             "when every edge uses a fixed quadratic pressure-loss law "
             "deltaP = R*Q*abs(Q) and node injections are explicitly specified and "
             "balanced. Node pressures are relative to the configured reference node. "
-            "It does not infer geometry, friction factors, fan curves, dampers, controls, "
-            "leakage, variable resistance, compressibility, or transient behavior."
+            "Edge resistance may be supplied directly or pre-derived from explicit duct "
+            "geometry. Geometry-derived resistance remains fixed during the solve. "
+            "The solver does not iterate flow-dependent friction, fan curves, dampers, "
+            "controls, leakage, compressibility, or transient behavior."
         ),
     }

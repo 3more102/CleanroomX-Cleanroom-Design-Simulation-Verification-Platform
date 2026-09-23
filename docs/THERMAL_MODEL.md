@@ -48,3 +48,10 @@ Internal sensible and latent loads are summed directly. Makeup-air total load is
 ## Limits
 
 This is not a final coil-selection, CFD, certification, or code-compliance calculation. The current model does not include detailed solar/envelope conduction, fan heat, duct heat gain/loss, coil bypass factor or ADP, humidification/dehumidification equipment selection, diversity schedules, heat recovery, weather databases, or transient loads.
+
+
+## v0.9 uncertainty extension
+
+For deterministic interval propagation of explicit thermal loads, airflow inputs, supply-air temperature, and optional available cooling/heating capacity checks, see `docs/THERMAL_UNCERTAINTY.md`.
+
+The v0.9 uncertainty workflow holds room/outdoor psychrometric states fixed; it does not turn the preliminary thermal model into an hourly load or probabilistic uncertainty simulation.

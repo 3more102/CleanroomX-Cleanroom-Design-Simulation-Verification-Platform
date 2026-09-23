@@ -56,15 +56,57 @@ def markdown_hvac_report(result: dict) -> str:
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
             )
 
+    if result["duct_network"] is not None:
+        network = result["duct_network"]
+        lines.extend(
+            [
+                "",
+                "## Supply-duct pressure-loss network",
+                "",
+                f"- Critical path: **{network['critical_path']}**.",
+                f"- Critical-path pressure loss: **{network['critical_path_pressure_drop_pa']} Pa**.",
+                "",
+                "| Path | Sections | Total pressure loss (Pa) | Max velocity (m/s) |",
+                "|---|---:|---:|---:|",
+            ]
+        )
+        for path in network["paths"]:
+            lines.append(
+                f"| {path['name']} | {path['section_count']} | "
+                f"{path['total_pressure_drop_pa']} | {path['max_velocity_m_s']} |"
+            )
+        lines.extend(["", "### Duct-section details", ""])
+        for path in network["paths"]:
+            lines.append(f"**{path['name']}**")
+            lines.append("")
+            lines.append(
+                "| Section | Flow (m³/h) | Velocity (m/s) | Friction (Pa) | Minor (Pa) | Fixed (Pa) | Total (Pa) |"
+            )
+            lines.append("|---|---:|---:|---:|---:|---:|---:|")
+            for section in path["sections"]:
+                lines.append(
+                    f"| {section['name']} | {section['airflow_m3_h']} | "
+                    f"{section['velocity_m_s']} | "
+                    f"{section['friction_pressure_drop_pa']} | "
+                    f"{section['minor_pressure_drop_pa']} | "
+                    f"{section['additional_pressure_drop_pa']} | "
+                    f"{section['total_pressure_drop_pa']} |"
+                )
+            lines.append("")
+        lines.append(network["scope_note"])
+
     if result["supply_fan"] is not None:
         fan = result["supply_fan"]
+        components = fan["pressure_components_pa"]
         lines.extend(
             [
                 "",
                 "## Preliminary supply-fan duty",
                 "",
                 f"- Airflow: **{fan['airflow_m3_h']} m³/h**.",
-                f"- Total entered static pressure: **{fan['total_static_pressure_pa']} Pa**.",
+                f"- Entered duct allowance: **{components['entered_duct']} Pa**.",
+                f"- Calculated network critical-path loss: **{components['network_critical_path']} Pa**.",
+                f"- Total preliminary static pressure: **{fan['total_static_pressure_pa']} Pa**.",
                 f"- Estimated electrical input: **{fan['estimated_electrical_input_kw']} kW**.",
                 f"- {fan['scope_note']}",
             ]

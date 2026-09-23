@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.4 engineering core
+## v0.5 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -17,6 +17,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Optional FFU/filter-unit count from rated airflow and explicit design utilization.
 - Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
 - Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
+- Path-based duct pressure-loss analysis using Darcy-Weisbach friction plus explicit local loss coefficients.
+- Circular and rectangular duct geometry with hydraulic-diameter reporting.
+- Critical-path selection across user-defined duct paths and direct integration into fan duty.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -26,11 +29,11 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, a fitted recovery model, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. ISO 14644-3 provides cleanroom test methods. Project, process, safety, and regulatory requirements can add other criteria.
 
-CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, fan-sizing, particle-target, or recovery-time limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, qualification protocol, process design basis, manufacturer data, or regulator.
+CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, duct-friction, fitting-loss, fan-sizing, particle-target, or recovery-time limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, qualification protocol, process design basis, manufacturer data, or regulator.
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. The duct calculation compares explicitly defined paths; it is not a nonlinear airflow-network solver and does not infer branch flows, fitting coefficients, friction factors, fan curves, system effect, leakage, acoustics, balancing, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
 ## Install
 
@@ -55,15 +58,19 @@ A failing configured verification requirement returns exit code 2.
 
     cleanroomx-hvac examples/semiconductor_thermal_demo.json
 
+Duct critical-path demo:
+
+    cleanroomx-hvac examples/duct_network_demo.json
+
 JSON output:
 
-    cleanroomx-hvac examples/semiconductor_thermal_demo.json --format json
+    cleanroomx-hvac examples/duct_network_demo.json --format json
 
 Write a Markdown report:
 
-    cleanroomx-hvac examples/semiconductor_thermal_demo.json --output hvac-report.md
+    cleanroomx-hvac examples/duct_network_demo.json --output hvac-report.md
 
-The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data and a preliminary supply-fan model. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, and docs/STANDARDS.md.
+The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data, a preliminary supply-fan model, and an optional path-based duct network. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, docs/DUCT_NETWORK_MODEL.md, and docs/STANDARDS.md.
 
 ## Analyze a measured particle-recovery test
 
@@ -118,14 +125,15 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are uncertainty/provenance tracking, richer engineering reports, duct/network pressure-loss modeling, and later a desktop/web UI plus CFD adapters.
+Next milestones are uncertainty/provenance tracking, richer engineering reports, branch-flow/network solving, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
 - ISO 14644-1:2015 — classification of air cleanliness by particle concentration.
 - ISO 14644-3:2019 — cleanroom and clean-zone test methods.
 - ISO 14644-4:2022 — cleanroom design, construction, and start-up.
-- ASHRAE Handbook—Fundamentals — psychrometrics.
+- ASHRAE Handbook—Fundamentals — psychrometrics and duct design.
+- ASHRAE Duct Fitting Database / Standard 120 resources — duct fitting resistance and loss coefficients.
 - ASHRAE Design Guide for Cleanrooms.
 
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.

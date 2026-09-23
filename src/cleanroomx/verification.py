@@ -6,7 +6,7 @@ from typing import Literal
 from .calculations import air_changes_per_hour, room_volume_m3
 from .models import RoomSpec
 
-Status = Literal["pass", "fail", "not_checked"]
+Status = Literal["pass", "fail", "indeterminate", "not_checked"]
 
 
 @dataclass(frozen=True)
@@ -17,6 +17,9 @@ class Finding:
     actual: float | None = None
     limit: float | None = None
     unit: str | None = None
+    uncertainty: float | None = None
+    interval_low: float | None = None
+    interval_high: float | None = None
 
 
 @dataclass(frozen=True)
@@ -28,7 +31,7 @@ class VerificationReport:
 
     @property
     def passed(self) -> bool:
-        return all(item.status != "fail" for item in self.findings)
+        return all(item.status not in {"fail", "indeterminate"} for item in self.findings)
 
     def to_dict(self) -> dict:
         return {
@@ -61,17 +64,48 @@ def verify_room(room: RoomSpec) -> VerificationReport:
         )
 
     if room.min_pressure_pa is None or room.observed_pressure_pa is None:
-        findings.append(Finding("PRESSURE", "not_checked", "Pressure requirement or observed value is not configured.", unit="Pa"))
-    else:
-        ok = room.observed_pressure_pa >= room.min_pressure_pa
         findings.append(
             Finding(
                 "PRESSURE",
-                "pass" if ok else "fail",
-                "Observed differential pressure meets the configured project requirement." if ok else "Observed differential pressure is below the configured project requirement.",
+                "not_checked",
+                "Pressure requirement or observed value is not configured.",
                 actual=room.observed_pressure_pa,
                 limit=room.min_pressure_pa,
                 unit="Pa",
+                uncertainty=room.observed_pressure_uncertainty_pa,
+            )
+        )
+    else:
+        uncertainty = room.observed_pressure_uncertainty_pa
+        low = room.observed_pressure_pa - uncertainty
+        high = room.observed_pressure_pa + uncertainty
+        if low >= room.min_pressure_pa:
+            status: Status = "pass"
+            message = (
+                "The complete observed-pressure interval meets the configured project requirement."
+            )
+        elif high < room.min_pressure_pa:
+            status = "fail"
+            message = (
+                "The complete observed-pressure interval is below the configured project requirement."
+            )
+        else:
+            status = "indeterminate"
+            message = (
+                "The configured pressure requirement lies inside the observed-pressure "
+                "uncertainty interval."
+            )
+        findings.append(
+            Finding(
+                "PRESSURE",
+                status,
+                message,
+                actual=room.observed_pressure_pa,
+                limit=room.min_pressure_pa,
+                unit="Pa",
+                uncertainty=uncertainty,
+                interval_low=low,
+                interval_high=high,
             )
         )
 

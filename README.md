@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.5 engineering core
+## v0.6 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -23,6 +23,8 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Conservative interval propagation for uncertain room dimensions and supply airflow.
 - Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
 - Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
+- Round/rectangular duct pressure-loss modeling with Darcy-Weisbach friction, explicit local loss coefficients, path totals, and critical-path selection.
+- Optional duct-network integration into preliminary supply-fan static-pressure and power sizing.
 - JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
 
 ## Important engineering boundary
@@ -33,7 +35,7 @@ CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure
 
 The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
 
-The HVAC module is also a preliminary engineering model. It does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
+The HVAC module is also a preliminary engineering model. The v0.6 duct workflow compares explicit user-defined paths using project-entered airflow, friction factors, geometry, density, and local loss coefficients. It does not solve branch airflow or fan operating points and does not replace detailed coil selection, weather/load modeling, duct design, fan-curve selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
 
 The uncertainty workflow uses deterministic worst-case input intervals. It is not a statistical measurement-uncertainty budget, does not invent tolerances, and does not replace calibration records or a project qualification procedure.
 
@@ -102,9 +104,25 @@ The v0.5 workflow propagates user-supplied absolute bounds through room volume a
 
 See docs/UNCERTAINTY_PROVENANCE.md.
 
+## Analyze duct-network pressure loss
+
+    cleanroomx-duct examples/duct_network_demo.json
+
+JSON output:
+
+    cleanroomx-duct examples/duct_network_demo.json --format json
+
+Write a Markdown report:
+
+    cleanroomx-duct examples/duct_network_demo.json --output duct-report.md
+
+The v0.6 duct workflow calculates straight-duct Darcy-Weisbach loss plus explicit local K losses for each segment, sums configured fan-to-terminal paths, and identifies the highest-loss critical path. When a duct network is embedded in an HVAC project, the calculated critical-path loss replaces the manually entered duct-loss component for preliminary fan sizing rather than being added to it.
+
+See docs/DUCT_NETWORK_MODEL.md.
+
 ## Multi-room pressure-cascade JSON
 
-\`\`\`json
+```json
 {
   "name": "Suite",
   "rooms": [
@@ -133,13 +151,13 @@ See docs/UNCERTAINTY_PROVENANCE.md.
     }
   ]
 }
-\`\`\`
+```
 
 The numeric limits in the examples are demonstration project inputs, **not quoted ISO limits**.
 
 ## Roadmap
 
-Next milestones are richer engineering reports, duct/network pressure-loss modeling, extension of uncertainty propagation to pressure/thermal/recovery workflows, and later a desktop/web UI plus CFD adapters.
+Next milestones are richer engineering reports, deeper uncertainty propagation into pressure/thermal/recovery workflows, automatic friction-factor options with explicit roughness/Reynolds inputs, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 
@@ -148,5 +166,7 @@ Next milestones are richer engineering reports, duct/network pressure-loss model
 - ISO 14644-4:2022 — cleanroom design, construction, and start-up.
 - ASHRAE Handbook—Fundamentals — psychrometrics.
 - ASHRAE Design Guide for Cleanrooms.
+- ASHRAE Handbook—Fundamentals, Chapter 21 — duct design, friction and dynamic losses.
+- ASHRAE Duct Fitting Database — fitting loss-coefficient data.
 
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.

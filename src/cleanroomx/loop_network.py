@@ -79,10 +79,9 @@ class LoopedFlowNetwork:
                 )
 
         total = sum(injections.values())
-        balance_scale = max(1.0, sum(abs(value) for value in injections.values()))
-        if abs(total) > max(1e-6, 1e-9 * balance_scale):
+        if abs(total) > 1e-6:
             raise ValueError(
-                "node injections must sum to zero within numerical tolerance; "
+                "node injections must sum to zero within 1e-6 m3/h; "
                 f"got {total:.9g} m3/h"
             )
 

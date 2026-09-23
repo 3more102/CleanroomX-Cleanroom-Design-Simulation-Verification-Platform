@@ -12,7 +12,7 @@ class BranchDuct:
     upstream_node: str
     downstream_node: str
     length_m: float
-    friction_factor: float
+    friction_factor: float | None
     air_density_kg_m3: float
     local_loss_coefficient: float = 0.0
     diameter_m: float | None = None

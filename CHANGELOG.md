@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.25 geometry-derived fixed loop resistance — 2026-09-23
+
+- Added optional derivation of loop-edge quadratic resistance from explicit circular or rectangular duct geometry.
+- Uses Darcy-Weisbach straight-duct friction plus an explicit local-loss coefficient: `R = 0.5·ρ·(fL/Dh + K)/A²`.
+- Supports either a user-supplied Darcy friction factor or automatic friction from explicit roughness, kinematic viscosity, and reference airflow.
+- Automatic friction is resolved once at the declared reference airflow; the derived resistance remains fixed during nonlinear loop balancing.
+- Preserves explicit `resistance_pa_per_m3_s_squared` inputs unchanged and rejects ambiguous edges that provide both resistance sources.
+- Adds resistance-basis and derivation evidence to JSON/Markdown loop reports.
+- Added a geometry-derived loop example and regression coverage for circular/rectangular geometry, automatic friction, loader validation, reporting, and backward compatibility.
+- Bumped package/runtime metadata to v0.25.0.
+
 ## v0.24 fan/system operating-point uncertainty — 2026-09-23
 
 - Added deterministic bounded uncertainty analysis for user-supplied fixed system pressure and quadratic system resistance.

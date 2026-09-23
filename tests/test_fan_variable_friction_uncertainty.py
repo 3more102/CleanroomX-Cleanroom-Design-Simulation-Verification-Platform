@@ -924,3 +924,82 @@ def test_uncertainty_report_surfaces_extreme_corner_witnesses() -> None:
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
 
     assert "corner indices" in report
+
+
+def test_operating_point_extrema_sources_reference_exact_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    envelope = result["operating_point_envelope"]
+    sources = result["operating_point_extrema_sources"]
+    assert envelope is not None
+    assert sources is not None
+    assert set(sources) == {
+        "airflow_m3_h",
+        "fan_pressure_pa",
+        "system_pressure_pa",
+    }
+
+    for metric in sources:
+        for bound in ("lower", "upper"):
+            evidence = sources[metric][bound]
+            assert evidence["value"] == pytest.approx(
+                envelope[metric][bound]
+            )
+            assert evidence["sources"]
+            for source in evidence["sources"]:
+                corner = result["corners"][source["corner_index"]]
+                assert corner["operating_point"] is not None
+                assert corner["operating_point"][metric] == pytest.approx(
+                    evidence["value"]
+                )
+                assert source["fixed_pressure_pa"] == corner[
+                    "fixed_pressure_pa"
+                ]
+                assert source.get("fan_curve_scenario") == corner.get(
+                    "fan_curve_scenario"
+                )
+                assert source.get("fan_speed_ratio") == corner.get(
+                    "fan_speed_ratio"
+                )
+
+
+def test_extrema_sources_withheld_when_any_scenario_is_unresolved() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_curve_scenarios_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["fan_curve_scenarios"][0]["points"] = [
+        {"airflow_m3_h": 0, "pressure_pa": 0},
+        {"airflow_m3_h": 5200, "pressure_pa": 0},
+        {"airflow_m3_h": 8650, "pressure_pa": 0},
+    ]
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["unresolved_corner_count"] >= 1
+    assert result["operating_point_envelope"] is None
+    assert result["operating_point_extrema_sources"] is None
+
+
+def test_extrema_source_report_names_exact_corner_context() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+
+    assert "Critical evaluated cases" in report
+    assert "Airflow lower" in report
+    assert "Fan pressure upper" in report
+    assert "corner " in report
+    assert "scenario=" in report

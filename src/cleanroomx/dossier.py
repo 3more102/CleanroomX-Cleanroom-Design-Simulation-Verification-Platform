@@ -197,6 +197,7 @@ def _fan_variable_friction_uncertainty_summary(results: list[dict]) -> dict:
             "analysis_count": 0,
             "corner_count": 0,
             "fan_curve_scenario_count": 0,
+            "no_intersection_corner_count": 0,
             "missing_provenance_analyses": 0,
         }
     counts = _count_statuses(item["status"] for item in results)
@@ -214,6 +215,12 @@ def _fan_variable_friction_uncertainty_summary(results: list[dict]) -> dict:
         "corner_count": sum(item.get("corner_count", 0) for item in results),
         "fan_curve_scenario_count": sum(
             len(item.get("fan_curve_scenarios", [])) for item in results
+        ),
+        "no_intersection_corner_count": sum(
+            item.get("fan_curve_no_intersection_summary", {}).get(
+                "no_intersection_corner_count", 0
+            )
+            for item in results
         ),
         "missing_provenance_analyses": missing,
     }

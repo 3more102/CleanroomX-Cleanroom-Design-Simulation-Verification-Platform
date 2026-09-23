@@ -34,6 +34,30 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             f"**{interval['lower']} to {interval['upper']}** "
             f"(nominal {interval['nominal']})"
         )
+    for name, interval in result["input_intervals"].get(
+        "edge_absolute_roughness_m", {}
+    ).items():
+        lines.append(
+            f"- Edge `{name}` Absolute roughness: "
+            f"**{interval['lower']} to {interval['upper']} m** "
+            f"(nominal {interval['nominal']} m)"
+        )
+    for name, interval in result["input_intervals"].get(
+        "edge_kinematic_viscosity_m2_s", {}
+    ).items():
+        lines.append(
+            f"- Edge `{name}` Kinematic viscosity: "
+            f"**{interval['lower']} to {interval['upper']} m²/s** "
+            f"(nominal {interval['nominal']} m²/s)"
+        )
+    for name, interval in result["input_intervals"].get(
+        "edge_air_density_kg_m3", {}
+    ).items():
+        lines.append(
+            f"- Edge `{name}` Air density: "
+            f"**{interval['lower']} to {interval['upper']} kg/m³** "
+            f"(nominal {interval['nominal']} kg/m³)"
+        )
 
     lines.extend(["", "## Nominal operating point", ""])
     nominal = result["nominal_operating_point"]
@@ -75,8 +99,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             "",
             "## Corner results",
             "",
-            "| Fixed pressure Pa | Local-loss K values | Status | Airflow m³/h | Pressure Pa |",
-            "|---:|---|---|---:|---:|",
+            "| Fixed pressure Pa | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
+            "|---:|---|---|---|---:|---:|",
         ]
     )
     for corner in result["corners"]:
@@ -87,9 +111,19 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "edge_local_loss_coefficient"
             ].items()
         )
+        physical_values = []
+        for label, key, unit in (
+            ("roughness", "edge_absolute_roughness_m", "m"),
+            ("viscosity", "edge_kinematic_viscosity_m2_s", "m²/s"),
+            ("density", "edge_air_density_kg_m3", "kg/m³"),
+        ):
+            for name, value in corner.get(key, {}).items():
+                physical_values.append(
+                    f"{name} {label}={value} {unit}"
+                )
         lines.append(
             f"| {corner['fixed_pressure_pa']} | {local_losses or '—'} | "
-            f"{corner['status']} | "
+            f"{', '.join(physical_values) or '—'} | {corner['status']} | "
             f"{_fmt(None if point is None else point['airflow_m3_h'])} | "
             f"{_fmt(None if point is None else point['system_pressure_pa'])} |"
         )

@@ -9,11 +9,22 @@
       "supply_airflow_m3_h": 2700.0,
       "min_ach": 25.0,
       "observed_pressure_pa": 30.0,
+      "observed_pressure_uncertainty_pa": 0.5,
+      "pressure_provenance": {
+        "source": "Demonstration pressure survey",
+        "instrument_id": "DEMO-DPM-01"
+      },
       "particle_requirements": [
         {
           "size_um": 0.5,
           "max_concentration_per_m3": 400000.0,
-          "observed_concentration_per_m3": 120000.0
+          "observed_concentration_per_m3": 120000.0,
+          "observed_uncertainty_per_m3": 10000.0,
+          "requirement_reference": "DEMO-PARTICLE-001",
+          "provenance": {
+            "source": "Demonstration particle-count record",
+            "instrument_id": "DEMO-PC-01"
+          }
         }
       ]
     },
@@ -24,7 +35,12 @@
       "height_m": 3.0,
       "supply_airflow_m3_h": 1200.0,
       "min_ach": 20.0,
-      "observed_pressure_pa": 16.0
+      "observed_pressure_pa": 16.0,
+      "observed_pressure_uncertainty_pa": 0.5,
+      "pressure_provenance": {
+        "source": "Demonstration pressure survey",
+        "instrument_id": "DEMO-DPM-01"
+      }
     },
     {
       "name": "Ante",
@@ -33,19 +49,26 @@
       "height_m": 3.0,
       "supply_airflow_m3_h": 720.0,
       "min_ach": 20.0,
-      "observed_pressure_pa": 8.0
+      "observed_pressure_pa": 8.0,
+      "observed_pressure_uncertainty_pa": 0.5,
+      "pressure_provenance": {
+        "source": "Demonstration pressure survey",
+        "instrument_id": "DEMO-DPM-01"
+      }
     }
   ],
   "pressure_cascade": [
     {
       "higher_pressure_room": "Process",
       "lower_pressure_room": "Preparation",
-      "min_delta_pa": 10.0
+      "min_delta_pa": 10.0,
+      "requirement_reference": "DEMO-CASCADE-001"
     },
     {
       "higher_pressure_room": "Preparation",
       "lower_pressure_room": "Ante",
-      "min_delta_pa": 5.0
+      "min_delta_pa": 5.0,
+      "requirement_reference": "DEMO-CASCADE-002"
     }
   ]
 }

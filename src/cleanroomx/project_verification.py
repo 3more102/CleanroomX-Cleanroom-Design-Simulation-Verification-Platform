@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from .models import ProjectSpec
-from .verification import Status, VerificationReport, verify_room
+from .verification import ReportStatus, Status, VerificationReport, verify_room
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,8 @@ class PressureCascadeFinding:
     lower_pressure_room: str
     actual_delta_pa: float | None = None
     limit_pa: float | None = None
+    lower_bound_pa: float | None = None
+    upper_bound_pa: float | None = None
 
 
 @dataclass(frozen=True)
@@ -24,17 +26,32 @@ class ProjectVerificationReport:
     pressure_cascade_findings: tuple[PressureCascadeFinding, ...]
 
     @property
-    def passed(self) -> bool:
-        return all(report.passed for report in self.room_reports) and all(
-            finding.status != "fail" for finding in self.pressure_cascade_findings
+    def status(self) -> ReportStatus:
+        statuses: list[Status | ReportStatus] = [
+            report.status for report in self.room_reports
+        ]
+        statuses.extend(
+            finding.status for finding in self.pressure_cascade_findings
         )
+        if "fail" in statuses:
+            return "fail"
+        if "indeterminate" in statuses:
+            return "indeterminate"
+        return "pass"
+
+    @property
+    def passed(self) -> bool:
+        return self.status == "pass"
 
     def to_dict(self) -> dict:
         return {
             "project": self.project,
+            "status": self.status,
             "passed": self.passed,
             "rooms": [report.to_dict() for report in self.room_reports],
-            "pressure_cascade": [asdict(finding) for finding in self.pressure_cascade_findings],
+            "pressure_cascade": [
+                asdict(finding) for finding in self.pressure_cascade_findings
+            ],
         }
 
 
@@ -61,20 +78,53 @@ def verify_project(project: ProjectSpec) -> ProjectVerificationReport:
             continue
 
         actual_delta = higher.observed_pressure_pa - lower.observed_pressure_pa
-        ok = actual_delta >= requirement.min_delta_pa
+        lower_delta = (
+            higher.observed_pressure_pa
+            - higher.observed_pressure_uncertainty_pa
+            - (
+                lower.observed_pressure_pa
+                + lower.observed_pressure_uncertainty_pa
+            )
+        )
+        upper_delta = (
+            higher.observed_pressure_pa
+            + higher.observed_pressure_uncertainty_pa
+            - (
+                lower.observed_pressure_pa
+                - lower.observed_pressure_uncertainty_pa
+            )
+        )
+
+        if lower_delta >= requirement.min_delta_pa:
+            status: Status = "pass"
+            message = (
+                "The complete room-to-room pressure-difference interval meets "
+                "the configured project minimum."
+            )
+        elif upper_delta < requirement.min_delta_pa:
+            status = "fail"
+            message = (
+                "The complete room-to-room pressure-difference interval is below "
+                "the configured project minimum."
+            )
+        else:
+            status = "indeterminate"
+            message = (
+                "The room-to-room pressure-difference interval overlaps the "
+                "configured project minimum."
+            )
+
         findings.append(
             PressureCascadeFinding(
                 code="PRESSURE_CASCADE",
-                status="pass" if ok else "fail",
-                message=(
-                    "Observed room-to-room pressure cascade meets the configured project requirement."
-                    if ok
-                    else "Observed room-to-room pressure cascade is below the configured project requirement."
-                ),
+                status=status,
+                message=message,
                 higher_pressure_room=higher.name,
                 lower_pressure_room=lower.name,
                 actual_delta_pa=actual_delta,
                 limit_pa=requirement.min_delta_pa,
+                lower_bound_pa=lower_delta,
+                upper_bound_pa=upper_delta,
             )
         )
 

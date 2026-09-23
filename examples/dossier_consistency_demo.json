@@ -1,0 +1,14 @@
+{
+  "name": "CleanroomX Dossier Consistency Demo",
+  "project_reference": "CRX-CONSISTENCY-001",
+  "revision": "A",
+  "notes": "Demonstration only. The airflow consistency settings are project inputs and not cleanroom acceptance limits.",
+  "verification_project": "facility_project.json",
+  "hvac_project": "consistency_hvac_demo.json",
+  "consistency_checks": {
+    "verification_hvac_airflow": {
+      "room_airflow_abs_tolerance_m3_h": 0.0,
+      "require_same_room_set": true
+    }
+  }
+}

@@ -4,7 +4,10 @@ from cleanroomx.hvac_models import AirState
 from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
 from cleanroomx.thermal_uncertainty_io import thermal_uncertainty_from_dict
 from cleanroomx.psychrometric_uncertainty_models import UncertainAirState
-from cleanroomx.thermal_uncertainty_models import UncertainThermalDesign
+from cleanroomx.thermal_uncertainty_models import (
+    UncertainAirState as ThermalUncertainAirState,
+    UncertainThermalDesign,
+)
 from cleanroomx.uncertainty_models import Provenance, UncertainValue
 
 
@@ -175,6 +178,17 @@ def test_missing_provenance_is_reported_separately() -> None:
     assert result["overall_status"] == "pass"
     assert result["traceability"]["complete"] is False
     assert "internal_latent_kw" in result["traceability"]["missing_provenance"]
+
+
+def test_legacy_thermal_uncertain_air_state_constructor_remains_supported() -> None:
+    state = ThermalUncertainAirState(
+        dry_bulb_c=uv(22.0, "C", 0.5),
+        relative_humidity_percent=uv(45.0, "%", 2.0),
+    )
+
+    assert state.name == "Thermal uncertainty air state"
+    assert state.nominal_state.dry_bulb_c == 22.0
+    assert len(state.corner_states()) == 4
 
 
 def test_loader_accepts_uncertain_psychrometric_states() -> None:

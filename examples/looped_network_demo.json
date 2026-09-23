@@ -1,0 +1,42 @@
+{
+  "name": "Quadratic looped-airflow demo",
+  "reference_node": "Supply",
+  "node_injections_m3_h": {
+    "Supply": 5400.0,
+    "Junction A": 0.0,
+    "Junction B": 0.0,
+    "Return": -5400.0
+  },
+  "edges": [
+    {
+      "name": "Supply to A",
+      "start_node": "Supply",
+      "end_node": "Junction A",
+      "resistance_pa_per_m3_s_squared": 80.0
+    },
+    {
+      "name": "A to Return",
+      "start_node": "Junction A",
+      "end_node": "Return",
+      "resistance_pa_per_m3_s_squared": 120.0
+    },
+    {
+      "name": "Supply to B",
+      "start_node": "Supply",
+      "end_node": "Junction B",
+      "resistance_pa_per_m3_s_squared": 110.0
+    },
+    {
+      "name": "B to Return",
+      "start_node": "Junction B",
+      "end_node": "Return",
+      "resistance_pa_per_m3_s_squared": 90.0
+    },
+    {
+      "name": "Cross-link A to B",
+      "start_node": "Junction A",
+      "end_node": "Junction B",
+      "resistance_pa_per_m3_s_squared": 250.0
+    }
+  ]
+}

@@ -102,6 +102,36 @@ def test_unequal_paths_keep_inverse_sqrt_flow_ratio_at_operating_point() -> None
     assert actual_ratio == pytest.approx(expected_ratio, rel=1e-4)
 
 
+def test_three_path_solution_preserves_equivalent_pressure_relation() -> None:
+    paths = (
+        ParallelFlowPath("Wide", (_section("Wide 1", 0.55, 8),)),
+        ParallelFlowPath("Medium", (_section("Medium 1", 0.45, 12),)),
+        ParallelFlowPath("Narrow", (_section("Narrow 1", 0.35, 16),)),
+    )
+    result = solve_fan_driven_parallel_network(
+        FanDrivenParallelNetworkStudy(
+            "Three branches",
+            _fan(),
+            40,
+            paths,
+        )
+    )
+
+    assert result["status"] == "solved"
+    network = result["network_solution"]
+    assert network is not None
+    operating_q_m3_s = result["fan_operating_point"]["airflow_m3_s"]
+    equivalent_r = result["equivalent_network_resistance_pa_per_m3_s_squared"]
+    expected_network_pressure = equivalent_r * operating_q_m3_s**2
+
+    assert network["common_pressure_drop_pa"] == pytest.approx(
+        expected_network_pressure, abs=0.01
+    )
+    assert network["mass_balance_error_m3_h"] == pytest.approx(0, abs=1e-6)
+    for path in network["paths"]:
+        assert path["pressure_balance_error_pa"] == pytest.approx(0, abs=1e-6)
+
+
 def test_no_intersection_is_reported_without_branch_flow_solution() -> None:
     path_a = ParallelFlowPath("A", (_section("A1", 0.5),))
     path_b = ParallelFlowPath("B", (_section("B1", 0.5),))

@@ -1,0 +1,76 @@
+{
+  "name": "Pilot suite qualification uncertainty",
+  "measurements": [
+    {
+      "name": "Process room differential pressure",
+      "observed": {
+        "value": 11.0,
+        "unit": "Pa",
+        "uncertainty_abs": 2.0,
+        "provenance": {
+          "source_type": "measurement",
+          "source_name": "Differential pressure survey",
+          "reference": "DEMO-DP-017",
+          "date": "2026-09-20",
+          "uncertainty_basis": "Demonstration absolute bound"
+        }
+      },
+      "requirement": {
+        "kind": "minimum",
+        "limit": 10.0,
+        "unit": "Pa",
+        "reference": "DEMO-URS-PRESSURE-01"
+      }
+    },
+    {
+      "name": "0.5 um particle concentration",
+      "observed": {
+        "value": 120000.0,
+        "unit": "particles/m3",
+        "uncertainty_abs": 10000.0,
+        "provenance": {
+          "source_type": "measurement",
+          "source_name": "Particle counter run",
+          "reference": "DEMO-PC-021",
+          "date": "2026-09-20",
+          "uncertainty_basis": "Demonstration absolute bound"
+        }
+      },
+      "requirement": {
+        "kind": "maximum",
+        "limit": 400000.0,
+        "unit": "particles/m3",
+        "reference": "DEMO-PARTICLE-01"
+      }
+    }
+  ],
+  "pressure_cascades": [
+    {
+      "name": "Process to preparation",
+      "higher_pressure": {
+        "value": 30.0,
+        "unit": "Pa",
+        "uncertainty_abs": 0.5,
+        "provenance": {
+          "source_type": "measurement",
+          "source_name": "Differential pressure survey",
+          "reference": "DEMO-DP-018",
+          "date": "2026-09-20"
+        }
+      },
+      "lower_pressure": {
+        "value": 16.0,
+        "unit": "Pa",
+        "uncertainty_abs": 0.5,
+        "provenance": {
+          "source_type": "measurement",
+          "source_name": "Differential pressure survey",
+          "reference": "DEMO-DP-019",
+          "date": "2026-09-20"
+        }
+      },
+      "min_delta_pa": 10.0,
+      "requirement_reference": "DEMO-URS-CASCADE-01"
+    }
+  ]
+}

@@ -535,6 +535,7 @@ def solve_fan_variable_friction_loop(
             "operating_iterations": operating_iterations,
             "operating_pressure_tolerance_pa": tolerance,
             "network_outer_iterations": vf["outer_iterations"],
+            "network_newton_iterations": selected_network["iterations"],
             "network_resistance_relative_tolerance": vf[
                 "resistance_relative_tolerance"
             ],

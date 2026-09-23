@@ -26,6 +26,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
 - Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
 - Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty, thermal-uncertainty, and standalone fan/system studies.
+- Optional cross-module verification/HVAC airflow reconciliation with explicit project-supplied tolerance, exact-name or explicit room mapping, and unmapped-room completeness guards.
 - Measured particle-recovery qualification records with project-configured target and maximum recovery time.
 - Recovery traceability metadata plus pass/fail/incomplete/not-checked status.
 - Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
@@ -208,9 +209,13 @@ Write a Markdown dossier:
 
     cleanroomx-dossier examples/dossier_demo.json --output dossier.md
 
-The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. HVAC fan-curve duty checks from v0.12 are carried into the dossier automatically when present. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
+The v0.13 dossier hashes every referenced input with SHA-256 and preserves component-specific fail, incomplete, indeterminate, not-checked, solved, outside-range, and no-intersection states. HVAC fan-curve duty checks from v0.12 are carried into the dossier automatically when present. An optional consistency block can reconcile verification and HVAC airflow using an explicit project-supplied percentage tolerance; CleanroomX does not invent a default tolerance. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
 
-See docs/ENGINEERING_DOSSIER.md.
+Consistency demo:
+
+    cleanroomx-dossier examples/dossier_consistency_demo.json
+
+See docs/ENGINEERING_DOSSIER.md and docs/CROSS_MODULE_CONSISTENCY.md.
 
 ## Multi-room pressure-cascade JSON
 
@@ -249,7 +254,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are tighter cross-module consistency checks, uncertainty propagation into recovery acceptance workflows, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
+Next milestones are uncertainty propagation into recovery acceptance workflows, broader cross-module consistency coverage, general looped-network solving research, fan/system control-law studies, and later a desktop/web UI plus CFD adapters.
 
 ## Standards references
 

@@ -7,16 +7,25 @@ from dataclasses import dataclass
 class RecoverySample:
     time_minutes: float
     concentration_per_m3: float
+    concentration_uncertainty_per_m3: float = 0.0
 
     def __post_init__(self) -> None:
         time = float(self.time_minutes)
         concentration = float(self.concentration_per_m3)
+        uncertainty = float(self.concentration_uncertainty_per_m3)
         if time < 0:
             raise ValueError("time_minutes must be >= 0")
         if concentration < 0:
             raise ValueError("concentration_per_m3 must be >= 0")
+        if uncertainty < 0:
+            raise ValueError("concentration_uncertainty_per_m3 must be >= 0")
+        if concentration - uncertainty < 0:
+            raise ValueError(
+                "concentration uncertainty interval cannot extend below zero"
+            )
         object.__setattr__(self, "time_minutes", time)
         object.__setattr__(self, "concentration_per_m3", concentration)
+        object.__setattr__(self, "concentration_uncertainty_per_m3", uncertainty)
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6 duct/network pressure-loss screening — 2026-09-23
+
+- Added explicit round and rectangular duct-section models.
+- Added Darcy-Weisbach friction loss with laminar `64/Re` and iterative Colebrook friction factors.
+- Added explicit local/fitting loss coefficients referenced to each section velocity pressure.
+- Added multi-path supply-duct analysis and automatic critical-path selection.
+- Added section diagnostics for area, hydraulic diameter, velocity, Reynolds number, friction factor, friction rate, and pressure-loss components.
+- Integrated calculated critical-path duct loss into preliminary supply-fan duty while preserving manual duct loss as the backward-compatible fallback when no network is configured.
+- Added duct JSON parsing, Markdown reporting, example data, validation tests, and engineering-scope documentation.
+- Kept duct roughness, air properties, geometry, section airflow, and local loss coefficients explicit project inputs; no proprietary fitting database is embedded.
+
 ## v0.5 uncertainty/provenance foundation — 2026-09-23
 
 - Added explicit provenance records for engineering inputs, including source type/name, reference, revision, date, uncertainty basis, and notes.

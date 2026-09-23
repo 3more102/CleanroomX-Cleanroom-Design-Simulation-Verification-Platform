@@ -1,0 +1,57 @@
+{
+  "name": "Automatic Darcy Friction Duct Demo",
+  "fan_system": {
+    "name": "Supply AHU",
+    "duct_pressure_drop_pa": 0.0,
+    "coil_pressure_drop_pa": 180.0,
+    "other_pressure_drop_pa": 90.0,
+    "fan_efficiency": 0.68,
+    "motor_efficiency": 0.92
+  },
+  "duct_network": {
+    "paths": [
+      {
+        "name": "Process Bay Path",
+        "sections": [
+          {
+            "name": "Main rectangular trunk",
+            "length_m": 18.0,
+            "airflow_m3_h": 5400.0,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 1.8,
+            "width_m": 0.8,
+            "height_m": 0.45,
+            "absolute_roughness_m": 0.00009,
+            "kinematic_viscosity_m2_s": 0.000015
+          },
+          {
+            "name": "Process branch",
+            "length_m": 12.0,
+            "airflow_m3_h": 3600.0,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 2.4,
+            "diameter_m": 0.5,
+            "absolute_roughness_m": 0.00009,
+            "kinematic_viscosity_m2_s": 0.000015
+          }
+        ]
+      }
+    ]
+  },
+  "rooms": [
+    {
+      "name": "Process Bay",
+      "cleanroom_airflow_m3_h": 3600.0,
+      "thermal_design": {
+        "room_air": {
+          "dry_bulb_c": 22.0,
+          "relative_humidity_percent": 45.0
+        },
+        "loads": {
+          "equipment_w": 4000.0
+        },
+        "supply_air_temp_c": 16.0
+      }
+    }
+  ]
+}

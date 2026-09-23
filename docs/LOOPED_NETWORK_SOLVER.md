@@ -1,6 +1,6 @@
 # Looped airflow-network solver
 
-CleanroomX v0.21 adds a steady-state pressure-node solver for connected networks that may contain arbitrary loops.
+CleanroomX v0.23 adds a steady-state pressure-node solver for connected networks that may contain arbitrary loops.
 
 ## Model
 

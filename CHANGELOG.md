@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.21 fixed-resistance looped airflow networks — 2026-09-23
+## v0.23 fixed-resistance looped airflow networks — 2026-09-23
 
 - Added a connected steady-state pressure-node solver for airflow networks with arbitrary loops.
 - Uses explicit fixed quadratic edge laws `ΔP = R·Q·|Q|` and balanced user-supplied node injections.
@@ -8,8 +8,32 @@
 - Reports signed reverse flow, relative node pressures, per-node mass-balance residuals, and per-edge pressure-law residuals.
 - Validates finite positive resistances, balanced injections, unique edge names, valid node references, and graph connectivity.
 - Added JSON loading, Markdown/JSON reporting, the `cleanroomx-loop-flow` CLI, example data, engineering-scope documentation, and regression tests.
-- Keeps geometry/friction inference, leakage, dampers, controls, fan coupling, compressibility, and transient behavior outside this bounded solver.
-- Bumped package/runtime metadata to v0.21.0.
+- Preserves v0.21 automatic Darcy-friction screening and v0.22 dossier airflow-consistency work; looped networks remain explicit fixed-resistance models.
+- Keeps looped-network geometry/friction inference, leakage, dampers, controls, fan coupling, compressibility, and transient behavior outside this bounded solver.
+- Bumped package/runtime metadata to v0.23.0.
+
+## v0.22 HVAC / fan operating-airflow consistency — 2026-09-23
+
+- Added dossier-integrated comparison of HVAC total governing airflow against standalone fan/system, reference-flow fan/duct, passive parallel-network, and fan-speed operating points.
+- Uses an explicit user-supplied absolute airflow tolerance; exact agreement remains the zero-tolerance default.
+- Preserves unsolved fan studies and fan-speed cases as `not_comparable` rather than converting missing operating points into failures.
+- Adds pass, fail, not-comparable, and pass-with-unresolved-studies states with per-operating-point evidence in Markdown/JSON dossiers.
+- Propagates solved mismatches into dossier attention items and unresolved comparisons into unchecked tracking.
+- Added focused unit tests, an end-to-end dossier example, documentation, and package/runtime version 0.22.0.
+- Keeps the feature bounded as cross-study consistency, not airflow adequacy, fan selection, commissioning acceptance, cleanroom certification, or a standards-derived tolerance.
+
+## v0.21 automatic Darcy friction screening — 2026-09-23
+
+- Added optional roughness/kinematic-viscosity-driven Darcy friction-factor resolution for path-based duct models and fixed-demand supply trees.
+- Computes Reynolds number from section velocity, hydraulic diameter, and explicit kinematic viscosity.
+- Uses the Darcy laminar relation `f = 64/Re` for circular ducts below `Re = 2300` and solves the Colebrook equation for `Re >= 2300`.
+- Rejects automatic laminar friction for noncircular ducts instead of applying the circular-duct relation; users can still supply an explicit friction factor.
+- Preserves the existing explicit `friction_factor` workflow and rejects ambiguous manual-plus-automatic inputs.
+- Resolves supply-tree friction after terminal-demand airflows are propagated, so each branch uses its solved airflow.
+- Resolves reference-flow fan/duct friction at the declared section reference flow, then holds that factor constant while deriving the bounded fixed-ratio quadratic system curve.
+- Leaves passive parallel-flow and fan-driven parallel-network solvers on explicit fixed resistance; v0.21 does not add nonlinear variable-friction network balancing.
+- Added focused regression coverage, documentation, an automatic-friction HVAC example, and 0.21.0 metadata.
+
 
 ## v0.20 dossier-integrated fan-speed studies — 2026-09-23
 

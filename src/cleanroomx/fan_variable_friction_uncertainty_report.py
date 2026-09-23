@@ -48,6 +48,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             f"**{interval['lower']} to {interval['upper']} m³/h** "
             f"(nominal {interval['nominal']} m³/h)"
         )
+    scenarios = result.get("fan_curve_scenarios", [])
+    if scenarios:
+        lines.append(
+            "- Correlated fan-curve scenarios: "
+            + ", ".join(f"**{item['name']}**" for item in scenarios)
+        )
     for name, interval in result["input_intervals"][
         "edge_local_loss_coefficient"
     ].items():
@@ -153,8 +159,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             "",
             "## Corner results",
             "",
-            "| Fixed pressure Pa | Speed ratio | Fan-point pressures Pa | Fan-point airflows m³/h | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
-            "|---:|---:|---|---|---|---|---|---:|---:|",
+            "| Fixed pressure Pa | Fan-curve scenario | Speed ratio | Fan-point pressures Pa | Fan-point airflows m³/h | Local-loss K values | Physical-input values | Status | Airflow m³/h | Pressure Pa |",
+            "|---:|---|---:|---|---|---|---|---|---:|---:|",
         ]
     )
     for corner in result["corners"]:
@@ -193,6 +199,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 )
         lines.append(
             f"| {corner['fixed_pressure_pa']} | "
+            f"{corner.get('fan_curve_scenario') or 'nominal reference'} | "
             f"{corner.get('fan_speed_ratio', 1.0)} | "
             f"{fan_pressures or '—'} | {fan_airflows or '—'} | "
             f"{local_losses or '—'} | "

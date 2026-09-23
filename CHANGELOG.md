@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.20 fan-system uncertainty and dossier fan-study integration — 2026-09-23
+
+- Added deterministic bounded fan/system operating-point uncertainty for user-supplied fixed-pressure and quadratic-resistance intervals.
+- Evaluates every unique lower/upper system-curve corner with the existing bounded solver and reports airflow, pressure, and air-power envelopes only when the complete uncertainty box is solved.
+- Preserves any corner that would require fan-curve extrapolation as an `indeterminate` analysis and withholds a misleading partial envelope.
+- Added fan-curve/system-input provenance tracking, Markdown/JSON reporting, the `cleanroomx-fan-uncertainty` CLI, example data, documentation, and regression tests.
+- Integrated both v0.19 fan-speed studies and v0.20 fan-system uncertainty analyses into engineering dossiers with SHA-256 source traceability and attention/unresolved-state handling.
+- Fixed dossier source validation so fan-only manifests are validated after all configured fan study sources are loaded.
+- Bumped package/runtime metadata to v0.20.0 while preserving the v0.19 fan-speed workflow.
+
 ## v0.19 bounded fan-speed affinity-law study — 2026-09-23
 
 - Added explicit user-supplied fan speed-ratio sweeps from a supplied reference fan curve.

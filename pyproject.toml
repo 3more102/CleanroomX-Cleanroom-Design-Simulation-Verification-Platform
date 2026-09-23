@@ -22,7 +22,8 @@ cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"
 cleanroomx-qualification = "cleanroomx.qualification_cli:main"
 cleanroomx-duct-flow = "cleanroomx.duct_flow_cli:main"
 cleanroomx-thermal-uncertainty = "cleanroomx.thermal_uncertainty_cli:main"
-cleanroomx-fan-curve = "cleanroomx.fan_curve_cli:main"\ncleanroomx-dossier = "cleanroomx.dossier_cli:main"
+cleanroomx-fan-curve = "cleanroomx.fan_curve_cli:main"
+cleanroomx-dossier = "cleanroomx.dossier_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

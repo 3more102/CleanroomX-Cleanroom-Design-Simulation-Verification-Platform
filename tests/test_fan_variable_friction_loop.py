@@ -109,6 +109,39 @@ def test_automatic_friction_example_converges_at_bounded_operating_point() -> No
     ) <= 1e-6
     assert network["max_abs_mass_balance_residual_m3_h"] <= 1e-6
     assert diagnostics["network_max_relative_resistance_closure_error"] <= 1e-6
+    search = diagnostics["operating_search_interval"]
+    assert search is not None
+    assert search["selected_airflow_m3_h"] == pytest.approx(
+        point["airflow_m3_h"],
+        abs=1e-6,
+    )
+    assert search["selected_pressure_residual_pa"] == pytest.approx(
+        point["pressure_residual_pa"],
+        abs=1e-9,
+    )
+    if search["bisection_performed"]:
+        assert search["method"] == "bounded_bisection"
+        initial = search["initial_bracket"]
+        terminal = search["terminal_bracket"]
+        assert initial is not None
+        assert terminal is not None
+        assert initial["span_m3_h"] > 0.0
+        assert 0.0 <= terminal["span_m3_h"] <= initial["span_m3_h"]
+        assert search["terminal_bracket_span_m3_h"] == pytest.approx(
+            terminal["span_m3_h"],
+            abs=1e-12,
+        )
+        assert 0.0 <= search["bracket_contraction_ratio"] <= 1.0
+        assert terminal["low_airflow_m3_h"] <= point["airflow_m3_h"]
+        assert point["airflow_m3_h"] <= terminal["high_airflow_m3_h"]
+        assert terminal["low_pressure_residual_pa"] >= -1e-6
+        assert terminal["high_pressure_residual_pa"] <= 1e-6
+    else:
+        assert search["method"] == "supplied_point_tolerance_contact"
+        assert search["initial_bracket"] is None
+        assert search["terminal_bracket"] is None
+        assert search["terminal_bracket_span_m3_h"] is None
+        assert search["bracket_contraction_ratio"] is None
     assert network["variable_friction"]["automatic_friction_edge_count"] == 3
     power = result["power_evidence"]
     assert power["shaft_power_kw"] is not None
@@ -232,6 +265,8 @@ def test_markdown_report_surfaces_solver_and_friction_evidence() -> None:
     assert "Solver diagnostics" in report
     assert "Variable-friction edge closure" in report
     assert "Supplied fan-curve checks" in report
+    assert "Operating-point root-search interval" in report
+    assert "numerical root-search provenance only" in report
     assert "Loop edge pressure-power dissipation" in report
     assert "Electrical input" in report
 
@@ -351,3 +386,38 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
     assert selected["additional_candidate_feature_count"] == 1
     assert selected["selected_candidate_is_only_discrete_feature"] is False
 
+
+
+def test_bisection_iteration_limit_retains_terminal_search_interval() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_loop_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["solver"]["max_operating_iterations"] = 1
+    data["solver"]["operating_pressure_tolerance_pa"] = 1e-15
+    result = solve_fan_variable_friction_loop(
+        fan_variable_friction_loop_study_from_dict(data)
+    )
+
+    assert result["status"] == "non_converged"
+    diagnostics = result["solver_diagnostics"]
+    assert diagnostics["termination_reason"] == "bisection_iteration_limit"
+    search = diagnostics["operating_search_interval"]
+    assert search is not None
+    assert search["method"] == "bounded_bisection"
+    assert search["bisection_performed"] is True
+    initial = search["initial_bracket"]
+    terminal = search["terminal_bracket"]
+    assert initial["span_m3_h"] > 0.0
+    assert terminal["span_m3_h"] == pytest.approx(
+        initial["span_m3_h"] / 2.0,
+        abs=1e-9,
+    )
+    assert search["bracket_contraction_ratio"] == pytest.approx(
+        0.5,
+        abs=1e-15,
+    )
+    assert terminal["low_pressure_residual_pa"] >= 0.0
+    assert terminal["high_pressure_residual_pa"] <= 0.0

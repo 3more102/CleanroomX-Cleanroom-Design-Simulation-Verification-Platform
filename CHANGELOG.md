@@ -1,4 +1,15 @@
 # Changelog
+## v0.61 supplied-point residual-topology audit — 2026-09-24
+
+- Adds a discrete fan-minus-system residual-topology audit to the nonlinear fan/variable-friction operating-point solver using the supplied fan-curve points already evaluated during bounded root search.
+- Records expected/evaluated point counts, complete versus partial point coverage, tolerance-contact points, strict sign-change segments, residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and the largest positive residual increase.
+- Preserves partial audit evidence when network evaluation becomes non-converged instead of implying that all supplied fan points were checked.
+- Propagates the audit into every nonlinear uncertainty corner and aggregates complete point coverage, sampled-monotonicity counts, residual-increase corner indices, multiple discrete candidate-feature corner indices, and tied source provenance for the largest positive residual increase when present.
+- Surfaces the evidence in standalone nonlinear-loop reports, uncertainty reports, and engineering-dossier tables.
+- Adds regression coverage for solved, no-intersection, non-converged, uncertainty-corner, and dossier paths.
+- Explicitly states that candidate crossing features and sampled residual monotonicity are not a count or proof of continuous physical intersections, dynamic stability, stall/surge limits, manufacturer operating region, or equipment acceptance.
+- Bumped package/runtime metadata to v0.61.0.
+
 ## v0.60 fan/system local crossing-conditioning audit — 2026-09-24
 
 - Derives fan-pressure, system-pressure, and signed fan-minus-system secant slopes from each solved corner's existing supplied-point intersection bracket.

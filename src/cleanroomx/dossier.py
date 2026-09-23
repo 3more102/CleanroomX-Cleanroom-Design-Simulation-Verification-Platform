@@ -190,6 +190,7 @@ def summarize_dossier_components(
         "hvac_fan_curve_duty_unresolved": components["hvac"].get("fan_curve_duty_unresolved", 0),
         "recovery_failures": components["recovery"]["counts"].get("fail", 0),
         "recovery_incomplete": components["recovery"]["counts"].get("incomplete", 0),
+        "recovery_indeterminate": components["recovery"]["counts"].get("indeterminate", 0),
         "uncertainty_failures": components["uncertainty"]["counts"].get("fail", 0),
         "uncertainty_indeterminate": components["uncertainty"]["counts"].get("indeterminate", 0),
         "qualification_failures": components["qualification"]["counts"].get("fail", 0),

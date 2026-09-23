@@ -1,4 +1,15 @@
 # Changelog
+## v0.53 nominal-relative corner excursion evidence — 2026-09-24
+
+- Adds nominal-centered absolute and percentage excursion evidence for complete nonlinear fan/variable-friction uncertainty operating-point envelopes.
+- Covers operating airflow, fan pressure, system pressure, and fan air power, plus available fluid/shaft/electrical/SFP power-chain ranges.
+- Percentage excursion is withheld when the solved nominal value is effectively zero rather than inventing an unstable denominator.
+- Keeps excursions conditional on complete corner coverage; indeterminate studies emit no nominal-relative envelope evidence.
+- Explicitly treats the new values as evaluated-corner summaries rather than sensitivity coefficients or guarantees about continuous interior extrema.
+- Surfaces operating-point excursions in standalone Markdown reports and a compact airflow-excursion column in engineering dossiers.
+- Adds regression coverage for excursion arithmetic, power-chain availability, reporting, dossier integration, and indeterminate withholding.
+- Bumped package/runtime metadata to v0.53.0.
+
 ## v0.52 configured solver-tolerance utilization audit — 2026-09-24
 
 - Extends nonlinear fan/variable-friction uncertainty solver-quality evidence with explicit checks against the operating-pressure, resistance-closure, and mass-balance tolerances already configured for the solver.

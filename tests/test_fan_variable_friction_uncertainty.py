@@ -1449,3 +1449,69 @@ def test_report_surfaces_aggregate_solver_quality_evidence() -> None:
     assert "within_configured_tolerances" in report
     assert "Utilization" in report
     assert "Remaining margin" in report
+
+
+
+def test_nominal_relative_corner_excursions_are_auditable() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    excursions = result["operating_point_excursions_from_nominal"]
+    assert excursions is not None
+    envelope = result["operating_point_envelope"]
+    nominal = result["nominal_operating_point"]
+
+    for key in (
+        "airflow_m3_h",
+        "fan_pressure_pa",
+        "system_pressure_pa",
+        "air_power_kw",
+    ):
+        evidence = excursions[key]
+        assert evidence["nominal"] == pytest.approx(nominal[key], abs=1e-6)
+        assert evidence["lower_delta"] == pytest.approx(
+            envelope[key]["lower"] - nominal[key],
+            abs=1e-6,
+        )
+        assert evidence["upper_delta"] == pytest.approx(
+            envelope[key]["upper"] - nominal[key],
+            abs=1e-6,
+        )
+        if abs(nominal[key]) > 1e-15:
+            assert evidence["lower_percent"] == pytest.approx(
+                evidence["lower_delta"] / abs(nominal[key]) * 100.0,
+                abs=1e-6,
+            )
+            assert evidence["upper_percent"] == pytest.approx(
+                evidence["upper_delta"] / abs(nominal[key]) * 100.0,
+                abs=1e-6,
+            )
+
+    power_excursions = result["power_evidence_excursions_from_nominal"]
+    assert power_excursions is not None
+    assert power_excursions["fluid_air_power_kw"] is not None
+    assert power_excursions["shaft_power_kw"] is not None
+    assert power_excursions["electrical_input_kw"] is not None
+    assert power_excursions["specific_fan_power_w_per_m3_s"] is not None
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Evaluated-corner excursions from nominal" in report
+    assert "Operating airflow" in report
+    assert "Electrical input" in report
+    assert "not sensitivity coefficients" in report
+
+
+def test_indeterminate_study_withholds_nominal_relative_excursions() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 900.0, "uncertainty_abs": 0.0}
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["operating_point_excursions_from_nominal"] is None
+    assert result["power_evidence_excursions_from_nominal"] is None

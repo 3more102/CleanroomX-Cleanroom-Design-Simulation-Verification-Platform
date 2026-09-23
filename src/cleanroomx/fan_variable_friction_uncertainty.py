@@ -1051,6 +1051,11 @@ def _solver_quality_summary(
         "resistance_relative_tolerance": study.resistance_relative_tolerance,
         "mass_balance_tolerance_m3_h": study.mass_balance_tolerance_m3_h,
     }
+    configured_iteration_limits = {
+        "max_outer_iterations": study.max_outer_iterations,
+        "max_newton_iterations": study.max_newton_iterations,
+        "max_operating_iterations": study.max_operating_iterations,
+    }
     worst_metrics = {
         "absolute_operating_pressure_residual_pa": _maximum_corner_metric_sources(
             corners,
@@ -1080,6 +1085,11 @@ def _solver_quality_summary(
         "network_outer_iterations": _maximum_corner_metric_sources(
             corners,
             _diagnostic("network_outer_iterations"),
+            "iterations",
+        ),
+        "network_newton_iterations": _maximum_corner_metric_sources(
+            corners,
+            _diagnostic("network_newton_iterations"),
             "iterations",
         ),
         "operating_iterations": _maximum_corner_metric_sources(
@@ -1158,6 +1168,61 @@ def _solver_quality_summary(
     else:
         tolerance_assessment_status = "within_configured_tolerances"
 
+    iteration_specs = (
+        ("network_outer_iterations", "max_outer_iterations"),
+        ("network_newton_iterations", "max_newton_iterations"),
+        ("operating_iterations", "max_operating_iterations"),
+    )
+    configured_iteration_checks = {}
+    for metric_key, limit_key in iteration_specs:
+        evidence = worst_metrics[metric_key]
+        limit = int(configured_iteration_limits[limit_key])
+        if evidence is None:
+            configured_iteration_checks[metric_key] = {
+                "status": "not_evaluable",
+                "observed_iterations": None,
+                "configured_limit": limit,
+                "utilization_ratio": None,
+                "remaining_iterations": None,
+            }
+            continue
+        observed = int(round(float(evidence["value"])))
+        configured_iteration_checks[metric_key] = {
+            "status": (
+                "within_iteration_limit"
+                if observed <= limit
+                else "exceeds_iteration_limit"
+            ),
+            "observed_iterations": observed,
+            "configured_limit": limit,
+            "utilization_ratio": round(observed / limit, 9),
+            "remaining_iterations": limit - observed,
+        }
+
+    within_iteration_limit_count = sum(
+        check["status"] == "within_iteration_limit"
+        for check in configured_iteration_checks.values()
+    )
+    exceeded_iteration_limit_count = sum(
+        check["status"] == "exceeds_iteration_limit"
+        for check in configured_iteration_checks.values()
+    )
+    iteration_not_evaluable_count = sum(
+        check["status"] == "not_evaluable"
+        for check in configured_iteration_checks.values()
+    )
+    iteration_evaluable_check_count = (
+        len(configured_iteration_checks) - iteration_not_evaluable_count
+    )
+    if exceeded_iteration_limit_count:
+        iteration_assessment_status = "configured_iteration_limit_exceeded"
+    elif not complete_study_coverage:
+        iteration_assessment_status = "incomplete_coverage"
+    elif iteration_not_evaluable_count:
+        iteration_assessment_status = "not_evaluable"
+    else:
+        iteration_assessment_status = "within_configured_iteration_limits"
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -1165,6 +1230,7 @@ def _solver_quality_summary(
         "nominal_status": nominal_status,
         "complete_study_coverage": complete_study_coverage,
         "configured_tolerances": configured_tolerances,
+        "configured_iteration_limits": configured_iteration_limits,
         "worst_metrics": worst_metrics,
         "configured_tolerance_checks": configured_tolerance_checks,
         "configured_tolerance_assessment": {
@@ -1176,14 +1242,27 @@ def _solver_quality_summary(
             "not_evaluable_count": not_evaluable_count,
             "complete_study_coverage": complete_study_coverage,
         },
+        "configured_iteration_checks": configured_iteration_checks,
+        "configured_iteration_assessment": {
+            "status": iteration_assessment_status,
+            "configured_check_count": len(configured_iteration_checks),
+            "evaluable_check_count": iteration_evaluable_check_count,
+            "within_limit_count": within_iteration_limit_count,
+            "exceeded_limit_count": exceeded_iteration_limit_count,
+            "not_evaluable_count": iteration_not_evaluable_count,
+            "complete_study_coverage": complete_study_coverage,
+        },
         "scope_note": (
             "Worst metrics aggregate solved evaluated corners only. "
             "complete_study_coverage is false if the nominal case or any "
             "evaluated corner is unresolved. Configured-tolerance utilization "
             "and remaining margin are numerical solver-audit evidence only, "
             "using the solver tolerances already supplied to this study. "
-            "Pressure-law residual and iteration maxima are reported as "
-            "diagnostics without inventing an acceptance threshold."
+            "Configured iteration-budget utilization is also numerical "
+            "solver-audit evidence using limits already supplied to the study, "
+            "not an equipment or cleanroom acceptance margin. Pressure-law "
+            "residual remains a raw diagnostic because this workflow defines "
+            "no separate configured threshold for it."
         ),
     }
 

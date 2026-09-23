@@ -63,6 +63,10 @@ The result reports:
 
 The v0.12 HVAC fan-curve duty check answers whether supplied fan data can meet one explicit required duty point. The standalone v0.11 solver intersects a user-entered fixed-plus-quadratic system curve with fan data. The v0.14 fan/duct-network workflow holds user-declared reference airflow fractions fixed and derives a critical-path quadratic system curve. This v0.16 workflow instead derives the equivalent resistance of passive common-pressure-node branches, solves their pressure-balanced flow split, and couples that network directly to the bounded fan operating-point solution.
 
+## Engineering dossier integration
+
+CleanroomX v0.17 can include one or more fan-driven passive parallel-network studies in an engineering dossier through `fan_parallel_network_studies`. Each input is SHA-256 fingerprinted; solved operating airflow/system pressure are reported, and a no-intersection result becomes an attention item without extrapolating supplied fan data.
+
 ## Engineering boundary
 
 This is a bounded steady-state screening model. It is valid only for passive paths that share common pressure nodes and can be represented with constant R×Q² resistance over the solved operating region.

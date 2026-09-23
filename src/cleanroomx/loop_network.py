@@ -46,11 +46,12 @@ class QuadraticFlowEdge:
             "explicit",
             "duct_geometry",
             "damper_adjusted",
+            "uncertainty_adjusted",
         }
         if self.resistance_basis not in valid_resistance_bases:
             raise ValueError(
                 "resistance_basis must be 'explicit', 'duct_geometry', "
-                "or 'damper_adjusted'"
+                "'damper_adjusted', or 'uncertainty_adjusted'"
             )
         if self.resistance_evidence is not None:
             object.__setattr__(

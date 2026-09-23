@@ -2,6 +2,16 @@
 ## v0.43 bounded fan-curve airflow-coordinate uncertainty — 2026-09-23
 
 - Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute airflow-coordinate bounds at selected supplied fan-curve point indices.
+- Keeps nominal airflow coordinates single-sourced in the supplied fan curve; uncertainty entries identify an existing zero-based point index and provide only an absolute airflow bound plus optional provenance.
+- Combines fan-airflow corners with fan-pressure, fixed-pressure, and duct physical/geometry uncertainty dimensions, then re-solves the complete nonlinear Darcy-friction network at every corner.
+- Rejects negative airflow intervals, unknown/duplicate point indices, repeated nominal airflow values, and any interval combination capable of producing non-increasing supplied airflow coordinates.
+- Preserves strict supplied fan-curve range behavior: no extrapolation is introduced, and unresolved corners suppress a complete envelope.
+- Added Markdown evidence, a reproducible airflow-coordinate uncertainty example, provenance tracking, regression coverage, and package metadata alignment.
+- Bumped package/runtime metadata to v0.43.0.
+
+## v0.43 bounded fan-curve airflow-coordinate uncertainty — 2026-09-23
+
+- Extended nonlinear fan/variable-friction corner analysis to user-supplied absolute airflow-coordinate bounds at selected supplied fan-curve point indices.
 - Keeps nominal fan airflow coordinates single-sourced in the supplied fan curve; uncertainty entries use zero-based point indices plus absolute bounds and optional provenance.
 - Combines fan-airflow corners with fan-pressure, fixed-pressure, and duct physical/geometry uncertainty dimensions before each complete nonlinear network/fan solve.
 - Rejects negative airflow intervals, invalid/duplicate point indices, repeated nominal airflows, and any interval combination capable of making supplied airflow coordinates non-increasing.

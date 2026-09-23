@@ -123,6 +123,93 @@ def test_automatic_friction_example_converges_at_bounded_operating_point() -> No
     )
 
 
+def test_bounded_bisection_search_evidence_is_explicit() -> None:
+    result = solve_fan_variable_friction_loop(
+        FanVariableFrictionLoopStudy(
+            name="Bisection evidence",
+            fan_curve=FanCurve(
+                "Bisection curve",
+                (
+                    FanCurvePoint(0.0, 500.0),
+                    FanCurvePoint(3600.0, 200.0),
+                    FanCurvePoint(7200.0, 0.0),
+                ),
+            ),
+            loop_network=_fixed_network(),
+            fan_discharge_node="Supply",
+            fan_suction_node="Return",
+        )
+    )
+
+    assert result["status"] == "solved"
+    diagnostics = result["solver_diagnostics"]
+    evidence = result["operating_point_search_evidence"]
+    bracket = evidence["final_bisection_bracket"]
+    point = result["fan_operating_point"]
+
+    assert diagnostics["termination_reason"] == "pressure_residual"
+    assert evidence["method"] == "bounded_bisection"
+    assert evidence["selected_supplied_point_index"] is None
+    assert bracket is not None
+    assert bracket["iteration"] == diagnostics["operating_iterations"]
+    assert bracket["low_fan_minus_system_pressure_pa"] > 0.0
+    assert bracket["high_fan_minus_system_pressure_pa"] < 0.0
+    assert abs(bracket["selected_fan_minus_system_pressure_pa"]) <= (
+        diagnostics["operating_pressure_tolerance_pa"]
+    )
+    assert bracket["width_m3_h"] == pytest.approx(
+        bracket["high_airflow_m3_h"] - bracket["low_airflow_m3_h"],
+        abs=1e-9,
+    )
+    assert bracket["half_width_m3_h"] == pytest.approx(
+        0.5 * bracket["width_m3_h"],
+        abs=1e-9,
+    )
+    assert point["airflow_m3_h"] == pytest.approx(
+        0.5
+        * (
+            bracket["low_airflow_m3_h"]
+            + bracket["high_airflow_m3_h"]
+        ),
+        abs=1e-6,
+    )
+    supplied_span = (
+        evidence["supplied_segment_high_airflow_m3_h"]
+        - evidence["supplied_segment_low_airflow_m3_h"]
+    )
+    assert bracket["width_fraction_of_supplied_segment"] == pytest.approx(
+        bracket["width_m3_h"] / supplied_span,
+        abs=1e-12,
+    )
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Operating-point search evidence" in report
+    assert "Final bisection bracket width" in report
+    assert "numerical search-geometry evidence only" in report
+
+
+def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
+    result = solve_fan_variable_friction_loop(
+        FanVariableFrictionLoopStudy(
+            name="Point contact evidence",
+            fan_curve=_fixed_curve(),
+            loop_network=_fixed_network(),
+            fan_discharge_node="Supply",
+            fan_suction_node="Return",
+        )
+    )
+
+    assert result["status"] == "solved"
+    assert result["solver_diagnostics"]["termination_reason"] == (
+        "fan_curve_point_residual"
+    )
+    evidence = result["operating_point_search_evidence"]
+    assert evidence["method"] == "supplied_point_tolerance_contact"
+    assert evidence["selected_supplied_point_index"] == 1
+    assert evidence["operating_iterations"] == 0
+    assert evidence["final_bisection_bracket"] is None
+
+
 def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:
     study = load_fan_variable_friction_loop_study(
         "examples/fan_variable_friction_loop_demo.json"

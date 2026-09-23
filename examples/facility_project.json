@@ -3,49 +3,52 @@
   "rooms": [
     {
       "name": "Process",
-      "length_m": 6.0,
-      "width_m": 5.0,
-      "height_m": 3.0,
-      "supply_airflow_m3_h": 2700.0,
-      "min_ach": 25.0,
-      "observed_pressure_pa": 30.0,
+      "length_m": 6,
+      "width_m": 5,
+      "height_m": 3,
+      "supply_airflow_m3_h": 2700,
+      "min_ach": 25,
+      "observed_pressure_pa": 30,
       "particle_requirements": [
         {
           "size_um": 0.5,
-          "max_concentration_per_m3": 400000.0,
-          "observed_concentration_per_m3": 120000.0
+          "max_concentration_per_m3": 400000,
+          "observed_concentration_per_m3": 120000
         }
-      ]
+      ],
+      "observed_pressure_uncertainty_pa": 0.5
     },
     {
       "name": "Preparation",
-      "length_m": 5.0,
-      "width_m": 4.0,
-      "height_m": 3.0,
-      "supply_airflow_m3_h": 1200.0,
-      "min_ach": 20.0,
-      "observed_pressure_pa": 16.0
+      "length_m": 5,
+      "width_m": 4,
+      "height_m": 3,
+      "supply_airflow_m3_h": 1200,
+      "min_ach": 20,
+      "observed_pressure_pa": 16,
+      "observed_pressure_uncertainty_pa": 0.5
     },
     {
       "name": "Ante",
-      "length_m": 4.0,
-      "width_m": 3.0,
-      "height_m": 3.0,
-      "supply_airflow_m3_h": 720.0,
-      "min_ach": 20.0,
-      "observed_pressure_pa": 8.0
+      "length_m": 4,
+      "width_m": 3,
+      "height_m": 3,
+      "supply_airflow_m3_h": 720,
+      "min_ach": 20,
+      "observed_pressure_pa": 8,
+      "observed_pressure_uncertainty_pa": 0.5
     }
   ],
   "pressure_cascade": [
     {
       "higher_pressure_room": "Process",
       "lower_pressure_room": "Preparation",
-      "min_delta_pa": 10.0
+      "min_delta_pa": 10
     },
     {
       "higher_pressure_room": "Preparation",
       "lower_pressure_room": "Ante",
-      "min_delta_pa": 5.0
+      "min_delta_pa": 5
     }
   ]
 }

@@ -696,7 +696,9 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{residual_summary['complete_supplied_point_coverage_corner_count']}/"
                     f"{residual_summary['corner_count']}; mono "
                     f"{residual_summary['monotonic_non_increasing_corner_count']}/"
-                    f"{residual_summary['corner_count']}; multi "
+                    f"{residual_summary['corner_count']}; selected "
+                    f"{residual_summary['selected_candidate_feature_corner_count']}/"
+                    f"{residual_summary['solved_corner_count']}; multi "
                     f"{residual_summary['multiple_candidate_feature_corner_count']}"
                 )
             lines.append(

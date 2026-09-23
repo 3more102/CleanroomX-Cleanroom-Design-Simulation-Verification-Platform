@@ -185,3 +185,39 @@ def test_loader_and_markdown_report() -> None:
     assert "Looped-Network Flow Report" in report
     assert "Maximum node continuity residual" in report
     assert "Supply -> Return" in report
+
+
+def test_reported_reference_residual_respects_requested_tolerance() -> None:
+    network = LoopedFlowNetwork(
+        name="Residual tolerance mesh",
+        node_injections_m3_h={
+            "A": 5000.0,
+            "B": 1000.0,
+            "C": -2200.0,
+            "D": -1800.0,
+            "E": -2000.0,
+        },
+        edges=(
+            QuadraticFlowEdge("AB", "A", "B", 1.1),
+            QuadraticFlowEdge("BC", "B", "C", 1.7),
+            QuadraticFlowEdge("CD", "C", "D", 1.3),
+            QuadraticFlowEdge("DE", "D", "E", 2.1),
+            QuadraticFlowEdge("EA", "E", "A", 1.9),
+            QuadraticFlowEdge("AC", "A", "C", 2.8),
+            QuadraticFlowEdge("BD", "B", "D", 2.5),
+        ),
+        reference_node="A",
+    )
+
+    tolerance = 1e-8
+    result = solve_looped_network(
+        network,
+        mass_balance_tolerance_m3_h=tolerance,
+    )
+
+    assert result["max_abs_mass_balance_residual_m3_h"] <= tolerance
+    reference = next(
+        node for node in result["nodes"]
+        if node["name"] == result["reference_node"]
+    )
+    assert abs(reference["mass_balance_residual_m3_h"]) <= tolerance

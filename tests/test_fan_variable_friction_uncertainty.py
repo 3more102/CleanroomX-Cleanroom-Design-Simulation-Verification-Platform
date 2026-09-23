@@ -163,3 +163,119 @@ def test_markdown_report_and_cli_surface_corner_evidence(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "complete"
     assert payload["corner_count"] == 8
+
+
+def test_physical_darcy_input_uncertainty_produces_complete_envelope() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_physical_uncertainty_demo.json"
+        )
+    )
+
+    assert result["status"] == "complete"
+    assert result["nominal_status"] == "solved"
+    assert result["corner_count"] == 8
+    assert result["solved_corner_count"] == 8
+    assert result["unresolved_corner_count"] == 0
+    assert result["traceability"]["complete"] is True
+    assert result["operating_point_envelope"] is not None
+    assert result["operating_point_envelope"]["airflow_m3_h"]["lower"] < (
+        result["operating_point_envelope"]["airflow_m3_h"]["upper"]
+    )
+    assert set(result["input_intervals"]["edge_absolute_roughness_m"]) == {
+        "Direct"
+    }
+    assert set(
+        result["input_intervals"]["edge_kinematic_viscosity_m2_s"]
+    ) == {"Direct"}
+    assert set(result["input_intervals"]["edge_air_density_kg_m3"]) == {
+        "Direct"
+    }
+    assert all(
+        set(corner["edge_absolute_roughness_m"]) == {"Direct"}
+        and set(corner["edge_kinematic_viscosity_m2_s"]) == {"Direct"}
+        and set(corner["edge_air_density_kg_m3"]) == {"Direct"}
+        for corner in result["corners"]
+    )
+
+
+def test_physical_uncertainty_nominal_matches_existing_nonlinear_solver() -> None:
+    uncertainty = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_physical_uncertainty_demo.json"
+        )
+    )
+    baseline = solve_fan_variable_friction_loop(
+        load_fan_variable_friction_loop_study(
+            "examples/fan_variable_friction_loop_demo.json"
+        )
+    )
+
+    assert uncertainty["nominal_status"] == baseline["status"] == "solved"
+    assert uncertainty["nominal_operating_point"]["airflow_m3_h"] == pytest.approx(
+        baseline["fan_operating_point"]["airflow_m3_h"], abs=1e-6
+    )
+    assert uncertainty["nominal_operating_point"]["system_pressure_pa"] == pytest.approx(
+        baseline["fan_operating_point"]["system_pressure_pa"], abs=1e-6
+    )
+
+
+@pytest.mark.parametrize(
+    ("block_name", "uncertainty_abs", "message"),
+    [
+        (
+            "edge_absolute_roughness_uncertainty",
+            0.5,
+            "upper uncertainty bound",
+        ),
+        (
+            "edge_kinematic_viscosity_uncertainty",
+            0.00002,
+            "lower uncertainty bound",
+        ),
+        (
+            "edge_air_density_uncertainty",
+            2.0,
+            "lower uncertainty bound",
+        ),
+    ],
+)
+def test_physical_uncertainty_rejects_nonphysical_bounds(
+    block_name,
+    uncertainty_abs,
+    message,
+) -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_physical_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data[block_name]["Direct"]["uncertainty_abs"] = uncertainty_abs
+    with pytest.raises(ValueError, match=message):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_physical_uncertainty_rejects_repeated_nominal_value() -> None:
+    data = json.loads(
+        open(
+            "examples/fan_variable_friction_physical_uncertainty_demo.json",
+            encoding="utf-8",
+        ).read()
+    )
+    data["edge_air_density_uncertainty"]["Direct"]["value"] = 1.2
+    with pytest.raises(ValueError, match="must not repeat the nominal"):
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+
+
+def test_physical_uncertainty_report_surfaces_all_bounded_inputs() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_physical_uncertainty_demo.json"
+        )
+    )
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Absolute roughness" in report
+    assert "Kinematic viscosity" in report
+    assert "Air density" in report
+    assert "Physical-input values" in report

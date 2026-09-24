@@ -179,6 +179,8 @@ class CleanroomXApp:
         self.status_var = tk.StringVar(value="Ready")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
         self.run_state_var = tk.StringVar(value="READY")
+        self.analysis_summary_var = tk.StringVar(value="0 analyses")
+        self.active_workflow_var = tk.StringVar(value="No active analysis")
 
         self._configure_style()
         self._build_menu()
@@ -203,10 +205,16 @@ class CleanroomXApp:
         style.configure(".", font=("Segoe UI", 9))
         style.configure("TFrame", background="#eef2f7")
         style.configure("Toolbar.TFrame", background="#dde6ef")
+        style.configure("Brand.TFrame", background="#102a43")
         style.configure("Card.TFrame", background="#f8fafc")
         style.configure("TLabel", background="#eef2f7", foreground="#243447")
         style.configure("Header.TLabel", background="#eef2f7", foreground="#102a43", font=("Segoe UI", 10, "bold"))
+        style.configure("ToolbarHeader.TLabel", background="#dde6ef", foreground="#102a43", font=("Segoe UI", 10, "bold"))
+        style.configure("ToolbarMuted.TLabel", background="#dde6ef", foreground="#627d98")
+        style.configure("Brand.TLabel", background="#102a43", foreground="#f8fafc", font=("Segoe UI Semibold", 15))
+        style.configure("BrandMeta.TLabel", background="#102a43", foreground="#9fb3c8", font=("Segoe UI", 8, "bold"))
         style.configure("Muted.TLabel", background="#eef2f7", foreground="#627d98")
+        style.configure("SidebarMeta.TLabel", background="#eef2f7", foreground="#486581", font=("Segoe UI", 8))
         style.configure("TButton", padding=(9, 5))
         style.configure("Accent.TButton", padding=(11, 6), font=("Segoe UI", 9, "bold"))
         style.configure("Danger.TButton", padding=(9, 5))
@@ -331,13 +339,27 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-6>", lambda event: self.notebook.select(self.plot_tab))
 
     def _build_layout(self) -> None:
+        brand = ttk.Frame(self.root, padding=(12, 9), style="Brand.TFrame")
+        brand.pack(fill="x")
+        ttk.Label(brand, text="CleanroomX", style="Brand.TLabel").pack(side="left")
+        ttk.Label(
+            brand,
+            text="CLEANROOM DESIGN  •  SIMULATION  •  VERIFICATION",
+            style="BrandMeta.TLabel",
+        ).pack(side="left", padx=(12, 0), pady=(4, 0))
+        ttk.Label(
+            brand,
+            text=f"v{__version__}",
+            style="BrandMeta.TLabel",
+        ).pack(side="right", pady=(4, 0))
+
         metadata = ttk.Frame(self.root, padding=(10, 9, 10, 7), style="Toolbar.TFrame")
         metadata.pack(fill="x")
-        ttk.Label(metadata, text="Project", style="Header.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(metadata, text="Project", style="ToolbarHeader.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
             row=0, column=1, sticky="ew", padx=(6, 12)
         )
-        ttk.Label(metadata, text="Description", style="Header.TLabel").grid(row=0, column=2, sticky="w")
+        ttk.Label(metadata, text="Description", style="ToolbarHeader.TLabel").grid(row=0, column=2, sticky="w")
         ttk.Entry(metadata, textvariable=self.description_var).grid(
             row=0, column=3, sticky="ew", padx=(6, 12)
         )
@@ -353,7 +375,7 @@ class CleanroomXApp:
         ttk.Label(
             metadata,
             text="Ctrl+1 Design   Ctrl+2 Input   Ctrl+3 Results   F5 Run   Ctrl+0 Fit",
-            style="Muted.TLabel",
+            style="ToolbarMuted.TLabel",
         ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(7, 0))
         self.run_state_label = ttk.Label(
             metadata,
@@ -376,9 +398,31 @@ class CleanroomXApp:
         sidebar = ttk.Frame(panes, padding=(6, 4, 8, 4))
         panes.add(sidebar, weight=1)
         sidebar_header = ttk.Frame(sidebar)
-        sidebar_header.pack(fill="x", pady=(0, 5))
+        sidebar_header.pack(fill="x", pady=(0, 2))
         ttk.Label(sidebar_header, text="Analyses", style="Header.TLabel").pack(side="left")
         ttk.Button(sidebar_header, text="+ Add", command=self.add_analysis).pack(side="right")
+        ttk.Label(
+            sidebar,
+            textvariable=self.analysis_summary_var,
+            style="SidebarMeta.TLabel",
+        ).pack(anchor="w")
+        ttk.Label(
+            sidebar,
+            textvariable=self.active_workflow_var,
+            style="SidebarMeta.TLabel",
+            wraplength=360,
+            justify="left",
+        ).pack(anchor="w", pady=(1, 6))
+
+        sidebar_actions = ttk.Frame(sidebar)
+        sidebar_actions.pack(fill="x", pady=(0, 6))
+        ttk.Button(sidebar_actions, text="Rename", command=self.rename_analysis).pack(
+            side="left", fill="x", expand=True, padx=(0, 3)
+        )
+        ttk.Button(sidebar_actions, text="Remove", command=self.remove_analysis).pack(
+            side="left", fill="x", expand=True, padx=(3, 0)
+        )
+
         self.analysis_tree = ttk.Treeview(
             sidebar, columns=("kind",), show="tree headings", selectmode="browse"
         )
@@ -635,6 +679,9 @@ class CleanroomXApp:
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
+        count = len(self.project.analyses)
+        if hasattr(self, "analysis_summary_var"):
+            self.analysis_summary_var.set(f"{count} analysis{'es' if count != 1 else ''}")
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
         for analysis in self.project.analyses:
@@ -659,6 +706,8 @@ class CleanroomXApp:
             self._load_analysis_into_editor(self.project.analyses[0])
         else:
             self._editor_analysis_id = None
+            if hasattr(self, "active_workflow_var"):
+                self.active_workflow_var.set("No active analysis")
             self.input_text.delete("1.0", "end")
             self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
@@ -709,6 +758,10 @@ class CleanroomXApp:
 
     def _load_analysis_into_editor(self, analysis: AnalysisDocument) -> None:
         self._editor_analysis_id = analysis.id
+        if hasattr(self, "active_workflow_var"):
+            self.active_workflow_var.set(
+                f"Active: {analysis.name} · {ANALYSIS_SPECS[analysis.kind].title}"
+            )
         self.input_text.delete("1.0", "end")
         self.input_text.insert(
             "1.0",

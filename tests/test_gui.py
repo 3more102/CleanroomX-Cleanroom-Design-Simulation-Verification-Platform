@@ -196,6 +196,39 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
     assert "Saved" in app.status_var.value
 
 
+def test_remove_analysis_invalidates_matching_result(monkeypatch):
+    analysis = AnalysisDocument(
+        id="a", name="A", kind="room_verification", input={"value": 1}
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="a"
+    )
+    app.last_run = object()
+    app.last_run_analysis_id = "a"
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._current_analysis = lambda: analysis
+    app._refresh_analysis_list = lambda: None
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda *args, **kwargs: True,
+    )
+
+    app.remove_analysis()
+
+    assert app.project.analyses == []
+    assert app.project.active_analysis_id is None
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+
+
 def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)

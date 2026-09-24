@@ -4,12 +4,23 @@ import math
 
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
+    DEVICE_TYPES,
+    DEVICE_VISUALS,
     SPATIAL_METADATA_KEY,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
     sync_layout_to_analysis,
 )
+
+
+
+def test_device_visual_palette_covers_every_supported_spatial_device():
+    assert set(DEVICE_VISUALS) == set(DEVICE_TYPES)
+    for symbol, fill, outline in DEVICE_VISUALS.values():
+        assert symbol
+        assert fill.startswith("#") and len(fill) == 7
+        assert outline.startswith("#") and len(outline) == 7
 
 
 def test_derive_layout_from_project_verification_preserves_real_room_geometry_and_pressure():

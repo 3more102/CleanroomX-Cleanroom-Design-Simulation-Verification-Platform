@@ -209,19 +209,21 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-        suffix=".tmp", dir=destination.parent, delete=False,
-    ) as handle:
-        temp_path = Path(handle.name)
-        handle.write(text)
-        handle.flush()
-        os.fsync(handle.fileno())
-
+    temp_path: Path | None = None
     try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
+            suffix=".tmp", dir=destination.parent, delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+
         temp_path.replace(destination)
     except Exception:
-        temp_path.unlink(missing_ok=True)
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
         raise
     return destination
 

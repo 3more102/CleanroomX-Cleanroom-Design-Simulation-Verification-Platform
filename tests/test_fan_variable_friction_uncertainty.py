@@ -2510,15 +2510,6 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_pressure_component_violation_corner_indices"
     ] == []
     assert summary[
-        "bisection_trace_pressure_component_violation_corner_indices"
-    ] == []
-    assert summary[
-        "bisection_trace_pressure_component_consistent_corner_count"
-    ] == len(limit_corners)
-    assert summary[
-        "maximum_bisection_trace_residual_component_error_pa"
-    ]["value"] <= 2e-9
-    assert summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert summary["bisection_trace_length_match_corner_count"] == (
@@ -2767,6 +2758,15 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary[
         "bisection_trace_origin_replay_corner_count"
     ] == len(limit_corners)
+    assert summary[
+        "bisection_trace_pressure_component_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_pressure_component_consistent_corner_count"
+    ] == len(limit_corners)
+    assert summary[
+        "maximum_bisection_trace_residual_component_error_pa"
+    ]["value"] <= 2e-9
     assert summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []

@@ -1,4 +1,16 @@
 # Changelog
+
+## v0.68 bisection iteration-limit terminal-state audit — 2026-09-24
+
+- Retains the terminal signed-residual airflow bracket when bounded nonlinear fan/system bisection exhausts `max_operating_iterations` before satisfying the configured pressure tolerance.
+- Records the post-final-contraction bracket width/half-width, signed endpoint residuals, normalized width, last evaluated airflow/residual, and which terminal endpoint received that evaluation.
+- Audits terminal strict-sign preservation, last-evaluation endpoint consistency, completed binary contraction count, iteration-implied width fraction, actual width fraction, and raw floating-point discrepancy.
+- Propagates iteration-limit evidence through nonlinear uncertainty corners without reclassifying unresolved cases as solved, with exact corner indices and tied source-corner extrema provenance.
+- Surfaces the terminal failure-state evidence in standalone nonlinear reports, uncertainty reports, and engineering dossiers.
+- Adds deterministic solver, uncertainty, and dossier regression coverage while keeping no-intersection and network-solver failures distinct.
+- Treats terminal bracket geometry strictly as numerical failure-state provenance, not physical uncertainty, interpolation error, stability evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.68.0.
+
 ## v0.67 bisection implementation-invariant audit — 2026-09-24
 
 - Audits retained bounded-bisection search geometry directly from the unrounded live solver state without changing the operating-point solve.

@@ -2946,6 +2946,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         in report
     )
     assert "Trace network-state replay consistent corners" in report
+    assert "Trace network-state projection replay evidence corners" in report
+    assert "Trace network-state projection replay complete coverage: **True**" in report
+    assert "Trace network-state projection replay violation corners: **[]**" in report
+    assert "Trace network-state projection leaf mismatches across corners: **0**" in report
+    assert "Maximum trace network-state projection numeric errors by field: **[]**" in report
     assert "Terminal pressure-component replay violation corners: **[]**" in report
     assert "Maximum terminal pressure-component replay error" in report
     assert "Terminal pressure-component replay violation records across corners: **0**" in report

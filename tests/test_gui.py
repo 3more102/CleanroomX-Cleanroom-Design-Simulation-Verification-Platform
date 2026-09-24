@@ -53,6 +53,8 @@ def test_extract_room_visuals_preserves_real_dimensions_and_engineering_metadata
                     "length_m": 6.0,
                     "width_m": 5.0,
                     "height_m": 3.0,
+                    "x_m": 12.5,
+                    "y_m": -2.0,
                     "supply_airflow_m3_h": 2700.0,
                     "observed_pressure_pa": 30.0,
                 }
@@ -68,6 +70,9 @@ def test_extract_room_visuals_preserves_real_dimensions_and_engineering_metadata
             "height_m": 3.0,
             "dimensions_real": True,
             "height_real": True,
+            "position_real": True,
+            "x_m": 12.5,
+            "y_m": -2.0,
             "airflow_m3_h": 2700.0,
             "pressure_pa": 30.0,
         }
@@ -83,10 +88,75 @@ def test_extract_room_visuals_marks_display_defaults_when_geometry_is_missing():
     assert rooms[0]["name"] == "Gowning"
     assert rooms[0]["dimensions_real"] is False
     assert rooms[0]["height_real"] is False
+    assert rooms[0]["position_real"] is False
+    assert rooms[0]["x_m"] is None
+    assert rooms[0]["y_m"] is None
     assert rooms[0]["length_m"] == 4.0
     assert rooms[0]["width_m"] == 4.0
     assert rooms[0]["height_m"] == 3.0
     assert rooms[0]["airflow_m3_h"] == 900.0
+
+
+def test_room_layout_uses_declared_coordinates_only_when_complete():
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    rooms = extract_room_visuals(
+        {
+            "rooms": [
+                {
+                    "name": "A",
+                    "length_m": 4,
+                    "width_m": 3,
+                    "height_m": 3,
+                    "x_m": -1,
+                    "y_m": 2,
+                },
+                {
+                    "name": "B",
+                    "length_m": 5,
+                    "width_m": 2,
+                    "height_m": 3,
+                    "x_m": 8,
+                    "y_m": 6,
+                },
+            ]
+        }
+    )
+
+    placed, fully_scaled = app._room_layout(rooms)
+
+    assert fully_scaled is True
+    assert [(room["x"], room["y"]) for room in placed] == [(-1.0, 2.0), (8.0, 6.0)]
+
+
+def test_room_layout_falls_back_to_auto_arrangement_for_partial_coordinates():
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    rooms = extract_room_visuals(
+        {
+            "rooms": [
+                {
+                    "name": "A",
+                    "length_m": 4,
+                    "width_m": 3,
+                    "height_m": 3,
+                    "x_m": 10,
+                    "y_m": 20,
+                },
+                {
+                    "name": "B",
+                    "length_m": 5,
+                    "width_m": 2,
+                    "height_m": 3,
+                },
+            ]
+        }
+    )
+
+    placed, fully_scaled = app._room_layout(rooms)
+
+    assert fully_scaled is True
+    assert placed[0]["x"] == 0.0
+    assert placed[0]["y"] == 0.0
+    assert (placed[1]["x"], placed[1]["y"]) != (10.0, 20.0)
 
 
 def test_extract_pressure_cascade_normalizes_declared_room_links():

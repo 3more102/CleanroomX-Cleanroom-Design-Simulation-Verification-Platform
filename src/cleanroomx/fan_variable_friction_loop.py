@@ -343,23 +343,118 @@ def _network_state_sha256(network: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _network_state_projection_difference_paths(
+def _network_state_projection_value_type(value) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, dict):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    return type(value).__name__
+
+
+def _network_state_projection_mismatch(
+    *,
+    path: str,
+    mismatch_kind: str,
+    recorded_present: bool,
+    recomputed_present: bool,
+    recorded_value=None,
+    recomputed_value=None,
+) -> dict:
+    absolute_error = None
+    numeric_error_field = None
+    if (
+        recorded_present
+        and recomputed_present
+        and isinstance(recorded_value, (int, float))
+        and not isinstance(recorded_value, bool)
+        and isinstance(recomputed_value, (int, float))
+        and not isinstance(recomputed_value, bool)
+        and math.isfinite(float(recorded_value))
+        and math.isfinite(float(recomputed_value))
+    ):
+        absolute_error = abs(
+            float(recorded_value) - float(recomputed_value)
+        )
+        numeric_error_field = path.rsplit(".", 1)[-1]
+    return {
+        "path": path,
+        "mismatch_kind": mismatch_kind,
+        "recorded_present": recorded_present,
+        "recomputed_present": recomputed_present,
+        "recorded_type": (
+            _network_state_projection_value_type(recorded_value)
+            if recorded_present
+            else None
+        ),
+        "recomputed_type": (
+            _network_state_projection_value_type(recomputed_value)
+            if recomputed_present
+            else None
+        ),
+        "recorded_value": recorded_value if recorded_present else None,
+        "recomputed_value": (
+            recomputed_value if recomputed_present else None
+        ),
+        "absolute_error": absolute_error,
+        "numeric_error_field": numeric_error_field,
+    }
+
+
+def _network_state_projection_differences(
     recorded,
     recomputed,
     *,
     path: str = "$",
-) -> list[str]:
+) -> list[dict]:
     if type(recorded) is not type(recomputed):
-        return [path]
+        return [
+            _network_state_projection_mismatch(
+                path=path,
+                mismatch_kind="type_mismatch",
+                recorded_present=True,
+                recomputed_present=True,
+                recorded_value=recorded,
+                recomputed_value=recomputed,
+            )
+        ]
     if isinstance(recorded, dict):
         differences = []
         for key in sorted(set(recorded) | set(recomputed)):
             child_path = f"{path}.{key}"
-            if key not in recorded or key not in recomputed:
-                differences.append(child_path)
+            if key not in recorded:
+                differences.append(
+                    _network_state_projection_mismatch(
+                        path=child_path,
+                        mismatch_kind="missing_recorded_key",
+                        recorded_present=False,
+                        recomputed_present=True,
+                        recomputed_value=recomputed[key],
+                    )
+                )
+                continue
+            if key not in recomputed:
+                differences.append(
+                    _network_state_projection_mismatch(
+                        path=child_path,
+                        mismatch_kind="missing_recomputed_key",
+                        recorded_present=True,
+                        recomputed_present=False,
+                        recorded_value=recorded[key],
+                    )
+                )
                 continue
             differences.extend(
-                _network_state_projection_difference_paths(
+                _network_state_projection_differences(
                     recorded[key],
                     recomputed[key],
                     path=child_path,
@@ -369,19 +464,88 @@ def _network_state_projection_difference_paths(
     if isinstance(recorded, list):
         differences = []
         if len(recorded) != len(recomputed):
-            differences.append(f"{path}.length")
+            differences.append(
+                _network_state_projection_mismatch(
+                    path=f"{path}.length",
+                    mismatch_kind="length_mismatch",
+                    recorded_present=True,
+                    recomputed_present=True,
+                    recorded_value=len(recorded),
+                    recomputed_value=len(recomputed),
+                )
+            )
         for index, (recorded_item, recomputed_item) in enumerate(
             zip(recorded, recomputed)
         ):
             differences.extend(
-                _network_state_projection_difference_paths(
+                _network_state_projection_differences(
                     recorded_item,
                     recomputed_item,
                     path=f"{path}[{index}]",
                 )
             )
         return differences
-    return [] if recorded == recomputed else [path]
+    if recorded == recomputed:
+        return []
+    return [
+        _network_state_projection_mismatch(
+            path=path,
+            mismatch_kind="value_mismatch",
+            recorded_present=True,
+            recomputed_present=True,
+            recorded_value=recorded,
+            recomputed_value=recomputed,
+        )
+    ]
+
+
+def _network_state_projection_difference_paths(
+    recorded,
+    recomputed,
+    *,
+    path: str = "$",
+) -> list[str]:
+    return [
+        mismatch["path"]
+        for mismatch in _network_state_projection_differences(
+            recorded,
+            recomputed,
+            path=path,
+        )
+    ]
+
+
+def _maximum_network_state_projection_numeric_errors(
+    mismatches: list[dict],
+) -> list[dict]:
+    grouped: dict[str, list[dict]] = {}
+    for mismatch in mismatches:
+        field = mismatch.get("numeric_error_field")
+        absolute_error = mismatch.get("absolute_error")
+        if field is None or absolute_error is None:
+            continue
+        grouped.setdefault(str(field), []).append(mismatch)
+
+    evidence = []
+    for field in sorted(grouped):
+        candidates = grouped[field]
+        maximum = max(
+            float(candidate["absolute_error"])
+            for candidate in candidates
+        )
+        evidence.append(
+            {
+                "field": field,
+                "comparison_basis": "same_canonical_leaf_field",
+                "maximum_absolute_error": maximum,
+                "witnesses": [
+                    candidate
+                    for candidate in candidates
+                    if float(candidate["absolute_error"]) == maximum
+                ],
+            }
+        )
+    return evidence
 
 
 def _point_check(
@@ -1768,6 +1932,7 @@ def _bisection_decision_trace_audit(
             recomputed_sha256 = str(
                 recomputed_state["network_state_sha256"]
             )
+            projection_mismatches = []
             projection_mismatch_paths = []
             projection_matches = None
             if terminal_network_projection_replay_available:
@@ -1779,13 +1944,17 @@ def _bisection_decision_trace_audit(
                 recomputed_projection = recomputed_state[
                     "network_state_projection"
                 ]
-                projection_mismatch_paths = (
-                    _network_state_projection_difference_paths(
+                projection_mismatches = (
+                    _network_state_projection_differences(
                         recorded_projection,
                         recomputed_projection,
                     )
                 )
-                projection_matches = not projection_mismatch_paths
+                projection_mismatch_paths = [
+                    mismatch["path"]
+                    for mismatch in projection_mismatches
+                ]
+                projection_matches = not projection_mismatches
             terminal_network_position_checks[position] = {
                 "replayed_airflow_m3_h": round(replayed_airflow, 9),
                 "recorded_network_state_sha256": recorded_sha256,
@@ -1798,6 +1967,14 @@ def _bisection_decision_trace_audit(
                 ),
                 "network_state_projection_mismatch_paths": (
                     projection_mismatch_paths
+                ),
+                "network_state_projection_mismatches": (
+                    projection_mismatches
+                ),
+                "network_state_projection_maximum_numeric_errors": (
+                    _maximum_network_state_projection_numeric_errors(
+                        projection_mismatches
+                    )
                 ),
             }
         terminal_network_state_replay_violations = [
@@ -1827,6 +2004,14 @@ def _bisection_decision_trace_audit(
                 "mismatch_paths": terminal_network_position_checks[position][
                     "network_state_projection_mismatch_paths"
                 ],
+                "mismatches": terminal_network_position_checks[position][
+                    "network_state_projection_mismatches"
+                ],
+                "maximum_numeric_errors": (
+                    terminal_network_position_checks[position][
+                        "network_state_projection_maximum_numeric_errors"
+                    ]
+                ),
             }
             for position in ("low", "high")
             if terminal_network_projection_replay_available
@@ -1844,7 +2029,7 @@ def _bisection_decision_trace_audit(
             "iteration": int(operating_iterations),
             "algorithm": "sha256",
             "canonicalization": (
-                _NETWORK_STATE_CANONICALIZATION
+                "network-state-projection-json-sort-keys-compact-utf8-v1"
             ),
             "low": terminal_network_position_checks["low"],
             "high": terminal_network_position_checks["high"],
@@ -2895,6 +3080,7 @@ def _selected_operating_state_replay_audit(
     recorded_network_state_sha256: str,
     segment_left: FanCurvePoint,
     segment_right: FanCurvePoint,
+    recorded_network_state_projection: dict | None = None,
     selected_supplied_point_index: int | None = None,
     bisection_trace: list[dict] | None = None,
 ) -> dict:
@@ -2919,6 +3105,29 @@ def _selected_operating_state_replay_audit(
     network_state_matches_independent_replay = (
         recorded_network_state == replayed_network_state
     )
+    recomputed_network_state_projection = _network_state_projection(
+        _replayed_network
+    )
+    network_state_projection_replay_available = (
+        recorded_network_state_projection is not None
+    )
+    network_state_projection_mismatches = []
+    network_state_projection_mismatch_paths = []
+    network_state_projection_matches_independent_replay = None
+    if network_state_projection_replay_available:
+        network_state_projection_mismatches = (
+            _network_state_projection_differences(
+                recorded_network_state_projection,
+                recomputed_network_state_projection,
+            )
+        )
+        network_state_projection_mismatch_paths = [
+            mismatch["path"]
+            for mismatch in network_state_projection_mismatches
+        ]
+        network_state_projection_matches_independent_replay = (
+            not network_state_projection_mismatches
+        )
 
     recorded_pressures = {
         "fan": float(recorded_fan_pressure_pa),
@@ -2964,6 +3173,22 @@ def _selected_operating_state_replay_audit(
                 "component": "network_state_sha256",
                 "recorded_network_state_sha256": recorded_network_state,
                 "recomputed_network_state_sha256": replayed_network_state,
+            }
+        )
+    if (
+        network_state_projection_replay_available
+        and network_state_projection_matches_independent_replay is False
+    ):
+        violations.append(
+            {
+                "component": "network_state_projection",
+                "mismatch_paths": network_state_projection_mismatch_paths,
+                "mismatches": network_state_projection_mismatches,
+                "maximum_numeric_errors": (
+                    _maximum_network_state_projection_numeric_errors(
+                        network_state_projection_mismatches
+                    )
+                ),
             }
         )
 
@@ -3038,12 +3263,43 @@ def _selected_operating_state_replay_audit(
         "network_state_replay_available": True,
         "network_state_replay_algorithm": "sha256",
         "network_state_replay_canonicalization": (
-            _NETWORK_STATE_CANONICALIZATION
+            "network-state-projection-json-sort-keys-compact-utf8-v1"
         ),
         "recorded_network_state_sha256": recorded_network_state,
         "recomputed_network_state_sha256": replayed_network_state,
         "network_state_matches_independent_replay": (
             network_state_matches_independent_replay
+        ),
+        "network_state_projection_replay_available": (
+            network_state_projection_replay_available
+        ),
+        "recorded_network_state_projection": (
+            recorded_network_state_projection
+        ),
+        "recomputed_network_state_projection": (
+            recomputed_network_state_projection
+        ),
+        "network_state_projection_matches_independent_replay": (
+            network_state_projection_matches_independent_replay
+        ),
+        "selected_network_state_projection_replay_consistent": (
+            network_state_projection_matches_independent_replay
+        ),
+        "network_state_projection_mismatch_count": (
+            len(network_state_projection_mismatches)
+            if network_state_projection_replay_available
+            else None
+        ),
+        "network_state_projection_mismatch_paths": (
+            network_state_projection_mismatch_paths
+        ),
+        "network_state_projection_mismatches": (
+            network_state_projection_mismatches
+        ),
+        "network_state_projection_maximum_numeric_errors": (
+            _maximum_network_state_projection_numeric_errors(
+                network_state_projection_mismatches
+            )
         ),
         "component_checks": component_checks,
         "all_pressure_components_match_independent_replay": all(
@@ -3059,6 +3315,11 @@ def _selected_operating_state_replay_audit(
         "all_selected_operating_state_matches_independent_replay": (
             selection_origin_matches
             and network_state_matches_independent_replay
+            and (
+                network_state_projection_matches_independent_replay
+                if network_state_projection_replay_available
+                else True
+            )
             and all(
                 check["matches_independent_replay"]
                 for check in component_checks.values()
@@ -3677,6 +3938,9 @@ def solve_fan_variable_friction_loop(
             recorded_system_pressure_pa=system_pressure,
             recorded_residual_pa=residual,
             recorded_network_state_sha256=_network_state_sha256(
+                selected_network
+            ),
+            recorded_network_state_projection=_network_state_projection(
                 selected_network
             ),
             segment_left=left,

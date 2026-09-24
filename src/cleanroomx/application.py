@@ -185,6 +185,11 @@ def validate_application_registry() -> dict:
             "duplicate application analysis keys: " + ", ".join(duplicate_keys)
         )
 
+    mapping_keys = set(ANALYSIS_SPECS)
+    catalog_keys = set(keys)
+    if mapping_keys != catalog_keys or len(ANALYSIS_SPECS) != len(_ANALYSES):
+        raise RuntimeError("application analysis mapping is inconsistent with the catalog")
+
     callable_target_count = 0
     fallback_reporter_count = 0
     for spec in _ANALYSES:

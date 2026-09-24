@@ -1203,6 +1203,13 @@ def test_independent_residual_replay_detects_self_consistent_pressure_corruption
         in report
     )
     assert "Maximum absolute trace pressure-component replay error" in report
+    assert "Trace network-state projection replay available: **True**" in report
+    assert (
+        "Every retained low/midpoint/high network-state projection matches independent replay: "
+        "**True**"
+        in report
+    )
+    assert "Trace network-state projection mismatch records: **0**" in report
 
 
 def test_independent_pressure_component_replay_detects_common_mode_corruption() -> None:

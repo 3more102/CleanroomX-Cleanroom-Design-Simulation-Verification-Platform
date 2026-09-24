@@ -1662,6 +1662,26 @@ def _bisection_decision_trace_audit(
                     recorded_sha256 == recomputed_sha256
                 ),
             }
+        terminal_network_state_replay_violations = [
+            {
+                "iteration": int(operating_iterations),
+                "position": position,
+                "recorded_network_state_sha256": (
+                    terminal_network_position_checks[position][
+                        "recorded_network_state_sha256"
+                    ]
+                ),
+                "recomputed_network_state_sha256": (
+                    terminal_network_position_checks[position][
+                        "recomputed_network_state_sha256"
+                    ]
+                ),
+            }
+            for position in ("low", "high")
+            if not terminal_network_position_checks[position][
+                "network_state_matches_independent_replay"
+            ]
+        ]
         terminal_network_state_replay = {
             "terminal_kind": (
                 "iteration_limit_remaining_bracket"
@@ -1682,13 +1702,16 @@ def _bisection_decision_trace_audit(
                     for check in terminal_network_position_checks.values()
                 )
             ),
+            "network_state_replay_violation_count": len(
+                terminal_network_state_replay_violations
+            ),
             "network_state_replay_violation_positions": [
-                position
-                for position in ("low", "high")
-                if not terminal_network_position_checks[position][
-                    "network_state_matches_independent_replay"
-                ]
+                witness["position"]
+                for witness in terminal_network_state_replay_violations
             ],
+            "network_state_replay_violations": (
+                terminal_network_state_replay_violations
+            ),
         }
 
     decision_semantic_checks = []
@@ -2442,9 +2465,23 @@ def _bisection_decision_trace_audit(
             if terminal_network_state_replay is not None
             else None
         ),
+        "terminal_network_state_replay_violation_count": (
+            terminal_network_state_replay[
+                "network_state_replay_violation_count"
+            ]
+            if terminal_network_state_replay is not None
+            else None
+        ),
         "terminal_network_state_replay_violation_positions": (
             terminal_network_state_replay[
                 "network_state_replay_violation_positions"
+            ]
+            if terminal_network_state_replay is not None
+            else []
+        ),
+        "terminal_network_state_replay_violations": (
+            terminal_network_state_replay[
+                "network_state_replay_violations"
             ]
             if terminal_network_state_replay is not None
             else []

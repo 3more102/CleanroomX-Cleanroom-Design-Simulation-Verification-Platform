@@ -783,8 +783,11 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "",
                 "- Corners with operating-point search evidence: "
                 f"**{search_summary['search_evidence_corner_count']}/"
+                f"{search_summary['corner_count']} total**",
+                "- Solved corners with search evidence: "
+                f"**{search_summary['solved_search_evidence_corner_count']}/"
                 f"{search_summary['solved_corner_count']} solved**",
-                "- Bounded-bisection corners: "
+                "- Bounded-bisection solved corners: "
                 f"**{search_summary['bisection_corner_count']}**",
                 "- Supplied-point tolerance-contact corners: "
                 f"**{search_summary['supplied_point_contact_corner_count']}**",
@@ -795,6 +798,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['strict_sign_change_violation_corner_indices']}**",
                 "- Midpoint-centering violations: "
                 f"**{search_summary['selected_midpoint_violation_corner_indices']}**",
+                "- Bisection iteration-limit corners with search evidence: "
+                f"**{search_summary['iteration_limit_search_evidence_corner_count']}**",
+                "- Iteration-limit remaining-bracket invariant evidence: "
+                f"**{search_summary['iteration_limit_invariant_evidence_corner_count']}**",
+                "- Iteration-limit strict sign-bracket violations: "
+                f"**{search_summary['iteration_limit_strict_sign_change_violation_corner_indices']}**",
                 f"- Complete-study coverage: **{coverage_label}**",
             ]
         )
@@ -827,6 +836,19 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                             f"**{nominal_invariant['absolute_width_fraction_consistency_error']}**",
                         ]
                     )
+            nominal_limit = nominal_search.get("iteration_limit_evidence")
+            if nominal_limit is not None:
+                remaining = nominal_limit["remaining_bisection_bracket"]
+                lines.extend(
+                    [
+                        "- Nominal search stopped at iteration limit; no operating point accepted.",
+                        "- Nominal remaining bisection bracket: "
+                        f"**{remaining['low_airflow_m3_h']}–"
+                        f"{remaining['high_airflow_m3_h']} m³/h**",
+                        "- Nominal remaining bisection half-width: "
+                        f"**{remaining['half_width_m3_h']} m³/h**",
+                    ]
+                )
 
         lines.extend(
             [
@@ -886,6 +908,27 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum absolute binary-width consistency error | "
                 f"{invariant_error['value']} | {invariant_error['unit']} | "
                 f"{' / '.join(invariant_sources)} |"
+            )
+        limit_error = search_summary.get(
+            "maximum_iteration_limit_absolute_width_fraction_consistency_error"
+        )
+        if limit_error is not None:
+            limit_sources = []
+            for source in limit_error["sources"]:
+                invariant = source["invariant_audit"]
+                remaining = source["remaining_bisection_bracket"]
+                limit_sources.append(
+                    _fmt_extreme_source(source)
+                    + f"; iterations={source['operating_iterations']}"
+                    + f"; remaining={remaining['low_airflow_m3_h']}"
+                    + f"–{remaining['high_airflow_m3_h']} m³/h"
+                    + f"; expected-fraction={invariant['expected_width_fraction_of_supplied_segment']}"
+                    + f"; actual-fraction={invariant['actual_width_fraction_of_supplied_segment']}"
+                )
+            lines.append(
+                "| Maximum iteration-limit remaining-bracket binary-width consistency error | "
+                f"{limit_error['value']} | {limit_error['unit']} | "
+                f"{' / '.join(limit_sources)} |"
             )
         lines.extend(["", search_summary["scope_note"]])
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.91 supplied-point network-state fingerprint replay — 2026-09-24
+
+- Retains the canonical order-invariant v2 network-state SHA-256 with every successfully evaluated supplied fan-curve point before operating-point candidate selection.
+- Independently re-solves each evaluated supplied-point airflow and compares node, edge, pressure-power, and variable-friction closure state fingerprints against the retained hash.
+- Extends internal-state provenance to complete no-intersection cases and preserves explicit partial replay coverage when the nonlinear network solver fails before all supplied points are evaluated.
+- Aggregates supplied-point replay evidence, incomplete-coverage corners, violation corners, and violation counts across nonlinear uncertainty studies and surfaces the evidence in standalone reports and engineering dossiers.
+- Adds corruption, solved, no-intersection, partial non-convergence, and uncertainty aggregation regression coverage.
+- Preserves v0.90 order-invariant canonicalization, v0.89 selected-state replay, v0.88 terminal-bracket replay, v0.87 trace replay, root selection, solver tolerances, no-extrapolation behavior, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.91.0.
+
 ## v0.90 order-invariant network-state fingerprint canonicalization — 2026-09-24
 
 - Canonicalizes semantically unordered named network-state collections before SHA-256 hashing by sorting solved nodes, solved edges, and variable-friction edge-closure rows by name.

@@ -252,6 +252,14 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
     ] <= 1e-9
+    assert trace_audit["residual_replay_available"] is True
+    assert trace_audit["residual_replay_check_count"] == len(trace)
+    assert trace_audit[
+        "all_trace_residuals_match_independent_replay"
+    ] is True
+    assert trace_audit[
+        "maximum_absolute_trace_residual_replay_error_pa"
+    ] <= 1e-9
     assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
     assert trace_audit[
         "all_recorded_width_fractions_match_iteration_sequence"
@@ -300,6 +308,10 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert "Bisection decision sequence (L/H/T)" in report
     assert (
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
+        in report
+    )
+    assert (
+        "Every retained trace residual matches independent fan/system replay: **True**"
         in report
     )
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
@@ -385,6 +397,13 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert trace_audit["geometry_check_count"] == len(trace)
     assert trace_audit["maximum_absolute_trace_width_error_m3_h"] <= 2e-9
     assert trace_audit["maximum_absolute_trace_width_fraction_error"] <= 1e-12
+    assert trace_audit["residual_replay_available"] is True
+    assert trace_audit[
+        "all_trace_residuals_match_independent_replay"
+    ] is True
+    assert trace_audit[
+        "maximum_absolute_trace_residual_replay_error_pa"
+    ] <= 1e-9
     assert trace_audit["terminal_outcome_consistent"] is True
     assert trace_audit[
         "all_state_transitions_replay_recorded_decisions"
@@ -624,6 +643,96 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "terminal_bracket_matches_origin_replay"
     ] is True
     assert origin_audit["trace_origin_to_terminal_replay_consistent"] is False
+
+
+def test_independent_residual_replay_detects_self_consistent_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Residual replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    assert len(trace) >= 2
+    assert trace[0]["decision"] in {
+        "replace_low_endpoint",
+        "replace_high_endpoint",
+    }
+
+    original_midpoint_residual = float(
+        trace[0]["midpoint_fan_minus_system_pressure_pa"]
+    )
+    assert abs(original_midpoint_residual) > study.operating_pressure_tolerance_pa
+    corrupted_midpoint_residual = original_midpoint_residual + (
+        1.0 if original_midpoint_residual > 0.0 else -1.0
+    )
+    trace[0]["midpoint_fan_minus_system_pressure_pa"] = (
+        corrupted_midpoint_residual
+    )
+
+    terminal_bracket = dict(evidence["final_bisection_bracket"])
+    if trace[0]["decision"] == "replace_low_endpoint":
+        active = True
+        for step in trace[1:]:
+            if active:
+                step["low_fan_minus_system_pressure_pa"] = (
+                    corrupted_midpoint_residual
+                )
+            if step["decision"] == "replace_low_endpoint":
+                active = False
+        if active:
+            terminal_bracket["low_fan_minus_system_pressure_pa"] = (
+                corrupted_midpoint_residual
+            )
+    else:
+        active = True
+        for step in trace[1:]:
+            if active:
+                step["high_fan_minus_system_pressure_pa"] = (
+                    corrupted_midpoint_residual
+                )
+            if step["decision"] == "replace_high_endpoint":
+                active = False
+        if active:
+            terminal_bracket["high_fan_minus_system_pressure_pa"] = (
+                corrupted_midpoint_residual
+            )
+
+    segment_index = evidence["supplied_segment_index"]
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=terminal_bracket,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+    )
+    assert audit is not None
+    assert audit["all_trace_raw_state_consistent"] is True
+    assert audit["all_decisions_match_midpoint_residual_semantics"] is True
+    assert audit["all_state_transitions_replay_recorded_decisions"] is True
+    assert audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert audit["residual_replay_available"] is True
+    assert audit["all_trace_residuals_match_independent_replay"] is False
+    assert audit["maximum_absolute_trace_residual_replay_error_pa"] > 0.0
+    assert any(
+        not check["all_residuals_match_independent_replay"]
+        for check in audit["residual_replay_checks"]
+    )
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

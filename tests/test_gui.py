@@ -196,6 +196,58 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
     assert "Saved" in app.status_var.value
 
 
+def test_save_project_as_invalidates_results_when_base_directory_changes(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    old_dir = tmp_path / "old"
+    new_dir = tmp_path / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Demo")
+    app.project_path = old_dir / "demo.cleanroomx.json"
+    app._editor_analysis_id = None
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+    app._baseline_state = None
+
+    app._runs_by_analysis = {"analysis-a": object()}
+    app.last_run = app._runs_by_analysis["analysis-a"]
+    app.last_run_analysis_id = "analysis-a"
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    destination = new_dir / "demo.cleanroomx.json"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+
+    app.save_project_as()
+
+    assert app.project_path == destination
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+
+
 def test_remove_analysis_invalidates_matching_result(monkeypatch):
     analysis = AnalysisDocument(
         id="a", name="A", kind="room_verification", input={"value": 1}
@@ -235,7 +287,7 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.98.0"
+    assert payload["version"] == "0.99.0"
     assert payload["analysis_count"] >= 20
     assert payload["bindings_valid"] is True
     assert payload["registry_validation"]["status"] == "ok"

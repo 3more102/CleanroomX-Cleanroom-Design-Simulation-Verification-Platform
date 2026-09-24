@@ -800,6 +800,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['selected_operating_state_replay_violation_corner_indices']}**",
                 "- Selected operating-state origin violation corners: "
                 f"**{search_summary['selected_operating_state_origin_violation_corner_indices']}**",
+                "- Selected operating network-state replay consistent corners: "
+                f"**{search_summary['selected_operating_network_state_replay_consistent_corner_count']}**",
+                "- Selected operating network-state replay violation corners: "
+                f"**{search_summary['selected_operating_network_state_replay_violation_corner_indices']}**",
                 "- Selected operating-state replay violation records: "
                 f"**{search_summary['selected_operating_state_replay_violation_count']}**",
                 "- Selected operating-state replay violation details: "

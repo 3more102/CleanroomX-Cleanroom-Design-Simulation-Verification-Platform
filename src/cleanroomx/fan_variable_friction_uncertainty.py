@@ -2595,6 +2595,14 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["terminal_outcome_consistent"]
     ]
+    trace_decision_semantic_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get(
+            "all_decisions_match_midpoint_residual_semantics",
+            False,
+        )
+    ]
     trace_origin_replay_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2949,6 +2957,13 @@ def _operating_point_search_resolution_summary(
         ),
         "bisection_trace_terminal_outcome_violation_corner_indices": (
             trace_terminal_outcome_violation_corner_indices
+        ),
+        "bisection_trace_decision_semantic_consistent_corner_count": (
+            len(trace_cases)
+            - len(trace_decision_semantic_violation_corner_indices)
+        ),
+        "bisection_trace_decision_semantic_violation_corner_indices": (
+            trace_decision_semantic_violation_corner_indices
         ),
         "bisection_trace_origin_replay_corner_count": (
             len(trace_cases) - len(trace_origin_replay_violation_corner_indices)

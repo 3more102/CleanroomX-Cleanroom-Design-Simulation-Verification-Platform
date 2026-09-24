@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.96 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.98 desktop application.
 
 ## Verified development status
 
-The current application release branch is `codex/cleanroomx-v096-application-gui`, package/runtime version **0.96.0**. It starts from integrated v0.95 commit `e62567d4e9c730ca1fb3439c38e340796208d4fe`, preserves the verified v0.91 → v0.92 → v0.93 → v0.94 → v0.95 provenance line, and adds the shared application layer, versioned project persistence, and desktop GUI without replacing the validated backend workflows. The default `main` branch remains older than this development line until repository integration is completed.
+The current release-completion branch is `codex/cleanroomx-v098-release-completion`, package/runtime version **0.98.0**. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 baseline was taken from live v0.97 application-completeness head `1fe0474addc9c1bd3086cdf50207520fcadb95cf`. The default `main` branch remains older than this development line until repository integration is completed.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.96 additionally launches the installed desktop entry point under Xvfb on Python 3.13 and executes the demonstration project through the real GUI smoke path.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.98 also validates every declared application parser/runner/reporter binding and launches the installed desktop entry point under Xvfb on Python 3.13 against the bundled demonstration project.
 
 ### Network-state replay provenance ladder
 
@@ -23,10 +23,12 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.94 | signed-zero-stable canonical network-result identity with named-collection order invariance and solver metadata/configuration/history provenance |
 | v0.95 | complete standalone solver-result identity/self-audit with uncertainty-corner and dossier linkage |
 | v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
+| v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
+| v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 
-### v0.96 desktop application
+### v0.98 desktop application
 
-v0.96 adds a user-operable Tkinter desktop application over the existing validated CleanroomX backends. It provides project creation/open/save, stable strict-JSON `.cleanroomx.json` persistence with migration of supported legacy shapes, unsaved-change protection, analysis creation/rename/removal, structured JSON input inspection with engineering-unit hints, file import/export, backend validation, guarded non-blocking analysis execution, result/diagnostic/report views, fan-curve plotting where supported, and JSON/Markdown export. Application regressions execute every workflow exposed by the desktop catalog end-to-end through the shared application service.
+v0.98 completes the user-operable Tkinter application over the existing validated CleanroomX backends. It provides project creation/open/save, stable strict-JSON `.cleanroomx.json` persistence with migration of supported legacy shapes, unsaved-change protection with a visible dirty marker, analysis creation/rename/removal, per-analysis result restoration, structured JSON input inspection with engineering-unit hints, file import/export, backend validation, guarded non-blocking analysis execution, result/diagnostic/report views, fan-curve plotting where supported, and JSON/Markdown export. The headless `cleanroomx-gui --check` path resolves every declared parser/runner/reporter binding, and application regressions execute every workflow exposed by the desktop catalog end-to-end through the shared application service.
 
 After installation, launch the application with:
 

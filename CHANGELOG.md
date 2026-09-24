@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.98 release completion — 2026-09-24
+
+- Continues from live v0.97 application-completeness head `1fe0474addc9c1bd3086cdf50207520fcadb95cf` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.
+- Bumps package/runtime/demo metadata to v0.98.0 and synchronizes CI version assertions.
+- Adds application-registry self-validation so headless `cleanroomx-gui --check` resolves every declared parser, runner, and reporter binding before reporting readiness.
+- Adds a window-title dirty marker for unsaved project/editor changes, including project metadata, analysis selection, input edits, imports, additions, renames, and removals.
+- Retains strict JSON handling, per-analysis result sessions, active-run mutation guards, complete application-workflow regressions, project persistence tests, legacy solver/provenance compatibility gates, and real Xvfb desktop smoke.
+- The desktop application remains engineering screening/numerical provenance software; it does not by itself establish certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
+
+## v0.97 application completeness and GUI lifecycle hardening — 2026-09-24
+
+- Executes every workflow in the shared application catalog against repository examples, including consistency and engineering-dossier adapters.
+- Hardens strict project/editor JSON handling, unsaved-change prompts, input preservation while switching analyses, active-run mutation guards, open-project error handling, and stale-result invalidation.
+- Retains results per analysis so switching between completed analyses restores the matching result/report/diagnostics without associating output with a different input.
+- Commits the loaded editor state during save operations even when the visible tree selection changes independently.
+- Preserves the v0.91-v0.95 numerical/provenance compatibility gates and the v0.96 desktop architecture.
+
 ## v0.96 desktop application and project workflow — 2026-09-24
 
 - Adds a shared application-service registry over the existing validated CleanroomX backend parsers, solvers, reporters, consistency checks, and engineering dossier workflow.

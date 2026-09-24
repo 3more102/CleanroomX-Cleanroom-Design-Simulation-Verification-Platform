@@ -830,3 +830,30 @@ def test_overview_snapshot_reports_project_spatial_and_run_state():
     assert snapshot["device_count"] == 1
     assert snapshot["active_status"] == "pass"
     assert snapshot["active_title"]
+
+
+def test_run_state_badge_uses_semantic_styles():
+    class Value:
+        def set(self, value):
+            self.value = value
+
+    class Label:
+        def configure(self, **kwargs):
+            self.style = kwargs.get("style")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.run_state_var = Value()
+    app.run_state_label = Label()
+
+    app._set_run_state("running")
+    assert app.run_state_var.value == "RUNNING"
+    assert app.run_state_label.style == "RunStateRunning.TLabel"
+
+    app._set_run_state("failed")
+    assert app.run_state_label.style == "RunStateFailed.TLabel"
+
+    app._set_run_state("pass")
+    assert app.run_state_label.style == "RunStateSuccess.TLabel"
+
+    app._set_run_state("ready")
+    assert app.run_state_label.style == "RunState.TLabel"

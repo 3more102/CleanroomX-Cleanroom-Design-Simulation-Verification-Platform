@@ -398,3 +398,15 @@ def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
     assert "fan_curve_scenarios=2" in report
     assert "Whole fan-curve scenarios" in report
     assert "lower_envelope, upper_envelope" in report
+def test_dossier_surfaces_bisection_iteration_limit_evidence_column() -> None:
+    result = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["operating_point_search_resolution_summary"]
+    assert summary["bisection_iteration_limit_corner_count"] == 0
+
+    report = markdown_dossier_report(result)
+    assert "Bisection iteration-limit evidence" in report
+    assert "0 corners; max terminal half-width —" in report
+

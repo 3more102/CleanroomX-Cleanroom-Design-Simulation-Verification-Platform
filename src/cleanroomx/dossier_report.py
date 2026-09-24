@@ -869,6 +869,28 @@ def markdown_dossier_report(result: dict) -> str:
                     if trace_pressure_component_replay_error is None
                     else trace_pressure_component_replay_error["value"]
                 )
+                supplied_point_network_state_replay_evidence_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_count = search_summary.get(
+                    "supplied_point_network_state_replay_consistent_corner_count",
+                    0,
+                )
+                supplied_point_network_state_replay_incomplete = len(
+                    search_summary.get(
+                        "supplied_point_network_state_replay_incomplete_corner_indices",
+                        [],
+                    )
+                )
+                supplied_point_network_state_replay_violations = len(
+                    search_summary.get(
+                        "supplied_point_network_state_replay_violation_corner_indices",
+                        [],
+                    )
+                )
                 solved_search_evidence_count = search_summary.get(
                     "solved_search_evidence_corner_count",
                     0,
@@ -1021,6 +1043,13 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_pressure_component_replay_violations}; "
                     f"max pressure-component-replay error "
                     f"{max_trace_pressure_component_replay_error} Pa; "
+                    f"supplied-point-network-state-replay "
+                    f"{supplied_point_network_state_replay_count}/"
+                    f"{supplied_point_network_state_replay_evidence_count}; "
+                    f"supplied-point-network-state incomplete "
+                    f"{supplied_point_network_state_replay_incomplete}; "
+                    f"supplied-point-network-state violations "
+                    f"{supplied_point_network_state_replay_violations}; "
                     f"selected-network-state-replay "
                     f"{selected_network_state_replay_count}/"
                     f"{solved_search_evidence_count}; "

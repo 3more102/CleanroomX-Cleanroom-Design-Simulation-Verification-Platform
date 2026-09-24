@@ -46,6 +46,8 @@ def empty_layout() -> dict:
             "azimuth_deg": 35.0,
             "elevation_deg": 28.0,
             "zoom_3d": 1.0,
+            "pan_3d_x": 0.0,
+            "pan_3d_y": 0.0,
         },
     }
 
@@ -114,6 +116,8 @@ def normalize_layout(value: Any) -> dict:
                 "azimuth_deg": _finite_number(view.get("azimuth_deg"), 35.0),
                 "elevation_deg": max(5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))),
                 "zoom_3d": max(0.2, min(8.0, _positive(view.get("zoom_3d"), 1.0))),
+                "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
+                "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),
             }
         )
     return result
@@ -166,9 +170,20 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
     raw = metadata.get(SPATIAL_METADATA_KEY)
     if isinstance(raw, dict):
         normalized = normalize_layout(raw)
-    else:
-        normalized = derive_layout_from_analysis(analysis)
-    metadata[SPATIAL_METADATA_KEY] = normalized
+        metadata[SPATIAL_METADATA_KEY] = normalized
+        return normalized
+
+    normalized = derive_layout_from_analysis(analysis)
+    if not normalized["rooms"]:
+        for candidate in getattr(project, "analyses", []):
+            normalized = derive_layout_from_analysis(candidate)
+            if normalized["rooms"]:
+                break
+
+    # Do not persist an empty auto-layout. This lets a later verification analysis
+    # seed the workspace without overwriting a deliberately persisted empty layout.
+    if normalized["rooms"]:
+        metadata[SPATIAL_METADATA_KEY] = normalized
     return normalized
 
 
@@ -279,6 +294,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("ffu", "+ FFU"),
             ("supply", "+ Supply"),
             ("return", "+ Return"),
+            ("exhaust", "+ Exhaust"),
             ("equipment", "+ Equipment"),
             ("sensor", "+ Sensor"),
         ):
@@ -325,6 +341,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
                 side="right", padx=2
             )
+        ttk.Button(header3, text="↓", width=3, command=lambda: self.tilt_3d(-5)).pack(side="right", padx=2)
+        ttk.Button(header3, text="↑", width=3, command=lambda: self.tilt_3d(5)).pack(side="right", padx=2)
         ttk.Button(header3, text="Reset", command=self.reset_3d).pack(side="right", padx=2)
         self.canvas_3d = tk.Canvas(three_d, background="#111820", highlightthickness=1)
         self.canvas_3d.pack(fill="both", expand=True)
@@ -379,6 +397,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
+        self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
+        self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
+        self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -638,8 +660,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         sy = yr * math.sin(el) - z * math.cos(el)
         scale = 34.0 * self.layout["view"]["zoom_3d"]
         return (
-            self.canvas_3d.winfo_width() / 2 + xr * scale,
-            self.canvas_3d.winfo_height() * 0.66 + sy * scale,
+            self.canvas_3d.winfo_width() / 2 + self.layout["view"]["pan_3d_x"] + xr * scale,
+            self.canvas_3d.winfo_height() * 0.66 + self.layout["view"]["pan_3d_y"] + sy * scale,
         )
 
     def _draw_3d(self) -> None:
@@ -793,10 +815,32 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["azimuth_deg"] = (self.layout["view"]["azimuth_deg"] + delta) % 360
         self._draw_3d()
 
+    def tilt_3d(self, delta: float) -> None:
+        self.layout["view"]["elevation_deg"] = max(
+            5.0, min(75.0, self.layout["view"]["elevation_deg"] + delta)
+        )
+        self._draw_3d()
+
     def reset_3d(self) -> None:
         self.layout["view"]["azimuth_deg"] = 35.0
         self.layout["view"]["elevation_deg"] = 28.0
         self.layout["view"]["zoom_3d"] = 1.0
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
+        self._draw_3d()
+
+    def _on_pan_3d_down(self, event: tk.Event) -> None:
+        self._pan_anchor = (event.x, event.y)
+        self._pan_origin = (
+            self.layout["view"]["pan_3d_x"],
+            self.layout["view"]["pan_3d_y"],
+        )
+
+    def _on_pan_3d_drag(self, event: tk.Event) -> None:
+        if self._pan_anchor is None or self._pan_origin is None:
+            return
+        self.layout["view"]["pan_3d_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
+        self.layout["view"]["pan_3d_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:

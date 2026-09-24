@@ -2033,6 +2033,146 @@ def _scope_note() -> str:
     )
 
 
+def _operating_point_state_replay(
+    study: FanVariableFrictionLoopStudy,
+    *,
+    airflow_m3_h: float,
+    retained_fan_pressure_pa: float,
+    retained_loop_network_pressure_pa: float,
+    retained_system_pressure_pa: float,
+    retained_residual_pa: float,
+    segment_left: FanCurvePoint,
+    segment_right: FanCurvePoint,
+    search_method: str,
+) -> dict:
+    """Freshly replay the accepted operating-point pressure state."""
+    tolerance_pa = 1e-9
+    airflow = float(airflow_m3_h)
+    try:
+        _network, replayed_loop_pressure = _solve_network_at_airflow(
+            study,
+            airflow,
+        )
+    except RuntimeError as exc:
+        return {
+            "available": True,
+            "replay_converged": False,
+            "search_method": search_method,
+            "selected_airflow_m3_h": round(airflow, 9),
+            "absolute_tolerance_pa": tolerance_pa,
+            "all_final_operating_point_state_matches_independent_replay": False,
+            "replay_error": str(exc),
+            "scope_note": (
+                "The accepted operating-point replay is deterministic numerical "
+                "implementation provenance only. Replay non-convergence does "
+                "not establish a physical instability or equipment limit."
+            ),
+        }
+
+    replayed_fan_pressure = _fan_pressure(
+        segment_left,
+        segment_right,
+        airflow,
+    )
+    replayed_system_pressure = (
+        float(study.fixed_pressure_pa) + replayed_loop_pressure
+    )
+    replayed_residual = replayed_fan_pressure - replayed_system_pressure
+
+    retained_fan = float(retained_fan_pressure_pa)
+    retained_loop = float(retained_loop_network_pressure_pa)
+    retained_system = float(retained_system_pressure_pa)
+    retained_residual = float(retained_residual_pa)
+
+    fan_error = abs(retained_fan - replayed_fan_pressure)
+    loop_error = abs(retained_loop - replayed_loop_pressure)
+    system_error = abs(retained_system - replayed_system_pressure)
+    residual_error = abs(retained_residual - replayed_residual)
+
+    fan_matches = math.isclose(
+        retained_fan,
+        replayed_fan_pressure,
+        rel_tol=0.0,
+        abs_tol=tolerance_pa,
+    )
+    loop_matches = math.isclose(
+        retained_loop,
+        replayed_loop_pressure,
+        rel_tol=0.0,
+        abs_tol=tolerance_pa,
+    )
+    system_matches = math.isclose(
+        retained_system,
+        replayed_system_pressure,
+        rel_tol=0.0,
+        abs_tol=tolerance_pa,
+    )
+    residual_matches = math.isclose(
+        retained_residual,
+        replayed_residual,
+        rel_tol=0.0,
+        abs_tol=tolerance_pa,
+    )
+
+    return {
+        "available": True,
+        "replay_converged": True,
+        "search_method": search_method,
+        "selected_airflow_m3_h": round(airflow, 9),
+        "absolute_tolerance_pa": tolerance_pa,
+        "retained_fan_pressure_pa": retained_fan,
+        "recomputed_fan_pressure_pa": round(replayed_fan_pressure, 9),
+        "absolute_fan_pressure_replay_error_pa": fan_error,
+        "retained_loop_network_pressure_pa": retained_loop,
+        "recomputed_loop_network_pressure_pa": round(
+            replayed_loop_pressure,
+            9,
+        ),
+        "absolute_loop_pressure_replay_error_pa": loop_error,
+        "retained_system_pressure_pa": retained_system,
+        "recomputed_system_pressure_pa": round(
+            replayed_system_pressure,
+            9,
+        ),
+        "absolute_system_pressure_replay_error_pa": system_error,
+        "retained_fan_minus_system_pressure_pa": retained_residual,
+        "recomputed_fan_minus_system_pressure_pa": round(
+            replayed_residual,
+            9,
+        ),
+        "absolute_residual_replay_error_pa": residual_error,
+        "fan_pressure_matches_independent_replay": fan_matches,
+        "loop_pressure_matches_independent_replay": loop_matches,
+        "system_pressure_matches_independent_replay": system_matches,
+        "residual_matches_independent_replay": residual_matches,
+        "all_pressure_components_match_independent_replay": (
+            fan_matches and loop_matches and system_matches
+        ),
+        "all_final_operating_point_state_matches_independent_replay": (
+            fan_matches
+            and loop_matches
+            and system_matches
+            and residual_matches
+        ),
+        "maximum_absolute_pressure_state_replay_error_pa": max(
+            fan_error,
+            loop_error,
+            system_error,
+            residual_error,
+        ),
+        "replay_error": None,
+        "scope_note": (
+            "The accepted operating-point replay freshly re-solves the "
+            "nonlinear loop and fan interpolation at the selected airflow. "
+            "It applies to both direct supplied-point contacts and bounded-"
+            "bisection solutions. The comparison is deterministic numerical "
+            "implementation provenance only, not physical uncertainty, "
+            "stability evidence, commissioning evidence, or an equipment-"
+            "acceptance criterion."
+        ),
+    }
+
+
 def solve_fan_variable_friction_loop(
     study: FanVariableFrictionLoopStudy,
 ) -> dict:
@@ -2545,11 +2685,26 @@ def solve_fan_variable_friction_loop(
         selected_airflow_m3_h=selected_airflow,
         selected_segment_index=selected_segment,
     )
+    search_method = (
+        "supplied_point_tolerance_contact"
+        if termination_reason == "fan_curve_point_residual"
+        else "bounded_bisection"
+    )
+    final_operating_point_state_replay = _operating_point_state_replay(
+        study,
+        airflow_m3_h=selected_airflow,
+        retained_fan_pressure_pa=selected_fan_pressure,
+        retained_loop_network_pressure_pa=selected_network_pressure,
+        retained_system_pressure_pa=system_pressure,
+        retained_residual_pa=residual,
+        segment_left=left,
+        segment_right=right,
+        search_method=search_method,
+    )
     operating_point_search_evidence = {
-        "method": (
-            "supplied_point_tolerance_contact"
-            if termination_reason == "fan_curve_point_residual"
-            else "bounded_bisection"
+        "method": search_method,
+        "final_operating_point_state_replay": (
+            final_operating_point_state_replay
         ),
         "supplied_segment_index": selected_segment,
         "supplied_segment_low_airflow_m3_h": round(
@@ -2585,7 +2740,9 @@ def solve_fan_variable_friction_loop(
             "limit outcomes retain the same completed decision trace and "
             "replay its final L/H decision into the remaining active bracket "
             "without accepting a root; direct supplied-point contacts do not "
-            "fabricate a bisection trace. Bracket width and the decision trace "
+            "fabricate a bisection trace. Every accepted solution, including "
+            "a direct supplied-point contact, carries a fresh final operating-"
+            "point pressure-state replay. Bracket width and the decision trace "
             "are numerical search "
             "provenance only; they are not physical airflow uncertainty, "
             "interpolation-error bounds, continuous worst-case guarantees, "

@@ -947,6 +947,7 @@ def _bisection_decision_trace_audit(
     pressure_component_replay_checks = []
     network_state_replay_checks = []
     terminal_pressure_component_replay = None
+    terminal_network_state_replay = None
     residual_replay_available = (
         study is not None
         and segment_left is not None
@@ -1626,6 +1627,68 @@ def _bisection_decision_trace_audit(
             "maximum_terminal_pressure_component_replay_error_witnesses": (
                 maximum_terminal_pressure_component_replay_error_witnesses
             ),
+        }
+
+    terminal_network_state_fields = tuple(
+        f"{position}_network_state_sha256"
+        for position in ("low", "high")
+    )
+    if (
+        residual_replay_available
+        and terminal_bracket_for_pressure_component_replay is not None
+        and all(
+            field in terminal_bracket_for_pressure_component_replay
+            for field in terminal_network_state_fields
+        )
+    ):
+        terminal_network_position_checks = {}
+        for position, replayed_airflow in (
+            ("low", replay_low_airflow),
+            ("high", replay_high_airflow),
+        ):
+            recorded_sha256 = str(
+                terminal_bracket_for_pressure_component_replay[
+                    f"{position}_network_state_sha256"
+                ]
+            )
+            recomputed_sha256 = str(
+                _independent_state(replayed_airflow)["network_state_sha256"]
+            )
+            terminal_network_position_checks[position] = {
+                "replayed_airflow_m3_h": round(replayed_airflow, 9),
+                "recorded_network_state_sha256": recorded_sha256,
+                "recomputed_network_state_sha256": recomputed_sha256,
+                "network_state_matches_independent_replay": (
+                    recorded_sha256 == recomputed_sha256
+                ),
+            }
+        terminal_network_state_replay = {
+            "terminal_kind": (
+                "iteration_limit_remaining_bracket"
+                if termination_reason == "bisection_iteration_limit"
+                else "solved_final_bracket"
+            ),
+            "termination_reason": termination_reason,
+            "iteration": int(operating_iterations),
+            "algorithm": "sha256",
+            "canonicalization": (
+                "network-state-projection-json-sort-keys-compact-utf8-v1"
+            ),
+            "low": terminal_network_position_checks["low"],
+            "high": terminal_network_position_checks["high"],
+            "all_terminal_network_states_match_independent_replay": (
+                all(
+                    check["network_state_matches_independent_replay"]
+                    for check in terminal_network_position_checks.values()
+                )
+            ),
+            "network_state_replay_violation_positions": [
+                position
+                for position in ("low", "high")
+                if not terminal_network_position_checks[position][
+                    "network_state_matches_independent_replay"
+                ]
+            ],
         }
 
     decision_semantic_checks = []
@@ -2369,6 +2432,24 @@ def _bisection_decision_trace_audit(
             else []
         ),
         "terminal_pressure_component_replay": terminal_pressure_component_replay,
+        "terminal_network_state_replay_available": (
+            terminal_network_state_replay is not None
+        ),
+        "all_terminal_network_states_match_independent_replay": (
+            terminal_network_state_replay[
+                "all_terminal_network_states_match_independent_replay"
+            ]
+            if terminal_network_state_replay is not None
+            else None
+        ),
+        "terminal_network_state_replay_violation_positions": (
+            terminal_network_state_replay[
+                "network_state_replay_violation_positions"
+            ]
+            if terminal_network_state_replay is not None
+            else []
+        ),
+        "terminal_network_state_replay": terminal_network_state_replay,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -2955,6 +3036,9 @@ def solve_fan_variable_friction_loop(
                                 low_system_pressure,
                                 9,
                             ),
+                            "low_network_state_sha256": (
+                                low_network_state_sha256
+                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
                                 9,
@@ -2967,6 +3051,9 @@ def solve_fan_variable_friction_loop(
                             "high_system_pressure_pa": round(
                                 high_system_pressure,
                                 9,
+                            ),
+                            "high_network_state_sha256": (
+                                high_network_state_sha256
                             ),
                             "selected_midpoint_airflow_m3_h": round(
                                 airflow,
@@ -3083,6 +3170,7 @@ def solve_fan_variable_friction_loop(
                         9,
                     ),
                     "low_system_pressure_pa": round(low_system_pressure, 9),
+                    "low_network_state_sha256": low_network_state_sha256,
                     "high_fan_minus_system_pressure_pa": round(
                         high_residual,
                         9,
@@ -3093,6 +3181,7 @@ def solve_fan_variable_friction_loop(
                         9,
                     ),
                     "high_system_pressure_pa": round(high_system_pressure, 9),
+                    "high_network_state_sha256": high_network_state_sha256,
                     "width_fraction_of_supplied_segment": round(
                         terminal_width_fraction,
                         12,

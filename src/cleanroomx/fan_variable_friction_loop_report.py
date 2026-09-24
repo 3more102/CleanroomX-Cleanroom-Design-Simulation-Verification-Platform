@@ -142,6 +142,20 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_recorded_midpoint_flags_match_numeric_geometry']}**",
                     "- Complete trace raw-state audit consistent: "
                     f"**{trace_audit['all_trace_raw_state_consistent']}**",
+                    "- Trace pressure-state evidence complete: "
+                    f"**{trace_audit['pressure_state_evidence_complete']}**",
+                    "- Recorded trace fixed pressure matches study input: "
+                    f"**{trace_audit['all_recorded_fixed_pressure_values_match_study']}**",
+                    "- Recorded trace system pressure equals fixed plus loop pressure: "
+                    f"**{trace_audit['all_recorded_system_pressures_match_fixed_plus_loop']}**",
+                    "- Recorded trace residual equals fan minus system pressure: "
+                    f"**{trace_audit['all_recorded_residuals_match_fan_minus_system']}**",
+                    "- Complete trace pressure-state audit consistent: "
+                    f"**{trace_audit['all_trace_pressure_state_consistent']}**",
+                    "- Maximum absolute trace system-pressure balance error: "
+                    f"**{trace_audit['maximum_absolute_trace_system_pressure_balance_error_pa']} Pa**",
+                    "- Maximum absolute trace residual balance error: "
+                    f"**{trace_audit['maximum_absolute_trace_residual_balance_error_pa']} Pa**",
                     "- Maximum absolute trace midpoint-centering error: "
                     f"**{trace_audit['maximum_absolute_trace_midpoint_error_m3_h']} m³/h**",
                     "- Every recorded trace width matches its airflow endpoints: "

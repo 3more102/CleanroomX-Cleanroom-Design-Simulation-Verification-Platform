@@ -213,7 +213,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Search evidence" in report
     assert "Bisection invariant / trace audit" in report
     assert "trace " in report
-    assert "trace violations L/S/M/T/I/R/O/F 0/0/0/0/0/0/0/0" in report
+    assert "trace violations L/S/M/T/I/R/A/O/F 0/0/0/0/0/0/0/0/0" in report
     assert "trace geometry violations W/N 0/0" in report
     assert "trace-geometry" in report
     assert "max trace width error" in report

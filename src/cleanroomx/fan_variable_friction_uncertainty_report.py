@@ -816,6 +816,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
+                "- Trace pressure-state audit violation corners: "
+                f"**{search_summary['bisection_trace_pressure_state_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -894,6 +896,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                         "- Nominal trace width fractions match binary iteration contraction: "
                         f"**{nominal_trace_audit['all_recorded_width_fractions_match_iteration_sequence']}**",
+                        "- Nominal trace pressure-state audit consistent: "
+                        f"**{nominal_trace_audit['all_trace_pressure_state_consistent']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
@@ -982,6 +986,36 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum trace midpoint-centering error | "
                 f"{trace_midpoint_error['value']} | "
                 f"{trace_midpoint_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_system_pressure_error = search_summary.get(
+            "maximum_bisection_trace_system_pressure_balance_error_pa"
+        )
+        if trace_system_pressure_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_system_pressure_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace system-pressure identity error | "
+                f"{trace_system_pressure_error['value']} | "
+                f"{trace_system_pressure_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_residual_error = search_summary.get(
+            "maximum_bisection_trace_residual_balance_error_pa"
+        )
+        if trace_residual_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_residual_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace fan-minus-system residual identity error | "
+                f"{trace_residual_error['value']} | "
+                f"{trace_residual_error['unit']} | "
                 f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(

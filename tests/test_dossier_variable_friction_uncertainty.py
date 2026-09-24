@@ -8,6 +8,7 @@ from cleanroomx.dossier import build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
 from cleanroomx.fan_variable_friction_loop import (
     _bisection_decision_trace_audit,
+    _fan_curve_supplied_point_network_state_replay_audit,
     _selected_operating_state_replay_audit,
     solve_fan_variable_friction_loop,
 )
@@ -57,6 +58,21 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert search_summary["bisection_invariant_evidence_corner_count"] == (
         search_summary["bisection_corner_count"]
     )
+    assert search_summary[
+        "supplied_point_network_state_replay_complete_coverage"
+    ] is True
+    assert search_summary[
+        "supplied_point_network_state_replay_consistent_corner_count"
+    ] == analysis["corner_count"]
+    assert search_summary[
+        "supplied_point_network_state_replay_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "supplied_point_network_state_replay_incomplete_corner_indices"
+    ] == []
+    assert search_summary[
+        "supplied_point_network_state_projection_mismatch_count"
+    ] == 0
     assert search_summary["strict_sign_change_violation_corner_indices"] == []
     assert search_summary["selected_midpoint_violation_corner_indices"] == []
     assert search_summary["bisection_trace_evidence_corner_count"] == (
@@ -317,6 +333,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "pressure-state violations 0" in report
     assert "residual-replay" in report
     assert "residual-replay violations 0" in report
+    assert "supplied-point-network-state-replay" in report
+    assert "supplied-point-network-state-replay coverage" in report
     assert "selected-network-state-projection-replay" in report
     assert "selected-network-state-projection-replay violations 0" in report
     assert "max residual-replay error" in report
@@ -508,6 +526,67 @@ def test_dossier_preserves_full_trace_projection_corruption_evidence(
     report = markdown_dossier_report(dossier)
     assert "full-trace-network-state-projection coverage" in report
     assert "$.edges[0].airflow_m3_h" in report
+    assert "recorded_value" in report
+    assert "recomputed_value" in report
+
+
+def test_dossier_preserves_supplied_point_projection_corruption(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2:
+            return result
+
+        checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+        checks[1]["network_state_projection"]["nodes"][0][
+            "relative_pressure_pa"
+        ] += 1.25
+        result["fan_curve_point_checks"] = checks
+        result["fan_curve_supplied_point_network_state_replay"] = (
+            _fan_curve_supplied_point_network_state_replay_audit(
+                case_study,
+                checks,
+            )
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    dossier = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = dossier["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "supplied_point_network_state_projection_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "supplied_point_network_state_projection_mismatch_count"
+    ] == 1
+    details = summary[
+        "supplied_point_network_state_replay_violation_details"
+    ]
+    assert details[0]["corner_index"] == 0
+    assert details[0]["projection_violation_point_indices"] == [1]
+    mismatch = details[0]["mismatches"][0]
+    assert mismatch["point_index"] == 1
+    assert mismatch["path"] == "$.nodes[0].relative_pressure_pa"
+    assert mismatch["absolute_error"] == pytest.approx(1.25)
+
+    json.dumps(dossier, sort_keys=True, allow_nan=False)
+    report = markdown_dossier_report(dossier)
+    assert "supplied-point-network-state-replay" in report
+    assert "$.nodes[0].relative_pressure_pa" in report
+    assert "point_index" in report
     assert "recorded_value" in report
     assert "recomputed_value" in report
 

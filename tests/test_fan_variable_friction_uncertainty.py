@@ -101,6 +101,82 @@ def test_result_integrity_sha256_is_recomputable_and_input_sensitive() -> None:
     assert integrity["sha256"] in report
 
 
+
+def test_solver_result_integrity_linkage_covers_nominal_and_all_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["solver_result_integrity_summary"]
+
+    assert summary["applicable"] is True
+    assert summary["expected_result_count"] == result["corner_count"] + 1
+    assert summary["evidence_result_count"] == summary["expected_result_count"]
+    assert summary["complete_coverage"] is True
+    assert summary["consistent_result_count"] == summary["expected_result_count"]
+    assert summary["inconsistent_result_count"] == 0
+    assert summary["incomplete_result_count"] == 0
+    assert summary["nominal_consistent"] is True
+    assert summary["violating_corner_indices"] == []
+    assert len(summary["source_solver_result_sha256"]) == (
+        summary["expected_result_count"]
+    )
+    assert all(
+        isinstance(record["sha256"], str) and len(record["sha256"]) == 64
+        for record in summary["source_solver_result_sha256"]
+    )
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "## Solver-result integrity linkage" in report
+    assert "Solver-result integrity complete coverage: **True**" in report
+
+
+def test_solver_result_integrity_linkage_detects_corrupted_corner_result(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count == 2:
+            result["solver_diagnostics"]["operating_iterations"] += 1
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["solver_result_integrity_summary"]
+
+    assert summary["complete_coverage"] is True
+    assert summary["consistent_result_count"] == summary["expected_result_count"] - 1
+    assert summary["inconsistent_result_count"] == 1
+    assert summary["incomplete_result_count"] == 0
+    assert summary["nominal_consistent"] is True
+    assert summary["violating_corner_indices"] == [0]
+    assert len(summary["violation_details"]) == 1
+    detail = summary["violation_details"][0]
+    assert detail["case"] == "corner"
+    assert detail["corner_index"] == 0
+    assert detail["metadata_matches_expected"] is True
+    assert detail["recorded_sha256"] != detail["recomputed_sha256"]
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Solver-result integrity inconsistent results: **1**" in report
+    assert "Solver-result integrity violating corner indices: **[0]**" in report
+
+
 def test_nominal_result_matches_existing_nonlinear_solver() -> None:
     uncertainty = analyze_fan_variable_friction_loop_uncertainty(
         load_fan_variable_friction_loop_uncertainty(

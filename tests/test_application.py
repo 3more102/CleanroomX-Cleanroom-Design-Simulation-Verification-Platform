@@ -126,6 +126,27 @@ def test_dossier_adapter_runs_real_file_referenced_workflow():
     json.dumps(run.result, allow_nan=False)
 
 
+def test_dossier_adapter_supports_absolute_references_without_saved_project():
+    payload = _example("dossier_variable_friction_uncertainty_demo.json")
+    payload["fan_variable_friction_uncertainty_analyses"] = [
+        str((ROOT / "examples" / value).resolve())
+        for value in payload["fan_variable_friction_uncertainty_analyses"]
+    ]
+
+    run = run_analysis("dossier", payload)
+
+    assert run.result["dossier"] == payload["name"]
+    assert run.status == run.result["executive_summary"]["state"]
+    json.dumps(run.result, allow_nan=False)
+
+
+def test_dossier_adapter_rejects_relative_references_without_saved_project():
+    payload = _example("dossier_variable_friction_uncertainty_demo.json")
+
+    with pytest.raises(ValueError, match="relative file references require"):
+        run_analysis("dossier", payload)
+
+
 def test_dossier_validation_rejects_manifest_without_analysis_sources():
     with pytest.raises(ValueError, match="at least one analysis input file"):
         validate_analysis_input(

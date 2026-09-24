@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.89 terminal network-state projection replay diagnostics — 2026-09-24
+
+- Retains the canonical low/high terminal network-state projections alongside their SHA-256 fingerprints on solved final and post-decision iteration-limit brackets.
+- Independently re-solves each terminal endpoint and compares the retained canonical node, edge, pressure-power, and variable-friction closure projection with the fresh projection.
+- Localizes projection corruption to deterministic JSON-style field paths such as `$.nodes[0].relative_pressure_pa`, even when the retained SHA-256 fingerprint itself was not modified.
+- Aggregates projection-replay consistency, exact violating endpoint positions, mismatch paths, and corner-level details through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Preserves v0.88 terminal fingerprint replay, v0.87 full-trace fingerprints, pressure-component replay, solver tolerances, root selection, no-extrapolation behavior, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.89.0.
+
 ## v0.88 terminal-bracket network-state fingerprint replay — 2026-09-24
 
 - Retains canonical SHA-256 internal network-state fingerprints on solved final and post-decision iteration-limit terminal bracket low/high endpoints.

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.100.0 desktop execution integrity — 2026-09-24
+
+- Continues from the integrated v0.99.1 mainline with the installable self-contained desktop demo and release documentation intact.
+- Adds canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies, surfaced in diagnostics and run-bundle export.
+- Preserves external file referents when importing analysis JSON or saving a project into a different directory, and clears cached runs when project path context changes.
+- Uses same-directory atomic UTF-8 writes for project persistence and GUI exports with user-visible export failures.
+- Allows unsaved dossier execution only when all referenced files are absolute; relative references still require a saved project/base directory.
+- Adds fan/system curve evidence to the desktop plot model, registry catalog/mapping parity checks, and pre-Tk startup registry validation.
+- Retains abandoned-worker exclusivity, packaged-demo/wheel verification, the complete Python 3.11/3.12/3.13 suite, and v0.91-v0.95 compatibility gates.
+- No validated solver equations, numerical tolerances, uncertainty enumeration, no-extrapolation behavior, or engineering acceptance semantics are changed.
+
 ## v0.99.1 installed desktop hardening — 2026-09-24
 
 - Continues directly from integrated v0.99.0 `main`; no divergent release branch is used as the baseline.

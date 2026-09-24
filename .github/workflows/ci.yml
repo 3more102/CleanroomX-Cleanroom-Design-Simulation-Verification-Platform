@@ -29,6 +29,7 @@ jobs:
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_orders_multiple_iterations
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_records_structure_mismatch
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_marks_incomplete_coverage
+          tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_preserves_iteration_limit_semantics
           tests/test_fan_variable_friction_uncertainty.py::test_full_trace_projection_replay_corruption_aggregates_exact_corner_evidence
           tests/test_fan_variable_friction_uncertainty.py::test_full_trace_projection_replay_missing_state_is_incomplete_coverage
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_full_trace_projection_corruption_evidence

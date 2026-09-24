@@ -95,6 +95,26 @@ jobs:
         run: |
           cleanroomx-gui --check
           xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
+          xvfb-run -a cleanroomx-gui --demo --smoke
+      - name: Verify v0.100 wheel includes and runs bundled demo
+        if: matrix.python-version == '3.13'
+        run: |
+          python -m pip wheel . --no-deps -w /tmp/cleanroomx-wheel
+          python -m venv /tmp/cleanroomx-wheel-venv
+          /tmp/cleanroomx-wheel-venv/bin/python -m pip install /tmp/cleanroomx-wheel/*.whl
+          /tmp/cleanroomx-wheel-venv/bin/cleanroomx-gui --check
+          /tmp/cleanroomx-wheel-venv/bin/python - <<'PY'
+          from cleanroomx.application import validate_analysis_input
+          from cleanroomx.gui import bundled_demo_project_path
+          from cleanroomx.project import load_project_document
+
+          path = bundled_demo_project_path()
+          project = load_project_document(path)
+          for analysis in project.analyses:
+              validate_analysis_input(analysis.kind, analysis.input, base_dir=path.parent)
+          print(f"Bundled demo dependency validation: PASS ({len(project.analyses)} analyses)")
+          PY
+          xvfb-run -a /tmp/cleanroomx-wheel-venv/bin/cleanroomx-gui --demo --smoke
       - name: Run representative v0.100 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

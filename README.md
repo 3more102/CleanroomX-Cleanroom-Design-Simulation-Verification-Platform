@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.98 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.98.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 release was completed from `codex/cleanroomx-v098-release-completion`, based on the live v0.97 application-completeness lineage, and merged into `main` after the Python 3.11/3.12/3.13 CI matrix, CLI smoke checks, and real Tk/Xvfb GUI smoke passed.
+The current integrated release is **CleanroomX v0.99.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.98 also validates every declared application parser/runner/reporter binding and launches the installed desktop entry point under Xvfb on Python 3.13 against the bundled demonstration project.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 additionally validates application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, every declared callable binding, and the installed desktop entry point under Xvfb on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -25,6 +25,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
+| v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
+
+### v0.99 application registry integrity
+
+v0.99 strengthens the completed desktop release by validating the registry as a software contract rather than only checking importability. Duplicate analysis keys are rejected; every normal analysis must retain parser and runner bindings; `consistency` and `dossier` must remain explicit custom application adapters; every declared parser, runner, and reporter must resolve to a callable; and the validation returns counts plus adapter metadata. `cleanroomx-gui --check` exposes the same evidence so installation/readiness checks can verify the catalog they are about to operate.
 
 ### v0.98 desktop application
 
@@ -660,7 +665,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-The desktop GUI is implemented in v0.96-v0.98. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.98 workflows.
+The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.99 workflows.
 
 ## Standards references
 

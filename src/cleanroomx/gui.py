@@ -167,6 +167,7 @@ class CleanroomXApp:
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
+        self._baseline_state = self._project_state_signature()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
 
@@ -393,6 +394,57 @@ class CleanroomXApp:
     def _base_dir(self) -> Path | None:
         return None if self.project_path is None else self.project_path.parent
 
+    def _project_state_signature(self) -> str:
+        data = copy.deepcopy(self.project.to_dict())
+        name = self.name_var.get().strip()
+        if not name:
+            raise ValueError("project name cannot be empty")
+        data["project"]["name"] = name
+        data["project"]["description"] = self.description_var.get()
+
+        if self._editor_analysis_id is not None:
+            text = self.input_text.get("1.0", "end-1c")
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"input JSON is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
+                ) from exc
+            if not isinstance(payload, dict):
+                raise ValueError("analysis input must be a JSON object")
+            for analysis in data["analyses"]:
+                if analysis["id"] == self._editor_analysis_id:
+                    analysis["input"] = payload
+                    break
+
+        return json.dumps(
+            data, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        )
+
+    def _has_unsaved_changes(self) -> bool:
+        try:
+            return self._project_state_signature() != self._baseline_state
+        except Exception:
+            return True
+
+    def _capture_saved_state(self) -> None:
+        self._baseline_state = self._project_state_signature()
+
+    def _confirm_project_replacement(self) -> bool:
+        if not self._has_unsaved_changes():
+            return True
+        choice = messagebox.askyesnocancel(
+            "Unsaved changes",
+            "Save changes to the current project before continuing?",
+            parent=self.root,
+        )
+        if choice is None:
+            return False
+        if choice:
+            self.save_project()
+            return not self._has_unsaved_changes()
+        return True
+
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
@@ -490,6 +542,8 @@ class CleanroomXApp:
         if self._running:
             messagebox.showwarning("Analysis running", "Abandon the current run first.")
             return
+        if not self._confirm_project_replacement():
+            return
         self.project = new_project()
         self.project_path = None
         self.name_var.set(self.project.name)
@@ -497,7 +551,9 @@ class CleanroomXApp:
         self.last_run = None
         self.last_run_analysis_id = None
         self._refresh_analysis_list()
+        self._capture_saved_state()
         self.status_var.set("New project")
+        self._update_title()
 
     def open_project(self) -> None:
         if self._running:
@@ -513,6 +569,8 @@ class CleanroomXApp:
             ],
         )
         if path:
+            if not self._confirm_project_replacement():
+                return
             self.load_project_path(path)
 
     def load_project_path(self, path: str | Path) -> None:
@@ -525,6 +583,7 @@ class CleanroomXApp:
         self.last_run = None
         self.last_run_analysis_id = None
         self._refresh_analysis_list()
+        self._capture_saved_state()
         self.status_var.set(f"Opened {project_path.name}")
         self._update_title()
 
@@ -549,6 +608,7 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._capture_saved_state()
         self.status_var.set(f"Saved {self.project_path.name}")
 
     def save_project_as(self) -> None:
@@ -573,6 +633,7 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._capture_saved_state()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
 
@@ -863,6 +924,14 @@ class CleanroomXApp:
         return run
 
     def _on_close(self) -> None:
+        if self._running and not messagebox.askyesno(
+            "Analysis running",
+            "A backend analysis is still running. Close CleanroomX anyway?",
+            parent=self.root,
+        ):
+            return
+        if not self._confirm_project_replacement():
+            return
         self.root.destroy()
 
 

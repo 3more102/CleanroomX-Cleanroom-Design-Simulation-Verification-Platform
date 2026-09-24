@@ -2201,6 +2201,34 @@ def test_full_bisection_projection_replay_orders_multiple_iterations() -> None:
     ]
 
 
+
+def test_full_bisection_projection_replay_preserves_tied_numeric_witnesses() -> None:
+    def mutate(trace):
+        for position in ("low", "high"):
+            trace[0][f"{position}_network_state_projection"]["nodes"][0][
+                "relative_pressure_pa"
+            ] += 1.0
+
+    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    maxima = audit[
+        "network_state_projection_replay_maximum_numeric_errors"
+    ]
+    pressure_maximum = next(
+        item for item in maxima if item["field"] == "relative_pressure_pa"
+    )
+    assert pressure_maximum["maximum_absolute_error"] == pytest.approx(1.0)
+    assert [
+        (item["iteration"], item["position"], item["path"])
+        for item in pressure_maximum["witnesses"]
+    ] == [
+        (1, "low", "$.nodes[0].relative_pressure_pa"),
+        (1, "high", "$.nodes[0].relative_pressure_pa"),
+    ]
+
+
 def test_full_bisection_projection_replay_records_structure_mismatch() -> None:
     def mutate(trace):
         del trace[0]["low_network_state_projection"]["edges"][0][

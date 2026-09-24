@@ -743,6 +743,7 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
+        self._invalidate_last_run_for(analysis.id)
         self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
         self.project.active_analysis_id = (
             self.project.analyses[0].id if self.project.analyses else None

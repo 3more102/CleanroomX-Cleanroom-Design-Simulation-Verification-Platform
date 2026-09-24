@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.73 bisection decision-trace replay audit — 2026-09-24
+
+- Replays every nonterminal successful bounded-bisection L/H decision into the next retained trace record and verifies both airflow-bracket and signed-residual-bracket state transitions.
+- Verifies trace iteration numbering is contiguous from one in addition to the existing trace-length, strict-sign, midpoint-geometry, and terminal-position checks.
+- Retains per-transition replay evidence with exact from/to iteration numbers and separate airflow/residual transition checks.
+- Aggregates exact uncertainty-corner indices for iteration-sequence and state-transition replay violations.
+- Surfaces the new replay audit in standalone fan-loop, uncertainty, and engineering-dossier Markdown and adds direct regression coverage.
+- Preserves operating-point selection, supplied-curve no-extrapolation behavior, and all v0.72 decision-trace semantics.
+- Treats replay evidence strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.73.0.
+
 ## v0.72 bounded-bisection decision-trace provenance — 2026-09-24
 
 - Retains every midpoint evaluation used by a successful bounded fan/system bisection solve, including the active signed-residual bracket, midpoint residual, normalized bracket width, and exact endpoint-replacement or tolerance-acceptance decision.

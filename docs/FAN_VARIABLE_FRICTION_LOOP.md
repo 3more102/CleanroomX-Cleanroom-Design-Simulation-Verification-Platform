@@ -38,6 +38,8 @@ v0.89 applies the same canonical network-state identity to the accepted selected
 
 v0.90 hardens that fingerprint canonicalization against harmless collection-order changes. Solved node rows, solved edge rows, and variable-friction edge-closure rows are sorted by their unique names before compact JSON serialization and SHA-256 hashing. Trace, terminal-bracket, and selected operating-state replay therefore compare semantic solved-state content rather than incidental enumeration order while retaining sensitivity to the same numeric state.
 
+v0.91 extends the same canonical network-state replay to every successfully evaluated supplied fan-curve point before operating-point candidate selection. Each supplied-point check retains its v2 network-state SHA-256 and the audit independently re-solves that exact airflow before comparing the internal solved state. This covers solved cases, complete `no_intersection_in_supplied_range` cases, and the successfully evaluated prefix before a network-solver failure, closing the internal-state provenance gap behind the supplied-point residual topology and root-selection anchors. The evidence remains deterministic implementation provenance only.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`
@@ -96,6 +98,7 @@ A solved result includes:
 - resistance-closure error;
 - edge Reynolds/friction evidence;
 - supplied fan-point system checks;
+- a supplied-point network-state replay audit that records one canonical SHA-256 per successfully evaluated supplied fan point, independently re-solves those exact airflows, reports exact hash mismatches, and distinguishes complete from partial supplied-point coverage;
 - operating-point termination reason;
 - a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, solver-eligible strict positive-to-negative sign-change segments, audit-only strict negative-to-positive reverse sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features;
 - for solved cases, selected-candidate provenance containing the documented selection policy, selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate.

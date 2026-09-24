@@ -7,7 +7,7 @@
 - Adds a real Tkinter desktop application for project and analysis management, structured JSON editing/inspection, validation, background execution, results, diagnostics, Markdown reports, fan-curve plotting, and JSON/Markdown export.
 - Adds the installed `cleanroomx-gui` console entry point plus `--check` headless capability validation and `--smoke` real-window smoke execution.
 - Adds an end-to-end demonstration project spanning facility verification, HVAC, fan operating point, nonlinear fan/variable-friction loop analysis, bounded uncertainty, consistency, and dossier workflows.
-- Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.
+- Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.\n- Hardens project persistence to strict JSON, preserves uncommitted editor state across analysis switching, prompts before destructive project replacement/exit, and blocks conflicting analysis mutation/input changes while a run is active.\n- Adds an application-level end-to-end regression matrix covering every workflow exposed by the desktop catalog.
 - Preserves the v0.95 solver-result integrity linkage and the complete v0.91-v0.94 replay/provenance compatibility gates.
 - Bumps package/runtime/demo metadata to v0.96.0.
 - The GUI exposes engineering screening and numerical/provenance evidence; it does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.

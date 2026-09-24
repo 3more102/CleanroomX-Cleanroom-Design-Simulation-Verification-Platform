@@ -6,7 +6,7 @@ import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, load_project_document, project_from_dict,
+    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
     save_project_document,
 )
 
@@ -92,3 +92,26 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):
+    target = tmp_path / "export.json"
+    target.write_text("old", encoding="utf-8")
+
+    atomic_write_text(target, "new\n")
+
+    assert target.read_text(encoding="utf-8") == "new\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+
+    def fail_replace(self, destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(type(target), "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        atomic_write_text(target, "payload\n")
+
+    assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+

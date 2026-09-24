@@ -847,6 +847,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_pressure_component_replay_violation_details']}**",
                 "- Tied maximum pressure-component replay witnesses across corners: "
                 f"**{search_summary['maximum_bisection_trace_pressure_component_replay_error_witnesses']}**",
+                "- Trace independent network-state replay violation corners: "
+                f"**{search_summary['bisection_trace_network_state_replay_violation_corner_indices']}**",
+                "- Trace network-state replay consistent corners: "
+                f"**{search_summary['bisection_trace_network_state_replay_consistent_corner_count']}**",
                 "- Terminal pressure-component replay violation corners: "
                 f"**{search_summary['terminal_pressure_component_replay_violation_corner_indices']}**",
                 "- Maximum terminal pressure-component replay error: "
@@ -941,6 +945,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_midpoint_pressure_components_match_independent_replay']}**",
                         "- Nominal full-bracket pressure-component replay consistent: "
                         f"**{nominal_trace_audit['all_trace_pressure_components_match_independent_replay']}**",
+                        "- Nominal full-bracket network-state fingerprint replay consistent: "
+                        f"**{nominal_trace_audit['all_trace_network_states_match_independent_replay']}**",
                         "- Nominal terminal pressure-component replay consistent: "
                         f"**{nominal_trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
                         "- Nominal terminal pressure-component replay violations: "

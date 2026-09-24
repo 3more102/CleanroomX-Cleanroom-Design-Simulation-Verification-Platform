@@ -68,6 +68,14 @@ The application catalog is built from the shared backend registry and includes r
 
 Consistency and dossier workflows resolve relative file references against project path context. Imported JSON is rebased from its source directory, and **Save Project As** rebases relative references when the destination directory changes. Absolute-only dossier inputs can run before the project is saved; relative references still require an explicit base directory. The installed `--demo` project ships its referenced files beside the project file.
 
+## 2D and 3D design workspace
+
+The desktop application now opens with dedicated **2D Plan** and **3D Model** tabs. These views are intentionally lightweight and dependency-free: they render cleanroom room geometry directly from the active analysis JSON using Tk canvas primitives.
+
+The design views prefer explicit `width_m` + `length_m` dimensions and use `height_m` / `ceiling_height_m` when available. If an input provides only `floor_area_m2`, or `volume_m3` together with height, the GUI may create a square footprint strictly as a display schematic; those rooms are visibly marked **DERIVED** and are not treated as geometry evidence. Airflow and differential-pressure values are shown when they are present in the room record.
+
+The 3D tab is a pseudo-3D engineering visualization, not a CFD solver, BIM model, certification artifact, or validated flow-field prediction. The validated calculation backends remain unchanged.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.

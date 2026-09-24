@@ -39,7 +39,7 @@ cleanroomx-gui
 Open the bundled demonstration project:
 
 ```bash
-cleanroomx-gui examples/gui_demo.cleanroomx.json
+cleanroomx-gui --demo
 ```
 
 ## Linux GUI smoke
@@ -55,3 +55,8 @@ xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
 ## Production-use boundary
 
 Deployment does not convert CleanroomX screening/numerical outputs into cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Controlled organizations should apply their own document control, change control, verification, and approval procedures.
+
+
+## Installed-wheel release verification
+
+The v0.100 CI release gate builds a wheel on Python 3.11, 3.12, and 3.13, installs it into a clean virtual environment, runs `cleanroomx-gui --check`, verifies packaged demo resources, and on Python 3.13 launches the installed `cleanroomx-gui --demo --smoke` under Xvfb.

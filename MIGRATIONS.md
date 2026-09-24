@@ -2,7 +2,7 @@
 
 ## Current schema
 
-CleanroomX v0.99.0 writes desktop projects using:
+CleanroomX v0.100.0 writes desktop projects using:
 
 - schema: `cleanroomx.project`
 - schema version: `1`
@@ -30,3 +30,8 @@ Unknown future project formats are rejected rather than silently reinterpreted.
 Loading a supported legacy file does not overwrite it automatically. If the migrated project is saved, CleanroomX writes schema version 1 using the current document model. Saving is validated first and uses an atomic temporary-file replacement.
 
 For controlled archival workflows, retain a copy of the original legacy file before saving the migrated project.
+
+
+## v0.100 path-context behavior
+
+Project schema version remains **1**. v0.100 does not introduce a schema migration. When a project is saved into a different directory, relative consistency/dossier file references are rebased so they continue to identify the same external files. Imported consistency/dossier JSON is rebased from the source JSON directory into the current project context; when no project base exists, relative references are converted to absolute paths. Cached analysis results are cleared when **Save Project As** changes the project base directory.

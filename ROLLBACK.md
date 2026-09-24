@@ -27,3 +27,8 @@ Generated JSON/Markdown results are derived artifacts. If the application versio
 ## Acceptance
 
 A rollback is complete only when the selected baseline installs successfully, its CI/regression checks pass, and required project files can be opened and validated with that baseline.
+
+
+## v0.100 release anchor
+
+The validated v0.100.0 merge commit is `fa02c71f990790089cb9c64eb2e009cd984eb5db`. Its exact PR head `d8965090ee86713919079d9ee5e8a3b1d8f95e3b` passed CI run #822 before merge. Use repository history and normal revert/CI flow rather than rewriting shared history.

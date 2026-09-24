@@ -160,6 +160,7 @@ class CleanroomXApp:
         self.project_path: Path | None = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
+        self._runs_by_analysis: dict[str, AnalysisRun] = {}
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
 
@@ -361,15 +362,34 @@ class CleanroomXApp:
         widget.insert("1.0", value)
         widget.configure(state="disabled")
 
-    def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
-        if analysis_id is None or self.last_run_analysis_id != analysis_id:
-            return
+    def _clear_rendered_run(self) -> None:
         self.last_run = None
         self.last_run_analysis_id = None
         self._set_text(self.result_text, "")
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
         self._draw_plot()
+
+    def _clear_run_cache(self) -> None:
+        self._runs_by_analysis.clear()
+        self._clear_rendered_run()
+
+    def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
+        if analysis_id is None:
+            return
+        self._runs_by_analysis.pop(analysis_id, None)
+        if self.last_run_analysis_id == analysis_id:
+            self._clear_rendered_run()
+
+    def _restore_run_for(self, analysis_id: str) -> bool:
+        run = self._runs_by_analysis.get(analysis_id)
+        if run is None:
+            self._clear_rendered_run()
+            return False
+        self.last_run = run
+        self.last_run_analysis_id = analysis_id
+        self._render_run(run, select_results=False)
+        return True
 
     def _on_input_modified(self, event=None) -> None:
         if not self.input_text.edit_modified():
@@ -551,12 +571,7 @@ class CleanroomXApp:
         self.input_text.edit_modified(False)
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
-        if self.last_run_analysis_id != analysis.id:
-            self._set_text(self.result_text, "")
-            self._set_text(self.report_text, "")
-            self._set_text(self.diagnostics_text, "")
-            self.last_run = None
-            self._draw_plot()
+        self._restore_run_for(analysis.id)
 
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():
@@ -591,8 +606,7 @@ class CleanroomXApp:
         self.project_path = None
         self.name_var.set(self.project.name)
         self.description_var.set("")
-        self.last_run = None
-        self.last_run_analysis_id = None
+        self._clear_run_cache()
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set("New project")
@@ -626,8 +640,7 @@ class CleanroomXApp:
         self.project_path = project_path
         self.name_var.set(project.name)
         self.description_var.set(project.description)
-        self.last_run = None
-        self.last_run_analysis_id = None
+        self._clear_run_cache()
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set(f"Opened {project_path.name}")
@@ -860,6 +873,7 @@ class CleanroomXApp:
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
+                    self._runs_by_analysis[analysis_id] = payload
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
@@ -870,7 +884,7 @@ class CleanroomXApp:
             pass
         self.root.after(100, self._poll_worker)
 
-    def _render_run(self, run: AnalysisRun) -> None:
+    def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
         self._set_text(
             self.result_text,
             json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False),
@@ -881,7 +895,8 @@ class CleanroomXApp:
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
         self._draw_plot()
-        self.notebook.select(1)
+        if select_results:
+            self.notebook.select(1)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
@@ -990,6 +1005,7 @@ class CleanroomXApp:
         if analysis is None:
             raise ValueError("smoke project has no active analysis")
         run = run_analysis(analysis.kind, analysis.input, base_dir=self._base_dir())
+        self._runs_by_analysis[analysis.id] = run
         self.last_run = run
         self.last_run_analysis_id = analysis.id
         self._render_run(run)

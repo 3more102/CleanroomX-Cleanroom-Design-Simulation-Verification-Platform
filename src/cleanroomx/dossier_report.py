@@ -788,6 +788,52 @@ def markdown_dossier_report(result: dict) -> str:
                     "iteration_limit_strict_sign_change_preserved_corner_count",
                     0,
                 )
+                limit_trace_count = search_summary.get(
+                    "iteration_limit_bisection_trace_evidence_corner_count",
+                    0,
+                )
+                limit_trace_length_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_length_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_trace_sign_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_sign_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_trace_midpoint_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_midpoint_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_trace_iteration_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_iteration_sequence_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_trace_replay_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_state_transition_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_trace_outcome_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_terminal_outcome_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_trace_terminal_replay_violations = len(
+                    search_summary.get(
+                        "iteration_limit_bisection_trace_terminal_replay_violation_corner_indices",
+                        [],
+                    )
+                )
                 limit_error = search_summary.get(
                     "maximum_iteration_limit_absolute_width_fraction_consistency_error"
                 )
@@ -806,6 +852,12 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_iteration_violations}/{trace_replay_violations}; "
                     f"max width-fraction error {max_error}; "
                     f"iteration-limit {limit_count}; "
+                    f"limit-trace {limit_trace_count}/{limit_count}; "
+                    f"limit-trace violations L/S/M/I/R/O/B "
+                    f"{limit_trace_length_violations}/{limit_trace_sign_violations}/"
+                    f"{limit_trace_midpoint_violations}/{limit_trace_iteration_violations}/"
+                    f"{limit_trace_replay_violations}/{limit_trace_outcome_violations}/"
+                    f"{limit_trace_terminal_replay_violations}; "
                     f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "
                     f"remaining max width-fraction error {max_limit_error}"
                 )

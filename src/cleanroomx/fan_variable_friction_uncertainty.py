@@ -11,6 +11,7 @@ from .fan_curve import FanCurve
 from .fan_speed import scale_fan_curve_for_speed
 from .fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
+    _solver_result_integrity_audit,
     solve_fan_variable_friction_loop,
 )
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
@@ -4882,6 +4883,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
             else None
         ),
     )
+    nominal_solver_result_integrity_audit = (
+        _solver_result_integrity_audit(nominal)
+    )
 
     fixed_values = sorted(
         {study.fixed_pressure_pa.lower, study.fixed_pressure_pa.upper}
@@ -5029,6 +5033,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                         fan_speed_ratio,
                         fan_curve_case["fan_curve"],
                     )
+                    solver_result_integrity_audit = (
+                        _solver_result_integrity_audit(result)
+                    )
                     point = result["fan_operating_point"]
                     network = result["operating_network_solution"]
                     edge_airflows = None
@@ -5099,6 +5106,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                 "edge_rectangular_height_m"
                             ],
                             "status": result["status"],
+                            "solver_result_integrity": result.get(
+                                "result_integrity"
+                            ),
+                            "solver_result_integrity_audit": (
+                                solver_result_integrity_audit
+                            ),
                             "operating_point_search_evidence": result.get(
                                 "operating_point_search_evidence"
                             ),
@@ -5142,6 +5155,85 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "solver_diagnostics": result["solver_diagnostics"],
                         }
                     )
+
+    solver_result_integrity_cases = [
+        {
+            "case": "nominal",
+            "corner_index": None,
+            "status": nominal["status"],
+            "integrity": nominal.get("result_integrity"),
+            "audit": nominal_solver_result_integrity_audit,
+        },
+        *[
+            {
+                "case": "corner",
+                "corner_index": corner_index,
+                "status": corner["status"],
+                "integrity": corner.get("solver_result_integrity"),
+                "audit": corner.get("solver_result_integrity_audit", {}),
+            }
+            for corner_index, corner in enumerate(corners)
+        ],
+    ]
+    solver_result_integrity_records = [
+        {
+            "case": case["case"],
+            "corner_index": case["corner_index"],
+            "status": case["status"],
+            "sha256": (
+                case["integrity"].get("sha256")
+                if isinstance(case["integrity"], dict)
+                else None
+            ),
+        }
+        for case in solver_result_integrity_cases
+    ]
+    solver_result_integrity_violation_details = [
+        {
+            "case": case["case"],
+            "corner_index": case["corner_index"],
+            "status": case["status"],
+            "verdict": case["audit"].get("verdict"),
+            "metadata_matches_expected": case["audit"].get(
+                "metadata_matches_expected"
+            ),
+            "recorded_sha256": case["audit"].get("recorded_sha256"),
+            "recomputed_sha256": case["audit"].get("recomputed_sha256"),
+        }
+        for case in solver_result_integrity_cases
+        if case["audit"].get("consistent") is not True
+    ]
+    solver_result_integrity_evidence_count = sum(
+        case["audit"].get("available") is True
+        for case in solver_result_integrity_cases
+    )
+    solver_result_integrity_consistent_count = sum(
+        case["audit"].get("consistent") is True
+        for case in solver_result_integrity_cases
+    )
+    solver_result_integrity_summary = {
+        "applicable": True,
+        "expected_result_count": len(solver_result_integrity_cases),
+        "evidence_result_count": solver_result_integrity_evidence_count,
+        "complete_coverage": (
+            solver_result_integrity_evidence_count
+            == len(solver_result_integrity_cases)
+        ),
+        "consistent_result_count": solver_result_integrity_consistent_count,
+        "inconsistent_result_count": len(
+            solver_result_integrity_violation_details
+        ),
+        "nominal_consistent": (
+            nominal_solver_result_integrity_audit.get("consistent") is True
+        ),
+        "violating_corner_indices": [
+            detail["corner_index"]
+            for detail in solver_result_integrity_violation_details
+            if detail["case"] == "corner"
+        ],
+        "source_solver_result_sha256": solver_result_integrity_records,
+        "violation_details": solver_result_integrity_violation_details,
+    }
 
     unresolved_corner_count = sum(
         corner["status"] != "solved" for corner in corners
@@ -5577,6 +5669,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "nominal_operating_point": nominal["fan_operating_point"],
         "nominal_power_evidence": nominal["power_evidence"],
         "nominal_result": nominal,
+        "solver_result_integrity_summary": (
+            solver_result_integrity_summary
+        ),
         "corner_count": len(corners),
         "solved_corner_count": len(solved_points),
         "unresolved_corner_count": unresolved_corner_count,

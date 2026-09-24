@@ -191,6 +191,11 @@ def _derive_status(result: dict) -> str:
         value = result.get(key)
         if value is not None:
             return str(value)
+    executive_summary = result.get("executive_summary")
+    if isinstance(executive_summary, dict):
+        value = executive_summary.get("state")
+        if value is not None:
+            return str(value)
     if isinstance(result.get("passed"), bool):
         return "pass" if result["passed"] else "fail"
     return "complete"

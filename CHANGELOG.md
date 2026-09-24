@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.79 independent bisection trace raw-state audit — 2026-09-24
+
+- Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.
+- Independently recomputes each retained airflow midpoint from the numeric bracket endpoints and records the absolute midpoint-centering error.
+- Checks the stored strict-sign-change and midpoint-validity flags against those recomputed numeric facts instead of trusting the flags as evidence.
+- Aggregates exact nonlinear uncertainty-corner indices for numeric sign failures, sign-flag mismatches, numeric midpoint failures, midpoint-flag mismatches, and combined raw-state audit failures, plus tied maximum midpoint-error witnesses.
+- Adds solved, iteration-limit, flag-corruption, and self-consistent corrupted-midpoint regression coverage while preserving the merged v0.78 decision-semantics audit and v0.77 origin replay.
+- Does not change candidate priority, root selection, root-acceptance tolerance, iteration budgets, fan-curve no-extrapolation behavior, or any engineering acceptance criterion.
+- Treats raw-state checks strictly as numerical implementation provenance; they are not physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability evidence, stall/surge evidence, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.79.0.
+
 ## v0.78 bisection trace decision-semantics audit — 2026-09-24
 
 - Independently verifies every retained bounded-bisection L/H/T decision against the recorded midpoint fan-minus-system residual and the configured operating-pressure tolerance.

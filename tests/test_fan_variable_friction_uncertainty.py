@@ -2504,6 +2504,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_midpoint_flag_mismatch_corner_indices"
     ] == []
     assert summary[
+        "bisection_trace_pressure_component_incomplete_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_pressure_residual_identity_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_pressure_component_decision_semantic_violation_corner_indices"
+    ] == []
+    assert summary[
         "bisection_trace_raw_state_violation_corner_indices"
     ] == []
     assert summary[
@@ -2536,6 +2545,21 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "bisection_trace_origin_replay_corner_count"
     ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_pressure_component_complete_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_pressure_residual_identity_match_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_pressure_component_decision_semantic_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    pressure_identity_error = summary[
+        "maximum_bisection_trace_pressure_residual_identity_error_pa"
+    ]
+    assert pressure_identity_error is not None
+    assert pressure_identity_error["value"] <= 2e-9
+    assert pressure_identity_error["sources"]
     assert summary[
         "bisection_trace_raw_state_consistent_corner_count"
     ] == summary["bisection_corner_count"]
@@ -2595,6 +2619,13 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         assert trace_audit[
             "all_recorded_midpoint_flags_match_numeric_geometry"
         ] is True
+        assert trace_audit["complete_pressure_component_coverage"] is True
+        assert trace_audit[
+            "all_midpoint_residuals_match_pressure_components"
+        ] is True
+        assert trace_audit[
+            "all_decisions_match_pressure_component_semantics"
+        ] is True
         assert trace_audit["all_trace_raw_state_consistent"] is True
         assert trace_audit[
             "all_recorded_widths_match_airflow_brackets"
@@ -2652,8 +2683,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace sign-flag mismatches vs numeric residuals: **[]**" in report
     assert "Recomputed trace midpoint violations: **[]**" in report
     assert "Trace midpoint-flag mismatches vs numeric geometry: **[]**" in report
+    assert "Trace pressure-component coverage gaps: **[]**" in report
+    assert "Trace pressure-residual identity violations: **[]**" in report
+    assert (
+        "Trace pressure-component decision-semantic violations: **[]**"
+        in report
+    )
     assert "Trace raw-state audit violation corners: **[]**" in report
     assert "Maximum trace midpoint-centering error" in report
+    assert "Maximum trace pressure-residual identity error" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report

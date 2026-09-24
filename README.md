@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.99.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current integrated release is **CleanroomX v0.99.1** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, retains the v0.99 application-registry integrity gate, and hardens the completed desktop workflows without replacing validated backend engineering semantics.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 additionally validates application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, every declared callable binding, and the installed desktop entry point under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99.1 additionally gates portable consistency/dossier file references across import and Save As, abandoned-worker exclusivity, atomic GUI exports, fan/system plot completeness, registry integrity, and the installed desktop entry point under Xvfb on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -26,6 +26,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
+| v0.99.1 | desktop release-integrity hardening: path portability, exclusive abandoned workers, atomic exports, and complete fan/system plots |
+
+### v0.99.1 desktop release integrity
+
+v0.99.1 preserves the v0.99 registry contract and closes desktop workflow integrity gaps found by inspecting the real application behavior. Moving a saved project with **Save As** rebases relative `consistency` and `dossier` references so they continue to identify the same files; importing those analysis inputs preserves the import file's directory context. Project persistence and GUI exports share a flushed same-directory atomic writer, and export failures are reported through the GUI instead of escaping as callback errors. **Abandon** suppresses the eventual worker result/error but keeps the UI run-locked until that backend worker exits, preventing overlapping analyses. Fan operating-point plots include backend-evaluated system-curve points when `curve_point_checks` evidence is available.
 
 ### v0.99 application registry integrity
 
@@ -665,7 +670,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.99 workflows.
+The desktop GUI is implemented in v0.96-v0.99.1. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.99.1 workflows.
 
 ## Standards references
 

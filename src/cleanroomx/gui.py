@@ -639,7 +639,7 @@ class CleanroomXApp:
 
     def save_project(self) -> None:
         try:
-            if self.project.analyses and self._current_analysis() is not None:
+            if self._editor_analysis() is not None:
                 self._commit_editor()
             else:
                 self._sync_metadata()
@@ -659,7 +659,7 @@ class CleanroomXApp:
 
     def save_project_as(self) -> None:
         try:
-            if self.project.analyses and self._current_analysis() is not None:
+            if self._editor_analysis() is not None:
                 self._commit_editor()
             else:
                 self._sync_metadata()

@@ -62,6 +62,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{selected_replay.get('network_state_projection_replay_available', False)}**",
                     "- Selected network-state projection matches independent replay: "
                     f"**{selected_replay.get('network_state_projection_matches_independent_replay')}**",
+                    "- Selected network-state projection replay verdict: "
+                    f"**{selected_replay.get('network_state_projection_replay_verdict')}**",
                     "- Selected network-state projection mismatch count: "
                     f"**{selected_replay.get('network_state_projection_mismatch_count')}**",
                     "- Selected network-state projection mismatch paths: "

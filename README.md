@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.68 engineering core
+## v0.69 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -46,6 +46,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Explicit selected-crossing-candidate provenance for solved nonlinear cases: discrete candidates are stored in the solver's actual priority order and results retain the selected feature, zero-based priority rank, additional-candidate count, and whether the selected sampled feature was unique.
 - Alternative crossing-candidate separation evidence for solved cases with multiple discrete supplied-point candidates, retaining each alternative tolerance-contact point or sign-change interval, its solver-priority rank, the selected airflow's gap to that interval, tied nearest alternatives, and explicit zero-gap overlap without estimating another continuous root.
 - Scale-aware alternative-candidate separation for v0.68, normalizing each discrete candidate interval gap by that case's supplied fan-curve airflow span and aggregating the minimum normalized separation with exact source-corner provenance.
+- Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
 - Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.
 - Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
@@ -159,6 +160,8 @@ v0.66 measures how far the solved airflow lies from every additional discrete cr
 v0.67 self-audits retained bisection geometry against the solver implementation: strict endpoint residual signs, midpoint centering, binary contraction step count, expected width fraction, actual width fraction, and floating-point consistency error. Direct supplied-point tolerance contacts remain outside this bisection-only audit.
 
 v0.68 makes v0.66 candidate separation scale-aware by dividing each selected-to-alternative interval gap by the exact supplied fan-curve airflow span used for that solve. The aggregate retains the minimum normalized separation and tied source corners. This normalization is a dimensionless sampled-data diagnostic only; it is not a physical robustness, stability, stall/surge, manufacturer, commissioning, certification, or equipment-acceptance margin.
+
+v0.69 completes the sampled sign-topology record by retaining strict negative-to-positive fan-minus-system residual transitions separately from the solver-eligible positive-to-negative crossing candidates. Reverse crossings are reported per evaluated case and aggregated across uncertainty corners with exact indices, but never enter the solver candidate list or alter the selected operating point. They are discrete numerical audit evidence only and do not prove an additional continuous root, dynamic stability, stall/surge behavior, manufacturer operating region, commissioning/certification status, or equipment acceptance.
 
 v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersection_in_supplied_range`. Each such corner records whether the lower or upper supplied airflow endpoint bounds the case, the endpoint fan and system pressures, the signed fan-minus-system pressure mismatch, and the absolute boundary pressure gap. Aggregate evidence counts lower/upper boundary cases and retains the largest evaluated gap with source-corner provenance. No fan-curve extrapolation or missing operating-point estimate is performed.
 

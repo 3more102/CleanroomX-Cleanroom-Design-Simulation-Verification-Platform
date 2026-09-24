@@ -1217,7 +1217,7 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     delta_pa = 1.0
     corrupted = _selected_operating_state_replay_audit(
         study,
-        selected_airflow_m3_h=operating["airflow_m3_h"],
+        selected_airflow_m3_h=replay["recorded_selected_airflow_m3_h"],
         recorded_fan_pressure_pa=pressure["fan_pressure_pa"] + delta_pa,
         recorded_loop_network_pressure_pa=(
             pressure["loop_network_pressure_pa"] + delta_pa

@@ -5,7 +5,7 @@
 - Retains canonical SHA-256 internal network-state fingerprints on solved final and post-decision iteration-limit terminal bracket low/high endpoints.
 - Independently re-solves both terminal endpoints and compares canonical node, edge, pressure-power, and variable-friction closure state fingerprints.
 - Detects terminal internal-state corruption even when terminal fan, loop-network, total-system pressures and retained trace replay evidence remain unchanged.
-- Propagates terminal network-state replay consistency, exact violating endpoint positions, uncertainty-corner provenance, standalone reports, and engineering dossiers.
+- Propagates terminal network-state replay consistency, exact violating endpoint positions plus recorded/recomputed hashes, uncertainty-corner provenance, standalone reports, and engineering dossiers.
 - Preserves v0.87 full-trace network-state replay, v0.86 terminal pressure-component replay, root selection, iteration budgets, no-extrapolation behavior, and engineering acceptance semantics.
 - Bumped package/runtime metadata to v0.88.0.
 

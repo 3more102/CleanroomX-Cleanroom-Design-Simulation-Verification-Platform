@@ -794,6 +794,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "- Bisection corners with invariant evidence: "
                 f"**{search_summary['bisection_invariant_evidence_corner_count']}/"
                 f"{search_summary['bisection_corner_count']}**",
+                "- Corners with retained bisection decision traces: "
+                f"**{search_summary['bisection_trace_evidence_corner_count']}**",
+                "- Solved corners with bisection decision traces: "
+                f"**{search_summary['solved_bisection_trace_evidence_corner_count']}**",
+                "- Iteration-limit corners with bisection decision traces: "
+                f"**{search_summary['iteration_limit_bisection_trace_evidence_corner_count']}**",
+                "- Trace length violations: "
+                f"**{search_summary['bisection_trace_length_violation_corner_indices']}**",
+                "- Trace sign-bracket violations: "
+                f"**{search_summary['bisection_trace_sign_violation_corner_indices']}**",
+                "- Trace midpoint-geometry violations: "
+                f"**{search_summary['bisection_trace_midpoint_violation_corner_indices']}**",
+                "- Trace terminal-outcome violations: "
+                f"**{search_summary['bisection_trace_outcome_violation_corner_indices']}**",
                 "- Strict sign-bracket violations: "
                 f"**{search_summary['strict_sign_change_violation_corner_indices']}**",
                 "- Midpoint-centering violations: "
@@ -836,6 +850,18 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                             f"**{nominal_invariant['absolute_width_fraction_consistency_error']}**",
                         ]
                     )
+            nominal_trace = nominal_search.get("bisection_trace_audit")
+            if nominal_trace is not None:
+                lines.extend(
+                    [
+                        "- Nominal bisection decision-trace steps: "
+                        f"**{nominal_trace['step_count']}**",
+                        "- Nominal bisection decision sequence (L/H/T): "
+                        f"**{nominal_trace['decision_sequence']}**",
+                        "- Nominal trace terminal outcome consistent: "
+                        f"**{nominal_trace['terminal_outcome_consistent']}**",
+                    ]
+                )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
             if nominal_limit is not None:
                 remaining = nominal_limit["remaining_bisection_bracket"]
@@ -908,6 +934,22 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum absolute binary-width consistency error | "
                 f"{invariant_error['value']} | {invariant_error['unit']} | "
                 f"{' / '.join(invariant_sources)} |"
+            )
+        trace_steps = search_summary.get("maximum_bisection_trace_step_count")
+        if trace_steps is not None:
+            trace_sources = []
+            for source in trace_steps["sources"]:
+                audit = source["bisection_trace_audit"]
+                trace_sources.append(
+                    _fmt_extreme_source(source)
+                    + f"; iterations={source['operating_iterations']}"
+                    + f"; sequence={audit['decision_sequence']}"
+                    + f"; outcome={audit['termination_reason']}"
+                )
+            lines.append(
+                "| Maximum retained bisection decision-trace steps | "
+                f"{trace_steps['value']} | {trace_steps['unit']} | "
+                f"{' / '.join(trace_sources)} |"
             )
         limit_error = search_summary.get(
             "maximum_iteration_limit_absolute_width_fraction_consistency_error"

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.92 signed-zero-stable network-state canonical projection — 2026-09-24
+
+- Normalizes every floating-point zero in the canonical internal network-state projection to positive `0.0`, making `-0.0` and `0.0` identical implementation-provenance values.
+- Applies normalization before both SHA-256 hashing and the v0.91 field-by-field terminal projection replay, preventing representation-only signed-zero differences from producing false hash or mismatch-path violations.
+- Preserves v0.90 deterministic sorting of named node, edge, and variable-friction closure collections and leaves every nonzero retained value unchanged.
+- Centralizes and advances the canonicalization identifier to `network-state-projection-sort-named-collections-normalize-signed-zero-json-sort-keys-compact-utf8-v3` across trace, terminal-bracket, and selected-state replay evidence.
+- Extends regression coverage to prove signed-zero-equivalent projections and fingerprints are identical while a real nonzero edge-airflow mutation remains detectable.
+- Preserves nonlinear solver equations, tolerances, root selection, projection mismatch localization, iteration budgets, no-extrapolation behavior, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.92.0.
+
 ## v0.91 terminal network-state projection replay diagnostics — 2026-09-24
 
 - Retains canonical low/high terminal network-state projections alongside their SHA-256 fingerprints on solved final and post-decision iteration-limit brackets.

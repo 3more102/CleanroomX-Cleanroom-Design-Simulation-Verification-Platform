@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.100.0 final release consolidation — 2026-09-24
+- Preserves v0.99.1 installed desktop packaging and abandoned-worker exclusivity.
+- Preserves relative consistency/dossier referents across Save As and JSON import.
+- Uses same-directory atomic UTF-8 replacement for project persistence and GUI exports.
+- Adds backend-evidence fan/system plotting.
+- Validates the application registry before normal Tk startup.
+- Adds canonical application-input SHA-256 execution provenance.
+- Records before/after SHA-256 and byte-size evidence for external consistency/dossier dependencies.
+- Preserves execution provenance in exported run bundles.
+- Keeps the bundled `cleanroomx-gui --demo` wheel workflow and clean-install/Xvfb gates.
+- Does not intentionally change validated engineering solver equations, tolerances, uncertainty semantics, no-extrapolation behavior, or acceptance criteria.
+
 ## v0.99.1 installed desktop hardening — 2026-09-24
 
 - Continues directly from integrated v0.99.0 `main`; no divergent release branch is used as the baseline.

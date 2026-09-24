@@ -689,6 +689,11 @@ def _bisection_decision_trace_audit(
         midpoint_airflow = float(step["midpoint_airflow_m3_h"])
         low_residual = float(step["low_fan_minus_system_pressure_pa"])
         high_residual = float(step["high_fan_minus_system_pressure_pa"])
+        midpoint_fan_pressure = float(step["midpoint_fan_pressure_pa"])
+        midpoint_system_pressure = float(step["midpoint_system_pressure_pa"])
+        recorded_midpoint_residual = float(
+            step["midpoint_fan_minus_system_pressure_pa"]
+        )
         recorded_sign_flag = bool(
             step["strict_sign_change_before_evaluation"]
         )
@@ -716,6 +721,18 @@ def _bisection_decision_trace_audit(
             rel_tol=0.0,
             abs_tol=1e-9,
         )
+        recomputed_midpoint_residual = (
+            midpoint_fan_pressure - midpoint_system_pressure
+        )
+        absolute_midpoint_residual_identity_error = abs(
+            recorded_midpoint_residual - recomputed_midpoint_residual
+        )
+        midpoint_residual_matches_pressure_components = math.isclose(
+            recorded_midpoint_residual,
+            recomputed_midpoint_residual,
+            rel_tol=0.0,
+            abs_tol=2e-9,
+        )
         raw_state_checks.append(
             {
                 "iteration": iteration,
@@ -737,6 +754,22 @@ def _bisection_decision_trace_audit(
                 "recorded_midpoint_flag": recorded_midpoint_flag,
                 "recorded_midpoint_flag_matches_numeric_geometry": (
                     recorded_midpoint_flag == numeric_midpoint_centered
+                ),
+                "recorded_midpoint_fan_pressure_pa": midpoint_fan_pressure,
+                "recorded_midpoint_system_pressure_pa": (
+                    midpoint_system_pressure
+                ),
+                "recorded_midpoint_fan_minus_system_pressure_pa": (
+                    recorded_midpoint_residual
+                ),
+                "recomputed_midpoint_fan_minus_system_pressure_pa": (
+                    recomputed_midpoint_residual
+                ),
+                "absolute_midpoint_residual_identity_error_pa": (
+                    absolute_midpoint_residual_identity_error
+                ),
+                "recorded_midpoint_residual_matches_pressure_components": (
+                    midpoint_residual_matches_pressure_components
                 ),
             }
         )
@@ -778,12 +811,22 @@ def _bisection_decision_trace_audit(
         midpoint_residual = float(
             step["midpoint_fan_minus_system_pressure_pa"]
         )
+        component_midpoint_residual = (
+            float(step["midpoint_fan_pressure_pa"])
+            - float(step["midpoint_system_pressure_pa"])
+        )
         if abs(midpoint_residual) <= tolerance:
             expected_decision = "accept_pressure_tolerance"
         elif midpoint_residual > 0.0:
             expected_decision = "replace_low_endpoint"
         else:
             expected_decision = "replace_high_endpoint"
+        if abs(component_midpoint_residual) <= tolerance:
+            expected_component_decision = "accept_pressure_tolerance"
+        elif component_midpoint_residual > 0.0:
+            expected_component_decision = "replace_low_endpoint"
+        else:
+            expected_component_decision = "replace_high_endpoint"
         recorded_decision = step["decision"]
         decision_semantic_checks.append(
             {
@@ -799,6 +842,15 @@ def _bisection_decision_trace_audit(
                 ),
                 "decision_matches_midpoint_residual_semantics": (
                     recorded_decision == expected_decision
+                ),
+                "recomputed_midpoint_fan_minus_system_pressure_pa": (
+                    component_midpoint_residual
+                ),
+                "expected_decision_from_pressure_components": (
+                    expected_component_decision
+                ),
+                "decision_matches_pressure_component_semantics": (
+                    recorded_decision == expected_component_decision
                 ),
             }
         )
@@ -1171,11 +1223,25 @@ def _bisection_decision_trace_audit(
             check["recorded_midpoint_flag_matches_numeric_geometry"]
             for check in raw_state_checks
         ),
+        "all_midpoint_residuals_match_pressure_components": all(
+            check["recorded_midpoint_residual_matches_pressure_components"]
+            for check in raw_state_checks
+        ),
+        "maximum_absolute_midpoint_residual_identity_error_pa": max(
+            (
+                check["absolute_midpoint_residual_identity_error_pa"]
+                for check in raw_state_checks
+            ),
+            default=0.0,
+        ),
         "all_trace_raw_state_consistent": all(
             check["numeric_strict_sign_change_before_evaluation"]
             and check["recorded_sign_flag_matches_numeric_residuals"]
             and check["numeric_midpoint_is_arithmetic_bracket_midpoint"]
             and check["recorded_midpoint_flag_matches_numeric_geometry"]
+            and check[
+                "recorded_midpoint_residual_matches_pressure_components"
+            ]
             for check in raw_state_checks
         ),
         "maximum_absolute_trace_midpoint_error_m3_h": max(
@@ -1239,6 +1305,15 @@ def _bisection_decision_trace_audit(
             for check in decision_semantic_checks
             if not check["decision_matches_midpoint_residual_semantics"]
         ],
+        "all_decisions_match_pressure_component_semantics": all(
+            check["decision_matches_pressure_component_semantics"]
+            for check in decision_semantic_checks
+        ),
+        "pressure_component_decision_semantic_violation_iterations": [
+            check["iteration"]
+            for check in decision_semantic_checks
+            if not check["decision_matches_pressure_component_semantics"]
+        ],
         "decision_semantic_checks": decision_semantic_checks,
         "termination_record_count": len(termination_indices),
         "termination_record_is_last": (
@@ -1286,9 +1361,11 @@ def _bisection_decision_trace_audit(
             "bracket width equals its endpoint span with the binary width "
             "fraction implied by its iteration. The raw-state audit "
             "independently recomputes strict sign-change and arithmetic-"
-            "midpoint facts from the recorded numeric state and checks the "
-            "stored flags against those recomputed facts. The decision-"
-            "semantics audit "
+            "midpoint facts from the recorded numeric state, checks the "
+            "stored flags against those recomputed facts, and independently "
+            "verifies each recorded midpoint residual equals recorded fan "
+            "pressure minus recorded system pressure. The decision-semantics "
+            "audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
@@ -1487,6 +1564,14 @@ def solve_fan_variable_friction_loop(
                             ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
+                                9,
+                            ),
+                            "midpoint_fan_pressure_pa": round(
+                                fan_pressure,
+                                9,
+                            ),
+                            "midpoint_system_pressure_pa": round(
+                                system_pressure,
                                 9,
                             ),
                             "midpoint_fan_minus_system_pressure_pa": round(

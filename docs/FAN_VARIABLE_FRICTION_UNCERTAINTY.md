@@ -83,6 +83,27 @@ v0.70 extends the bounded-search audit to non-converged cases that stop specific
 
 The uncertainty aggregate includes these unresolved search records in overall search-evidence coverage, reports exact iteration-limit corner indices, invariant-evidence coverage, any remaining-bracket sign violations, and tied source-corner provenance for the maximum remaining-bracket width-fraction consistency error. Solved final-bracket evidence remains separate. The remaining interval is numerical search/implementation provenance only; it is not an accepted operating point, physical airflow uncertainty, an interpolation-error bound, a continuous worst-case/root guarantee, a stability or stall/surge criterion, or an equipment-acceptance limit.
 
+## Bisection decision-trace evidence
+
+Bounded-bisection search evidence can retain the complete sequence of midpoint
+evaluations for both solved and iteration-limit corners. Each trace step
+records the pre-evaluation bracket, midpoint, signed endpoint and midpoint
+residuals, binary-contraction width evidence, exact endpoint-replacement or
+tolerance-accept decision, and the post-decision bracket.
+
+The trace audit checks step-count agreement with reported operating iterations,
+strict residual-sign bracketing before every evaluation, arithmetic midpoint
+geometry, iteration-implied binary width contraction, continuity between each
+post-decision bracket and the next step, and consistency between the terminal
+decision and the solver outcome. Aggregate uncertainty evidence reports exact
+violation corner indices and tied source-corner provenance for the longest
+retained trace. Direct supplied-point tolerance contacts remain trace-free.
+
+This is deterministic numerical implementation provenance only. It is not
+physical uncertainty, an interpolation-error bound, continuous root-uniqueness
+evidence, a stability or stall/surge criterion, or an equipment-acceptance
+limit.
+
 ## Supplied-point residual-topology evidence
 
 v0.61 propagates the base nonlinear solver's discrete fan-minus-system residual audit into the nominal case and every evaluated uncertainty corner. Each audit records expected and evaluated supplied-point counts, complete or partial point coverage, supplied points that fall within the configured operating-pressure tolerance, solver-eligible strict positive-to-negative sign-change segments, every adjacent supplied-point residual transition, sampled non-increasing behavior within tolerance, and any positive residual increase. v0.69 additionally retains strict negative-to-positive sign-change segments as audit-only reverse topology; these reverse segments never enter the solver candidate list.

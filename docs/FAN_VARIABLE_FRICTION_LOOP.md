@@ -26,6 +26,8 @@ v0.83 extends that replay to the complete active bracket at every retained bisec
 
 v0.84 makes any pressure-component replay failure directly traceable. Each mismatch records its exact bisection iteration, low/midpoint/high bracket position, fan/loop-network/system component, recorded pressure, independently recomputed pressure, and absolute error. Tied maximum-error witnesses are preserved without changing the existing 1e-9 Pa implementation-replay tolerance or any engineering acceptance criterion.
 
+v0.85 extends the same independent pressure-component replay to the terminal bisection bracket itself. Solved final brackets retain low/high fan, nonlinear loop-network, and total system pressures; iteration-limit evidence retains the post-decision remaining bracket after the last budgeted L/H update. Terminal mismatches preserve the same exact position/component, recorded/recomputed value, absolute-error, and tied maximum-witness provenance, including the endpoint newly created by the final iteration-limit decision.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

@@ -11,6 +11,7 @@ from cleanroomx.application import (
     application_info,
     run_analysis,
     validate_analysis_input,
+    validate_application_registry,
 )
 
 
@@ -19,6 +20,35 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _example(name: str) -> dict:
     return json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
+
+
+def test_application_registry_integrity_covers_every_bound_target():
+    validation = validate_application_registry()
+    expected_target_count = sum(
+        target is not None
+        for spec in ANALYSIS_SPECS.values()
+        for target in (spec.parser, spec.runner, spec.reporter)
+    )
+    assert validation["status"] == "ok"
+    assert validation["analysis_count"] == len(ANALYSIS_SPECS)
+    assert validation["callable_target_count"] == expected_target_count
+    assert set(validation["custom_adapters"]) == {"consistency", "dossier"}
+
+
+def test_application_registry_integrity_reports_binding_context(monkeypatch):
+    import cleanroomx.application as application_module
+
+    original = application_module._load_callable
+    failed_target = ANALYSIS_SPECS["hvac"].runner
+
+    def fail_hvac_runner(target):
+        if target == failed_target:
+            raise ImportError("simulated missing backend")
+        return original(target)
+
+    monkeypatch.setattr(application_module, "_load_callable", fail_hvac_runner)
+    with pytest.raises(RuntimeError, match=r"hvac runner target failed to load"):
+        application_module.validate_application_registry()
 
 
 def test_application_catalog_exposes_major_existing_workflows():

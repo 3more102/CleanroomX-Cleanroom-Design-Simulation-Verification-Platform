@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.76 bisection decision-trace geometry consistency — 2026-09-24
+
+- Audits every retained bounded-bisection trace record's `width_m3_h` against its recorded low/high airflow endpoints.
+- Audits every retained trace record's normalized supplied-segment width against the exact binary contraction implied by its one-based bisection iteration.
+- Retains per-step expected/recorded width evidence and absolute consistency errors, with aggregate exact uncertainty-corner violation indices and worst-error witnesses.
+- Applies the same trace-geometry audit to solved pressure-tolerance and non-converged iteration-limit traces without changing root selection, iteration budgets, or terminal replay semantics.
+- Surfaces the evidence in standalone fan-loop, nonlinear uncertainty, and engineering-dossier Markdown.
+- Adds a corruption-detection regression that deliberately alters retained width fields and verifies the audit fails those fields while preserving the independent replay checks.
+- Treats trace geometry strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, a continuous-root guarantee, stability/stall/surge evidence, commissioning/certification evidence, or an equipment-acceptance criterion.
+- Bumped package/runtime metadata to v0.76.0.
+
 ## v0.75 iteration-limit decision-trace terminal replay — 2026-09-24
 
 - Extends retained bounded-bisection decision traces to non-converged searches that exhaust `max_operating_iterations`.

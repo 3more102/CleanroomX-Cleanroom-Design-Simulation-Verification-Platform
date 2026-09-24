@@ -6,6 +6,10 @@
 - Hardens the desktop application registry from callable-resolution-only checking to structural integrity validation: duplicate analysis keys are rejected, ordinary analyses must declare parser+runner bindings, and `consistency`/`dossier` must remain registered custom adapters.
 - Makes registry validation return auditable metadata (analysis count, resolved callable count, custom adapters, and fallback-reporter count) and exposes that evidence through `application_info()` and headless `cleanroomx-gui --check`.
 - Adds regressions for duplicate-key rejection, custom-adapter contract enforcement, metadata consistency, and headless GUI exposure.
+- Enforces parity between the immutable application catalog and public analysis mapping and validates the registry before normal Tk startup.
+- Allows unsaved engineering-dossier execution when every referenced file path is absolute; relative references still require a saved-project/base directory.
+- Clears cached analysis results when **Save Project As** changes the project directory so outputs cannot survive a changed relative-path context.
+- Keeps **Abandon** exclusive until its backend worker exits, suppressing the abandoned result/error and preventing overlapping backend analyses.
 - Bumps package/runtime/demo metadata to v0.99.0 and synchronizes CI version assertions while retaining the complete Python 3.11/3.12/3.13 suite, provenance compatibility gates, CLI smokes, and real Tk/Xvfb GUI smoke.
 - This gate validates software registry completeness and wiring only; it does not establish engineering certification, CFD validity, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
 

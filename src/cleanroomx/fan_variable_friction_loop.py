@@ -657,6 +657,8 @@ def _bisection_decision_trace_audit(
     trace: list[dict] | None,
     *,
     operating_iterations: int,
+    termination_reason: str,
+    terminal_bracket: dict | None,
 ) -> dict | None:
     if trace is None:
         return None
@@ -760,8 +762,96 @@ def _bisection_decision_trace_audit(
             }
         )
 
+    terminal_replay_check = None
+    terminal_bracket_matches_replayed_last_decision = False
+    if trace and terminal_bracket is not None:
+        last_step = trace[-1]
+        last_decision = last_step["decision"]
+        expected_low_airflow = float(last_step["low_airflow_m3_h"])
+        expected_high_airflow = float(last_step["high_airflow_m3_h"])
+        expected_low_residual = float(
+            last_step["low_fan_minus_system_pressure_pa"]
+        )
+        expected_high_residual = float(
+            last_step["high_fan_minus_system_pressure_pa"]
+        )
+        if last_decision == "replace_low_endpoint":
+            expected_low_airflow = float(
+                last_step["midpoint_airflow_m3_h"]
+            )
+            expected_low_residual = float(
+                last_step["midpoint_fan_minus_system_pressure_pa"]
+            )
+        elif last_decision == "replace_high_endpoint":
+            expected_high_airflow = float(
+                last_step["midpoint_airflow_m3_h"]
+            )
+            expected_high_residual = float(
+                last_step["midpoint_fan_minus_system_pressure_pa"]
+            )
+
+        low_airflow_matches = math.isclose(
+            float(terminal_bracket["low_airflow_m3_h"]),
+            expected_low_airflow,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        high_airflow_matches = math.isclose(
+            float(terminal_bracket["high_airflow_m3_h"]),
+            expected_high_airflow,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        low_residual_matches = math.isclose(
+            float(terminal_bracket["low_fan_minus_system_pressure_pa"]),
+            expected_low_residual,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        high_residual_matches = math.isclose(
+            float(terminal_bracket["high_fan_minus_system_pressure_pa"]),
+            expected_high_residual,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        terminal_bracket_matches_replayed_last_decision = (
+            low_airflow_matches
+            and high_airflow_matches
+            and low_residual_matches
+            and high_residual_matches
+        )
+        terminal_replay_check = {
+            "last_iteration": int(last_step["iteration"]),
+            "last_decision": last_decision,
+            "low_airflow_matches": low_airflow_matches,
+            "high_airflow_matches": high_airflow_matches,
+            "low_residual_matches": low_residual_matches,
+            "high_residual_matches": high_residual_matches,
+            "terminal_bracket_matches_replayed_last_decision": (
+                terminal_bracket_matches_replayed_last_decision
+            ),
+        }
+
+    if termination_reason == "pressure_residual":
+        terminal_decision_pattern_consistent = (
+            termination_indices == [len(trace) - 1]
+        )
+    elif termination_reason == "bisection_iteration_limit":
+        terminal_decision_pattern_consistent = (
+            len(trace) > 0
+            and not termination_indices
+            and all(
+                step["decision"]
+                in {"replace_low_endpoint", "replace_high_endpoint"}
+                for step in trace
+            )
+        )
+    else:
+        terminal_decision_pattern_consistent = False
+
     return {
         "step_count": len(trace),
+        "termination_reason": termination_reason,
         "trace_matches_operating_iterations": (
             len(trace) == operating_iterations
         ),
@@ -781,6 +871,17 @@ def _bisection_decision_trace_audit(
         "termination_record_is_last": (
             termination_indices == [len(trace) - 1]
         ),
+        "terminal_decision_pattern_consistent": (
+            terminal_decision_pattern_consistent
+        ),
+        "terminal_bracket_matches_replayed_last_decision": (
+            terminal_bracket_matches_replayed_last_decision
+        ),
+        "terminal_outcome_consistent": (
+            terminal_decision_pattern_consistent
+            and terminal_bracket_matches_replayed_last_decision
+        ),
+        "terminal_replay_check": terminal_replay_check,
         "replace_low_endpoint_count": sum(
             step["decision"] == "replace_low_endpoint" for step in trace
         ),
@@ -807,19 +908,18 @@ def _bisection_decision_trace_audit(
         "decision_legend": legend,
         "scope_note": (
             "The decision trace preserves every bounded-bisection midpoint "
-            "evaluation that led to the solved operating point. L replaces "
-            "the positive-residual low endpoint, H replaces the negative-"
-            "residual high endpoint, and T accepts a midpoint within the "
-            "configured operating-pressure tolerance. The replay audit "
-            "verifies that each nonterminal L/H decision produces the next "
-            "recorded airflow/residual bracket and that iteration numbering "
-            "is contiguous. This is numerical implementation provenance "
-            "only; it is not physical uncertainty, an interpolation-error "
-            "bound, a stability margin, or an equipment-acceptance "
-            "criterion."
+            "evaluation. L replaces the positive-residual low endpoint, H "
+            "replaces the negative-residual high endpoint, and T accepts a "
+            "midpoint within the configured operating-pressure tolerance. "
+            "The replay audit verifies every inter-step L/H transition and "
+            "also replays the final recorded decision into the retained "
+            "terminal bracket. Solved pressure-tolerance and iteration-limit "
+            "outcomes use distinct terminal-decision checks. This is "
+            "numerical implementation provenance only; it is not physical "
+            "uncertainty, an interpolation-error bound, a stability margin, "
+            "or an equipment-acceptance criterion."
         ),
     }
-
 
 def _nonconverged_result(
     study: FanVariableFrictionLoopStudy,
@@ -1176,6 +1276,13 @@ def solve_fan_variable_friction_loop(
                     "selected_supplied_point_index": None,
                     "operating_iterations": operating_iterations,
                     "final_bisection_bracket": None,
+                    "bisection_trace": bisection_trace,
+                    "bisection_trace_audit": _bisection_decision_trace_audit(
+                        bisection_trace,
+                        operating_iterations=operating_iterations,
+                        termination_reason=termination_reason,
+                        terminal_bracket=terminal_bracket,
+                    ),
                     "iteration_limit_evidence": {
                         "last_evaluated_midpoint_airflow_m3_h": round(
                             selected_airflow,
@@ -1192,8 +1299,9 @@ def solve_fan_variable_friction_loop(
                         "The iteration-limit evidence retains the active "
                         "signed-residual bracket remaining after the final "
                         "budgeted bisection evaluation. Its geometry and "
-                        "binary-contraction audit are solver implementation "
-                        "diagnostics only; no operating point is accepted, "
+                        "binary-contraction audit and completed decision "
+                        "trace replay are solver implementation diagnostics "
+                        "only; no operating point is accepted, "
                         "and the remaining bracket is not physical airflow "
                         "uncertainty, interpolation error, a continuous "
                         "worst-case bound, or an equipment-acceptance limit."
@@ -1325,6 +1433,8 @@ def solve_fan_variable_friction_loop(
         "bisection_trace_audit": _bisection_decision_trace_audit(
             bisection_trace,
             operating_iterations=operating_iterations,
+            termination_reason=termination_reason,
+            terminal_bracket=final_bisection_bracket,
         ),
         "scope_note": (
             "The final bisection bracket is the active signed-residual search "

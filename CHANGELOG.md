@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.80 bisection residual pressure-chain audit — 2026-09-24
+
+- Retains low/high/midpoint fan pressure and total-system pressure components for every completed bounded-bisection trace step.
+- Independently recomputes each stored fan-minus-system residual from those retained pressure components and records per-step consistency evidence plus the maximum absolute residual-component error.
+- Propagates exact pressure-chain violation corner indices, complete-corner coverage counts, and worst-error witnesses through nonlinear uncertainty reports and engineering dossiers.
+- Adds direct corruption coverage so correct-looking sign, midpoint, replay, and decision-semantic evidence cannot hide an inconsistent retained pressure decomposition.
+- Preserves v0.79 raw-state checks, v0.78 decision semantics, v0.77 origin replay, v0.76 geometry checks, root selection, iteration budgets, and no-extrapolation behavior.
+- This is numerical implementation provenance only; it does not establish physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from every retained bounded-bisection trace record instead of trusting stored audit booleans.

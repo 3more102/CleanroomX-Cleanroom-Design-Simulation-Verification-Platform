@@ -9,6 +9,11 @@
 - Allows unsaved dossier execution when all referenced files are absolute, while keeping relative references dependent on an explicit saved-project/base directory.
 - Clears cached results when **Save Project As** changes the project base directory.
 - Keeps **Abandon** exclusive until the backend worker exits, suppressing abandoned results/errors and preventing overlapping backend analyses.
+- Preserves external-file referents when analysis JSON is imported or a project is relocated with **Save Project As**.
+- Centralizes same-directory atomic UTF-8 writes for project saves and desktop exports and reports filesystem failures to the operator.
+- Plots backend-computed system-curve evidence alongside supplied fan curves when available.
+- Ships a self-contained packaged demo and validates the installed wheel with headless and real Tk/Xvfb smoke checks.
+- Adds architecture, migration, security, deployment, rollback, test-evidence, and validation release documentation.
 - Preserves all validated engineering solver equations, tolerances, uncertainty semantics, acceptance rules, and v0.91-v0.95 compatibility gates.
 
 ## v0.99 application registry integrity — 2026-09-24

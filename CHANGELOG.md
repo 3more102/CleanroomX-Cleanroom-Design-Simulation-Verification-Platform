@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.80 independent fan/system residual replay — 2026-09-24
+
+- Independently reconstructs the exact supplied-segment bisection states from the retained L/H/T decision chain and re-solves the variable-friction loop at each low, high, and midpoint airflow.
+- Recomputes fan pressure from the selected supplied interpolation segment and system pressure from a fresh nonlinear loop solve, then verifies every retained fan-minus-system residual against that independent replay.
+- Retains per-step replay evidence, a strict numerical replay tolerance, maximum residual-replay error, exact uncertainty-corner violation indices, and worst-error witness provenance.
+- Adds report and dossier propagation while preserving v0.79 raw-state checks, v0.78 decision semantics, v0.77 origin replay, root selection, iteration budgets, and fan-curve no-extrapolation behavior.
+- Treats the residual replay strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, stall/surge evidence, manufacturer operating-region evidence, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.

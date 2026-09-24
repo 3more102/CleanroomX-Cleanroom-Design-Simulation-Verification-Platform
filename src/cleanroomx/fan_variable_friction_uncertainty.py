@@ -1718,11 +1718,30 @@ def _fan_curve_supplied_point_residual_summary(
             "nearest_alternative_candidate_airflow_interval_gap_m3_h"
         ) is not None
     ]
+    selected_below_alternative_indices = [
+        corner_index
+        for corner_index, _corner, audit in alternative_separation_cases
+        if (audit.get("alternative_candidate_below_selected_airflow_count") or 0)
+        > 0
+    ]
     selected_overlap_alternative_interval_indices = [
         corner_index
         for corner_index, _corner, audit in alternative_separation_cases
         if audit.get(
             "selected_airflow_overlaps_alternative_candidate_interval"
+        ) is True
+    ]
+    selected_above_alternative_indices = [
+        corner_index
+        for corner_index, _corner, audit in alternative_separation_cases
+        if (audit.get("alternative_candidate_above_selected_airflow_count") or 0)
+        > 0
+    ]
+    selected_bidirectional_alternative_indices = [
+        corner_index
+        for corner_index, _corner, audit in alternative_separation_cases
+        if audit.get(
+            "alternative_candidates_on_both_sides_of_selected_airflow"
         ) is True
     ]
     monotonic_count = sum(
@@ -1787,23 +1806,25 @@ def _fan_curve_supplied_point_residual_summary(
             "sources": sources,
         }
 
-    minimum_alternative_candidate_gap = None
-    if alternative_separation_cases:
+    def _minimum_candidate_gap_evidence(
+        gap_key: str,
+        features_key: str,
+    ) -> dict | None:
+        available = [
+            (corner_index, corner, audit)
+            for corner_index, corner, audit in alternative_separation_cases
+            if audit.get(gap_key) is not None
+        ]
+        if not available:
+            return None
+
         minimum_gap = min(
-            float(
-                audit[
-                    "nearest_alternative_candidate_airflow_interval_gap_m3_h"
-                ]
-            )
-            for _corner_index, _corner, audit in alternative_separation_cases
+            float(audit[gap_key])
+            for _corner_index, _corner, audit in available
         )
         sources = []
-        for corner_index, corner, audit in alternative_separation_cases:
-            observed_gap = float(
-                audit[
-                    "nearest_alternative_candidate_airflow_interval_gap_m3_h"
-                ]
-            )
+        for corner_index, corner, audit in available:
+            observed_gap = float(audit[gap_key])
             if not math.isclose(
                 observed_gap,
                 minimum_gap,
@@ -1820,18 +1841,28 @@ def _fan_curve_supplied_point_residual_summary(
                     "selected_candidate_feature": audit.get(
                         "selected_candidate_feature"
                     ),
-                    "nearest_alternative_candidate_features": audit.get(
-                        "nearest_alternative_candidate_features"
-                    )
-                    or [],
+                    features_key: audit.get(features_key) or [],
                 }
             )
             sources.append(source)
-        minimum_alternative_candidate_gap = {
+        return {
             "value": round(minimum_gap, 9),
             "unit": "m3/h",
             "sources": sources,
         }
+
+    minimum_alternative_candidate_gap = _minimum_candidate_gap_evidence(
+        "nearest_alternative_candidate_airflow_interval_gap_m3_h",
+        "nearest_alternative_candidate_features",
+    )
+    minimum_below_alternative_candidate_gap = _minimum_candidate_gap_evidence(
+        "nearest_below_alternative_candidate_airflow_interval_gap_m3_h",
+        "nearest_below_alternative_candidate_features",
+    )
+    minimum_above_alternative_candidate_gap = _minimum_candidate_gap_evidence(
+        "nearest_above_alternative_candidate_airflow_interval_gap_m3_h",
+        "nearest_above_alternative_candidate_features",
+    )
 
     return {
         "corner_count": len(corners),
@@ -1853,14 +1884,38 @@ def _fan_curve_supplied_point_residual_summary(
         "alternative_candidate_separation_evidence_corner_count": len(
             alternative_separation_cases
         ),
+        "selected_airflow_with_below_alternative_corner_count": len(
+            selected_below_alternative_indices
+        ),
+        "selected_airflow_with_below_alternative_corner_indices": (
+            selected_below_alternative_indices
+        ),
         "selected_airflow_overlap_alternative_interval_corner_count": len(
             selected_overlap_alternative_interval_indices
         ),
         "selected_airflow_overlap_alternative_interval_corner_indices": (
             selected_overlap_alternative_interval_indices
         ),
+        "selected_airflow_with_above_alternative_corner_count": len(
+            selected_above_alternative_indices
+        ),
+        "selected_airflow_with_above_alternative_corner_indices": (
+            selected_above_alternative_indices
+        ),
+        "selected_airflow_with_bidirectional_alternative_corner_count": len(
+            selected_bidirectional_alternative_indices
+        ),
+        "selected_airflow_with_bidirectional_alternative_corner_indices": (
+            selected_bidirectional_alternative_indices
+        ),
         "minimum_selected_to_alternative_candidate_interval_gap_m3_h": (
             minimum_alternative_candidate_gap
+        ),
+        "minimum_selected_to_below_alternative_candidate_interval_gap_m3_h": (
+            minimum_below_alternative_candidate_gap
+        ),
+        "minimum_selected_to_above_alternative_candidate_interval_gap_m3_h": (
+            minimum_above_alternative_candidate_gap
         ),
         "monotonic_non_increasing_corner_count": monotonic_count,
         "residual_increase_corner_count": len(residual_increase_indices),
@@ -1881,16 +1936,16 @@ def _fan_curve_supplied_point_residual_summary(
             "selection evidence identifies the discrete feature chosen using "
             "the solver's documented priority and preserves whether additional "
             "discrete candidates were present. When alternatives exist, the "
-            "aggregate can retain the smallest airflow gap from the selected "
-            "solution to an alternative discrete point or sign-change interval; "
-            "this does not infer a second continuous root. Sampled monotonicity "
-            "and candidate crossing features do not prove "
+            "aggregate retains overall and directional airflow gaps to "
+            "alternative discrete points or sign-change intervals and records "
+            "whether alternatives lie below, overlap, or lie above the selected "
+            "airflow; this does not infer another continuous root. Sampled "
+            "monotonicity and candidate crossing features do not prove "
             "continuous uniqueness or dynamic stability and do not define "
             "stall/surge, manufacturer-region, commissioning, certification, "
             "or equipment-acceptance criteria."
         ),
     }
-
 
 def _fan_curve_crossing_conditioning_diagnostic(result: dict) -> dict | None:
     bracket = _fan_curve_intersection_bracket_diagnostic(result)

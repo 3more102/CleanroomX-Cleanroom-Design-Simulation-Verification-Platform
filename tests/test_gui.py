@@ -65,6 +65,52 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.description == "Preserve editor state"
 
 
+def test_running_analysis_prevents_switching_to_another_analysis():
+    class Tree:
+        def __init__(self):
+            self.selected = ("b",)
+
+        def selection(self):
+            return self.selected
+
+        def exists(self, analysis_id):
+            return analysis_id == "a"
+
+        def selection_set(self, analysis_id):
+            self.selected = (analysis_id,)
+
+        def focus(self, analysis_id):
+            self.focused = analysis_id
+
+        def see(self, analysis_id):
+            self.seen = analysis_id
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(id="a", name="A", kind="room_verification", input={}),
+            AnalysisDocument(id="b", name="B", kind="room_verification", input={}),
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app._selection_guard = False
+    app._running = True
+    app.analysis_tree = Tree()
+    app.status_var = Status()
+
+    app._on_analysis_selected()
+
+    assert app.analysis_tree.selection() == ("a",)
+    assert app.project.active_analysis_id == "a"
+    assert "abandon" in app.status_var.value.lower()
+
+
 def test_unsaved_state_detects_uncommitted_editor_changes():
     class Value:
         def __init__(self, value):

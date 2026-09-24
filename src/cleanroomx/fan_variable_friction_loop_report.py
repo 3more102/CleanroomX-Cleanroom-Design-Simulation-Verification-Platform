@@ -196,8 +196,12 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 f"**{audit['residual_monotonic_non_increasing_with_tolerance']}**",
                 "- Tolerance-contact supplied points: "
                 f"**{audit['tolerance_contact_point_count']}**",
-                "- Strict sign-change supplied segments: "
+                "- Solver-eligible strict positive-to-negative supplied segments: "
                 f"**{audit['strict_sign_change_segment_count']}**",
+                "- Reverse strict negative-to-positive supplied segments (audit-only): "
+                f"**{audit['reverse_strict_sign_change_segment_count']}**",
+                "- All strict bidirectional sign-change supplied segments: "
+                f"**{audit['all_strict_sign_change_segment_count']}**",
                 "- Candidate crossing features: "
                 f"**{audit['candidate_crossing_feature_count']}**",
                 "- Selection policy: "
@@ -287,6 +291,24 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                             f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} | "
                             f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span']} |"
                         )
+        reverse_segments = audit.get("reverse_strict_sign_change_segments") or []
+        if reverse_segments:
+            lines.extend(
+                [
+                    "",
+                    "| Reverse segment low point | High point | Airflow span (m³/h) | Low residual (Pa) | High residual (Pa) |",
+                    "|---:|---:|---|---:|---:|",
+                ]
+            )
+            for segment in reverse_segments:
+                lines.append(
+                    f"| {segment['low_point_index']} | "
+                    f"{segment['high_point_index']} | "
+                    f"{segment['low_airflow_m3_h']}–"
+                    f"{segment['high_airflow_m3_h']} | "
+                    f"{segment['low_fan_minus_system_pressure_pa']} | "
+                    f"{segment['high_fan_minus_system_pressure_pa']} |"
+                )
         if audit["residual_transitions"]:
             lines.extend(
                 [

@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import flatten_json, main, unit_hint
+from cleanroomx.gui import flatten_json, main, parse_analysis_input_text, unit_hint
 from cleanroomx.project import load_project_document
 
 
@@ -22,6 +24,16 @@ def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows
     assert ("$.room.enabled", "true", "") in rows
+
+
+def test_analysis_input_parser_requires_strict_json_object():
+    assert parse_analysis_input_text('{"name": "demo"}') == {"name": "demo"}
+    with pytest.raises(ValueError, match="JSON object"):
+        parse_analysis_input_text("[1, 2, 3]")
+    with pytest.raises(ValueError, match="non-finite"):
+        parse_analysis_input_text('{"value": NaN}')
+    with pytest.raises(ValueError, match="line 1"):
+        parse_analysis_input_text('{"broken":')
 
 
 def test_gui_check_mode_needs_no_display(capsys):

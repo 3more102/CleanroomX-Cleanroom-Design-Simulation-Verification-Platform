@@ -680,11 +680,21 @@ def _bisection_decision_trace_audit(
         decision: symbol for symbol, decision in legend.items()
     }
     iteration_sequence = [int(step["iteration"]) for step in trace]
+    raw_state_checks = []
     geometry_checks = []
     for step in trace:
         iteration = int(step["iteration"])
         low_airflow = float(step["low_airflow_m3_h"])
         high_airflow = float(step["high_airflow_m3_h"])
+        midpoint_airflow = float(step["midpoint_airflow_m3_h"])
+        low_residual = float(step["low_fan_minus_system_pressure_pa"])
+        high_residual = float(step["high_fan_minus_system_pressure_pa"])
+        recorded_sign_flag = bool(
+            step["strict_sign_change_before_evaluation"]
+        )
+        recorded_midpoint_flag = bool(
+            step["midpoint_is_arithmetic_bracket_midpoint"]
+        )
         recorded_width = float(step["width_m3_h"])
         recorded_width_fraction = float(
             step["width_fraction_of_supplied_segment"]
@@ -694,6 +704,41 @@ def _bisection_decision_trace_audit(
         absolute_width_error = abs(recorded_width - expected_width)
         absolute_width_fraction_error = abs(
             recorded_width_fraction - expected_width_fraction
+        )
+        expected_midpoint_airflow = 0.5 * (low_airflow + high_airflow)
+        absolute_midpoint_error = abs(
+            midpoint_airflow - expected_midpoint_airflow
+        )
+        numeric_sign_change = low_residual > 0.0 and high_residual < 0.0
+        numeric_midpoint_centered = math.isclose(
+            midpoint_airflow,
+            expected_midpoint_airflow,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        raw_state_checks.append(
+            {
+                "iteration": iteration,
+                "numeric_strict_sign_change_before_evaluation": (
+                    numeric_sign_change
+                ),
+                "recorded_strict_sign_change_flag": recorded_sign_flag,
+                "recorded_sign_flag_matches_numeric_residuals": (
+                    recorded_sign_flag == numeric_sign_change
+                ),
+                "recorded_midpoint_airflow_m3_h": midpoint_airflow,
+                "expected_midpoint_airflow_from_endpoints_m3_h": (
+                    expected_midpoint_airflow
+                ),
+                "absolute_midpoint_error_m3_h": absolute_midpoint_error,
+                "numeric_midpoint_is_arithmetic_bracket_midpoint": (
+                    numeric_midpoint_centered
+                ),
+                "recorded_midpoint_flag": recorded_midpoint_flag,
+                "recorded_midpoint_flag_matches_numeric_geometry": (
+                    recorded_midpoint_flag == numeric_midpoint_centered
+                ),
+            }
         )
         geometry_checks.append(
             {
@@ -1109,6 +1154,38 @@ def _bisection_decision_trace_audit(
         "iterations_are_contiguous_from_one": (
             iteration_sequence == list(range(1, len(trace) + 1))
         ),
+        "raw_state_check_count": len(raw_state_checks),
+        "all_numeric_brackets_preserve_strict_sign_change": all(
+            check["numeric_strict_sign_change_before_evaluation"]
+            for check in raw_state_checks
+        ),
+        "all_recorded_sign_flags_match_numeric_residuals": all(
+            check["recorded_sign_flag_matches_numeric_residuals"]
+            for check in raw_state_checks
+        ),
+        "all_numeric_midpoints_are_arithmetic_bracket_midpoints": all(
+            check["numeric_midpoint_is_arithmetic_bracket_midpoint"]
+            for check in raw_state_checks
+        ),
+        "all_recorded_midpoint_flags_match_numeric_geometry": all(
+            check["recorded_midpoint_flag_matches_numeric_geometry"]
+            for check in raw_state_checks
+        ),
+        "all_trace_raw_state_consistent": all(
+            check["numeric_strict_sign_change_before_evaluation"]
+            and check["recorded_sign_flag_matches_numeric_residuals"]
+            and check["numeric_midpoint_is_arithmetic_bracket_midpoint"]
+            and check["recorded_midpoint_flag_matches_numeric_geometry"]
+            for check in raw_state_checks
+        ),
+        "maximum_absolute_trace_midpoint_error_m3_h": max(
+            (
+                check["absolute_midpoint_error_m3_h"]
+                for check in raw_state_checks
+            ),
+            default=0.0,
+        ),
+        "raw_state_checks": raw_state_checks,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -1207,8 +1284,12 @@ def _bisection_decision_trace_audit(
             "decision produces the next recorded airflow/residual bracket, "
             "that iteration numbering is contiguous, and that every recorded "
             "bracket width equals its endpoint span with the binary width "
-            "fraction implied by its iteration. The decision-semantics audit "
-            "independently verifies each L/H/T choice against the recorded "
+            "fraction implied by its iteration. The raw-state audit "
+            "independently recomputes strict sign-change and arithmetic-"
+            "midpoint facts from the recorded numeric state and checks the "
+            "stored flags against those recomputed facts. The decision-"
+            "semantics audit independently verifies each L/H/T choice against "
+            "the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
             "the selected supplied-point "

@@ -2559,6 +2559,22 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["all_midpoints_are_arithmetic_bracket_midpoints"]
     ]
+    trace_width_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["all_recorded_widths_match_airflow_brackets"]
+    ]
+    trace_width_fraction_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit[
+            "all_recorded_width_fractions_match_iteration_sequence"
+        ]
+    ]
+    trace_geometry_violation_corner_indices = sorted(
+        set(trace_width_violation_corner_indices)
+        | set(trace_width_fraction_violation_corner_indices)
+    )
     trace_termination_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in solved_trace_cases
@@ -2722,6 +2738,45 @@ def _operating_point_search_resolution_summary(
             "sources": sources,
         }
 
+    def _maximum_trace_geometry_metric_evidence(
+        key: str,
+        unit: str,
+    ) -> dict | None:
+        if not trace_cases:
+            return None
+        maximum = max(
+            float(audit[key])
+            for _corner_index, _corner, _evidence, audit in trace_cases
+        )
+        sources = []
+        for corner_index, corner, evidence, audit in trace_cases:
+            value = float(audit[key])
+            if not math.isclose(
+                value,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "trace_geometry_metric": key,
+                    "trace_geometry_metric_value": value,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": unit,
+            "sources": sources,
+        }
+
     def _maximum_iteration_limit_invariant_error_evidence() -> dict | None:
         if not iteration_limit_invariant_cases:
             return None
@@ -2827,6 +2882,37 @@ def _operating_point_search_resolution_summary(
         ),
         "bisection_trace_midpoint_violation_corner_indices": (
             trace_midpoint_violation_corner_indices
+        ),
+        "bisection_trace_width_match_corner_count": (
+            len(trace_cases) - len(trace_width_violation_corner_indices)
+        ),
+        "bisection_trace_width_violation_corner_indices": (
+            trace_width_violation_corner_indices
+        ),
+        "bisection_trace_width_fraction_match_corner_count": (
+            len(trace_cases)
+            - len(trace_width_fraction_violation_corner_indices)
+        ),
+        "bisection_trace_width_fraction_violation_corner_indices": (
+            trace_width_fraction_violation_corner_indices
+        ),
+        "bisection_trace_geometry_consistent_corner_count": (
+            len(trace_cases) - len(trace_geometry_violation_corner_indices)
+        ),
+        "bisection_trace_geometry_violation_corner_indices": (
+            trace_geometry_violation_corner_indices
+        ),
+        "maximum_bisection_trace_width_error_m3_h": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_width_error_m3_h",
+                "m3/h",
+            )
+        ),
+        "maximum_bisection_trace_width_fraction_error": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_width_fraction_error",
+                "1",
+            )
         ),
         "bisection_trace_terminal_last_corner_count": (
             len(solved_trace_cases)
@@ -2934,7 +3020,10 @@ def _operating_point_search_resolution_summary(
             "nonterminal L/H decision into the next recorded bracket. v0.75 "
             "extends trace retention to iteration-limit outcomes and verifies "
             "that the final L/H decision reproduces the retained remaining "
-            "signed-residual bracket without accepting an operating point."
+            "signed-residual bracket without accepting an operating point. "
+            "v0.76 audits every retained trace step's recorded bracket width "
+            "against its airflow endpoints and its normalized width against "
+            "the binary contraction implied by the iteration number."
         ),
     }
 

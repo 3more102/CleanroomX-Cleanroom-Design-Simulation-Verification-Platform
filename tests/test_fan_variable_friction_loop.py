@@ -10,6 +10,7 @@ from cleanroomx.fan_loop_network import (
 )
 from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
+    _bisection_decision_trace_audit,
     _fan_curve_supplied_point_residual_audit,
     _with_selected_crossing_feature,
     solve_fan_variable_friction_loop,
@@ -234,6 +235,14 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "all_midpoints_are_arithmetic_bracket_midpoints"
     ] is True
+    assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
+    assert trace_audit[
+        "all_recorded_width_fractions_match_iteration_sequence"
+    ] is True
+    assert trace_audit["all_trace_geometry_consistent"] is True
+    assert trace_audit["geometry_check_count"] == len(trace)
+    assert trace_audit["maximum_absolute_trace_width_error_m3_h"] <= 2e-9
+    assert trace_audit["maximum_absolute_trace_width_fraction_error"] <= 1e-12
     assert trace_audit["termination_record_count"] == 1
     assert trace_audit["termination_record_is_last"] is True
     assert trace_audit["terminal_outcome_consistent"] is True
@@ -337,6 +346,14 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert trace_audit["iterations_are_contiguous_from_one"] is True
     assert trace_audit["termination_record_count"] == 0
     assert trace_audit["termination_record_is_last"] is False
+    assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
+    assert trace_audit[
+        "all_recorded_width_fractions_match_iteration_sequence"
+    ] is True
+    assert trace_audit["all_trace_geometry_consistent"] is True
+    assert trace_audit["geometry_check_count"] == len(trace)
+    assert trace_audit["maximum_absolute_trace_width_error_m3_h"] <= 2e-9
+    assert trace_audit["maximum_absolute_trace_width_fraction_error"] <= 1e-12
     assert trace_audit["terminal_outcome_consistent"] is True
     assert trace_audit[
         "all_state_transitions_replay_recorded_decisions"
@@ -365,6 +382,81 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
         in report
     )
+    assert "Every recorded trace width matches its airflow endpoints: **True**" in report
+    assert (
+        "Every recorded trace width fraction matches binary iteration contraction: **True**"
+        in report
+    )
+
+
+def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
+    trace = [
+        {
+            "iteration": 1,
+            "low_airflow_m3_h": 0.0,
+            "high_airflow_m3_h": 8.0,
+            "midpoint_airflow_m3_h": 4.0,
+            "width_m3_h": 8.0,
+            "width_fraction_of_supplied_segment": 1.0,
+            "low_fan_minus_system_pressure_pa": 4.0,
+            "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_minus_system_pressure_pa": 1.0,
+            "decision": "replace_low_endpoint",
+            "strict_sign_change_before_evaluation": True,
+            "midpoint_is_arithmetic_bracket_midpoint": True,
+        },
+        {
+            "iteration": 2,
+            "low_airflow_m3_h": 4.0,
+            "high_airflow_m3_h": 8.0,
+            "midpoint_airflow_m3_h": 6.0,
+            "width_m3_h": 4.0,
+            "width_fraction_of_supplied_segment": 0.5,
+            "low_fan_minus_system_pressure_pa": 1.0,
+            "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_minus_system_pressure_pa": 0.0,
+            "decision": "accept_pressure_tolerance",
+            "strict_sign_change_before_evaluation": True,
+            "midpoint_is_arithmetic_bracket_midpoint": True,
+        },
+    ]
+
+    clean = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+    )
+    assert clean is not None
+    assert clean["all_trace_geometry_consistent"] is True
+    assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
+        0.0,
+        abs=1e-18,
+    )
+    assert clean[
+        "maximum_absolute_trace_width_fraction_error"
+    ] == pytest.approx(0.0, abs=1e-18)
+
+    corrupted = [dict(step) for step in trace]
+    corrupted[0]["width_m3_h"] = 7.0
+    corrupted[1]["width_fraction_of_supplied_segment"] = 0.75
+    audit = _bisection_decision_trace_audit(
+        corrupted,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+    )
+    assert audit is not None
+    assert audit["all_recorded_widths_match_airflow_brackets"] is False
+    assert audit[
+        "all_recorded_width_fractions_match_iteration_sequence"
+    ] is False
+    assert audit["all_trace_geometry_consistent"] is False
+    assert audit["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
+        1.0,
+        abs=1e-18,
+    )
+    assert audit[
+        "maximum_absolute_trace_width_fraction_error"
+    ] == pytest.approx(0.25, abs=1e-18)
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

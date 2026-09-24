@@ -67,6 +67,20 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert search_summary["bisection_trace_length_violation_corner_indices"] == []
     assert search_summary["bisection_trace_sign_violation_corner_indices"] == []
     assert search_summary["bisection_trace_midpoint_violation_corner_indices"] == []
+    assert search_summary["bisection_trace_width_violation_corner_indices"] == []
+    assert search_summary[
+        "bisection_trace_width_fraction_violation_corner_indices"
+    ] == []
+    assert search_summary["bisection_trace_geometry_violation_corner_indices"] == []
+    assert search_summary["bisection_trace_geometry_consistent_corner_count"] == (
+        search_summary["bisection_trace_evidence_corner_count"]
+    )
+    assert search_summary[
+        "maximum_bisection_trace_width_error_m3_h"
+    ]["value"] <= 2e-9
+    assert search_summary[
+        "maximum_bisection_trace_width_fraction_error"
+    ]["value"] <= 1e-12
     assert search_summary["bisection_trace_terminal_violation_corner_indices"] == []
     assert search_summary[
         "bisection_trace_iteration_sequence_violation_corner_indices"
@@ -194,6 +208,10 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Bisection invariant / trace audit" in report
     assert "trace " in report
     assert "trace violations L/S/M/T/I/R/O/F 0/0/0/0/0/0/0/0" in report
+    assert "trace geometry violations W/N 0/0" in report
+    assert "trace-geometry" in report
+    assert "max trace width error" in report
+    assert "max trace normalized-width error" in report
     assert "trace-outcome" in report
     assert "limit-final-replay 0/0" in report
     assert "max width-fraction error" in report

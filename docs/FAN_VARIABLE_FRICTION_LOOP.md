@@ -105,6 +105,8 @@ v0.73 makes that trace replayable as a state-transition record. For each nonterm
 
 v0.75 extends the same replay-audited trace to bounded-bisection searches that stop only because the configured operating-iteration budget is exhausted. No operating point is accepted and no terminal `T` record is fabricated. Instead, the final recorded `L` or `H` decision is replayed into the retained remaining signed-residual bracket, and both airflow and residual endpoints must match the retained terminal search state. This is numerical implementation/search-state provenance only; it is not physical airflow uncertainty, an interpolation-error bound, a continuous-root guarantee, stability/stall/surge evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance criterion.
 
+v0.76 additionally audits the geometry fields stored in every solved or iteration-limit trace record. The recorded `width_m3_h` must equal the retained high-minus-low airflow endpoints, and `width_fraction_of_supplied_segment` must equal the binary contraction `0.5 ** (iteration - 1)`. Per-step absolute errors are retained so report and uncertainty layers can expose exact violation provenance. These checks validate recorded numerical search state only; they do not create a physical uncertainty or acceptance margin.
+
 ## CLI
 
 ```text

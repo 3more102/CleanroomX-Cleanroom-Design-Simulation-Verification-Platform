@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.78 independent bisection-trace midpoint audit — 2026-09-24
+
+- Independently recomputes every retained bounded-bisection trace midpoint from the recorded low/high airflow endpoints instead of trusting the stored midpoint-validity flag.
+- Retains per-step recorded midpoint, expected arithmetic midpoint, absolute midpoint consistency error, and a direct endpoint-derived consistency result.
+- Adds maximum retained-trace midpoint error evidence with exact nonlinear uncertainty-corner witnesses and surfaces it in standalone loop, uncertainty, and engineering-dossier Markdown.
+- Adds a corruption regression where an altered midpoint and downstream bracket remain replay-consistent under the v0.77 origin-to-terminal audit; v0.78 independently detects the wrong midpoint.
+- Preserves v0.76 width/normalized-width checks, v0.77 origin replay, candidate priority, acceptance tolerance, iteration budget, and no-extrapolation semantics.
+- Treats midpoint validation strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, stall/surge evidence, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.78.0.
+
 ## v0.77 bisection trace origin-to-terminal replay — 2026-09-24
 
 - Anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points.

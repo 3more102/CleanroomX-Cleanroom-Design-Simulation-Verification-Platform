@@ -5127,6 +5127,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "fan_curve_supplied_point_residual_audit": result.get(
                                 "fan_curve_supplied_point_residual_audit"
                             ),
+                            "fan_curve_supplied_point_network_state_replay": result.get(
+                                "fan_curve_supplied_point_network_state_replay"
+                            ),
                             "fan_curve_airflow_range_m3_h": result[
                                 "fan_curve_airflow_range_m3_h"
                             ],
@@ -5201,6 +5204,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     nominal_fan_curve_supplied_point_residual_audit = nominal.get(
         "fan_curve_supplied_point_residual_audit"
+    )
+    nominal_fan_curve_supplied_point_network_state_replay = nominal.get(
+        "fan_curve_supplied_point_network_state_replay"
     )
     fan_curve_supplied_point_residual_summary = (
         _fan_curve_supplied_point_residual_summary(
@@ -5610,6 +5616,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "nominal_fan_curve_supplied_point_residual_audit": (
             nominal_fan_curve_supplied_point_residual_audit
+        ),
+        "nominal_fan_curve_supplied_point_network_state_replay": (
+            nominal_fan_curve_supplied_point_network_state_replay
         ),
         "fan_curve_supplied_point_residual_summary": (
             fan_curve_supplied_point_residual_summary

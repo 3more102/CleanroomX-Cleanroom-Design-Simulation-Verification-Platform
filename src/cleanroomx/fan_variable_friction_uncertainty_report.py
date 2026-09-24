@@ -814,6 +814,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_numeric_midpoint_violation_corner_indices']}**",
                 "- Trace midpoint-flag mismatches vs numeric geometry: "
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
+                "- Trace pressure-component coverage gaps: "
+                f"**{search_summary['bisection_trace_pressure_component_incomplete_corner_indices']}**",
+                "- Trace pressure-residual identity violations: "
+                f"**{search_summary['bisection_trace_pressure_residual_identity_violation_corner_indices']}**",
+                "- Trace pressure-component decision-semantic violations: "
+                f"**{search_summary['bisection_trace_pressure_component_decision_semantic_violation_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
@@ -890,6 +896,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['decision_sequence']}**",
                         "- Nominal trace invariants all satisfied: "
                         f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['all_trace_geometry_consistent'] and nominal_trace_audit['terminal_outcome_consistent'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                        "- Nominal trace pressure-component coverage complete: "
+                        f"**{nominal_trace_audit['complete_pressure_component_coverage']}**",
+                        "- Nominal trace residual identity consistent: "
+                        f"**{nominal_trace_audit['all_midpoint_residuals_match_pressure_components']}**",
+                        "- Nominal trace pressure-component decision semantics consistent: "
+                        f"**{nominal_trace_audit['all_decisions_match_pressure_component_semantics']}**",
                         "- Nominal trace recorded widths match airflow endpoints: "
                         f"**{nominal_trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                         "- Nominal trace width fractions match binary iteration contraction: "
@@ -982,6 +994,21 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum trace midpoint-centering error | "
                 f"{trace_midpoint_error['value']} | "
                 f"{trace_midpoint_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_pressure_identity_error = search_summary.get(
+            "maximum_bisection_trace_pressure_residual_identity_error_pa"
+        )
+        if trace_pressure_identity_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_pressure_identity_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace pressure-residual identity error | "
+                f"{trace_pressure_identity_error['value']} | "
+                f"{trace_pressure_identity_error['unit']} | "
                 f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(

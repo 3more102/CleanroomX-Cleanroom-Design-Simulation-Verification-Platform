@@ -410,3 +410,51 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+def test_export_writer_reports_filesystem_failure(monkeypatch, tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+
+    def fail_write(self, content, encoding=None):
+        raise OSError("disk is read-only")
+
+    captured = {}
+    monkeypatch.setattr(gui_module.Path, "write_text", fail_write)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    assert app._write_export_file(
+        str(tmp_path / "result.json"),
+        "{}\n",
+        label="Result",
+    ) is False
+    assert app.status_var.value == "Result export failed"
+    assert captured["title"] == "Result export failed"
+    assert captured["message"] == "disk is read-only"
+    assert captured["parent"] is app.root
+
+
+def test_export_writer_writes_content_and_updates_status(tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+    path = tmp_path / "report.md"
+
+    assert app._write_export_file(str(path), "# Report\n", label="Report") is True
+    assert path.read_text(encoding="utf-8") == "# Report\n"
+    assert app.status_var.value == "Exported report — report.md"
+

@@ -2504,6 +2504,9 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_midpoint_flag_mismatch_corner_indices"
     ] == []
     assert summary[
+        "bisection_trace_pressure_arithmetic_violation_corner_indices"
+    ] == []
+    assert summary[
         "bisection_trace_raw_state_violation_corner_indices"
     ] == []
     assert summary[
@@ -2537,8 +2540,17 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_origin_replay_corner_count"
     ] == summary["bisection_corner_count"]
     assert summary[
+        "bisection_trace_pressure_arithmetic_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
         "bisection_trace_raw_state_consistent_corner_count"
     ] == summary["bisection_corner_count"]
+    pressure_arithmetic_error = summary[
+        "maximum_bisection_trace_midpoint_residual_arithmetic_error_pa"
+    ]
+    assert pressure_arithmetic_error is not None
+    assert pressure_arithmetic_error["value"] <= 2e-9
+    assert pressure_arithmetic_error["sources"]
     midpoint_error = summary["maximum_bisection_trace_midpoint_error_m3_h"]
     assert midpoint_error is not None
     assert midpoint_error["value"] <= 1e-9
@@ -2595,6 +2607,12 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         assert trace_audit[
             "all_recorded_midpoint_flags_match_numeric_geometry"
         ] is True
+        assert trace_audit[
+            "all_midpoint_residuals_match_recorded_pressures"
+        ] is True
+        assert trace_audit[
+            "midpoint_residual_arithmetic_violation_iterations"
+        ] == []
         assert trace_audit["all_trace_raw_state_consistent"] is True
         assert trace_audit[
             "all_recorded_widths_match_airflow_brackets"
@@ -2652,10 +2670,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace sign-flag mismatches vs numeric residuals: **[]**" in report
     assert "Recomputed trace midpoint violations: **[]**" in report
     assert "Trace midpoint-flag mismatches vs numeric geometry: **[]**" in report
+    assert (
+        "Trace midpoint-residual pressure-arithmetic violations: **[]**"
+        in report
+    )
     assert "Trace raw-state audit violation corners: **[]**" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report
+    assert "Maximum trace midpoint residual arithmetic error" in report
     assert "Maximum trace recorded-width consistency error" in report
     assert "Maximum trace binary width-fraction consistency error" in report
     assert "Maximum absolute binary-width consistency error" in report

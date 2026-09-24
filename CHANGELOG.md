@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.82 independent midpoint pressure-state replay — 2026-09-24
+
+- Extends the v0.81 fresh nonlinear replay from fan-minus-system residuals to the complete retained midpoint pressure state: fan pressure, loop-network pressure, fixed pressure, total system pressure, and residual.
+- Re-solves the nonlinear variable-friction network and re-interpolates fan pressure independently at each replayed bisection midpoint, then compares every retained pressure component against the fresh model state with a strict 1e-9 Pa implementation-audit tolerance.
+- Detects coordinated absolute-pressure corruption where fan, loop, and total-system pressure are shifted consistently so the v0.80 retained-state identities still balance and the v0.81 residual replay remains unchanged.
+- Retains per-step component replay evidence and maximum absolute fan, loop, fixed, system, and residual replay errors for exact implementation provenance.
+- Preserves candidate priority, bounded root selection, root-acceptance tolerance, iteration budgets, fan-curve no-extrapolation behavior, and all existing engineering acceptance criteria.
+- Treats the new pressure-state replay strictly as deterministic numerical implementation provenance; it does not establish physical airflow uncertainty, fan-model validity, root uniqueness/stability, stall/surge limits, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.82.0.
+
 ## v0.81 independent fan/system residual replay — 2026-09-24
 
 - Reconstructs every retained bounded-bisection low/high/midpoint airflow from the selected supplied fan segment and recorded L/H/T decision chain, then freshly re-solves the nonlinear variable-friction loop at each replayed state.

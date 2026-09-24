@@ -6,8 +6,11 @@ from pathlib import Path
 import pytest
 
 import cleanroomx.gui as gui_module
-from cleanroomx.application import run_analysis
-from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
+from cleanroomx.application import run_analysis, validate_analysis_input
+from cleanroomx.gui import (
+    CleanroomXApp, _strict_json_loads, bundled_demo_project_path,
+    flatten_json, main, unit_hint,
+)
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
 
 
@@ -410,6 +413,23 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+
+def test_bundled_demo_is_present_and_dependency_complete():
+    path = bundled_demo_project_path()
+    project = load_project_document(path)
+    assert path.is_file()
+    assert project.active_analysis_id == "hvac"
+
+    for analysis in project.analyses:
+        validate_analysis_input(analysis.kind, analysis.input, base_dir=path.parent)
+
+    by_kind = {analysis.kind: analysis for analysis in project.analyses}
+    for kind in ("consistency", "dossier"):
+        analysis = by_kind[kind]
+        run = run_analysis(kind, analysis.input, base_dir=path.parent)
+        assert run.kind == kind
+        assert run.result
 
 
 def test_abandon_waits_for_worker_exit_before_reenabling_ui():

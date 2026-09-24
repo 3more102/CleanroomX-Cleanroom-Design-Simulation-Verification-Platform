@@ -1,40 +1,39 @@
-# CleanroomX v0.99 Test Evidence
+# CleanroomX v0.100 Test Evidence
 
-## Verified release baseline
+## Release candidate
 
 Date: 2026-09-24
 
-Release baseline commit on `main`:
+Release: **CleanroomX v0.100.0**
 
-`1f035d08f893573868610d35296e3947445318e6`
+Canonical branch: `codex/cleanroomx-v0100-final-mainline`
 
-GitHub Actions CI:
+The candidate is built directly from the integrated v0.99.1 mainline, not from an older divergent release branch.
 
-- Run #790
-- Run id: `36045911650`
-- Event: push to `main`
-- Conclusion: **success**
+## Required exact-head gates
 
-## Matrix evidence
+Before merge, the exact pull-request head must pass:
 
-Run #790 executed the full suite on all supported Python versions:
+- v0.91 selected-projection compatibility regressions;
+- v0.92 full-bisection projection compatibility regressions;
+- v0.93 supplied-point replay compatibility regressions;
+- v0.94 canonical-provenance compatibility regressions;
+- v0.95 solver-result-integrity compatibility regressions;
+- focused v0.100 application, project-document, and GUI regressions;
+- complete test suite on Python 3.11, 3.12, and 3.13;
+- representative nonlinear loop, uncertainty, and dossier CLI JSON/Markdown smoke checks;
+- clean-wheel build/install plus `cleanroomx-gui --check` on every Python matrix entry;
+- installed-wheel packaged-demo verification;
+- Python 3.13 real Tk/Xvfb `--demo --smoke`.
 
-- Python 3.11: **558 passed**
-- Python 3.12: **558 passed**
-- Python 3.13: **558 passed**
+## v0.100 coverage
 
-The workflow also completed the dedicated v0.91, v0.92, v0.93, v0.94, and v0.95 compatibility gates.
+The candidate covers canonical application-input SHA-256 identity; before/after dependency SHA-256 and byte-size evidence; run-bundle export; catalog/mapping parity and pre-window registry validation; absolute-only unsaved dossier execution; portable consistency/dossier references across import and Save As; base-directory result-cache invalidation; abandoned-worker exclusivity; same-directory flush/fsync atomic project/export writes; user-visible export errors; and fan/system plot evidence.
 
-## Desktop and CLI evidence
+## Verified predecessor evidence
 
-On Python 3.13, run #790 also completed the installed `cleanroomx-gui --check` readiness path and the real Tk GUI smoke under Xvfb against `examples/gui_demo.cleanroomx.json`. Representative nonlinear loop, uncertainty, and dossier CLI JSON/Markdown smoke checks completed successfully.
-
-The release baseline is package/runtime/demo/CI synchronized at `0.99.0`. The application registry rejects duplicate workflow keys, enforces ordinary parser/runner contracts and the custom consistency/dossier adapter contract, verifies declared callable bindings, and exposes structured readiness metadata through the headless GUI check.
-
-## Release-document closure
-
-The release-document pull request adds architecture, migration, security, deployment, rollback, test-evidence, and validation records only. It does not change runtime source, solver equations, numerical tolerances, uncertainty semantics, no-extrapolation behavior, or engineering acceptance rules. The documentation PR and resulting main push are required to pass CI before closure.
+The earlier integrated v0.99 baseline at commit `1f035d08f893573868610d35296e3947445318e6` passed GitHub Actions run id `36045911650` with 558 tests on each of Python 3.11, 3.12, and 3.13 plus the v0.91-v0.95 compatibility, CLI, headless-GUI, and Tk/Xvfb gates. Later v0.99.1 mainline work added the packaged demo, installed-wheel validation, and abandoned-worker exclusivity.
 
 ## Engineering boundary
 
-Passing automated tests establishes repository regression evidence for implemented software behavior. It is not evidence of ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance.
+Automated software validation is repository regression evidence. It does not establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty evidence, or regulatory compliance.

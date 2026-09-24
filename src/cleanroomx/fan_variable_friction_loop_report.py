@@ -405,6 +405,37 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
             f"{row['pressure_margin_pa']} | {row['network_outer_iterations']} |"
         )
 
+    supplied_point_network_replay = result.get(
+        "fan_curve_supplied_point_network_state_replay"
+    )
+    if supplied_point_network_replay:
+        lines.extend(
+            [
+                "",
+                "## Supplied-point network-state replay audit",
+                "",
+                "- Evaluated supplied-point network states: "
+                f"**{supplied_point_network_replay['evaluated_supplied_point_count']}/"
+                f"{supplied_point_network_replay['expected_supplied_point_count']}**",
+                "- Independent supplied-point replay checks: "
+                f"**{supplied_point_network_replay['replay_check_count']}**",
+                "- All evaluated supplied-point network-state hashes match independent replay: "
+                f"**{supplied_point_network_replay['all_evaluated_supplied_point_network_state_hashes_match_independent_replay']}**",
+                "- All evaluated supplied-point network-state projections match independent replay: "
+                f"**{supplied_point_network_replay['all_evaluated_supplied_point_network_state_projections_match_independent_replay']}**",
+                "- Complete supplied-point network-state replay: "
+                f"**{supplied_point_network_replay['complete_supplied_point_network_state_replay']}**",
+                "- Supplied-point hash replay violation points: "
+                f"**{supplied_point_network_replay['hash_violation_point_indices']}**",
+                "- Supplied-point projection replay violation points: "
+                f"**{supplied_point_network_replay['projection_violation_point_indices']}**",
+                "- Supplied-point network-state replay violation count: "
+                f"**{supplied_point_network_replay['violation_count']}**",
+                "- Exact supplied-point network-state replay violations: "
+                f"**{supplied_point_network_replay['violations']}**",
+            ]
+        )
+
     audit = result.get("fan_curve_supplied_point_residual_audit")
     if audit:
         lines.extend(

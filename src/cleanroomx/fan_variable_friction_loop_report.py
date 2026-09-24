@@ -148,6 +148,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['residual_replay_available']}**",
                     "- Every retained trace residual matches independent fan/system replay: "
                     f"**{trace_audit['all_trace_residuals_match_independent_replay']}**",
+                    "- Trace decisions match independent residual-replay semantics: "
+                    f"**{trace_audit['all_decisions_match_independent_residual_replay_semantics']}**",
                     "- Maximum absolute trace residual-replay error: "
                     f"**{trace_audit['maximum_absolute_trace_residual_replay_error_pa']} Pa**",
                     "- Every recorded trace width matches its airflow endpoints: "

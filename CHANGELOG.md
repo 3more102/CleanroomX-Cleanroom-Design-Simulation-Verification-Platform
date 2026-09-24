@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99 complete desktop hardening — 2026-09-24
+
+- Continues from the newest integrated `main` descendant, including the registry-integrity hardening merged at `9563507252f204bd8d88fa53f67d4afe2999f040`; no older divergent version-named branch is used as the release baseline.
+- Preserves registry uniqueness/custom-adapter/binding validation and exposes the detailed registry-validation summary through `cleanroomx-gui --check`.
+- Extends application plot models with backend-computed system-pressure samples that match the displayed supplied fan curve, preserving the operating-point marker without reimplementing system-curve engineering math in the GUI layer.
+- Distinguishes fan and system series with labeled solid/dashed Tk-canvas rendering.
+- Routes input JSON, result JSON, and report Markdown exports through a guarded write path so filesystem failures are surfaced as GUI errors instead of uncaught exceptions.
+- Makes the bundled real-window smoke open the fan operating-point workflow so Xvfb exercises project loading, backend execution, multi-series plot rendering, result rendering, and shutdown.
+- Bumps package/runtime/demo metadata and CI assertions to v0.99.0 and adds a dedicated desktop-hardening regression gate while retaining the complete Python 3.11/3.12/3.13 suite and all v0.91-v0.95 provenance compatibility gates.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

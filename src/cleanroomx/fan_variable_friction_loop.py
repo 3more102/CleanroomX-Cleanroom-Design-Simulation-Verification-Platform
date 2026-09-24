@@ -618,10 +618,100 @@ def _bisection_decision_trace_audit(
     symbol_by_decision = {
         decision: symbol for symbol, decision in legend.items()
     }
+    iteration_sequence = [int(step["iteration"]) for step in trace]
+    transition_checks = []
+    for transition_index, (step, next_step) in enumerate(
+        zip(trace, trace[1:]),
+        start=1,
+    ):
+        decision = step["decision"]
+        expected_low_airflow = float(step["low_airflow_m3_h"])
+        expected_high_airflow = float(step["high_airflow_m3_h"])
+        expected_low_residual = float(
+            step["low_fan_minus_system_pressure_pa"]
+        )
+        expected_high_residual = float(
+            step["high_fan_minus_system_pressure_pa"]
+        )
+        replayable_decision = decision in {
+            "replace_low_endpoint",
+            "replace_high_endpoint",
+        }
+        if decision == "replace_low_endpoint":
+            expected_low_airflow = float(step["midpoint_airflow_m3_h"])
+            expected_low_residual = float(
+                step["midpoint_fan_minus_system_pressure_pa"]
+            )
+        elif decision == "replace_high_endpoint":
+            expected_high_airflow = float(step["midpoint_airflow_m3_h"])
+            expected_high_residual = float(
+                step["midpoint_fan_minus_system_pressure_pa"]
+            )
+
+        next_iteration_is_contiguous = (
+            int(next_step["iteration"]) == int(step["iteration"]) + 1
+        )
+        next_airflow_bracket_matches_decision = (
+            replayable_decision
+            and math.isclose(
+                float(next_step["low_airflow_m3_h"]),
+                expected_low_airflow,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+            and math.isclose(
+                float(next_step["high_airflow_m3_h"]),
+                expected_high_airflow,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+        )
+        next_residual_bracket_matches_decision = (
+            replayable_decision
+            and math.isclose(
+                float(next_step["low_fan_minus_system_pressure_pa"]),
+                expected_low_residual,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+            and math.isclose(
+                float(next_step["high_fan_minus_system_pressure_pa"]),
+                expected_high_residual,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+        )
+        transition_checks.append(
+            {
+                "transition_index": transition_index,
+                "from_iteration": int(step["iteration"]),
+                "to_iteration": int(next_step["iteration"]),
+                "decision": decision,
+                "next_iteration_is_contiguous": (
+                    next_iteration_is_contiguous
+                ),
+                "next_airflow_bracket_matches_decision": (
+                    next_airflow_bracket_matches_decision
+                ),
+                "next_residual_bracket_matches_decision": (
+                    next_residual_bracket_matches_decision
+                ),
+                "state_transition_replays_recorded_decision": (
+                    next_iteration_is_contiguous
+                    and next_airflow_bracket_matches_decision
+                    and next_residual_bracket_matches_decision
+                ),
+            }
+        )
+
     return {
         "step_count": len(trace),
         "trace_matches_operating_iterations": (
             len(trace) == operating_iterations
+        ),
+        "iteration_sequence": iteration_sequence,
+        "iterations_are_contiguous_from_one": (
+            iteration_sequence == list(range(1, len(trace) + 1))
         ),
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
@@ -641,6 +731,20 @@ def _bisection_decision_trace_audit(
         "replace_high_endpoint_count": sum(
             step["decision"] == "replace_high_endpoint" for step in trace
         ),
+        "transition_record_count": len(transition_checks),
+        "all_airflow_bracket_transitions_replay_recorded_decisions": all(
+            check["next_airflow_bracket_matches_decision"]
+            for check in transition_checks
+        ),
+        "all_residual_bracket_transitions_replay_recorded_decisions": all(
+            check["next_residual_bracket_matches_decision"]
+            for check in transition_checks
+        ),
+        "all_state_transitions_replay_recorded_decisions": all(
+            check["state_transition_replays_recorded_decision"]
+            for check in transition_checks
+        ),
+        "transition_checks": transition_checks,
         "decision_sequence": "".join(
             symbol_by_decision[step["decision"]] for step in trace
         ),
@@ -650,10 +754,13 @@ def _bisection_decision_trace_audit(
             "evaluation that led to the solved operating point. L replaces "
             "the positive-residual low endpoint, H replaces the negative-"
             "residual high endpoint, and T accepts a midpoint within the "
-            "configured operating-pressure tolerance. This is numerical "
-            "implementation provenance only; it is not physical uncertainty, "
-            "an interpolation-error bound, a stability margin, or an "
-            "equipment-acceptance criterion."
+            "configured operating-pressure tolerance. The replay audit "
+            "verifies that each nonterminal L/H decision produces the next "
+            "recorded airflow/residual bracket and that iteration numbering "
+            "is contiguous. This is numerical implementation provenance "
+            "only; it is not physical uncertainty, an interpolation-error "
+            "bound, a stability margin, or an equipment-acceptance "
+            "criterion."
         ),
     }
 

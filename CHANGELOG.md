@@ -2,11 +2,13 @@
 
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
-- Independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from every retained bounded-bisection trace record instead of trusting stored audit booleans.
-- Verifies stored sign-change and midpoint flags against those recomputed numeric facts and retains per-step raw-state evidence plus maximum midpoint-centering error.
-- Propagates exact raw-state violation corner indices and coverage counts through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
-- Adds regressions for corrupted stored flags and midpoint coordinates while preserving v0.78 decision-semantics checks, v0.77 origin replay, v0.76 geometry checks, candidate selection, iteration budgets, and no-extrapolation behavior.
-- Treats the audit strictly as numerical implementation provenance; it does not establish physical airflow uncertainty, interpolation error, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.
+- Independently recomputes each retained airflow midpoint from the numeric bracket endpoints and records the absolute midpoint-centering error.
+- Checks the stored strict-sign-change and midpoint-validity flags against those recomputed numeric facts instead of trusting the flags as evidence.
+- Aggregates exact nonlinear uncertainty-corner indices for numeric sign failures, sign-flag mismatches, numeric midpoint failures, midpoint-flag mismatches, and combined raw-state audit failures, plus tied maximum midpoint-error witnesses.
+- Adds solved, iteration-limit, flag-corruption, and self-consistent corrupted-midpoint regression coverage while preserving the merged v0.78 decision-semantics audit and v0.77 origin replay.
+- Does not change candidate priority, root selection, root-acceptance tolerance, iteration budgets, fan-curve no-extrapolation behavior, or any engineering acceptance criterion.
+- Treats raw-state checks strictly as numerical implementation provenance; they are not physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability evidence, stall/surge evidence, commissioning/certification evidence, or equipment acceptance.
 - Bumped package/runtime metadata to v0.79.0.
 
 ## v0.78 bisection trace decision-semantics audit — 2026-09-24

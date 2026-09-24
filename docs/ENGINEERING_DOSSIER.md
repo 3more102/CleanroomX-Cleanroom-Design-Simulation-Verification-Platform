@@ -38,6 +38,8 @@ For v0.92 the dossier also preserves the complete per-bisection low/midpoint/hig
 
 For v0.93 the dossier additionally preserves supplied fan-point network-state replay across all nonlinear uncertainty corners. It keeps sampled-point SHA-256 violations, field-level projection violations, incomplete-coverage corners, exact corner/point/path mismatch records, coverage-gap reasons, detailed retained/recomputed/type evidence, mismatch totals, and tied per-field worst numerical witnesses distinct from selected, terminal, and bisection replay. Thus corruption in a sampled candidate anchor or a missing pre-failure point remains visible through dossier JSON and Markdown without changing the underlying engineering outcome.
 
+For v0.94 all of those replay layers use the shared signed-zero-stable, named-collection-order-invariant v3 canonical network-result representation. Dossier-preserved mismatch evidence can therefore identify deterministic solver metadata/configuration/history corruption as well as solved node/edge/pressure-power/closure corruption. Chronological solver history remains order-sensitive, and the stronger canonical identity remains content-integrity evidence rather than proof of source authenticity or engineering certification.
+
 Example:
 
 ```json

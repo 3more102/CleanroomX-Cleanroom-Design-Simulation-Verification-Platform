@@ -5,6 +5,7 @@ import math
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    SpatialDesignWorkspace,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -177,3 +178,31 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
         analysis,
     ) is False
     assert analysis.input == original
+
+
+def test_spatial_workspace_reads_pressure_cascade_links_from_active_project_analysis():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "pressure_cascade": [
+                {
+                    "higher_pressure_room": "Process",
+                    "lower_pressure_room": "Preparation",
+                    "min_delta_pa": 10,
+                },
+                {
+                    "higher_pressure_room": "",
+                    "lower_pressure_room": "Ignored",
+                    "min_delta_pa": 5,
+                },
+            ]
+        },
+    )
+    workspace = SpatialDesignWorkspace.__new__(SpatialDesignWorkspace)
+    workspace._analysis_getter = lambda: analysis
+
+    assert workspace._pressure_cascade_links() == [
+        ("Process", "Preparation", 10.0)
+    ]

@@ -359,6 +359,8 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         assert f"{position}_fan_pressure_pa" in remaining
         assert f"{position}_loop_network_pressure_pa" in remaining
         assert f"{position}_system_pressure_pa" in remaining
+        assert f"{position}_network_state_sha256" in remaining
+        assert len(remaining[f"{position}_network_state_sha256"]) == 64
     assert remaining["width_m3_h"] == pytest.approx(
         remaining["high_airflow_m3_h"] - remaining["low_airflow_m3_h"],
         abs=1e-9,
@@ -441,6 +443,20 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert terminal_component_replay["terminal_kind"] == (
         "iteration_limit_remaining_bracket"
     )
+    assert trace_audit["terminal_network_state_replay_available"] is True
+    assert trace_audit[
+        "all_terminal_network_states_match_independent_replay"
+    ] is True
+    assert trace_audit["terminal_network_state_replay_violation_count"] == 0
+    assert trace_audit[
+        "terminal_network_state_replay_violation_positions"
+    ] == []
+    assert trace_audit["terminal_network_state_replay_violations"] == []
+    terminal_network_replay = trace_audit["terminal_network_state_replay"]
+    assert terminal_network_replay is not None
+    assert terminal_network_replay["terminal_kind"] == (
+        "iteration_limit_remaining_bracket"
+    )
     assert "T" not in trace_audit["decision_sequence"]
 
     report = markdown_fan_variable_friction_loop_report(result)
@@ -470,6 +486,10 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert "Terminal pressure-component replay violation count: **0**" in report
     assert "Maximum absolute terminal pressure-component replay error" in report
     assert "Exact terminal pressure-component replay violations: **[]**" in report
+    assert "Terminal low/high network states match independent replay: **True**" in report
+    assert "Terminal network-state replay violation count: **0**" in report
+    assert "Terminal network-state replay violating bracket positions: **[]**" in report
+    assert "Exact terminal network-state replay violations: **[]**" in report
     assert "Every recorded trace width matches its airflow endpoints: **True**" in report
     assert (
         "Every recorded trace width fraction matches binary iteration contraction: **True**"
@@ -1144,6 +1164,16 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     terminal_component_replay = audit["terminal_pressure_component_replay"]
     assert terminal_component_replay is not None
     assert terminal_component_replay["terminal_kind"] == "solved_final_bracket"
+    assert audit["terminal_network_state_replay_available"] is True
+    assert audit[
+        "all_terminal_network_states_match_independent_replay"
+    ] is True
+    assert audit["terminal_network_state_replay_violation_count"] == 0
+    assert audit["terminal_network_state_replay_violation_positions"] == []
+    assert audit["terminal_network_state_replay_violations"] == []
+    terminal_network_replay = audit["terminal_network_state_replay"]
+    assert terminal_network_replay is not None
+    assert terminal_network_replay["terminal_kind"] == "solved_final_bracket"
 
     corrupted = [dict(step) for step in trace]
     delta_pa = 1.0
@@ -1330,6 +1360,92 @@ def test_terminal_bracket_component_replay_detects_iteration_limit_corruption() 
     ] is False
     assert terminal_check["high"][
         "all_pressure_components_match_independent_replay"
+    ] is True
+
+
+def test_terminal_network_state_replay_detects_iteration_limit_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Terminal network-state replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+        operating_pressure_tolerance_pa=1e-15,
+        max_operating_iterations=1,
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "non_converged"
+    evidence = result["operating_point_search_evidence"]
+    assert evidence is not None
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    terminal = dict(
+        evidence["iteration_limit_evidence"]["remaining_bisection_bracket"]
+    )
+    audit = evidence["bisection_trace_audit"]
+    assert audit["all_trace_network_states_match_independent_replay"] is True
+    assert audit[
+        "all_terminal_pressure_components_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_terminal_network_states_match_independent_replay"
+    ] is True
+
+    original_sha256 = terminal["low_network_state_sha256"]
+    assert len(original_sha256) == 64
+    terminal["low_network_state_sha256"] = "0" * 64
+
+    segment_index = evidence["supplied_segment_index"]
+    corrupted_audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="bisection_iteration_limit",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        iteration_limit_terminal_bracket=terminal,
+    )
+    assert corrupted_audit is not None
+    assert corrupted_audit[
+        "all_trace_network_states_match_independent_replay"
+    ] is True
+    assert corrupted_audit[
+        "all_terminal_pressure_components_match_independent_replay"
+    ] is True
+    assert corrupted_audit[
+        "all_terminal_network_states_match_independent_replay"
+    ] is False
+    assert corrupted_audit[
+        "terminal_network_state_replay_violation_count"
+    ] == 1
+    assert corrupted_audit[
+        "terminal_network_state_replay_violation_positions"
+    ] == ["low"]
+    violations = corrupted_audit["terminal_network_state_replay_violations"]
+    assert len(violations) == 1
+    assert violations[0]["iteration"] == 1
+    assert violations[0]["position"] == "low"
+    assert violations[0]["recorded_network_state_sha256"] == "0" * 64
+    assert violations[0]["recomputed_network_state_sha256"] == original_sha256
+    terminal_replay = corrupted_audit["terminal_network_state_replay"]
+    assert terminal_replay is not None
+    assert terminal_replay["terminal_kind"] == (
+        "iteration_limit_remaining_bracket"
+    )
+    assert terminal_replay["low"][
+        "network_state_matches_independent_replay"
+    ] is False
+    assert terminal_replay["high"][
+        "network_state_matches_independent_replay"
     ] is True
 
 

@@ -248,7 +248,15 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
+    assert trace_audit["all_midpoint_residuals_match_pressure_components"] is True
+    assert trace_audit[
+        "maximum_absolute_midpoint_residual_identity_error_pa"
+    ] <= 2e-9
     assert trace_audit["all_trace_raw_state_consistent"] is True
+    assert trace_audit["all_decisions_match_pressure_component_semantics"] is True
+    assert trace_audit[
+        "pressure_component_decision_semantic_violation_iterations"
+    ] == []
     assert trace_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
     ] <= 1e-9
@@ -439,6 +447,14 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
         in report
     )
+    assert (
+        "Recorded midpoint residuals equal fan minus system pressure: **True**"
+        in report
+    )
+    assert (
+        "Trace decisions match independently recomputed pressure-component semantics: **True**"
+        in report
+    )
     assert "Every recorded trace width matches its airflow endpoints: **True**" in report
     assert (
         "Every recorded trace width fraction matches binary iteration contraction: **True**"
@@ -457,6 +473,8 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
             "width_fraction_of_supplied_segment": 1.0,
             "low_fan_minus_system_pressure_pa": 4.0,
             "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_pressure_pa": 101.0,
+            "midpoint_system_pressure_pa": 100.0,
             "midpoint_fan_minus_system_pressure_pa": 1.0,
             "decision": "replace_low_endpoint",
             "strict_sign_change_before_evaluation": True,
@@ -471,6 +489,8 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
             "width_fraction_of_supplied_segment": 0.5,
             "low_fan_minus_system_pressure_pa": 1.0,
             "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_pressure_pa": 100.0,
+            "midpoint_system_pressure_pa": 100.0,
             "midpoint_fan_minus_system_pressure_pa": 0.0,
             "decision": "accept_pressure_tolerance",
             "strict_sign_change_before_evaluation": True,
@@ -512,7 +532,15 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     assert clean[
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
+    assert clean["all_midpoint_residuals_match_pressure_components"] is True
+    assert clean[
+        "maximum_absolute_midpoint_residual_identity_error_pa"
+    ] == pytest.approx(0.0, abs=1e-18)
     assert clean["all_trace_raw_state_consistent"] is True
+    assert clean["all_decisions_match_pressure_component_semantics"] is True
+    assert clean[
+        "pressure_component_decision_semantic_violation_iterations"
+    ] == []
     assert clean["maximum_absolute_trace_midpoint_error_m3_h"] == pytest.approx(
         0.0,
         abs=1e-18,
@@ -524,6 +552,34 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     assert clean[
         "maximum_absolute_trace_width_fraction_error"
     ] == pytest.approx(0.0, abs=1e-18)
+
+    pressure_component_corrupted = [dict(step) for step in trace]
+    pressure_component_corrupted[0]["midpoint_fan_pressure_pa"] = 99.0
+    pressure_component_audit = _bisection_decision_trace_audit(
+        pressure_component_corrupted,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=solved_terminal_bracket,
+    )
+    assert pressure_component_audit is not None
+    assert pressure_component_audit[
+        "all_midpoint_residuals_match_pressure_components"
+    ] is False
+    assert pressure_component_audit[
+        "maximum_absolute_midpoint_residual_identity_error_pa"
+    ] == pytest.approx(2.0, abs=1e-18)
+    assert pressure_component_audit[
+        "all_decisions_match_midpoint_residual_semantics"
+    ] is True
+    assert pressure_component_audit[
+        "all_decisions_match_pressure_component_semantics"
+    ] is False
+    assert pressure_component_audit[
+        "pressure_component_decision_semantic_violation_iterations"
+    ] == [1]
+    assert pressure_component_audit["all_trace_raw_state_consistent"] is False
 
     corrupted = [dict(step) for step in trace]
     corrupted[0]["width_m3_h"] = 7.0

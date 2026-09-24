@@ -93,6 +93,8 @@ v0.68 extends v0.66 alternative-candidate separation with a dimensionless scale-
 
 v0.69 completes the sampled sign-topology record by retaining strict negative-to-positive supplied-point residual crossings separately from the solver-eligible positive-to-negative crossing segments. The report exposes each reverse segment and the total bidirectional strict sign-change count, while the solver candidate list and selection policy remain unchanged. Reverse segments are audit-only sampled-data evidence and do not establish an additional continuous root or any physical acceptance/stability conclusion.
 
+v0.70 retains bounded-bisection evidence when the operating-point search reaches `max_operating_iterations` without satisfying the configured pressure residual tolerance. The result remains `non_converged` and carries no accepted operating point, but records the last evaluated midpoint and the remaining active positive/negative-residual bracket, including width, half-width, normalized width, completed binary contraction steps, strict-sign preservation, and contraction-consistency error. This is numerical search/implementation provenance only, not physical airflow uncertainty, interpolation error, a continuous root interval guarantee, stability/stall/surge evidence, or equipment acceptance.
+
 ## CLI
 
 ```text

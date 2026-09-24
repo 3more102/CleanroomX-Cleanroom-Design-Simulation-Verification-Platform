@@ -312,6 +312,8 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "pressure-state violations 0" in report
     assert "residual-replay" in report
     assert "residual-replay violations 0" in report
+    assert "selected-network-state-projection-replay" in report
+    assert "selected-network-state-projection-replay violations 0" in report
     assert "max residual-replay error" in report
     assert "max trace system-pressure identity error" in report
     assert "max trace residual identity error" in report

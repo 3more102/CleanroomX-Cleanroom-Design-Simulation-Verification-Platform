@@ -28,7 +28,7 @@ Check that the application layer, GUI imports, and every declared parser/runner/
 cleanroomx-gui --check
 ```
 
-The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate analysis keys, missing parser/runner bindings on ordinary analyses, accidental parser/runner bindings on custom `consistency`/`dossier` adapters, unresolved/non-callable targets, and returns auditable registry metadata alongside the package version and catalog size.
+The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate analysis keys, catalog/mapping drift, missing parser/runner bindings on ordinary analyses, accidental parser/runner bindings on custom `consistency`/`dossier` adapters, unresolved/non-callable targets, and returns auditable registry metadata alongside the package version and catalog size. Normal desktop startup runs the same registry validation before creating the Tk root.
 
 For CI or Linux automation with a virtual display:
 
@@ -52,7 +52,7 @@ Project saves are validated before writing and use an atomic temporary-file repl
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export result JSON or report Markdown and save the project.
 
-The **Abandon** action invalidates the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot. The status line explicitly reports abandonment behavior.
+The **Abandon** action suppresses the eventual worker result/error without attempting unsafe force-termination of a Python thread. CleanroomX stays busy until that worker actually exits, so a second backend analysis cannot overlap an abandoned computation. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot. The status line reports abandonment progress and readiness.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
@@ -60,7 +60,7 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
 
-Consistency and dossier workflows resolve relative file references against the saved project directory. Save the GUI project before running those workflows when their inputs use relative paths.
+Consistency and dossier workflows resolve relative file references against the saved project directory. Save the GUI project before running those workflows when their inputs use relative paths. A dossier whose references are all absolute can run before the project is first saved. If **Save Project As** changes the project directory, in-memory analysis results are cleared because the relative-path resolution context has changed.
 
 ## Results and plots
 
@@ -70,7 +70,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, catalog/mapping parity, structural registry integrity plus binding resolution, pre-display startup validation, strict result serialization, relative-file adapters, unsaved absolute-reference dossier execution, Save-As path-context cache invalidation, abandoned-worker exclusivity, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
 

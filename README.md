@@ -20,8 +20,7 @@ The CI workflow runs a dedicated v0.94 canonical-provenance gate, then the v0.93
 | v0.91 | selected operating network-state canonical projection replay with field localization |
 | v0.92 | full per-bisection low/midpoint/high canonical projection replay with exact mismatch localization |
 | v0.93 | supplied fan-point canonical SHA-256 and field-level projection replay |
-| v0.94 | complete solver-result canonical identity hardening: signed-zero normalization, named-collection order invariance, solver metadata/configuration/history identity |
-| v0.94 | signed-zero-stable, order-invariant named-collection canonical network-result identity with solver provenance/history |
+| v0.94 | signed-zero-stable canonical network-result identity with named-collection order invariance and solver metadata/configuration/history provenance |
 
 ### v0.94 canonical solver provenance hardening
 
@@ -42,14 +41,6 @@ SHA-256 replay remains a separate audit layer; projection equality is not inferr
 The same evidence propagates through nonlinear uncertainty aggregation, standalone JSON/Markdown reports, and engineering dossiers with exact corner → iteration → position → path provenance. Replay failures do not create, remove, or change an engineering operating point; solver decisions, no-extrapolation behavior, tolerances, convergence criteria, power calculations, and engineering acceptance semantics remain separate.
 
 This replay is deterministic numerical/provenance verification only. It is **not** cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
-
-### v0.94 canonical solver provenance
-
-v0.94 hardens the one shared canonical network-result representation used by full-trace, terminal, selected, and supplied-point SHA-256/projection replay. Canonicalization now normalizes floating `-0.0` to `0.0`, sorts semantically named node, edge, and variable-friction closure collections by name, and deliberately preserves chronological outer-iteration history order.
-
-The canonical projection now also covers network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and retained outer-iteration history. Field-level replay therefore localizes corruption in deterministic solver provenance as well as final node/edge/pressure-power/closure values. This changes provenance identity only; it does not change fan candidate discovery, interpolation/no-extrapolation, root selection, bisection decisions, solver tolerances, nonlinear iteration budgets, power calculations, uncertainty-corner generation, or engineering acceptance.
-
-This evidence is deterministic numerical/software provenance verification only. A SHA-256 digest identifies canonical content; it does not prove source authenticity, cleanroom certification, CFD validation, fan acceptance, commissioning status, global root uniqueness, physical stability, stall/surge behavior, manufacturer operating-envelope validity, physical uncertainty, or statistical confidence.
 
 ## v0.94 engineering core
 

@@ -351,20 +351,24 @@ class CleanroomXApp:
 
         sidebar = ttk.Frame(panes, style="Sidebar.TFrame", padding=8)
         panes.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="ANALYSES", style="SidebarTitle.TLabel").pack(anchor="w", pady=(0, 7))
+        ttk.Label(sidebar, text="ANALYSES", style="SidebarTitle.TLabel").pack(
+            anchor="w", pady=(0, 7)
+        )
+        tree_host = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        tree_host.pack(fill="both", expand=True)
         self.analysis_tree = ttk.Treeview(
-            sidebar, columns=("kind",), show="tree headings", selectmode="browse"
+            tree_host, columns=("kind",), show="tree headings", selectmode="browse"
         )
         self.analysis_tree.heading("#0", text="Name")
         self.analysis_tree.heading("kind", text="Kind")
         self.analysis_tree.column("#0", width=210)
         self.analysis_tree.column("kind", width=155)
-        scroll = ttk.Scrollbar(sidebar, orient="vertical", command=self.analysis_tree.yview)
+        scroll = ttk.Scrollbar(
+            tree_host, orient="vertical", command=self.analysis_tree.yview
+        )
         self.analysis_tree.configure(yscrollcommand=scroll.set)
-        tree_host = ttk.Frame(sidebar, style="Sidebar.TFrame")
-        tree_host.pack(fill="both", expand=True)
-        self.analysis_tree.pack(in_=tree_host, side="left", fill="both", expand=True)
-        scroll.pack(in_=tree_host, side="right", fill="y")
+        self.analysis_tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_analysis_selected)
 
         sidebar_actions = ttk.Frame(sidebar, style="Sidebar.TFrame")

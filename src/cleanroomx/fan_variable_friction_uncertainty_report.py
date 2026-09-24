@@ -804,14 +804,25 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['selected_operating_network_state_replay_consistent_corner_count']}**",
                 "- Selected operating network-state replay violation corners: "
                 f"**{search_summary['selected_operating_network_state_replay_violation_corner_indices']}**",
-                "- Selected operating network-state projection replay evidence corners: "
-                f"**{search_summary['selected_operating_network_state_projection_replay_evidence_corner_count']}**",
+                "- Selected operating network-state projection replay applicable: "
+                f"**{search_summary['selected_operating_network_state_projection_replay_applicable']}**",
+                "- Selected operating network-state projection replay coverage: "
+                f"**{search_summary['selected_operating_network_state_projection_replay_evidence_corner_count']}/"
+                f"{search_summary['selected_operating_network_state_projection_replay_applicable_corner_count']}**",
+                "- Selected operating network-state projection replay complete coverage: "
+                f"**{search_summary['selected_operating_network_state_projection_replay_complete_coverage']}**",
                 "- Selected operating network-state projection replay consistent corners: "
                 f"**{search_summary['selected_operating_network_state_projection_replay_consistent_corner_count']}**",
+                "- Selected operating network-state projection replay inconsistent corners: "
+                f"**{search_summary['selected_operating_network_state_projection_replay_inconsistent_corner_count']}**",
                 "- Selected operating network-state projection replay violation corners: "
                 f"**{search_summary['selected_operating_network_state_projection_replay_violation_corner_indices']}**",
                 "- Selected operating network-state projection mismatch records: "
                 f"**{search_summary['selected_operating_network_state_projection_mismatch_count']}**",
+                "- Selected operating network-state projection violation details: "
+                f"**{search_summary['selected_operating_network_state_projection_replay_violation_details']}**",
+                "- Selected operating network-state projection maximum numerical replay errors by field: "
+                f"**{search_summary['maximum_selected_operating_network_state_projection_numeric_errors']}**",
                 "- Selected operating-state replay violation records: "
                 f"**{search_summary['selected_operating_state_replay_violation_count']}**",
                 "- Selected operating-state replay violation details: "

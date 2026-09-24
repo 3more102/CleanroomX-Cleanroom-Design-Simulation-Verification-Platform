@@ -597,6 +597,103 @@ def _with_selected_crossing_feature(
     return enriched
 
 
+def _bisection_decision_trace_audit(
+    trace: list[dict] | None,
+    *,
+    operating_iterations: int,
+    termination_reason: str,
+) -> dict | None:
+    if trace is None:
+        return None
+
+    accept_indices = [
+        index
+        for index, step in enumerate(trace)
+        if step["decision"] == "accept_pressure_tolerance"
+    ]
+    transition_chain_preserved = all(
+        math.isclose(
+            float(current["post_decision_low_airflow_m3_h"]),
+            float(following["low_airflow_m3_h"]),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        and math.isclose(
+            float(current["post_decision_high_airflow_m3_h"]),
+            float(following["high_airflow_m3_h"]),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        for current, following in zip(trace, trace[1:])
+    )
+    if termination_reason == "pressure_residual":
+        terminal_outcome_consistent = (
+            accept_indices == [len(trace) - 1]
+            and trace[-1]["decision"] == "accept_pressure_tolerance"
+        )
+    elif termination_reason == "bisection_iteration_limit":
+        terminal_outcome_consistent = (
+            not accept_indices
+            and bool(trace)
+            and trace[-1]["decision"]
+            in {"replace_low_endpoint", "replace_high_endpoint"}
+        )
+    else:
+        terminal_outcome_consistent = False
+
+    legend = {
+        "L": "replace_low_endpoint",
+        "H": "replace_high_endpoint",
+        "T": "accept_pressure_tolerance",
+    }
+    symbol_by_decision = {
+        decision: symbol for symbol, decision in legend.items()
+    }
+    return {
+        "step_count": len(trace),
+        "termination_reason": termination_reason,
+        "trace_matches_operating_iterations": (
+            len(trace) == operating_iterations
+        ),
+        "all_steps_preserve_strict_sign_change_before_evaluation": all(
+            step["strict_sign_change_before_evaluation"]
+            for step in trace
+        ),
+        "all_midpoints_are_arithmetic_bracket_midpoints": all(
+            step["midpoint_is_arithmetic_bracket_midpoint"]
+            for step in trace
+        ),
+        "all_width_fractions_match_binary_contraction": all(
+            step["binary_width_fraction_matches_iteration"]
+            for step in trace
+        ),
+        "transition_chain_preserved": transition_chain_preserved,
+        "accept_pressure_tolerance_count": len(accept_indices),
+        "terminal_outcome_consistent": terminal_outcome_consistent,
+        "replace_low_endpoint_count": sum(
+            step["decision"] == "replace_low_endpoint" for step in trace
+        ),
+        "replace_high_endpoint_count": sum(
+            step["decision"] == "replace_high_endpoint" for step in trace
+        ),
+        "decision_sequence": "".join(
+            symbol_by_decision[step["decision"]] for step in trace
+        ),
+        "decision_legend": legend,
+        "scope_note": (
+            "The decision trace preserves every completed bounded-bisection "
+            "midpoint evaluation. L replaces the positive-residual low "
+            "endpoint, H replaces the negative-residual high endpoint, and "
+            "T accepts a midpoint within the configured operating-pressure "
+            "tolerance. Solved and iteration-limit outcomes retain distinct "
+            "terminal-decision rules. This is numerical implementation "
+            "provenance only; it is not physical uncertainty, an "
+            "interpolation-error bound, a stability margin, or an "
+            "equipment-acceptance criterion."
+        ),
+    }
+
+
 def _nonconverged_result(
     study: FanVariableFrictionLoopStudy,
     *,
@@ -686,6 +783,7 @@ def solve_fan_variable_friction_loop(
     selected_segment = 0
     selected_supplied_point_index: int | None = None
     final_bisection_bracket: dict | None = None
+    bisection_trace: list[dict] | None = None
     operating_iterations = 0
     termination_reason = "no_intersection_in_supplied_range"
 
@@ -718,6 +816,7 @@ def solve_fan_variable_friction_loop(
             low_residual = left_residual
             high_residual = right_residual
             supplied_segment_span = high - low
+            bisection_trace = []
             final: tuple[float, float, dict, float, float] | None = None
 
             try:
@@ -739,13 +838,90 @@ def solve_fan_variable_friction_loop(
                         residual,
                     )
                     operating_iterations = iteration
+                    bracket_width = high - low
+                    width_fraction = bracket_width / supplied_segment_span
+                    expected_width_fraction = 0.5 ** (iteration - 1)
+                    bracket_midpoint = 0.5 * (low + high)
                     if abs(residual) <= tolerance:
-                        bracket_width = high - low
-                        width_fraction = (
-                            bracket_width / supplied_segment_span
-                        )
-                        expected_width_fraction = 0.5 ** (iteration - 1)
-                        bracket_midpoint = 0.5 * (low + high)
+                        decision = "accept_pressure_tolerance"
+                        next_low = low
+                        next_high = high
+                    elif residual > 0.0:
+                        decision = "replace_low_endpoint"
+                        next_low = airflow
+                        next_high = high
+                    else:
+                        decision = "replace_high_endpoint"
+                        next_low = low
+                        next_high = airflow
+
+                    assert bisection_trace is not None
+                    bisection_trace.append(
+                        {
+                            "iteration": iteration,
+                            "low_airflow_m3_h": round(low, 9),
+                            "high_airflow_m3_h": round(high, 9),
+                            "midpoint_airflow_m3_h": round(airflow, 9),
+                            "post_decision_low_airflow_m3_h": round(
+                                next_low,
+                                9,
+                            ),
+                            "post_decision_high_airflow_m3_h": round(
+                                next_high,
+                                9,
+                            ),
+                            "width_m3_h": round(bracket_width, 9),
+                            "width_fraction_of_supplied_segment": round(
+                                width_fraction,
+                                15,
+                            ),
+                            "expected_width_fraction_of_supplied_segment": round(
+                                expected_width_fraction,
+                                15,
+                            ),
+                            "absolute_width_fraction_consistency_error": round(
+                                abs(
+                                    width_fraction
+                                    - expected_width_fraction
+                                ),
+                                18,
+                            ),
+                            "low_fan_minus_system_pressure_pa": round(
+                                low_residual,
+                                9,
+                            ),
+                            "high_fan_minus_system_pressure_pa": round(
+                                high_residual,
+                                9,
+                            ),
+                            "midpoint_fan_minus_system_pressure_pa": round(
+                                residual,
+                                9,
+                            ),
+                            "decision": decision,
+                            "strict_sign_change_before_evaluation": (
+                                low_residual > 0.0
+                                and high_residual < 0.0
+                            ),
+                            "midpoint_is_arithmetic_bracket_midpoint": (
+                                math.isclose(
+                                    airflow,
+                                    bracket_midpoint,
+                                    rel_tol=0.0,
+                                    abs_tol=1e-12,
+                                )
+                            ),
+                            "binary_width_fraction_matches_iteration": (
+                                math.isclose(
+                                    width_fraction,
+                                    expected_width_fraction,
+                                    rel_tol=1e-12,
+                                    abs_tol=1e-15,
+                                )
+                            ),
+                        }
+                    )
+                    if abs(residual) <= tolerance:
                         final_bisection_bracket = {
                             "low_airflow_m3_h": round(low, 9),
                             "high_airflow_m3_h": round(high, 9),
@@ -811,10 +987,10 @@ def solve_fan_variable_friction_loop(
                         termination_reason = "pressure_residual"
                         break
                     if residual > 0.0:
-                        low = airflow
+                        low = next_low
                         low_residual = residual
                     else:
-                        high = airflow
+                        high = next_high
                         high_residual = residual
                 else:
                     termination_reason = "bisection_iteration_limit"
@@ -907,6 +1083,12 @@ def solve_fan_variable_friction_loop(
                     "selected_supplied_point_index": None,
                     "operating_iterations": operating_iterations,
                     "final_bisection_bracket": None,
+                    "bisection_trace": bisection_trace,
+                    "bisection_trace_audit": _bisection_decision_trace_audit(
+                        bisection_trace,
+                        operating_iterations=operating_iterations,
+                        termination_reason=termination_reason,
+                    ),
                     "iteration_limit_evidence": {
                         "last_evaluated_midpoint_airflow_m3_h": round(
                             selected_airflow,
@@ -1052,14 +1234,23 @@ def solve_fan_variable_friction_loop(
         "selected_supplied_point_index": selected_supplied_point_index,
         "operating_iterations": operating_iterations,
         "final_bisection_bracket": final_bisection_bracket,
+        "bisection_trace": bisection_trace,
+        "bisection_trace_audit": _bisection_decision_trace_audit(
+            bisection_trace,
+            operating_iterations=operating_iterations,
+            termination_reason=termination_reason,
+        ),
         "scope_note": (
             "The final bisection bracket is the active signed-residual search "
             "interval immediately before a pressure-tolerance midpoint "
-            "termination. Its width and half-width are numerical search-"
-            "geometry evidence only; they are not physical airflow "
-            "uncertainty, interpolation error, continuous worst-case bounds, "
-            "or equipment-acceptance limits. Supplied-point tolerance-contact "
-            "solutions do not fabricate a bisection bracket."
+            "termination. Bounded-bisection solutions also retain every "
+            "completed midpoint decision; iteration-limit outcomes retain "
+            "the same trace without fabricating an accepted point. Bracket "
+            "geometry and decision traces are numerical search provenance "
+            "only; they are not physical airflow uncertainty, interpolation "
+            "error, continuous worst-case bounds, stability margins, or "
+            "equipment-acceptance limits. Supplied-point tolerance-contact "
+            "solutions do not fabricate bisection evidence."
         ),
     }
 

@@ -40,7 +40,7 @@ Open the bundled end-to-end demonstration directly:
 cleanroomx-gui examples/gui_demo.cleanroomx.json
 ```
 
-For automated installation checks without a display:
+For automated installation checks without a display, including validation that every registered parser, runner, and reporter binding is importable and callable:
 
 ```bash
 cleanroomx-gui --check

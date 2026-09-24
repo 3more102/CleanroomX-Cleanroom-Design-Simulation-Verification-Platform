@@ -150,6 +150,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Min segment-point clearance m³/h" in report
     assert "Segment evidence" in report
     assert "Min alternative candidate gap m³/h" in report
+    assert "Min alternative candidate gap / supplied curve span" in report
     assert "Residual topology" in report
     assert "No-intersection boundary cases" in report
     assert "Result SHA-256" in report

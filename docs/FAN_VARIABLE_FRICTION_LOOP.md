@@ -42,6 +42,8 @@ v0.91 retains that same order-invariant canonical projection for the terminal br
 
 v0.92 makes the shared canonical projection both signed-zero-stable and solver-provenance-complete. Floating `-0.0` is normalized to `0.0`, while the projection now includes network/status/reference-node identity, inner Newton iteration count, mass-balance tolerance, variable-friction convergence/configuration, and ordered outer-iteration history. Named node/edge/closure collections remain sorted by name, while chronological solver history remains order-sensitive by design. The same v3 projection drives SHA-256 replay and v0.91 terminal mismatch-path diagnostics.
 
+v0.93 extends the same v3 hash and field-by-field canonical projection replay to every successfully evaluated supplied fan-curve point before root selection. Each supplied-point check retains both representations; a fresh nonlinear solve at that exact airflow verifies the SHA-256 and projection independently and reports deterministic mismatch paths when the projection differs. This covers solved cases, complete `no_intersection_in_supplied_range` cases, and the successfully evaluated prefix before a network-solver failure. The audit is deterministic implementation provenance only.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`
@@ -100,6 +102,7 @@ A solved result includes:
 - resistance-closure error;
 - edge Reynolds/friction evidence;
 - supplied fan-point system checks;
+- a supplied-point network-state replay audit retaining the v3 canonical SHA-256 and projection for each successfully evaluated fan point, independently re-solving those exact airflows, localizing projection differences to deterministic field paths, and distinguishing complete from partial point coverage;
 - operating-point termination reason;
 - a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, solver-eligible strict positive-to-negative sign-change segments, audit-only strict negative-to-positive reverse sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features;
 - for solved cases, selected-candidate provenance containing the documented selection policy, selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate.

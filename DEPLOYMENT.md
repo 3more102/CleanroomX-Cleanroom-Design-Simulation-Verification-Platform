@@ -36,11 +36,13 @@ Launch the desktop application:
 cleanroomx-gui
 ```
 
-Open the bundled demonstration project:
+Open the self-contained demonstration bundled in the installed distribution:
 
 ```bash
-cleanroomx-gui examples/gui_demo.cleanroomx.json
+cleanroomx-gui --demo
 ```
+
+The wheel includes the demonstration project and all JSON dependencies required by its consistency and dossier analyses.
 
 ## Linux GUI smoke
 

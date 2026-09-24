@@ -775,6 +775,7 @@ def _bisection_decision_trace_audit(
             }
         )
 
+    tolerance = float(operating_pressure_tolerance_pa)
     residual_replay_checks = []
     residual_replay_available = (
         study is not None
@@ -856,6 +857,13 @@ def _bisection_decision_trace_audit(
                 rel_tol=0.0,
                 abs_tol=residual_replay_absolute_tolerance_pa,
             )
+            if abs(recomputed_midpoint_residual) <= tolerance:
+                expected_replay_decision = "accept_pressure_tolerance"
+            elif recomputed_midpoint_residual > 0.0:
+                expected_replay_decision = "replace_low_endpoint"
+            else:
+                expected_replay_decision = "replace_high_endpoint"
+            recorded_decision = step["decision"]
             residual_replay_checks.append(
                 {
                     "iteration": int(step["iteration"]),
@@ -905,6 +913,13 @@ def _bisection_decision_trace_audit(
                     "all_residuals_match_independent_replay": (
                         low_matches and high_matches and midpoint_matches
                     ),
+                    "expected_decision_from_independent_midpoint_residual": (
+                        expected_replay_decision
+                    ),
+                    "recorded_decision": recorded_decision,
+                    "decision_matches_independent_residual_semantics": (
+                        recorded_decision == expected_replay_decision
+                    ),
                 }
             )
             decision = step["decision"]
@@ -914,7 +929,6 @@ def _bisection_decision_trace_audit(
                 replay_high_airflow = replay_midpoint_airflow
 
     decision_semantic_checks = []
-    tolerance = float(operating_pressure_tolerance_pa)
     for step in trace:
         midpoint_residual = float(
             step["midpoint_fan_minus_system_pressure_pa"]
@@ -1366,6 +1380,19 @@ def _bisection_decision_trace_audit(
             if residual_replay_available
             else None
         ),
+        "all_decisions_match_independent_residual_replay_semantics": (
+            all(
+                check["decision_matches_independent_residual_semantics"]
+                for check in residual_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "independent_residual_decision_semantic_violation_iterations": [
+            check["iteration"]
+            for check in residual_replay_checks
+            if not check["decision_matches_independent_residual_semantics"]
+        ],
         "maximum_absolute_trace_residual_replay_error_pa": (
             max(
                 max(
@@ -1483,8 +1510,10 @@ def _bisection_decision_trace_audit(
             "stored flags against those recomputed facts. The residual-"
             "replay audit independently re-solves the loop at the exact "
             "supplied-segment bisection endpoints and midpoints, recomputes "
-            "fan-minus-system pressure, and checks every retained residual "
-            "against that replay. The decision-semantics audit "
+            "fan-minus-system pressure, checks every retained residual "
+            "against that replay, and independently classifies each L/H/T "
+            "decision from the recomputed midpoint residual and configured "
+            "pressure tolerance. The recorded decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "

@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Residual topology | Provenance complete |",
-                "|---|---|---:|---:|---:|---:|---|---|---|---|---|---|---|---|---|---|---|---:|---|---:|---|---:|---|---:|---:|---:|---|---:|---|---:|---|---:|---|---:|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Residual topology | Provenance complete |",
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -701,6 +701,7 @@ def markdown_dossier_report(result: dict) -> str:
             )
             search_half_width = "—"
             search_coverage = "—"
+            search_invariants = "—"
             if search_summary is not None:
                 search_coverage = (
                     f"{search_summary['search_evidence_corner_count']}/"
@@ -711,6 +712,31 @@ def markdown_dossier_report(result: dict) -> str:
                 )
                 if search_evidence is not None:
                     search_half_width = search_evidence["value"]
+                invariant_count = search_summary.get(
+                    "bisection_invariant_evidence_corner_count",
+                    0,
+                )
+                sign_count = search_summary.get(
+                    "strict_sign_change_preserved_corner_count",
+                    0,
+                )
+                midpoint_count = search_summary.get(
+                    "selected_midpoint_centered_corner_count",
+                    0,
+                )
+                invariant_error = search_summary.get(
+                    "maximum_absolute_width_fraction_consistency_error"
+                )
+                max_error = (
+                    "—"
+                    if invariant_error is None
+                    else invariant_error["value"]
+                )
+                search_invariants = (
+                    f"sign {sign_count}/{invariant_count}; "
+                    f"midpoint {midpoint_count}/{invariant_count}; "
+                    f"max width-fraction error {max_error}"
+                )
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"
             )
@@ -767,6 +793,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{solved_residual_airflow_equivalent} | "
                 f"{pressure_airflow_coverage} | "
                 f"{search_half_width} | {search_coverage} | "
+                f"{search_invariants} | "
                 f"{segment_clearance} | {segment_coverage} | "
                 f"{alternative_candidate_gap} | "
                 f"{residual_topology} | "

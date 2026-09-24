@@ -2337,3 +2337,71 @@ def test_fan_curve_segment_position_marks_zero_solved_corner_coverage() -> None:
     assert summary["maximum_segment_airflow_span_m3_h"] is None
     assert all(corner["fan_curve_segment_position"] is None for corner in result["corners"])
 
+
+
+def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_curve_scenarios_demo.json"
+        )
+    )
+
+    summary = result["operating_point_search_resolution_summary"]
+    bisection_corners = [
+        corner
+        for corner in result["corners"]
+        if corner["operating_point_search_evidence"] is not None
+        and corner["operating_point_search_evidence"]["method"]
+        == "bounded_bisection"
+    ]
+
+    assert summary["bisection_corner_count"] == len(bisection_corners)
+    assert summary["bisection_corner_count"] > 0
+    assert summary["bisection_invariant_evidence_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+    assert summary["strict_sign_change_violation_corner_indices"] == []
+    assert summary["selected_midpoint_violation_corner_indices"] == []
+    assert summary["strict_sign_change_preserved_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+    assert summary["selected_midpoint_centered_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+
+    errors = []
+    for corner in bisection_corners:
+        evidence = corner["operating_point_search_evidence"]
+        bracket = evidence["final_bisection_bracket"]
+        assert bracket is not None
+        invariant = bracket["invariant_audit"]
+        assert invariant["strict_sign_change_preserved"] is True
+        assert invariant["selected_airflow_is_bracket_midpoint"] is True
+        assert invariant["binary_contraction_step_count"] == (
+            bracket["iteration"] - 1
+        )
+        expected_fraction = 0.5 ** (bracket["iteration"] - 1)
+        assert invariant[
+            "expected_width_fraction_of_supplied_segment"
+        ] == pytest.approx(expected_fraction, abs=1e-15)
+        assert invariant[
+            "actual_width_fraction_of_supplied_segment"
+        ] == pytest.approx(
+            bracket["width_fraction_of_supplied_segment"],
+            abs=1e-12,
+        )
+        errors.append(
+            invariant["absolute_width_fraction_consistency_error"]
+        )
+
+    maximum_error = summary[
+        "maximum_absolute_width_fraction_consistency_error"
+    ]
+    assert maximum_error is not None
+    assert maximum_error["value"] == pytest.approx(max(errors), abs=1e-18)
+    assert maximum_error["sources"]
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Bisection corners with invariant evidence" in report
+    assert "Strict sign-bracket violations" in report
+    assert "Maximum absolute binary-width consistency error" in report

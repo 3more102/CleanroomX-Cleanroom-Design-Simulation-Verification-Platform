@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Residual topology | Provenance complete |",
-                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Bisection iteration-limit evidence | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Residual topology | Provenance complete |",
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -702,6 +702,7 @@ def markdown_dossier_report(result: dict) -> str:
             search_half_width = "—"
             search_coverage = "—"
             search_invariants = "—"
+            search_iteration_limit_evidence = "—"
             if search_summary is not None:
                 search_coverage = (
                     f"{search_summary['search_evidence_corner_count']}/"
@@ -736,6 +737,22 @@ def markdown_dossier_report(result: dict) -> str:
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
                     f"max width-fraction error {max_error}"
+                )
+                iteration_limit_count = search_summary.get(
+                    "bisection_iteration_limit_corner_count",
+                    0,
+                )
+                terminal_half_width = search_summary.get(
+                    "maximum_iteration_limit_terminal_bracket_half_width_m3_h"
+                )
+                terminal_half_width_value = (
+                    "—"
+                    if terminal_half_width is None
+                    else terminal_half_width["value"]
+                )
+                search_iteration_limit_evidence = (
+                    f"{iteration_limit_count} corners; "
+                    f"max terminal half-width {terminal_half_width_value}"
                 )
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"
@@ -794,6 +811,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{pressure_airflow_coverage} | "
                 f"{search_half_width} | {search_coverage} | "
                 f"{search_invariants} | "
+                f"{search_iteration_limit_evidence} | "
                 f"{segment_clearance} | {segment_coverage} | "
                 f"{alternative_candidate_gap} | "
                 f"{residual_topology} | "

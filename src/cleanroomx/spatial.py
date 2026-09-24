@@ -282,7 +282,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._summary_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
+        self._view_mode_var = tk.StringVar(value="split")
+        self._grid_var = tk.StringVar(value="0.5")
+        self._mode_buttons: dict[str, ttk.Button] = {}
         self._property_vars: dict[str, tk.StringVar] = {}
+        self._property_entries: dict[str, ttk.Entry] = {}
 
         self._build()
         self.refresh()
@@ -323,12 +327,58 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
 
+        viewbar = ttk.Frame(self, padding=(6, 0, 6, 4))
+        viewbar.pack(fill="x")
+        ttk.Label(viewbar, text="Workspace").pack(side="left", padx=(0, 5))
+        for mode, label in (("2d", "2D"), ("split", "Split"), ("3d", "3D")):
+            button = ttk.Button(
+                viewbar,
+                text=label,
+                width=7,
+                command=lambda m=mode: self.set_view_mode(m),
+            )
+            button.pack(side="left", padx=2)
+            self._mode_buttons[mode] = button
+        ttk.Separator(viewbar, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Label(viewbar, text="2D zoom").pack(side="left", padx=(0, 4))
+        ttk.Button(viewbar, text="−", width=3, command=lambda: self.zoom_2d(1 / 1.15)).pack(
+            side="left", padx=1
+        )
+        ttk.Button(viewbar, text="+", width=3, command=lambda: self.zoom_2d(1.15)).pack(
+            side="left", padx=1
+        )
+        ttk.Label(viewbar, text="3D zoom").pack(side="left", padx=(10, 4))
+        ttk.Button(viewbar, text="−", width=3, command=lambda: self._zoom_3d(1 / 1.15)).pack(
+            side="left", padx=1
+        )
+        ttk.Button(viewbar, text="+", width=3, command=lambda: self._zoom_3d(1.15)).pack(
+            side="left", padx=1
+        )
+        ttk.Separator(viewbar, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Label(viewbar, text="Snap grid").pack(side="left", padx=(0, 4))
+        grid_box = ttk.Combobox(
+            viewbar,
+            textvariable=self._grid_var,
+            values=("0.10", "0.25", "0.50", "1.00", "2.00"),
+            state="readonly",
+            width=6,
+        )
+        grid_box.pack(side="left")
+        grid_box.bind("<<ComboboxSelected>>", lambda event: self.set_grid_spacing())
+        ttk.Label(viewbar, text="m").pack(side="left", padx=(3, 8))
+        ttk.Label(
+            viewbar,
+            text="Delete removes selection · Esc clears selection",
+        ).pack(side="right")
+
         body = ttk.Panedwindow(self, orient="horizontal")
+        self._body = body
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
 
         two_d = ttk.Frame(body)
+        self._two_d = two_d
         body.add(two_d, weight=4)
-        ttk.Label(two_d, text="2D Layout", font=("TkDefaultFont", 10, "bold")).pack(
+        ttk.Label(two_d, text="2D FLOOR PLAN", font=("TkDefaultFont", 10, "bold")).pack(
             anchor="w", padx=4, pady=(2, 4)
         )
         self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
@@ -339,13 +389,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(footer2d, textvariable=self._summary_var, anchor="e").pack(side="right")
 
         right = ttk.Panedwindow(body, orient="vertical")
+        self._right = right
         body.add(right, weight=4)
 
         three_d = ttk.Frame(right)
         right.add(three_d, weight=3)
         header3 = ttk.Frame(three_d)
         header3.pack(fill="x")
-        ttk.Label(header3, text="3D View", font=("TkDefaultFont", 10, "bold")).pack(
+        ttk.Label(header3, text="3D DIGITAL TWIN", font=("TkDefaultFont", 10, "bold")).pack(
             side="left", padx=4, pady=(2, 4)
         )
         for label, delta in (("↺", -15), ("↻", 15)):
@@ -370,6 +421,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("name", "Name"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
+            ("z_m", "Z (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
@@ -381,7 +433,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
             self._property_vars[key] = var
-            ttk.Entry(inspector, textvariable=var, width=18).grid(
+            entry = ttk.Entry(inspector, textvariable=var, width=18)
+            self._property_entries[key] = entry
+            entry.grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
         button_row = 2 + (len(fields) + 1) // 2
@@ -416,11 +470,47 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
         self.canvas_3d.bind("<Delete>", lambda event: self.delete_selected())
         self.bind_all("<Escape>", lambda event: self.clear_selection())
+        self._update_view_mode_buttons()
+
+    def _update_view_mode_buttons(self) -> None:
+        active = self._view_mode_var.get()
+        for mode, button in self._mode_buttons.items():
+            button.configure(style="Accent.TButton" if mode == active else "TButton")
+
+    def set_view_mode(self, mode: str, *, announce: bool = True) -> None:
+        if mode not in {"2d", "split", "3d"}:
+            return
+        self._view_mode_var.set(mode)
+        for pane in (self._two_d, self._right):
+            try:
+                self._body.forget(pane)
+            except tk.TclError:
+                pass
+        if mode in {"2d", "split"}:
+            self._body.add(self._two_d, weight=7 if mode == "2d" else 4)
+        if mode in {"3d", "split"}:
+            self._body.add(self._right, weight=7 if mode == "3d" else 4)
+        self._update_view_mode_buttons()
+        self.after_idle(self.redraw)
+        if announce:
+            label = {"2d": "2D floor plan", "split": "2D + 3D split", "3d": "3D digital twin"}[mode]
+            self._status_setter(f"Spatial workspace: {label}")
+
+    def set_grid_spacing(self) -> None:
+        try:
+            spacing = float(self._grid_var.get())
+        except ValueError:
+            return
+        if not math.isfinite(spacing) or spacing <= 0:
+            return
+        self.layout["grid_m"] = spacing
+        self._persist(f"Snap grid set to {spacing:g} m")
 
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        self._grid_var.set(f"{self.layout['grid_m']:g}")
         if self.selected and not self._selected_object():
             self.selected = None
         self._update_summary()
@@ -459,14 +549,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
-            for var in self._property_vars.values():
+            for key, var in self._property_vars.items():
                 var.set("")
+                entry = self._property_entries.get(key)
+                if entry is not None:
+                    entry.configure(state="disabled")
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+
+        is_room = bool(self.selected and self.selected.kind == "room")
+        prefix = "Room" if is_room else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+        room_only = {"length_m", "width_m", "height_m", "pressure_pa"}
+        device_only = {"z_m"}
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+            entry = self._property_entries.get(key)
+            if entry is None:
+                continue
+            allowed = key not in room_only | device_only
+            if is_room and key in room_only:
+                allowed = True
+            if not is_room and key in device_only:
+                allowed = True
+            entry.configure(state="normal" if allowed else "disabled")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -489,6 +595,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+        elif self.selected and self.selected.kind == "device":
+            z_text = self._property_vars["z_m"].get().strip()
+            if z_text:
+                item["z_m"] = _finite_number(z_text, item.get("z_m", 0.0))
         self._load_property_panel()
         self._persist("Spatial properties updated")
 
@@ -979,6 +1089,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_x"] += x - after[0]
         self.layout["view"]["pan_y"] += y - after[1]
         self.redraw()
+
+    def zoom_2d(self, factor: float) -> None:
+        self._zoom_at(
+            factor,
+            max(1, self.canvas_2d.winfo_width()) / 2,
+            max(1, self.canvas_2d.winfo_height()) / 2,
+        )
 
     def _on_wheel_3d(self, event: tk.Event) -> None:
         self._zoom_3d(1.1 if event.delta > 0 else 1 / 1.1)

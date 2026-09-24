@@ -865,6 +865,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['terminal_network_state_replay_violation_corner_indices']}**",
                 "- Terminal network-state replay consistent corners: "
                 f"**{search_summary['terminal_network_state_replay_consistent_corner_count']}**",
+                "- Terminal network-state replay violation records across corners: "
+                f"**{search_summary['terminal_network_state_replay_violation_count']}**",
                 "- Exact terminal network-state replay violation details: "
                 f"**{search_summary['terminal_network_state_replay_violation_details']}**",
                 "- Trace recorded-width violations: "

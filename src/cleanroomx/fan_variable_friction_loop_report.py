@@ -42,6 +42,33 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 "- Selected supplied-point index: "
                 f"**{search['selected_supplied_point_index']}**"
             )
+        final_replay = search.get("final_operating_point_state_replay")
+        if final_replay is not None:
+            lines.extend(
+                [
+                    "- Final operating-point independent replay available: "
+                    f"**{final_replay['available']}**",
+                    "- Final operating-point replay converged: "
+                    f"**{final_replay['replay_converged']}**",
+                    "- Final operating-point state matches independent replay: "
+                    f"**{final_replay['all_final_operating_point_state_matches_independent_replay']}**",
+                ]
+            )
+            if final_replay["replay_converged"]:
+                lines.extend(
+                    [
+                        "- Final operating-point fan pressure matches replay: "
+                        f"**{final_replay['fan_pressure_matches_independent_replay']}**",
+                        "- Final operating-point loop pressure matches replay: "
+                        f"**{final_replay['loop_pressure_matches_independent_replay']}**",
+                        "- Final operating-point system pressure matches replay: "
+                        f"**{final_replay['system_pressure_matches_independent_replay']}**",
+                        "- Final operating-point residual matches replay: "
+                        f"**{final_replay['residual_matches_independent_replay']}**",
+                        "- Maximum absolute final operating-point replay error: "
+                        f"**{final_replay['maximum_absolute_pressure_state_replay_error_pa']} Pa**",
+                    ]
+                )
         bracket = search["final_bisection_bracket"]
         if bracket is None:
             iteration_limit = search.get("iteration_limit_evidence")

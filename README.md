@@ -4,17 +4,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current validated provenance/replay development line is `codex/cleanroomx-v093-supplied-point-network-state-replay-v092-line` at `9069c465ad85e938134df912599f96b0b9a3336c`, with package/runtime version **0.93.0**. It is a direct descendant of the verified v0.92 head `f92c615fda95313a798b5bd5149bfeb4693293e0`, which in turn descends from the verified v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`.
+The current clean provenance/replay release line is `codex/cleanroomx-v094-canonical-solver-provenance-v093-line`, package/runtime version **0.94.0**. It is a direct descendant of merged v0.93 integration commit `fd4598c0598f2eb421c69fa45ad3691f84f748e1`, which contains the verified v0.91 → v0.92 → v0.93 lineage. The default `main` branch remains older than this provenance line and must not be used as its implementation baseline.
 
-GitHub Actions CI run [#690](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/36007799670) passed on Python **3.11, 3.12, and 3.13**. Per interpreter, the verified gate was:
-
-- v0.93 supplied-point network-state replay regressions: **10 passed**
-- v0.92 full per-bisection projection replay compatibility regressions: **15 passed**
-- v0.91 selected projection replay compatibility regressions: **8 passed**
-- complete suite: **461 passed**
-- representative nonlinear loop, nonlinear uncertainty, and engineering-dossier JSON/Markdown CLI smoke checks: **PASS**
-
-PR [#196](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/196) carries this clean v0.92→v0.93 line. The default `main` branch is older than the verified v0.91+ provenance line and should not be used as the implementation baseline for these releases.
+The CI workflow runs a dedicated v0.94 canonical-provenance gate, then the v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection compatibility gates, followed by the complete test suite and representative nonlinear loop/uncertainty/dossier JSON and Markdown smoke checks on Python **3.11, 3.12, and 3.13**.
 
 ### Network-state replay provenance ladder
 
@@ -28,6 +20,7 @@ PR [#196](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Ver
 | v0.91 | selected operating network-state canonical projection replay with field localization |
 | v0.92 | full per-bisection low/midpoint/high canonical projection replay with exact mismatch localization |
 | v0.93 | supplied fan-point canonical SHA-256 and field-level projection replay |
+| v0.94 | signed-zero-stable, order-invariant named-collection canonical network-result identity with solver provenance/history |
 
 ### v0.92 full per-bisection projection replay
 
@@ -39,7 +32,15 @@ The same evidence propagates through nonlinear uncertainty aggregation, standalo
 
 This replay is deterministic numerical/provenance verification only. It is **not** cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
 
-## v0.93 engineering core
+### v0.94 canonical solver provenance
+
+v0.94 hardens the one shared canonical network-result representation used by full-trace, terminal, selected, and supplied-point SHA-256/projection replay. Canonicalization now normalizes floating `-0.0` to `0.0`, sorts semantically named node, edge, and variable-friction closure collections by name, and deliberately preserves chronological outer-iteration history order.
+
+The canonical projection now also covers network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and retained outer-iteration history. Field-level replay therefore localizes corruption in deterministic solver provenance as well as final node/edge/pressure-power/closure values. This changes provenance identity only; it does not change fan candidate discovery, interpolation/no-extrapolation, root selection, bisection decisions, solver tolerances, nonlinear iteration budgets, power calculations, uncertainty-corner generation, or engineering acceptance.
+
+This evidence is deterministic numerical/software provenance verification only. A SHA-256 digest identifies canonical content; it does not prove source authenticity, cleanroom certification, CFD validation, fan acceptance, commissioning status, global root uniqueness, physical stability, stall/surge behavior, manufacturer operating-envelope validity, physical uncertainty, or statistical confidence.
+
+## v0.94 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -106,6 +107,7 @@ This replay is deterministic numerical/provenance verification only. It is **not
 - Terminal network-state projection replay diagnostics for v0.90, retaining canonical low/high terminal node/edge/pressure-power/closure projections and independently comparing them with fresh endpoint solves to report exact JSON-style mismatch paths without changing solver decisions or engineering acceptance semantics.
 - Selected operating network-state projection replay diagnostics for v0.91, retaining the accepted solution's canonical node/edge/pressure-power/closure projection and independently comparing it with a fresh exact-selected-airflow solve to report deterministic JSON-style mismatch paths, recorded/recomputed values, type evidence, numerical absolute errors when meaningful, tied per-field worst-error witnesses, and uncertainty-corner provenance even when the retained SHA-256 is unchanged. This replay is numerical/provenance verification only: it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness, stall/surge analysis, or physical uncertainty quantification.
 - Full per-bisection network-state projection replay diagnostics for v0.92, retaining canonical low/midpoint/high projections on every bounded-bisection trace row and independently re-solving the exact reconstructed search airflows. Replay reports complete checked-versus-expected state-position coverage, exact iteration/position/path mismatch provenance, recorded/recomputed/type evidence, deterministic all-mismatch ordering, numerical absolute errors, and tied per-field worst witnesses across uncertainty corners and dossiers. This is numerical/provenance verification only: it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
+- Signed-zero-stable complete solver-provenance canonicalization for v0.94, extending the shared network-result identity to solver/network metadata and ordered iteration history while keeping named result collections order-invariant and preserving all solver physics and engineering-status semantics.
 - Supplied fan-point internal network-state replay for v0.93, retaining the canonical SHA-256 and full network-state projection for every successfully evaluated supplied fan-curve sample before candidate selection, then independently re-solving each exact supplied airflow. The audit keeps hash identity separate from field-level projection equality, localizes every projection corruption to point-indexed deterministic JSON paths, preserves detailed values/types/numerical errors and tied per-field witnesses, and distinguishes actual corruption from incomplete evaluation/replay coverage across solved, no-intersection, non-converged, uncertainty, and dossier workflows. This is deterministic numerical/provenance verification only and does not change candidate discovery, interpolation, root selection, solver tolerances, convergence, or engineering acceptance.
 - Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.

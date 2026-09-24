@@ -78,6 +78,12 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "bisection_trace_terminal_outcome_violation_corner_indices"
     ] == []
     assert search_summary[
+        "bisection_trace_origin_replay_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "bisection_trace_origin_replay_corner_count"
+    ] == search_summary["bisection_corner_count"]
+    assert search_summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert search_summary[

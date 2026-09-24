@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.93 supplied fan-point network-state fingerprint and projection replay — 2026-09-24
+
+- Retains the canonical internal network-state SHA-256 and full canonical projection for every successfully evaluated supplied fan-curve point before operating-point candidate selection.
+- Independently re-solves each exact supplied airflow and compares the retained SHA-256 and field-level projection separately using the existing shared deterministic network-state comparator.
+- Reports point-indexed deterministic JSON mismatch paths, recorded/recomputed values and types, mismatch kinds, numerical absolute errors when meaningful, all mismatches in deterministic point/path order, and tied per-field worst-error witnesses.
+- Separates actual hash/projection corruption from incomplete supplied-point evaluation, missing retained state, and independent replay failure; complete no-intersection cases remain fully auditable while partial pre-failure coverage stays explicit.
+- Aggregates supplied-point replay across nonlinear uncertainty corners and engineering dossiers with exact corner/point/path provenance, coverage gaps, mismatch totals, and maximum numerical witnesses.
+- Preserves v0.85-v0.92 candidate discovery, fan interpolation/no-extrapolation, root-selection priority, solver tolerances, nonlinear convergence, power, uncertainty-corner, engineering-status, and replay semantics.
+- This replay is deterministic numerical/provenance verification only; it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
+- Bumped package/runtime metadata to v0.93.0.
+
 ## v0.92 full per-bisection network-state projection replay diagnostics — 2026-09-24
 
 - Retains canonical low/midpoint/high internal network-state projections on every bounded-bisection trace row alongside the existing v0.87 SHA-256 fingerprints.

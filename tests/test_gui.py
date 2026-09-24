@@ -235,6 +235,8 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert payload["name"] == "CleanroomX"
     assert payload["version"] == "0.96.0"
     assert payload["analysis_count"] >= 20
+    assert payload["registry_validation"]["status"] == "ok"
+    assert payload["registry_validation"]["analysis_count"] == payload["analysis_count"]
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():

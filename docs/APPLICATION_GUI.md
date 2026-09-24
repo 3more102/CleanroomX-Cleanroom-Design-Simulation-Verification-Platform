@@ -52,6 +52,8 @@ Project saves are validated before writing and use an atomic temporary-file repl
 
 The **Abandon** action invalidates the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot. The status line explicitly reports abandonment behavior.
 
+Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
+
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.82 independent pressure-component replay — 2026-09-24
+
+- Independently replays each retained bisection midpoint's fan pressure, nonlinear loop-network pressure, and total system pressure from the selected supplied fan segment and a fresh variable-friction network solve.
+- Compares the replayed pressure components directly with their retained trace values instead of relying only on the v0.80 algebraic identities or the v0.81 fan-minus-system residual.
+- Detects common-mode pressure corruption where fan, loop, and total system pressures shift together while the residual and all retained-state pressure identities remain self-consistent.
+- Retains complete per-step component-replay coverage, a strict 1e-9 Pa numerical tolerance, exact uncertainty-corner violation indices, and tied maximum component-replay error provenance.
+- Propagates component-replay evidence through standalone loop reports, nonlinear uncertainty reports, engineering dossiers, and regression coverage for solved and iteration-limit traces.
+- Preserves root selection, decision semantics, iteration budgets, fan-curve no-extrapolation behavior, and all existing engineering acceptance criteria; this remains numerical implementation provenance only.
+- Bumped package/runtime metadata to v0.82.0.
+
 ## v0.81 independent fan/system residual replay — 2026-09-24
 
 - Reconstructs every retained bounded-bisection low/high/midpoint airflow from the selected supplied fan segment and recorded L/H/T decision chain, then freshly re-solves the nonlinear variable-friction loop at each replayed state.

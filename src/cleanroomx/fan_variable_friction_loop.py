@@ -871,23 +871,25 @@ def _bisection_decision_trace_audit(
         )
 
     residual_replay_checks = []
+    pressure_component_replay_checks = []
     residual_replay_available = (
         study is not None
         and segment_left is not None
         and segment_right is not None
     )
     residual_replay_absolute_tolerance_pa = 1e-9
+    pressure_component_replay_absolute_tolerance_pa = 1e-9
     if residual_replay_available:
         assert study is not None
         assert segment_left is not None
         assert segment_right is not None
         replay_low_airflow = float(segment_left.airflow_m3_h)
         replay_high_airflow = float(segment_right.airflow_m3_h)
-        residual_cache: dict[float, float] = {}
+        state_cache: dict[float, dict[str, float]] = {}
 
-        def _independent_residual(airflow_m3_h: float) -> float:
+        def _independent_state(airflow_m3_h: float) -> dict[str, float]:
             airflow = float(airflow_m3_h)
-            if airflow not in residual_cache:
+            if airflow not in state_cache:
                 _network, network_pressure = _solve_network_at_airflow(
                     study,
                     airflow,
@@ -897,24 +899,25 @@ def _bisection_decision_trace_audit(
                     segment_right,
                     airflow,
                 )
-                residual_cache[airflow] = fan_pressure - (
-                    study.fixed_pressure_pa + network_pressure
-                )
-            return residual_cache[airflow]
+                system_pressure = study.fixed_pressure_pa + network_pressure
+                state_cache[airflow] = {
+                    "fan_pressure_pa": fan_pressure,
+                    "loop_network_pressure_pa": network_pressure,
+                    "system_pressure_pa": system_pressure,
+                    "residual_pa": fan_pressure - system_pressure,
+                }
+            return state_cache[airflow]
 
         for step in trace:
             replay_midpoint_airflow = 0.5 * (
                 replay_low_airflow + replay_high_airflow
             )
-            recomputed_low_residual = _independent_residual(
-                replay_low_airflow
-            )
-            recomputed_high_residual = _independent_residual(
-                replay_high_airflow
-            )
-            recomputed_midpoint_residual = _independent_residual(
-                replay_midpoint_airflow
-            )
+            low_state = _independent_state(replay_low_airflow)
+            high_state = _independent_state(replay_high_airflow)
+            midpoint_state = _independent_state(replay_midpoint_airflow)
+            recomputed_low_residual = low_state["residual_pa"]
+            recomputed_high_residual = high_state["residual_pa"]
+            recomputed_midpoint_residual = midpoint_state["residual_pa"]
             recorded_low_residual = float(
                 step["low_fan_minus_system_pressure_pa"]
             )
@@ -1002,6 +1005,108 @@ def _bisection_decision_trace_audit(
                     ),
                 }
             )
+
+            pressure_component_fields = (
+                "midpoint_fan_pressure_pa",
+                "midpoint_loop_network_pressure_pa",
+                "midpoint_system_pressure_pa",
+            )
+            if all(field in step for field in pressure_component_fields):
+                recorded_fan_pressure = float(
+                    step["midpoint_fan_pressure_pa"]
+                )
+                recorded_loop_pressure = float(
+                    step["midpoint_loop_network_pressure_pa"]
+                )
+                recorded_system_pressure = float(
+                    step["midpoint_system_pressure_pa"]
+                )
+                recomputed_fan_pressure = midpoint_state["fan_pressure_pa"]
+                recomputed_loop_pressure = midpoint_state[
+                    "loop_network_pressure_pa"
+                ]
+                recomputed_system_pressure = midpoint_state[
+                    "system_pressure_pa"
+                ]
+                fan_error = abs(
+                    recorded_fan_pressure - recomputed_fan_pressure
+                )
+                loop_error = abs(
+                    recorded_loop_pressure - recomputed_loop_pressure
+                )
+                system_error = abs(
+                    recorded_system_pressure - recomputed_system_pressure
+                )
+                fan_matches = math.isclose(
+                    recorded_fan_pressure,
+                    recomputed_fan_pressure,
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                loop_matches = math.isclose(
+                    recorded_loop_pressure,
+                    recomputed_loop_pressure,
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                system_matches = math.isclose(
+                    recorded_system_pressure,
+                    recomputed_system_pressure,
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                pressure_component_replay_checks.append(
+                    {
+                        "iteration": int(step["iteration"]),
+                        "replayed_midpoint_airflow_m3_h": round(
+                            replay_midpoint_airflow,
+                            9,
+                        ),
+                        "recorded_midpoint_fan_pressure_pa": (
+                            recorded_fan_pressure
+                        ),
+                        "recomputed_midpoint_fan_pressure_pa": round(
+                            recomputed_fan_pressure,
+                            9,
+                        ),
+                        "absolute_midpoint_fan_pressure_replay_error_pa": (
+                            fan_error
+                        ),
+                        "recorded_midpoint_loop_network_pressure_pa": (
+                            recorded_loop_pressure
+                        ),
+                        "recomputed_midpoint_loop_network_pressure_pa": round(
+                            recomputed_loop_pressure,
+                            9,
+                        ),
+                        "absolute_midpoint_loop_pressure_replay_error_pa": (
+                            loop_error
+                        ),
+                        "recorded_midpoint_system_pressure_pa": (
+                            recorded_system_pressure
+                        ),
+                        "recomputed_midpoint_system_pressure_pa": round(
+                            recomputed_system_pressure,
+                            9,
+                        ),
+                        "absolute_midpoint_system_pressure_replay_error_pa": (
+                            system_error
+                        ),
+                        "fan_pressure_matches_independent_replay": (
+                            fan_matches
+                        ),
+                        "loop_pressure_matches_independent_replay": (
+                            loop_matches
+                        ),
+                        "system_pressure_matches_independent_replay": (
+                            system_matches
+                        ),
+                        "all_pressure_components_match_independent_replay": (
+                            fan_matches and loop_matches and system_matches
+                        ),
+                    }
+                )
+
             decision = step["decision"]
             if decision == "replace_low_endpoint":
                 replay_low_airflow = replay_midpoint_airflow
@@ -1525,6 +1630,77 @@ def _bisection_decision_trace_audit(
             else None
         ),
         "residual_replay_checks": residual_replay_checks,
+        "pressure_component_replay_available": residual_replay_available,
+        "pressure_component_replay_check_count": len(
+            pressure_component_replay_checks
+        ),
+        "pressure_component_replay_evidence_complete": (
+            len(pressure_component_replay_checks) == len(trace)
+            if residual_replay_available
+            else None
+        ),
+        "pressure_component_replay_absolute_tolerance_pa": (
+            pressure_component_replay_absolute_tolerance_pa
+            if residual_replay_available
+            else None
+        ),
+        "all_recorded_midpoint_fan_pressures_match_independent_replay": (
+            len(pressure_component_replay_checks) == len(trace)
+            and all(
+                check["fan_pressure_matches_independent_replay"]
+                for check in pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_recorded_midpoint_loop_pressures_match_independent_replay": (
+            len(pressure_component_replay_checks) == len(trace)
+            and all(
+                check["loop_pressure_matches_independent_replay"]
+                for check in pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_recorded_midpoint_system_pressures_match_independent_replay": (
+            len(pressure_component_replay_checks) == len(trace)
+            and all(
+                check["system_pressure_matches_independent_replay"]
+                for check in pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_midpoint_pressure_components_match_independent_replay": (
+            len(pressure_component_replay_checks) == len(trace)
+            and all(
+                check["all_pressure_components_match_independent_replay"]
+                for check in pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "maximum_absolute_trace_pressure_component_replay_error_pa": (
+            max(
+                max(
+                    check[
+                        "absolute_midpoint_fan_pressure_replay_error_pa"
+                    ],
+                    check[
+                        "absolute_midpoint_loop_pressure_replay_error_pa"
+                    ],
+                    check[
+                        "absolute_midpoint_system_pressure_replay_error_pa"
+                    ],
+                )
+                for check in pressure_component_replay_checks
+            )
+            if pressure_component_replay_checks
+            else None
+        ),
+        "pressure_component_replay_checks": (
+            pressure_component_replay_checks
+        ),
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace

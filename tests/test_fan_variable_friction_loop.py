@@ -1653,15 +1653,26 @@ def test_terminal_network_state_projection_replay_localizes_internal_corruption(
     mismatches = corrupted_audit[
         "terminal_network_state_projection_mismatches"
     ]
-    assert mismatches == [
-        {
-            "iteration": 1,
-            "position": "low",
-            "mismatch_paths": [
-                "$.nodes[0].relative_pressure_pa",
-            ],
-        }
+    assert len(mismatches) == 1
+    mismatch = mismatches[0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == "low"
+    assert mismatch["mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
     ]
+    assert len(mismatch["mismatches"]) == 1
+    leaf = mismatch["mismatches"][0]
+    assert leaf["path"] == "$.nodes[0].relative_pressure_pa"
+    assert leaf["mismatch_kind"] == "value_mismatch"
+    assert leaf["absolute_error"] == pytest.approx(1.0)
+    assert leaf["numeric_error_field"] == "relative_pressure_pa"
+    assert len(mismatch["maximum_numeric_errors"]) == 1
+    assert mismatch["maximum_numeric_errors"][0]["field"] == (
+        "relative_pressure_pa"
+    )
+    assert mismatch["maximum_numeric_errors"][0][
+        "maximum_absolute_error"
+    ] == pytest.approx(1.0)
     terminal_replay = corrupted_audit["terminal_network_state_replay"]
     assert terminal_replay is not None
     assert terminal_replay["low"][
@@ -1709,6 +1720,18 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
         replay["recomputed_network_state_sha256"]
     )
     assert replay["network_state_matches_independent_replay"] is True
+    assert replay["network_state_projection_replay_available"] is True
+    assert replay[
+        "network_state_projection_matches_independent_replay"
+    ] is True
+    assert replay["network_state_projection_mismatch_count"] == 0
+    assert replay["network_state_projection_mismatch_paths"] == []
+    assert replay["network_state_projection_mismatches"] == []
+    assert replay["network_state_projection_maximum_numeric_errors"] == []
+    assert replay["selected_network_state_projection_replay_consistent"] is True
+    assert replay["recorded_network_state_projection"] == (
+        replay["recomputed_network_state_projection"]
+    )
     assert replay["violation_count"] == 0
     assert replay["violations"] == []
     assert replay["maximum_absolute_pressure_replay_error_pa"] <= 1e-9
@@ -1807,6 +1830,232 @@ def test_selected_operating_state_replay_detects_internal_network_state_corrupti
     assert corrupted["violations"][0]["component"] == "network_state_sha256"
     assert corrupted["recorded_network_state_sha256"] == "0" * 64
     assert len(corrupted["recomputed_network_state_sha256"]) == 64
+
+
+def test_selected_operating_state_projection_replay_localizes_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Selected network-state projection replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    replay = evidence["selected_operating_state_replay"]
+    pressure = result["system_pressure_check"]
+    segment_index = evidence["supplied_segment_index"]
+
+    corrupted_projection = json.loads(
+        json.dumps(replay["recorded_network_state_projection"])
+    )
+    corrupted_projection["nodes"][0]["relative_pressure_pa"] += 1.0
+
+    corrupted = _selected_operating_state_replay_audit(
+        study,
+        selected_airflow_m3_h=replay["selected_airflow_replay_input_m3_h"],
+        recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
+        recorded_loop_network_pressure_pa=pressure[
+            "loop_network_pressure_pa"
+        ],
+        recorded_system_pressure_pa=pressure["total_system_pressure_pa"],
+        recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
+        recorded_network_state_sha256=replay[
+            "recorded_network_state_sha256"
+        ],
+        recorded_network_state_projection=corrupted_projection,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        bisection_trace=evidence["bisection_trace"],
+    )
+
+    assert corrupted["network_state_matches_independent_replay"] is True
+    assert corrupted["network_state_projection_replay_available"] is True
+    assert corrupted[
+        "network_state_projection_matches_independent_replay"
+    ] is False
+    assert corrupted["network_state_projection_mismatch_count"] == 1
+    assert corrupted["network_state_projection_mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
+    ]
+    assert corrupted[
+        "all_selected_operating_state_matches_independent_replay"
+    ] is False
+    assert corrupted["violation_count"] == 1
+    projection_violation = corrupted["violations"][0]
+    assert projection_violation["component"] == "network_state_projection"
+    assert projection_violation["mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
+    ]
+    mismatches = projection_violation["mismatches"]
+    assert len(mismatches) == 1
+    assert mismatches[0]["path"] == "$.nodes[0].relative_pressure_pa"
+    assert mismatches[0]["mismatch_kind"] == "value_mismatch"
+    assert mismatches[0]["recorded_present"] is True
+    assert mismatches[0]["recomputed_present"] is True
+    assert mismatches[0]["recorded_type"] == "number"
+    assert mismatches[0]["recomputed_type"] == "number"
+    assert (
+        mismatches[0]["recorded_value"]
+        - mismatches[0]["recomputed_value"]
+    ) == pytest.approx(1.0)
+    assert mismatches[0]["absolute_error"] == pytest.approx(1.0)
+    assert mismatches[0]["numeric_error_field"] == "relative_pressure_pa"
+    maximum_errors = projection_violation["maximum_numeric_errors"]
+    assert len(maximum_errors) == 1
+    assert maximum_errors[0]["field"] == "relative_pressure_pa"
+    assert maximum_errors[0]["maximum_absolute_error"] == pytest.approx(1.0)
+    assert corrupted[
+        "network_state_projection_mismatches"
+    ] == mismatches
+    assert corrupted[
+        "network_state_projection_maximum_numeric_errors"
+    ] == maximum_errors
+
+
+def _selected_projection_replay_with_mutation(mutator):
+    study = FanVariableFrictionLoopStudy(
+        name="Selected projection corruption fixture",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    replay = evidence["selected_operating_state_replay"]
+    pressure = result["system_pressure_check"]
+    segment_index = evidence["supplied_segment_index"]
+    projection = json.loads(
+        json.dumps(replay["recorded_network_state_projection"])
+    )
+    mutator(projection)
+    audit = _selected_operating_state_replay_audit(
+        study,
+        selected_airflow_m3_h=replay["selected_airflow_replay_input_m3_h"],
+        recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
+        recorded_loop_network_pressure_pa=pressure[
+            "loop_network_pressure_pa"
+        ],
+        recorded_system_pressure_pa=pressure["total_system_pressure_pa"],
+        recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
+        recorded_network_state_sha256=replay[
+            "recorded_network_state_sha256"
+        ],
+        recorded_network_state_projection=projection,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        selected_supplied_point_index=evidence[
+            "selected_supplied_point_index"
+        ],
+        bisection_trace=evidence["bisection_trace"],
+    )
+    return result, audit
+
+
+def test_selected_projection_replay_localizes_edge_state_corruption() -> None:
+    _result, audit = _selected_projection_replay_with_mutation(
+        lambda projection: projection["edges"][0].__setitem__(
+            "airflow_m3_h",
+            projection["edges"][0]["airflow_m3_h"] + 2.5,
+        )
+    )
+
+    assert audit["network_state_matches_independent_replay"] is True
+    assert audit["network_state_projection_mismatch_paths"] == [
+        "$.edges[0].airflow_m3_h"
+    ]
+    mismatch = audit["network_state_projection_mismatches"][0]
+    assert mismatch["path"] == "$.edges[0].airflow_m3_h"
+    assert mismatch["mismatch_kind"] == "value_mismatch"
+    assert mismatch["absolute_error"] == pytest.approx(2.5)
+    assert audit["selected_network_state_projection_replay_consistent"] is False
+
+
+def test_selected_projection_replay_localizes_pressure_power_corruption() -> None:
+    _result, audit = _selected_projection_replay_with_mutation(
+        lambda projection: projection["pressure_power"].__setitem__(
+            "balance_residual_w",
+            projection["pressure_power"]["balance_residual_w"] + 0.125,
+        )
+    )
+
+    assert audit["network_state_matches_independent_replay"] is True
+    assert audit["network_state_projection_mismatch_paths"] == [
+        "$.pressure_power.balance_residual_w"
+    ]
+    mismatch = audit["network_state_projection_mismatches"][0]
+    assert mismatch["recorded_type"] == "number"
+    assert mismatch["recomputed_type"] == "number"
+    assert mismatch["absolute_error"] == pytest.approx(0.125)
+
+
+def test_selected_projection_replay_retains_all_mismatches_in_deterministic_order() -> None:
+    def mutate(projection):
+        projection["pressure_power"]["balance_residual_w"] += 0.125
+        projection["nodes"][0]["relative_pressure_pa"] += 1.0
+        projection["edges"][0]["airflow_m3_h"] += 2.5
+
+    result, audit = _selected_projection_replay_with_mutation(mutate)
+
+    expected_paths = [
+        "$.edges[0].airflow_m3_h",
+        "$.nodes[0].relative_pressure_pa",
+        "$.pressure_power.balance_residual_w",
+    ]
+    assert audit["network_state_matches_independent_replay"] is True
+    assert audit["network_state_projection_mismatch_count"] == 3
+    assert audit["network_state_projection_mismatch_paths"] == expected_paths
+    assert [
+        mismatch["path"]
+        for mismatch in audit["network_state_projection_mismatches"]
+    ] == expected_paths
+    assert audit["violation_count"] == 1
+    assert audit["violations"][0]["mismatch_paths"] == expected_paths
+
+    report_result = json.loads(json.dumps(result))
+    report_result["operating_point_search_evidence"][
+        "selected_operating_state_replay"
+    ] = audit
+    report = markdown_fan_variable_friction_loop_report(report_result)
+    for path in expected_paths:
+        assert path in report
+    assert "recorded_value" in report
+    assert "recomputed_value" in report
+
+
+def test_selected_projection_replay_records_type_mismatch_evidence() -> None:
+    _result, audit = _selected_projection_replay_with_mutation(
+        lambda projection: projection["edges"][0].__setitem__(
+            "resistance_pa_per_m3_s_squared",
+            "corrupt",
+        )
+    )
+
+    mismatch = audit["network_state_projection_mismatches"][0]
+    assert mismatch["path"] == (
+        "$.edges[0].resistance_pa_per_m3_s_squared"
+    )
+    assert mismatch["mismatch_kind"] == "type_mismatch"
+    assert mismatch["recorded_type"] == "string"
+    assert mismatch["recomputed_type"] == "number"
+    assert mismatch["absolute_error"] is None
 
 
 def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:

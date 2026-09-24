@@ -1,0 +1,51 @@
+{
+  "name": "Pilot cleanroom suite",
+  "rooms": [
+    {
+      "name": "Process",
+      "length_m": 6.0,
+      "width_m": 5.0,
+      "height_m": 3.0,
+      "supply_airflow_m3_h": 2700.0,
+      "min_ach": 25.0,
+      "observed_pressure_pa": 30.0,
+      "particle_requirements": [
+        {
+          "size_um": 0.5,
+          "max_concentration_per_m3": 400000.0,
+          "observed_concentration_per_m3": 120000.0
+        }
+      ]
+    },
+    {
+      "name": "Preparation",
+      "length_m": 5.0,
+      "width_m": 4.0,
+      "height_m": 3.0,
+      "supply_airflow_m3_h": 1200.0,
+      "min_ach": 20.0,
+      "observed_pressure_pa": 16.0
+    },
+    {
+      "name": "Ante",
+      "length_m": 4.0,
+      "width_m": 3.0,
+      "height_m": 3.0,
+      "supply_airflow_m3_h": 720.0,
+      "min_ach": 20.0,
+      "observed_pressure_pa": 8.0
+    }
+  ],
+  "pressure_cascade": [
+    {
+      "higher_pressure_room": "Process",
+      "lower_pressure_room": "Preparation",
+      "min_delta_pa": 10.0
+    },
+    {
+      "higher_pressure_room": "Preparation",
+      "lower_pressure_room": "Ante",
+      "min_delta_pa": 5.0
+    }
+  ]
+}

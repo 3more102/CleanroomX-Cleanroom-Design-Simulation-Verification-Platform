@@ -76,6 +76,31 @@ def test_application_registry_enforces_custom_adapter_contract(monkeypatch):
         application_module.validate_application_registry()
 
 
+def test_application_registry_rejects_catalog_mapping_drift(monkeypatch):
+    import cleanroomx.application as application_module
+
+    reduced = dict(application_module.ANALYSIS_SPECS)
+    reduced.pop("hvac")
+    monkeypatch.setattr(application_module, "ANALYSIS_SPECS", reduced)
+    with pytest.raises(RuntimeError, match="mapping is inconsistent with the catalog"):
+        application_module.validate_application_registry()
+
+
+def test_application_registry_rejects_standard_workflow_without_parser_runner(monkeypatch):
+    import cleanroomx.application as application_module
+    from dataclasses import replace
+
+    specs = tuple(
+        replace(spec, parser=None)
+        if spec.key == "hvac"
+        else spec
+        for spec in application_module._ANALYSES
+    )
+    monkeypatch.setattr(application_module, "_ANALYSES", specs)
+    with pytest.raises(RuntimeError, match="hvac must define both parser and runner"):
+        application_module.validate_application_registry()
+
+
 def test_hvac_application_service_reuses_real_backend():
     run = run_analysis("hvac", _example("duct_network_demo.json"))
     assert run.kind == "hvac"

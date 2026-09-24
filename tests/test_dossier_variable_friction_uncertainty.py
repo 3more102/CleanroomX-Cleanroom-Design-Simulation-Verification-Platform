@@ -238,6 +238,11 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "trace-geometry" in report
     assert "trace-raw-state" in report
     assert "raw-state violations 0" in report
+    assert "trace-residual-recheck" in report
+    assert "residual-recheck violations 0" in report
+    assert "trace-recomputed-decision" in report
+    assert "recomputed-decision violations 0" in report
+    assert "max trace residual recheck error" in report
     assert "max trace midpoint error" in report
     assert "max trace width error" in report
     assert "max trace normalized-width error" in report

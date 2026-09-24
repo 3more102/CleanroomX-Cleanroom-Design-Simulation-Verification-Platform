@@ -2299,6 +2299,15 @@ def _operating_point_search_resolution_summary(
         for corner_index, corner, evidence in cases
         if evidence["method"] == "supplied_point_tolerance_contact"
     ]
+    iteration_limit_cases = [
+        (
+            corner_index,
+            corner,
+            corner["terminal_bisection_failure_evidence"],
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get("terminal_bisection_failure_evidence") is not None
+    ]
 
     invariant_cases = [
         (
@@ -2320,6 +2329,20 @@ def _operating_point_search_resolution_summary(
         corner_index
         for corner_index, _corner, _evidence, invariant in invariant_cases
         if not invariant["selected_airflow_is_bracket_midpoint"]
+    ]
+    iteration_limit_sign_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, evidence in iteration_limit_cases
+        if not evidence["terminal_bisection_bracket"]["invariant_audit"][
+            "strict_sign_change_preserved"
+        ]
+    ]
+    iteration_limit_endpoint_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, evidence in iteration_limit_cases
+        if not evidence["terminal_bisection_bracket"]["invariant_audit"][
+            "last_evaluated_airflow_is_terminal_bracket_endpoint"
+        ]
     ]
 
     def _maximum_bracket_evidence(
@@ -2363,6 +2386,88 @@ def _operating_point_search_resolution_summary(
         return {
             "value": round(maximum, 12),
             "unit": unit,
+            "sources": sources,
+        }
+
+    def _maximum_terminal_bracket_evidence(
+        key: str,
+        unit: str,
+    ) -> dict | None:
+        if not iteration_limit_cases:
+            return None
+        maximum = max(
+            float(evidence["terminal_bisection_bracket"][key])
+            for _corner_index, _corner, evidence in iteration_limit_cases
+        )
+        sources = []
+        for corner_index, corner, evidence in iteration_limit_cases:
+            bracket = evidence["terminal_bisection_bracket"]
+            if not math.isclose(
+                float(bracket[key]),
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "terminal_bisection_bracket": bracket,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 12),
+            "unit": unit,
+            "sources": sources,
+        }
+
+    def _maximum_terminal_invariant_error_evidence() -> dict | None:
+        if not iteration_limit_cases:
+            return None
+        maximum = max(
+            float(
+                evidence["terminal_bisection_bracket"]["invariant_audit"][
+                    "absolute_width_fraction_consistency_error"
+                ]
+            )
+            for _corner_index, _corner, evidence in iteration_limit_cases
+        )
+        sources = []
+        for corner_index, corner, evidence in iteration_limit_cases:
+            invariant = evidence["terminal_bisection_bracket"][
+                "invariant_audit"
+            ]
+            error = float(
+                invariant["absolute_width_fraction_consistency_error"]
+            )
+            if not math.isclose(
+                error,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "invariant_audit": invariant,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": "1",
             "sources": sources,
         }
 
@@ -2418,6 +2523,20 @@ def _operating_point_search_resolution_summary(
             corner_index
             for corner_index, _corner, _evidence in supplied_point_cases
         ],
+        "bisection_iteration_limit_corner_count": len(iteration_limit_cases),
+        "bisection_iteration_limit_corner_indices": [
+            corner_index
+            for corner_index, _corner, _evidence in iteration_limit_cases
+        ],
+        "bisection_iteration_limit_invariant_evidence_corner_count": len(
+            iteration_limit_cases
+        ),
+        "bisection_iteration_limit_strict_sign_change_violation_corner_indices": (
+            iteration_limit_sign_violation_corner_indices
+        ),
+        "bisection_iteration_limit_endpoint_violation_corner_indices": (
+            iteration_limit_endpoint_violation_corner_indices
+        ),
         "bisection_invariant_evidence_corner_count": len(invariant_cases),
         "strict_sign_change_preserved_corner_count": (
             len(invariant_cases)
@@ -2435,6 +2554,21 @@ def _operating_point_search_resolution_summary(
         ),
         "maximum_absolute_width_fraction_consistency_error": (
             _maximum_invariant_error_evidence()
+        ),
+        "maximum_iteration_limit_terminal_bracket_width_m3_h": (
+            _maximum_terminal_bracket_evidence("width_m3_h", "m3/h")
+        ),
+        "maximum_iteration_limit_terminal_bracket_half_width_m3_h": (
+            _maximum_terminal_bracket_evidence("half_width_m3_h", "m3/h")
+        ),
+        "maximum_iteration_limit_terminal_bracket_width_fraction_of_supplied_segment": (
+            _maximum_terminal_bracket_evidence(
+                "width_fraction_of_supplied_segment",
+                "1",
+            )
+        ),
+        "maximum_iteration_limit_absolute_width_fraction_consistency_error": (
+            _maximum_terminal_invariant_error_evidence()
         ),
         "complete_solved_corner_evidence": (
             len(cases) == solved_corner_count
@@ -2468,7 +2602,11 @@ def _operating_point_search_resolution_summary(
             "audits implementation invariants using the unrounded live "
             "bisection state: strict residual-sign bracketing, selected "
             "midpoint centering, and the absolute discrepancy between actual "
-            "and iteration-implied binary width contraction."
+            "and iteration-implied binary width contraction. v0.68 also "
+            "retains the post-final-contraction signed bracket when bounded "
+            "bisection exhausts max_operating_iterations before convergence, "
+            "including exact corner provenance and terminal contraction "
+            "invariants without reclassifying the case as solved."
         ),
     }
 
@@ -3093,6 +3231,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "operating_point_search_evidence": result.get(
                                 "operating_point_search_evidence"
                             ),
+                            "terminal_bisection_failure_evidence": result.get(
+                                "terminal_bisection_failure_evidence"
+                            ),
                             "fan_curve_no_intersection_diagnostic": (
                                 _fan_curve_no_intersection_diagnostic(result)
                             ),
@@ -3174,6 +3315,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     nominal_operating_point_search_evidence = nominal.get(
         "operating_point_search_evidence"
+    )
+    nominal_terminal_bisection_failure_evidence = nominal.get(
+        "terminal_bisection_failure_evidence"
     )
     operating_point_search_resolution_summary = (
         _operating_point_search_resolution_summary(
@@ -3589,6 +3733,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "nominal_operating_point_search_evidence": (
             nominal_operating_point_search_evidence
+        ),
+        "nominal_terminal_bisection_failure_evidence": (
+            nominal_terminal_bisection_failure_evidence
         ),
         "operating_point_search_resolution_summary": (
             operating_point_search_resolution_summary

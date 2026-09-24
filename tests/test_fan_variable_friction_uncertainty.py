@@ -2640,6 +2640,33 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_network_state_replay_consistent_corner_count"
     ] == summary["bisection_corner_count"]
     assert summary[
+        "bisection_trace_network_state_projection_replay_evidence_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_network_state_projection_replay_complete_coverage"
+    ] is True
+    assert summary[
+        "bisection_trace_network_state_projection_replay_incomplete_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_network_state_projection_replay_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_count"
+    ] == 0
+    assert summary[
+        "bisection_trace_network_state_projection_mismatch_count"
+    ] == 0
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_details"
+    ] == []
+    assert summary[
+        "maximum_bisection_trace_network_state_projection_numeric_errors"
+    ] == []
+    assert summary[
         "terminal_pressure_component_replay_violation_corner_indices"
     ] == []
     assert summary[
@@ -3065,6 +3092,33 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary[
         "bisection_trace_network_state_replay_consistent_corner_count"
     ] == len(limit_corners)
+    assert summary[
+        "bisection_trace_network_state_projection_replay_evidence_corner_count"
+    ] == len(limit_corners)
+    assert summary[
+        "bisection_trace_network_state_projection_replay_complete_coverage"
+    ] is True
+    assert summary[
+        "bisection_trace_network_state_projection_replay_incomplete_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_network_state_projection_replay_consistent_corner_count"
+    ] == len(limit_corners)
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_count"
+    ] == 0
+    assert summary[
+        "bisection_trace_network_state_projection_mismatch_count"
+    ] == 0
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_details"
+    ] == []
+    assert summary[
+        "maximum_bisection_trace_network_state_projection_numeric_errors"
+    ] == []
     assert summary[
         "terminal_pressure_component_replay_violation_corner_indices"
     ] == []

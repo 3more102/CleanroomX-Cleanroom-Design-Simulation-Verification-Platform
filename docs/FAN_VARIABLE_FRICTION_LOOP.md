@@ -107,6 +107,8 @@ v0.75 extends the same replay-audited trace to bounded-bisection searches that s
 
 v0.76 additionally audits the geometry fields stored in every solved or iteration-limit trace record. The recorded `width_m3_h` must equal the retained high-minus-low airflow endpoints, and `width_fraction_of_supplied_segment` must equal the binary contraction `0.5 ** (iteration - 1)`. Per-step absolute errors are retained so report and uncertainty layers can expose exact violation provenance. These checks validate recorded numerical search state only; they do not create a physical uncertainty or acceptance margin.
 
+v0.77 anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points, then reconstructs the complete L/H/T chain from that origin through the solved final bracket or retained iteration-limit bracket. Every recorded airflow and residual bracket state must agree with the replayed chain, independently of the v0.76 stored-width geometry audit. This is end-to-end numerical implementation provenance only; it does not add physical uncertainty, interpolation-error, root-uniqueness, stability/stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
+
 ## CLI
 
 ```text

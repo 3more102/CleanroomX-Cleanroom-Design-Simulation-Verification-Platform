@@ -249,6 +249,14 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "all_state_transitions_replay_recorded_decisions"
     ] is True
+    assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
+    origin_replay = trace_audit["trace_origin_replay"]
+    assert origin_replay is not None
+    assert origin_replay["initial_bracket_matches_first_trace_step"] is True
+    assert origin_replay["all_trace_steps_match_origin_replay"] is True
+    assert origin_replay["terminal_bracket_matches_origin_replay"] is True
+    assert origin_replay["trace_origin_to_terminal_replay_consistent"] is True
+    assert evidence["initial_bisection_bracket"] is not None
     assert all(
         check["state_transition_replays_recorded_decision"]
         for check in trace_audit["transition_checks"]
@@ -263,6 +271,7 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert "Absolute binary-width consistency error" in report
     assert "Bisection decision-trace steps" in report
     assert "Bisection decision sequence (L/H/T)" in report
+    assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
     assert "numerical search" in report
 
 
@@ -341,6 +350,14 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert trace_audit[
         "all_state_transitions_replay_recorded_decisions"
     ] is True
+    assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
+    origin_replay = trace_audit["trace_origin_replay"]
+    assert origin_replay is not None
+    assert origin_replay["initial_bracket_matches_first_trace_step"] is True
+    assert origin_replay["all_trace_steps_match_origin_replay"] is True
+    assert origin_replay["terminal_bracket_matches_origin_replay"] is True
+    assert origin_replay["trace_origin_to_terminal_replay_consistent"] is True
+    assert evidence["initial_bisection_bracket"] is not None
     terminal_replay = trace_audit["iteration_limit_terminal_replay"]
     assert terminal_replay is not None
     assert terminal_replay[
@@ -361,6 +378,7 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert "Remaining-bracket binary-width consistency error" in report
     assert "Bisection decision-trace steps" in report
     assert "Trace terminal solver outcome consistent: **True**" in report
+    assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
     assert (
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
         in report

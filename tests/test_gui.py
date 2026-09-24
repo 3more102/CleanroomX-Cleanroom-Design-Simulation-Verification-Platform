@@ -11,6 +11,7 @@ from cleanroomx.gui import (
     CleanroomXApp,
     _strict_json_loads,
     analysis_matches_filter,
+    extract_pressure_cascade,
     extract_room_visuals,
     flatten_json,
     main,
@@ -86,6 +87,38 @@ def test_extract_room_visuals_marks_display_defaults_when_geometry_is_missing():
     assert rooms[0]["width_m"] == 4.0
     assert rooms[0]["height_m"] == 3.0
     assert rooms[0]["airflow_m3_h"] == 900.0
+
+
+def test_extract_pressure_cascade_normalizes_declared_room_links():
+    links = extract_pressure_cascade(
+        {
+            "pressure_cascade": [
+                {
+                    "higher_pressure_room": "Process",
+                    "lower_pressure_room": "Preparation",
+                    "min_delta_pa": 10,
+                },
+                {
+                    "higher_pressure_room": "Preparation",
+                    "lower_pressure_room": "Ante",
+                    "min_delta_pa": "5",
+                },
+            ]
+        }
+    )
+
+    assert links == [
+        {
+            "higher_pressure_room": "Process",
+            "lower_pressure_room": "Preparation",
+            "min_delta_pa": 10.0,
+        },
+        {
+            "higher_pressure_room": "Preparation",
+            "lower_pressure_room": "Ante",
+            "min_delta_pa": 5.0,
+        },
+    ]
 
 
 def test_analysis_filter_matches_name_kind_and_catalog_title():

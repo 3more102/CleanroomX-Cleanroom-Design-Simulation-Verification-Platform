@@ -636,6 +636,42 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
     assert captured["parent"] is app.root
 
 
+def test_render_run_selects_results_frame_instead_of_numeric_tab_index():
+    class Widget:
+        def __init__(self):
+            self.master = object()
+
+    class Notebook:
+        def __init__(self):
+            self.selected = None
+            self.labels = {}
+
+        def tab(self, target, **kwargs):
+            self.labels[target] = kwargs
+
+        def select(self, target):
+            self.selected = target
+
+    class Run:
+        result = {"ok": True}
+        markdown = "# Report"
+        diagnostics = {"status": "ok"}
+        status = "pass"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.result_text = Widget()
+    app.report_text = Widget()
+    app.diagnostics_text = Widget()
+    app.notebook = Notebook()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    app._render_run(Run())
+
+    assert app.notebook.selected is app.result_text.master
+    assert app.notebook.labels[app.result_text.master]["text"] == "Results · pass"
+
+
 def test_per_analysis_run_cache_restores_without_forcing_result_tab():
     run_a = object()
     run_b = object()

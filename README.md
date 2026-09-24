@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100.0 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.99.1**, hardening the integrated v0.99 desktop application. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current release line is **CleanroomX v0.100.0**, hardening the integrated v0.99 desktop application. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99.1 additionally prevents overlapping backend runs after UI abandonment, packages a self-contained demo in the wheel, validates clean-wheel installation on Python 3.11/3.12/3.13, and launches the installed wheel under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.100.0 additionally prevents overlapping backend runs after UI abandonment, packages a self-contained demo in the wheel, validates clean-wheel installation on Python 3.11/3.12/3.13, and launches the installed wheel under Xvfb on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -26,7 +26,7 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
-| v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
+| v0.100.0 | abandoned-run concurrency hardening and installable self-contained desktop demo |
 
 ### v0.99 application registry integrity
 
@@ -693,3 +693,9 @@ The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer p
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.
 
 v0.37 adds deterministic bounded corner uncertainty around the nonlinear fan/variable-friction loop solver for explicit fixed-pressure and selected automatic-friction local-loss bounds. Every corner rebuilds the affected geometry evidence and re-runs the full Darcy-friction fan/network solve. Complete operating-point and internal edge-flow envelopes are reported only when the nominal case and every evaluated corner solve inside the supplied fan-curve range; no-intersection or numerical non-convergence remains indeterminate. The analysis is deterministic corner evidence, not statistical uncertainty propagation, and does not infer K-factor uncertainty, covariance, geometry manufacturing tolerances, fan-curve uncertainty, controls, leakage, commissioning acceptance, or certification.
+
+### v0.100.0 final release consolidation
+
+v0.100.0 keeps the validated solver/provenance lineage and the installed desktop packaging introduced in v0.99.1, then closes the remaining application-integrity gaps. Save As and JSON import preserve consistency/dossier file referents, project and export writes are atomic, fan operating-point plots reuse backend-evaluated system-curve evidence, normal Tk startup validates the application registry, and every application run records canonical input SHA-256 provenance. Consistency and dossier runs also record before/after SHA-256 and byte-size evidence for referenced files. Exported run bundles preserve this evidence.
+
+The wheel remains self-contained: `cleanroomx-gui --demo` loads the packaged demonstration and its referenced JSON inputs. CI must pass the complete Python 3.11/3.12/3.13 suite, v0.91-v0.95 compatibility gates, clean-wheel installation, installed `--check`, representative CLI smokes, and the real Python 3.13 Tk/Xvfb installed-demo smoke before the release is merged.

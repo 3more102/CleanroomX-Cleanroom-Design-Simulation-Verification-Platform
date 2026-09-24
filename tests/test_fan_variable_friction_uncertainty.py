@@ -177,6 +177,46 @@ def test_solver_result_integrity_linkage_detects_corrupted_corner_result(
     assert "Solver-result integrity violating corner indices: **[0]**" in report
 
 
+
+def test_solver_result_integrity_linkage_marks_missing_corner_evidence(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def omit_one_corner_integrity(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count == 2:
+            result.pop("result_integrity")
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        omit_one_corner_integrity,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["solver_result_integrity_summary"]
+
+    assert summary["evidence_result_count"] == summary["expected_result_count"] - 1
+    assert summary["complete_coverage"] is False
+    assert summary["incomplete_result_count"] == 1
+    assert summary["inconsistent_result_count"] == 1
+    assert summary["violating_corner_indices"] == [0]
+    assert summary["violation_details"][0]["verdict"] == (
+        "solver_result_integrity_missing"
+    )
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Solver-result integrity complete coverage: **False**" in report
+
+
 def test_nominal_result_matches_existing_nonlinear_solver() -> None:
     uncertainty = analyze_fan_variable_friction_loop_uncertainty(
         load_fan_variable_friction_loop_uncertainty(

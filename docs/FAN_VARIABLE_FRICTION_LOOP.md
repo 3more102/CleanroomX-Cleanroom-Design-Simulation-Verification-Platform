@@ -99,6 +99,8 @@ v0.70 retains bounded-bisection evidence when the operating-point search reaches
 
 v0.72 retains the complete midpoint decision trace for every successful bounded-bisection operating-point solve. Each record preserves the active positive/negative-residual bracket before evaluation, arithmetic midpoint, midpoint residual, normalized width, and the deterministic decision: `L` replaces the positive-residual low endpoint, `H` replaces the negative-residual high endpoint, and `T` accepts the midpoint within the configured pressure tolerance. The audit checks trace length against operating iterations, strict sign bracketing, midpoint centering, and terminal decision placement. This is implementation provenance only and does not add a physical uncertainty, interpolation-error, stability, manufacturer-limit, commissioning, certification, or equipment-acceptance criterion.
 
+v0.73 makes that trace replayable as a state-transition record. For each nonterminal L/H step, the audit reconstructs the expected next airflow bracket and signed-residual bracket and checks them against the next retained trace record; it also verifies that iteration numbers are contiguous from one. This detects trace corruption or solver/trace divergence without changing the accepted operating point. Replay evidence is numerical implementation provenance only, not physical uncertainty, interpolation error, continuous-root uniqueness/stability evidence, or an equipment-acceptance criterion.
+
 ## CLI
 
 ```text

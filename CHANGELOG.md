@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.99.1 installed desktop hardening — 2026-09-24
+
+- Continues directly from integrated v0.99.0 `main`; no divergent release branch is used as the baseline.
+- Keeps an abandoned analysis exclusive until its backend worker exits, suppressing the abandoned result without allowing a second overlapping computation to start.
+- Packages the GUI demonstration project and its relative consistency/dossier dependencies inside the installable wheel and adds `cleanroomx-gui --demo` for repository-independent launch.
+- Adds regressions for abandoned-run exclusivity and packaged-demo execution.
+- Builds and installs a clean wheel in every Python 3.11/3.12/3.13 CI job, validates the installed application/resources, and runs the Python 3.13 Tk/Xvfb smoke from the installed wheel.
+- Synchronizes package/runtime/demo/CI metadata at v0.99.1 without changing validated engineering solver semantics.
+
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.

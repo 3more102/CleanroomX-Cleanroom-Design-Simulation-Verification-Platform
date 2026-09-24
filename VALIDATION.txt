@@ -1,52 +1,41 @@
-CLEANROOMX RELEASE VALIDATION
-=============================
+CLEANROOMX v0.100 RELEASE VALIDATION
+=====================================
 
-Release: CleanroomX v0.99.0
-Validation date: 2026-09-24
+Release line: 0.100.0
+Canonical branch: codex/cleanroomx-v0100-final-consolidated
 
-VERIFIED RELEASE BASELINE
-main commit:
-1f035d08f893573868610d35296e3947445318e6
+REQUIRED BEFORE MERGE
+---------------------
+PASS required - v0.91 compatibility gate
+PASS required - v0.92 compatibility gate
+PASS required - v0.93 compatibility gate
+PASS required - v0.94 compatibility gate
+PASS required - v0.95 compatibility gate
+PASS required - focused application/project/GUI regressions
+PASS required - complete Python 3.11 test suite
+PASS required - complete Python 3.12 test suite
+PASS required - complete Python 3.13 test suite
+PASS required - representative CLI JSON/Markdown smoke checks
+PASS required - headless GUI registry readiness
+PASS required - source-tree real Tk/Xvfb GUI smoke
+PASS required - wheel build/install and packaged-demo validation
+PASS required - installed-wheel real Tk/Xvfb demo smoke
 
-GitHub Actions:
-run #790
-run id 36045911650
-status COMPLETED
-conclusion SUCCESS
-
-FULL TEST MATRIX
-Python 3.11: 558 passed
-Python 3.12: 558 passed
-Python 3.13: 558 passed
-
-ADDITIONAL VERIFIED GATES
-PASS - v0.91 compatibility regressions
-PASS - v0.92 compatibility regressions
-PASS - v0.93 compatibility regressions
-PASS - v0.94 compatibility regressions
-PASS - v0.95 solver-result-integrity compatibility regressions
-PASS - package/runtime/demo/CI version synchronization at 0.99.0
-PASS - structural application-registry integrity
-PASS - Python 3.13 cleanroomx-gui --check
-PASS - Python 3.13 real Tk GUI smoke under Xvfb
-PASS - representative CLI JSON/Markdown smoke checks
-
-RELEASE-DOCUMENT CLOSURE
-Added:
-ARCHITECTURE.md
-MIGRATIONS.md
-SECURITY.md
-DEPLOYMENT.md
-ROLLBACK.md
-TEST_EVIDENCE.md
-VALIDATION.txt
-
-The documentation closure changes no runtime source or validated
-engineering/numerical behavior. Its pull request and resulting main
-push must both complete CI successfully.
+CONSOLIDATED RELEASE CONTROLS
+-----------------------------
+- canonical input and external dependency SHA-256 execution provenance
+- strict run-bundle export
+- application registry parity and pre-window fail-fast validation
+- absolute/relative dossier path-context enforcement
+- file-reference rebasing across import and Save As relocation
+- cache invalidation when the project base directory changes
+- abandoned-worker exclusivity until backend exit
+- same-directory atomic project and export writes
+- fan plus backend system-curve plot evidence
+- self-contained packaged desktop demo
 
 ENGINEERING BOUNDARY
-This validation is software regression evidence. It does not establish
-ISO cleanroom certification, CFD validation, commissioning/TAB
-acceptance, manufacturer approval, physical/statistical uncertainty,
-or regulatory compliance.
+--------------------
+No validated solver equations, numerical tolerances, uncertainty enumeration,
+root-selection/no-extrapolation behavior, or engineering acceptance criteria are
+changed by this release consolidation.

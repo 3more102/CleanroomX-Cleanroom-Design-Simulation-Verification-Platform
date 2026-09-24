@@ -2581,11 +2581,17 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["all_recorded_midpoint_flags_match_numeric_geometry"]
     ]
+    trace_pressure_residual_identity_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["all_midpoint_residuals_match_pressure_components"]
+    ]
     trace_raw_state_violation_corner_indices = sorted(
         set(trace_numeric_sign_violation_corner_indices)
         | set(trace_sign_flag_mismatch_corner_indices)
         | set(trace_numeric_midpoint_violation_corner_indices)
         | set(trace_midpoint_flag_mismatch_corner_indices)
+        | set(trace_pressure_residual_identity_violation_corner_indices)
     )
     trace_width_violation_corner_indices = [
         corner_index
@@ -2628,6 +2634,14 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit.get(
             "all_decisions_match_midpoint_residual_semantics",
+            False,
+        )
+    ]
+    trace_pressure_component_decision_semantic_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get(
+            "all_decisions_match_pressure_component_semantics",
             False,
         )
     ]
@@ -2953,6 +2967,19 @@ def _operating_point_search_resolution_summary(
         "bisection_trace_midpoint_flag_mismatch_corner_indices": (
             trace_midpoint_flag_mismatch_corner_indices
         ),
+        "bisection_trace_pressure_residual_identity_match_corner_count": (
+            len(trace_cases)
+            - len(trace_pressure_residual_identity_violation_corner_indices)
+        ),
+        "bisection_trace_pressure_residual_identity_violation_corner_indices": (
+            trace_pressure_residual_identity_violation_corner_indices
+        ),
+        "maximum_bisection_trace_pressure_residual_identity_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_midpoint_residual_identity_error_pa",
+                "Pa",
+            )
+        ),
         "bisection_trace_raw_state_consistent_corner_count": (
             len(trace_cases) - len(trace_raw_state_violation_corner_indices)
         ),
@@ -3030,6 +3057,15 @@ def _operating_point_search_resolution_summary(
         ),
         "bisection_trace_decision_semantic_violation_corner_indices": (
             trace_decision_semantic_violation_corner_indices
+        ),
+        "bisection_trace_pressure_component_decision_semantic_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                trace_pressure_component_decision_semantic_violation_corner_indices
+            )
+        ),
+        "bisection_trace_pressure_component_decision_semantic_violation_corner_indices": (
+            trace_pressure_component_decision_semantic_violation_corner_indices
         ),
         "bisection_trace_origin_replay_corner_count": (
             len(trace_cases) - len(trace_origin_replay_violation_corner_indices)

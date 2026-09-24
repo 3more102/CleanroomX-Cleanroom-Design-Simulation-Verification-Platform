@@ -13,6 +13,15 @@ from tkinter import ttk
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+DEVICE_COLORS = {
+    "door": "#94a3b8",
+    "supply": "#38bdf8",
+    "return": "#60a5fa",
+    "exhaust": "#fb7185",
+    "ffu": "#34d399",
+    "equipment": "#fbbf24",
+    "sensor": "#c084fc",
+}
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -841,6 +850,20 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def fit_views(self) -> None:
+        canvas.create_text(
+            10,
+            10,
+            anchor="nw",
+            text=(
+                f"Az {self.layout['view']['azimuth_deg']:.0f}°  ·  "
+                f"El {self.layout['view']['elevation_deg']:.0f}°  ·  "
+                f"Zoom {self.layout['view']['zoom_3d']:.2f}×"
+            ),
+            fill="#8fa4bc",
+            font=("TkDefaultFont", 9),
+            tags=("hud3d",),
+        )
+
         min_x, min_y, max_x, max_y = self._bounds()
         width_m = max(1.0, max_x - min_x)
         height_m = max(1.0, max_y - min_y)
@@ -890,11 +913,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.create_line(0, origin_y, w, origin_y, fill="#31506f", width=2, tags=("axis",))
         if 0 <= origin_x <= w:
             canvas.create_line(origin_x, 0, origin_x, h, fill="#31506f", width=2, tags=("axis",))
+        cascade_count = len(self._pressure_cascade_links())
         canvas.create_text(
             10,
             10,
             anchor="nw",
-            text=f"Grid {self.layout['grid_m']:g} m  ·  {len(self.layout['rooms'])} rooms  ·  {len(self.layout['devices'])} devices",
+            text=(
+                f"Grid {self.layout['grid_m']:g} m  ·  "
+                f"{len(self.layout['rooms'])} rooms  ·  "
+                f"{len(self.layout['devices'])} devices  ·  "
+                f"{cascade_count} pressure links"
+            ),
             fill="#8fa4bc",
             font=("TkDefaultFont", 9),
             tags=("hud",),
@@ -924,6 +953,54 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#0b1726",
                 font=("TkDefaultFont", 9, "bold" if selected else "normal"),
                 tags=(f"room:{room['id']}", "room"),
+            )
+
+        if pmin is not None and pmax is not None:
+            legend_width = 132
+            legend_height = 10
+            legend_x = max(12, w - legend_width - 24)
+            legend_y = max(38, h - 42)
+            segments = 24
+            for index in range(segments):
+                ratio = index / max(1, segments - 1)
+                pressure = pmin + ratio * (pmax - pmin)
+                x0 = legend_x + index * legend_width / segments
+                x1 = legend_x + (index + 1) * legend_width / segments
+                canvas.create_rectangle(
+                    x0,
+                    legend_y,
+                    x1,
+                    legend_y + legend_height,
+                    outline="",
+                    fill=_pressure_fill(pressure, pmin, pmax),
+                    tags=("pressure-legend",),
+                )
+            canvas.create_text(
+                legend_x,
+                legend_y - 4,
+                anchor="sw",
+                text=f"{pmin:g} Pa",
+                fill="#9fb2c5",
+                font=("TkDefaultFont", 8),
+                tags=("pressure-legend",),
+            )
+            canvas.create_text(
+                legend_x + legend_width,
+                legend_y - 4,
+                anchor="se",
+                text=f"{pmax:g} Pa",
+                fill="#9fb2c5",
+                font=("TkDefaultFont", 8),
+                tags=("pressure-legend",),
+            )
+            canvas.create_text(
+                legend_x + legend_width / 2,
+                legend_y + legend_height + 4,
+                anchor="n",
+                text="ROOM PRESSURE",
+                fill="#738aa3",
+                font=("TkDefaultFont", 8, "bold"),
+                tags=("pressure-legend",),
             )
 
         cascade_links = self._pressure_cascade_links()
@@ -980,9 +1057,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
             radius = 9 if selected else 7
+            device_color = DEVICE_COLORS.get(device["type"], "#eaf2fb")
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#eaf2fb", outline="#fb7185" if selected else "#334e68",
+                fill=device_color, outline="#ffffff" if selected else "#334e68",
                 width=3 if selected else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
@@ -1003,6 +1081,17 @@ class SpatialDesignWorkspace(ttk.Frame):
                     font=("TkDefaultFont", 8),
                     tags=(f"device:{device['id']}", "device"),
                 )
+
+        if self.layout["devices"]:
+            canvas.create_text(
+                10,
+                h - 10,
+                anchor="sw",
+                text="D door · S supply · R return · E exhaust · F FFU · Q equipment · ● sensor",
+                fill="#738aa3",
+                font=("TkDefaultFont", 8),
+                tags=("device-legend",),
+            )
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -1125,9 +1214,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
+            device_color = DEVICE_COLORS.get(device["type"], "#fbbf24")
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
+                fill=device_color, outline="#ffffff" if selected else "#d6a20f",
                 width=2, tags=(tag, "device3d"),
             )
             if self._show_device_labels.get():

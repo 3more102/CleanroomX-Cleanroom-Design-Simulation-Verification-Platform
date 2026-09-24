@@ -941,6 +941,60 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_network_state_projection_applicable_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_applicable_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_coverage_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_complete_coverage = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_complete_coverage",
+                        False,
+                    )
+                )
+                trace_network_state_projection_consistent_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_violations = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_network_state_projection_coverage_gaps = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_coverage_gap_corner_indices",
+                        [],
+                    )
+                )
+                trace_network_state_projection_mismatch_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_mismatch_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_violation_details = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_violation_details",
+                        [],
+                    )
+                )
+                trace_network_state_projection_maximum_numeric_errors = (
+                    search_summary.get(
+                        "maximum_bisection_trace_network_state_projection_numeric_errors",
+                        [],
+                    )
+                )
                 terminal_network_state_replay_count = search_summary.get(
                     "terminal_network_state_replay_consistent_corner_count",
                     0,
@@ -1105,6 +1159,23 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_network_state_replay_count}/{trace_count}; "
                     f"network-state-replay violations "
                     f"{trace_network_state_replay_violations}; "
+                    f"full-trace-network-state-projection-replay "
+                    f"{trace_network_state_projection_consistent_count}/"
+                    f"{trace_network_state_projection_applicable_count}; "
+                    f"full-trace-network-state-projection coverage "
+                    f"{trace_network_state_projection_coverage_count}/"
+                    f"{trace_network_state_projection_applicable_count} "
+                    f"complete={trace_network_state_projection_complete_coverage}; "
+                    f"full-trace-network-state-projection violations "
+                    f"{trace_network_state_projection_violations}; "
+                    f"full-trace-network-state-projection coverage-gaps "
+                    f"{trace_network_state_projection_coverage_gaps}; "
+                    f"full-trace-network-state-projection mismatches "
+                    f"{trace_network_state_projection_mismatch_count}; "
+                    f"full-trace-network-state-projection details "
+                    f"{trace_network_state_projection_violation_details}; "
+                    f"full-trace-network-state-projection max-numeric-errors "
+                    f"{trace_network_state_projection_maximum_numeric_errors}; "
                     f"terminal-network-state-replay "
                     f"{terminal_network_state_replay_count}/{trace_count}; "
                     f"terminal-network-state-replay violations "

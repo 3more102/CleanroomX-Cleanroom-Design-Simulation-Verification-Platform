@@ -249,6 +249,21 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
     assert trace_audit["all_trace_raw_state_consistent"] is True
+    assert trace_audit["residual_component_check_count"] == len(trace)
+    assert trace_audit["residual_component_audit_complete"] is True
+    assert trace_audit[
+        "all_trace_residuals_match_pressure_components"
+    ] is True
+    assert trace_audit["residual_component_violation_iterations"] == []
+    assert trace_audit[
+        "maximum_absolute_trace_residual_component_error_pa"
+    ] <= 2e-9
+    assert trace_audit[
+        "all_decisions_match_pressure_component_residual_semantics"
+    ] is True
+    assert trace_audit[
+        "pressure_component_decision_semantic_violation_iterations"
+    ] == []
     assert trace_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
     ] <= 1e-9
@@ -300,6 +315,14 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert "Bisection decision sequence (L/H/T)" in report
     assert (
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
+        in report
+    )
+    assert (
+        "Every trace residual matches retained fan/system pressure components: **True**"
+        in report
+    )
+    assert (
+        "Trace decisions match pressure-component recomputed residual semantics: **True**"
         in report
     )
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
@@ -391,6 +414,14 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     ] is True
     assert trace_audit["all_decisions_match_midpoint_residual_semantics"] is True
     assert trace_audit["decision_semantic_violation_iterations"] == []
+    assert trace_audit["residual_component_check_count"] == len(trace)
+    assert trace_audit["residual_component_audit_complete"] is True
+    assert trace_audit[
+        "all_trace_residuals_match_pressure_components"
+    ] is True
+    assert trace_audit[
+        "all_decisions_match_pressure_component_residual_semantics"
+    ] is True
     assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
     origin_replay = trace_audit["trace_origin_replay"]
     assert origin_replay is not None
@@ -420,6 +451,14 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert "Trace terminal solver outcome consistent: **True**" in report
     assert (
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
+        in report
+    )
+    assert (
+        "Every trace residual matches retained fan/system pressure components: **True**"
+        in report
+    )
+    assert (
+        "Trace decisions match pressure-component recomputed residual semantics: **True**"
         in report
     )
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report

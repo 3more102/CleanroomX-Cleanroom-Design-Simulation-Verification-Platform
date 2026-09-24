@@ -2499,6 +2499,38 @@ def _operating_point_search_resolution_summary(
         and evidence.get("iteration_limit_evidence") is not None
     ]
 
+    supplied_point_network_state_replay_cases = [
+        (
+            corner_index,
+            corner,
+            corner.get("fan_curve_supplied_point_network_state_replay"),
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get("fan_curve_supplied_point_network_state_replay")
+        is not None
+    ]
+    supplied_point_network_state_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, audit
+        in supplied_point_network_state_replay_cases
+        if int(audit.get("violation_count", 0)) > 0
+    ]
+    supplied_point_network_state_replay_incomplete_corner_indices = [
+        corner_index
+        for corner_index, _corner, audit
+        in supplied_point_network_state_replay_cases
+        if audit.get("complete_supplied_point_coverage", False) is not True
+        or audit.get("replay_evidence_complete", False) is not True
+    ]
+    supplied_point_network_state_replay_consistent_corner_count = sum(
+        audit.get(
+            "all_evaluated_supplied_point_network_states_match_independent_replay"
+        )
+        is True
+        for _corner_index, _corner, audit
+        in supplied_point_network_state_replay_cases
+    )
+
     selected_operating_state_replay_cases = [
         (
             corner_index,
@@ -3252,6 +3284,29 @@ def _operating_point_search_resolution_summary(
             corner_index
             for corner_index, _corner, _evidence in supplied_point_cases
         ],
+        "supplied_point_network_state_replay_evidence_corner_count": len(
+            supplied_point_network_state_replay_cases
+        ),
+        "supplied_point_network_state_replay_complete_coverage_corner_count": (
+            len(supplied_point_network_state_replay_cases)
+            - len(
+                supplied_point_network_state_replay_incomplete_corner_indices
+            )
+        ),
+        "supplied_point_network_state_replay_incomplete_corner_indices": (
+            supplied_point_network_state_replay_incomplete_corner_indices
+        ),
+        "supplied_point_network_state_replay_consistent_corner_count": (
+            supplied_point_network_state_replay_consistent_corner_count
+        ),
+        "supplied_point_network_state_replay_violation_corner_indices": (
+            supplied_point_network_state_replay_violation_corner_indices
+        ),
+        "supplied_point_network_state_replay_violation_count": sum(
+            int(audit.get("violation_count", 0))
+            for _corner_index, _corner, audit
+            in supplied_point_network_state_replay_cases
+        ),
         "selected_operating_state_replay_evidence_corner_count": len(
             selected_operating_state_replay_cases
         ),

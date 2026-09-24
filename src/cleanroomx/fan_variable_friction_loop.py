@@ -658,6 +658,8 @@ def _bisection_decision_trace_audit(
     *,
     operating_iterations: int,
     termination_reason: str,
+    initial_bisection_bracket: dict | None = None,
+    solved_terminal_bracket: dict | None = None,
     iteration_limit_terminal_bracket: dict | None = None,
 ) -> dict | None:
     if trace is None:
@@ -761,6 +763,162 @@ def _bisection_decision_trace_audit(
                 ),
             }
         )
+
+    origin_replay = None
+    terminal_bracket_for_origin_replay = (
+        iteration_limit_terminal_bracket
+        if termination_reason == "bisection_iteration_limit"
+        else solved_terminal_bracket
+    )
+    if trace and initial_bisection_bracket is not None:
+        replay_low_airflow = float(
+            initial_bisection_bracket["low_airflow_m3_h"]
+        )
+        replay_high_airflow = float(
+            initial_bisection_bracket["high_airflow_m3_h"]
+        )
+        replay_low_residual = float(
+            initial_bisection_bracket["low_fan_minus_system_pressure_pa"]
+        )
+        replay_high_residual = float(
+            initial_bisection_bracket["high_fan_minus_system_pressure_pa"]
+        )
+        origin_step_checks = []
+        for trace_index, step in enumerate(trace):
+            airflow_matches = (
+                math.isclose(
+                    float(step["low_airflow_m3_h"]),
+                    replay_low_airflow,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+                and math.isclose(
+                    float(step["high_airflow_m3_h"]),
+                    replay_high_airflow,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+            )
+            residual_matches = (
+                math.isclose(
+                    float(step["low_fan_minus_system_pressure_pa"]),
+                    replay_low_residual,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+                and math.isclose(
+                    float(step["high_fan_minus_system_pressure_pa"]),
+                    replay_high_residual,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+            )
+            current_bracket_matches = airflow_matches and residual_matches
+            decision = step["decision"]
+            replayable_decision = decision in {
+                "replace_low_endpoint",
+                "replace_high_endpoint",
+                "accept_pressure_tolerance",
+            }
+            if decision == "replace_low_endpoint":
+                replay_low_airflow = float(step["midpoint_airflow_m3_h"])
+                replay_low_residual = float(
+                    step["midpoint_fan_minus_system_pressure_pa"]
+                )
+            elif decision == "replace_high_endpoint":
+                replay_high_airflow = float(step["midpoint_airflow_m3_h"])
+                replay_high_residual = float(
+                    step["midpoint_fan_minus_system_pressure_pa"]
+                )
+            origin_step_checks.append(
+                {
+                    "trace_index": trace_index,
+                    "iteration": int(step["iteration"]),
+                    "decision": decision,
+                    "airflow_bracket_matches_origin_replay": airflow_matches,
+                    "residual_bracket_matches_origin_replay": residual_matches,
+                    "current_bracket_matches_origin_replay": (
+                        current_bracket_matches
+                    ),
+                    "decision_is_replayable": replayable_decision,
+                }
+            )
+
+        terminal_matches = False
+        if terminal_bracket_for_origin_replay is not None:
+            terminal_matches = (
+                math.isclose(
+                    float(
+                        terminal_bracket_for_origin_replay[
+                            "low_airflow_m3_h"
+                        ]
+                    ),
+                    replay_low_airflow,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+                and math.isclose(
+                    float(
+                        terminal_bracket_for_origin_replay[
+                            "high_airflow_m3_h"
+                        ]
+                    ),
+                    replay_high_airflow,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+                and math.isclose(
+                    float(
+                        terminal_bracket_for_origin_replay[
+                            "low_fan_minus_system_pressure_pa"
+                        ]
+                    ),
+                    replay_low_residual,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+                and math.isclose(
+                    float(
+                        terminal_bracket_for_origin_replay[
+                            "high_fan_minus_system_pressure_pa"
+                        ]
+                    ),
+                    replay_high_residual,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+            )
+        all_steps_match = all(
+            check["current_bracket_matches_origin_replay"]
+            and check["decision_is_replayable"]
+            for check in origin_step_checks
+        )
+        origin_replay = {
+            "initial_bracket_matches_first_trace_step": (
+                bool(origin_step_checks)
+                and origin_step_checks[0][
+                    "current_bracket_matches_origin_replay"
+                ]
+            ),
+            "all_trace_steps_match_origin_replay": all_steps_match,
+            "terminal_bracket_matches_origin_replay": terminal_matches,
+            "trace_origin_to_terminal_replay_consistent": (
+                all_steps_match and terminal_matches
+            ),
+            "replayed_terminal_bracket": {
+                "low_airflow_m3_h": round(replay_low_airflow, 9),
+                "high_airflow_m3_h": round(replay_high_airflow, 9),
+                "low_fan_minus_system_pressure_pa": round(
+                    replay_low_residual,
+                    9,
+                ),
+                "high_fan_minus_system_pressure_pa": round(
+                    replay_high_residual,
+                    9,
+                ),
+            },
+            "step_checks": origin_step_checks,
+        }
 
     terminal_limit_replay = None
     if (
@@ -885,6 +1043,11 @@ def _bisection_decision_trace_audit(
             termination_indices == [len(trace) - 1]
         ),
         "terminal_outcome_consistent": terminal_outcome_consistent,
+        "trace_origin_replay": origin_replay,
+        "trace_origin_to_terminal_replay_consistent": (
+            origin_replay is not None
+            and origin_replay["trace_origin_to_terminal_replay_consistent"]
+        ),
         "iteration_limit_terminal_replay": terminal_limit_replay,
         "replace_low_endpoint_count": sum(
             step["decision"] == "replace_low_endpoint" for step in trace
@@ -917,7 +1080,10 @@ def _bisection_decision_trace_audit(
             "accepts a midpoint within the configured operating-pressure "
             "tolerance. The replay audit verifies that each nonterminal L/H "
             "decision produces the next recorded airflow/residual bracket and "
-            "that iteration numbering is contiguous. For an iteration-limit "
+            "that iteration numbering is contiguous. The origin replay also "
+            "anchors the first trace state to the selected supplied-point "
+            "bracket and reconstructs the complete decision chain through the "
+            "terminal retained bracket. For an iteration-limit "
             "outcome, the final L/H decision is additionally replayed into "
             "the retained remaining bracket without accepting an operating "
             "point. This is numerical implementation provenance only; it is "
@@ -1015,6 +1181,7 @@ def solve_fan_variable_friction_loop(
     selected_segment = 0
     selected_supplied_point_index: int | None = None
     final_bisection_bracket: dict | None = None
+    initial_bisection_bracket: dict | None = None
     bisection_trace: list[dict] | None = None
     operating_iterations = 0
     termination_reason = "no_intersection_in_supplied_range"
@@ -1048,6 +1215,18 @@ def solve_fan_variable_friction_loop(
             low_residual = left_residual
             high_residual = right_residual
             supplied_segment_span = high - low
+            initial_bisection_bracket = {
+                "low_airflow_m3_h": round(low, 9),
+                "high_airflow_m3_h": round(high, 9),
+                "low_fan_minus_system_pressure_pa": round(
+                    low_residual,
+                    9,
+                ),
+                "high_fan_minus_system_pressure_pa": round(
+                    high_residual,
+                    9,
+                ),
+            }
             bisection_trace = []
             final: tuple[float, float, dict, float, float] | None = None
 
@@ -1280,12 +1459,14 @@ def solve_fan_variable_friction_loop(
                     ),
                     "selected_supplied_point_index": None,
                     "operating_iterations": operating_iterations,
+                    "initial_bisection_bracket": initial_bisection_bracket,
                     "final_bisection_bracket": None,
                     "bisection_trace": bisection_trace,
                     "bisection_trace_audit": _bisection_decision_trace_audit(
                         bisection_trace,
                         operating_iterations=operating_iterations,
                         termination_reason=termination_reason,
+                        initial_bisection_bracket=initial_bisection_bracket,
                         iteration_limit_terminal_bracket=terminal_bracket,
                     ),
                     "iteration_limit_evidence": {
@@ -1432,12 +1613,15 @@ def solve_fan_variable_friction_loop(
         ),
         "selected_supplied_point_index": selected_supplied_point_index,
         "operating_iterations": operating_iterations,
+        "initial_bisection_bracket": initial_bisection_bracket,
         "final_bisection_bracket": final_bisection_bracket,
         "bisection_trace": bisection_trace,
         "bisection_trace_audit": _bisection_decision_trace_audit(
             bisection_trace,
             operating_iterations=operating_iterations,
             termination_reason=termination_reason,
+            initial_bisection_bracket=initial_bisection_bracket,
+            solved_terminal_bracket=final_bisection_bracket,
         ),
         "scope_note": (
             "The final bisection bracket is the active signed-residual search "

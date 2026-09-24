@@ -1581,6 +1581,15 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
         replay["recomputed_network_state_sha256"]
     )
     assert replay["network_state_matches_independent_replay"] is True
+    assert replay["network_state_projection_replay_available"] is True
+    assert replay[
+        "network_state_projection_matches_independent_replay"
+    ] is True
+    assert replay["network_state_projection_mismatch_count"] == 0
+    assert replay["network_state_projection_mismatch_paths"] == []
+    assert replay["recorded_network_state_projection"] == (
+        replay["recomputed_network_state_projection"]
+    )
     assert replay["violation_count"] == 0
     assert replay["violations"] == []
     assert replay["maximum_absolute_pressure_replay_error_pa"] <= 1e-9
@@ -1679,6 +1688,72 @@ def test_selected_operating_state_replay_detects_internal_network_state_corrupti
     assert corrupted["violations"][0]["component"] == "network_state_sha256"
     assert corrupted["recorded_network_state_sha256"] == "0" * 64
     assert len(corrupted["recomputed_network_state_sha256"]) == 64
+
+
+def test_selected_operating_state_projection_replay_localizes_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Selected network-state projection replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    replay = evidence["selected_operating_state_replay"]
+    pressure = result["system_pressure_check"]
+    segment_index = evidence["supplied_segment_index"]
+
+    corrupted_projection = json.loads(
+        json.dumps(replay["recorded_network_state_projection"])
+    )
+    corrupted_projection["nodes"][0]["relative_pressure_pa"] += 1.0
+
+    corrupted = _selected_operating_state_replay_audit(
+        study,
+        selected_airflow_m3_h=replay["selected_airflow_replay_input_m3_h"],
+        recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
+        recorded_loop_network_pressure_pa=pressure[
+            "loop_network_pressure_pa"
+        ],
+        recorded_system_pressure_pa=pressure["total_system_pressure_pa"],
+        recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
+        recorded_network_state_sha256=replay[
+            "recorded_network_state_sha256"
+        ],
+        recorded_network_state_projection=corrupted_projection,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        bisection_trace=evidence["bisection_trace"],
+    )
+
+    assert corrupted["network_state_matches_independent_replay"] is True
+    assert corrupted["network_state_projection_replay_available"] is True
+    assert corrupted[
+        "network_state_projection_matches_independent_replay"
+    ] is False
+    assert corrupted["network_state_projection_mismatch_count"] == 1
+    assert corrupted["network_state_projection_mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
+    ]
+    assert corrupted[
+        "all_selected_operating_state_matches_independent_replay"
+    ] is False
+    assert corrupted["violation_count"] == 1
+    assert corrupted["violations"] == [
+        {
+            "component": "network_state_projection",
+            "mismatch_paths": ["$.nodes[0].relative_pressure_pa"],
+        }
+    ]
 
 
 def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:

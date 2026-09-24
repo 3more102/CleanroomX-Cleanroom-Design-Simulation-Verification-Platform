@@ -872,6 +872,7 @@ def _bisection_decision_trace_audit(
 
     residual_replay_checks = []
     pressure_component_replay_checks = []
+    endpoint_pressure_component_replay_checks = []
     residual_replay_available = (
         study is not None
         and segment_left is not None
@@ -1103,6 +1104,163 @@ def _bisection_decision_trace_audit(
                         ),
                         "all_pressure_components_match_independent_replay": (
                             fan_matches and loop_matches and system_matches
+                        ),
+                    }
+                )
+
+            endpoint_pressure_component_fields = (
+                "low_fan_pressure_pa",
+                "low_loop_network_pressure_pa",
+                "low_system_pressure_pa",
+                "high_fan_pressure_pa",
+                "high_loop_network_pressure_pa",
+                "high_system_pressure_pa",
+            )
+            if all(
+                field in step
+                for field in endpoint_pressure_component_fields
+            ):
+                recorded_low_fan_pressure = float(
+                    step["low_fan_pressure_pa"]
+                )
+                recorded_low_loop_pressure = float(
+                    step["low_loop_network_pressure_pa"]
+                )
+                recorded_low_system_pressure = float(
+                    step["low_system_pressure_pa"]
+                )
+                recorded_high_fan_pressure = float(
+                    step["high_fan_pressure_pa"]
+                )
+                recorded_high_loop_pressure = float(
+                    step["high_loop_network_pressure_pa"]
+                )
+                recorded_high_system_pressure = float(
+                    step["high_system_pressure_pa"]
+                )
+                low_fan_error = abs(
+                    recorded_low_fan_pressure - low_state["fan_pressure_pa"]
+                )
+                low_loop_error = abs(
+                    recorded_low_loop_pressure
+                    - low_state["loop_network_pressure_pa"]
+                )
+                low_system_error = abs(
+                    recorded_low_system_pressure
+                    - low_state["system_pressure_pa"]
+                )
+                high_fan_error = abs(
+                    recorded_high_fan_pressure
+                    - high_state["fan_pressure_pa"]
+                )
+                high_loop_error = abs(
+                    recorded_high_loop_pressure
+                    - high_state["loop_network_pressure_pa"]
+                )
+                high_system_error = abs(
+                    recorded_high_system_pressure
+                    - high_state["system_pressure_pa"]
+                )
+                low_fan_matches = math.isclose(
+                    recorded_low_fan_pressure,
+                    low_state["fan_pressure_pa"],
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                low_loop_matches = math.isclose(
+                    recorded_low_loop_pressure,
+                    low_state["loop_network_pressure_pa"],
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                low_system_matches = math.isclose(
+                    recorded_low_system_pressure,
+                    low_state["system_pressure_pa"],
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                high_fan_matches = math.isclose(
+                    recorded_high_fan_pressure,
+                    high_state["fan_pressure_pa"],
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                high_loop_matches = math.isclose(
+                    recorded_high_loop_pressure,
+                    high_state["loop_network_pressure_pa"],
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                high_system_matches = math.isclose(
+                    recorded_high_system_pressure,
+                    high_state["system_pressure_pa"],
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                endpoint_pressure_component_replay_checks.append(
+                    {
+                        "iteration": int(step["iteration"]),
+                        "replayed_low_airflow_m3_h": round(
+                            replay_low_airflow,
+                            9,
+                        ),
+                        "replayed_high_airflow_m3_h": round(
+                            replay_high_airflow,
+                            9,
+                        ),
+                        "absolute_low_fan_pressure_replay_error_pa": (
+                            low_fan_error
+                        ),
+                        "absolute_low_loop_pressure_replay_error_pa": (
+                            low_loop_error
+                        ),
+                        "absolute_low_system_pressure_replay_error_pa": (
+                            low_system_error
+                        ),
+                        "absolute_high_fan_pressure_replay_error_pa": (
+                            high_fan_error
+                        ),
+                        "absolute_high_loop_pressure_replay_error_pa": (
+                            high_loop_error
+                        ),
+                        "absolute_high_system_pressure_replay_error_pa": (
+                            high_system_error
+                        ),
+                        "low_fan_pressure_matches_independent_replay": (
+                            low_fan_matches
+                        ),
+                        "low_loop_pressure_matches_independent_replay": (
+                            low_loop_matches
+                        ),
+                        "low_system_pressure_matches_independent_replay": (
+                            low_system_matches
+                        ),
+                        "high_fan_pressure_matches_independent_replay": (
+                            high_fan_matches
+                        ),
+                        "high_loop_pressure_matches_independent_replay": (
+                            high_loop_matches
+                        ),
+                        "high_system_pressure_matches_independent_replay": (
+                            high_system_matches
+                        ),
+                        "all_low_endpoint_pressure_components_match_independent_replay": (
+                            low_fan_matches
+                            and low_loop_matches
+                            and low_system_matches
+                        ),
+                        "all_high_endpoint_pressure_components_match_independent_replay": (
+                            high_fan_matches
+                            and high_loop_matches
+                            and high_system_matches
+                        ),
+                        "all_endpoint_pressure_components_match_independent_replay": (
+                            low_fan_matches
+                            and low_loop_matches
+                            and low_system_matches
+                            and high_fan_matches
+                            and high_loop_matches
+                            and high_system_matches
                         ),
                     }
                 )
@@ -1701,6 +1859,81 @@ def _bisection_decision_trace_audit(
         "pressure_component_replay_checks": (
             pressure_component_replay_checks
         ),
+        "endpoint_pressure_component_replay_check_count": len(
+            endpoint_pressure_component_replay_checks
+        ),
+        "endpoint_pressure_component_replay_evidence_complete": (
+            len(endpoint_pressure_component_replay_checks) == len(trace)
+            if residual_replay_available
+            else None
+        ),
+        "all_low_endpoint_pressure_components_match_independent_replay": (
+            len(endpoint_pressure_component_replay_checks) == len(trace)
+            and all(
+                check[
+                    "all_low_endpoint_pressure_components_match_independent_replay"
+                ]
+                for check in endpoint_pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_high_endpoint_pressure_components_match_independent_replay": (
+            len(endpoint_pressure_component_replay_checks) == len(trace)
+            and all(
+                check[
+                    "all_high_endpoint_pressure_components_match_independent_replay"
+                ]
+                for check in endpoint_pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_endpoint_pressure_components_match_independent_replay": (
+            len(endpoint_pressure_component_replay_checks) == len(trace)
+            and all(
+                check[
+                    "all_endpoint_pressure_components_match_independent_replay"
+                ]
+                for check in endpoint_pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_bracket_pressure_components_match_independent_replay": (
+            len(endpoint_pressure_component_replay_checks) == len(trace)
+            and len(pressure_component_replay_checks) == len(trace)
+            and all(
+                check[
+                    "all_endpoint_pressure_components_match_independent_replay"
+                ]
+                for check in endpoint_pressure_component_replay_checks
+            )
+            and all(
+                check["all_pressure_components_match_independent_replay"]
+                for check in pressure_component_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "maximum_absolute_trace_endpoint_pressure_component_replay_error_pa": (
+            max(
+                max(
+                    check["absolute_low_fan_pressure_replay_error_pa"],
+                    check["absolute_low_loop_pressure_replay_error_pa"],
+                    check["absolute_low_system_pressure_replay_error_pa"],
+                    check["absolute_high_fan_pressure_replay_error_pa"],
+                    check["absolute_high_loop_pressure_replay_error_pa"],
+                    check["absolute_high_system_pressure_replay_error_pa"],
+                )
+                for check in endpoint_pressure_component_replay_checks
+            )
+            if endpoint_pressure_component_replay_checks
+            else None
+        ),
+        "endpoint_pressure_component_replay_checks": (
+            endpoint_pressure_component_replay_checks
+        ),
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -1947,6 +2180,22 @@ def solve_fan_variable_friction_loop(
             high = right.airflow_m3_h
             low_residual = left_residual
             high_residual = right_residual
+            low_fan_pressure = float(curve_checks[index]["fan_pressure_pa"])
+            low_network_pressure = float(
+                curve_checks[index]["loop_network_pressure_pa"]
+            )
+            low_system_pressure = float(
+                curve_checks[index]["system_pressure_pa"]
+            )
+            high_fan_pressure = float(
+                curve_checks[index + 1]["fan_pressure_pa"]
+            )
+            high_network_pressure = float(
+                curve_checks[index + 1]["loop_network_pressure_pa"]
+            )
+            high_system_pressure = float(
+                curve_checks[index + 1]["system_pressure_pa"]
+            )
             supplied_segment_span = high - low
             initial_bisection_bracket = {
                 "low_airflow_m3_h": round(low, 9),
@@ -2009,6 +2258,30 @@ def solve_fan_variable_friction_loop(
                             ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
+                                9,
+                            ),
+                            "low_fan_pressure_pa": round(
+                                low_fan_pressure,
+                                9,
+                            ),
+                            "low_loop_network_pressure_pa": round(
+                                low_network_pressure,
+                                9,
+                            ),
+                            "low_system_pressure_pa": round(
+                                low_system_pressure,
+                                9,
+                            ),
+                            "high_fan_pressure_pa": round(
+                                high_fan_pressure,
+                                9,
+                            ),
+                            "high_loop_network_pressure_pa": round(
+                                high_network_pressure,
+                                9,
+                            ),
+                            "high_system_pressure_pa": round(
+                                high_system_pressure,
                                 9,
                             ),
                             "midpoint_fan_pressure_pa": round(
@@ -2115,9 +2388,15 @@ def solve_fan_variable_friction_loop(
                     if residual > 0.0:
                         low = airflow
                         low_residual = residual
+                        low_fan_pressure = fan_pressure
+                        low_network_pressure = network_pressure
+                        low_system_pressure = system_pressure
                     else:
                         high = airflow
                         high_residual = residual
+                        high_fan_pressure = fan_pressure
+                        high_network_pressure = network_pressure
+                        high_system_pressure = system_pressure
                 else:
                     termination_reason = "bisection_iteration_limit"
             except RuntimeError as exc:

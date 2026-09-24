@@ -421,6 +421,7 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Supplied-point residual topology audit" in report
     assert "Candidate crossing features" in report
+    assert "Reverse strict negative-to-positive supplied segments" in report
     assert "Selected discrete candidate" in report
     assert "Selection policy" in report
     if audit["additional_candidate_feature_count"]:
@@ -452,6 +453,14 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
     ]
     audit = _fan_curve_supplied_point_residual_audit(study, checks)
     assert audit["strict_sign_change_segment_count"] == 2
+    assert audit["reverse_strict_sign_change_segment_count"] == 1
+    assert audit["all_strict_sign_change_segment_count"] == 3
+    reverse = audit["reverse_strict_sign_change_segments"]
+    assert len(reverse) == 1
+    assert reverse[0]["low_point_index"] == 1
+    assert reverse[0]["high_point_index"] == 2
+    assert reverse[0]["low_fan_minus_system_pressure_pa"] == pytest.approx(-10.0)
+    assert reverse[0]["high_fan_minus_system_pressure_pa"] == pytest.approx(10.0)
     assert audit["candidate_crossing_feature_count"] == 2
 
     selected = _with_selected_crossing_feature(
@@ -494,4 +503,26 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
         selected["selected_airflow_overlaps_alternative_candidate_interval"]
         is False
     )
+
+
+def test_reverse_sign_change_is_audit_only_and_not_a_solver_candidate() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    checks = [
+        {"airflow_m3_h": 0.0, "pressure_margin_pa": -10.0},
+        {"airflow_m3_h": 1000.0, "pressure_margin_pa": 10.0},
+    ]
+    audit = _fan_curve_supplied_point_residual_audit(study, checks)
+
+    assert audit["strict_sign_change_segment_count"] == 0
+    assert audit["reverse_strict_sign_change_segment_count"] == 1
+    assert audit["all_strict_sign_change_segment_count"] == 1
+    assert audit["candidate_crossing_feature_count"] == 0
+    assert audit["candidate_crossing_features_in_solver_priority_order"] == []
+    reverse = audit["reverse_strict_sign_change_segments"][0]
+    assert reverse["low_point_index"] == 0
+    assert reverse["high_point_index"] == 1
+    assert reverse["low_fan_minus_system_pressure_pa"] == pytest.approx(-10.0)
+    assert reverse["high_fan_minus_system_pressure_pa"] == pytest.approx(10.0)
 

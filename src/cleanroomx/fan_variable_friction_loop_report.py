@@ -132,8 +132,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_steps_preserve_strict_sign_change_before_evaluation']}**",
                     "- Every trace midpoint is the arithmetic bracket midpoint: "
                     f"**{trace_audit['all_midpoints_are_arithmetic_bracket_midpoints']}**",
-                    "- Terminal tolerance decision is the final trace record: "
-                    f"**{trace_audit['termination_record_is_last']}**",
+                    "- Trace terminal solver outcome consistent: "
+                    f"**{trace_audit['terminal_outcome_consistent']}**",
                     "- Trace iteration sequence is contiguous from one: "
                     f"**{trace_audit['iterations_are_contiguous_from_one']}**",
                     "- Trace state transitions replay recorded L/H decisions: "
@@ -143,6 +143,15 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"{trace_audit['replace_high_endpoint_count']}**",
                 ]
             )
+            terminal_replay = trace_audit.get(
+                "iteration_limit_terminal_replay"
+            )
+            if terminal_replay is not None:
+                lines.append(
+                    "- Iteration-limit remaining bracket replays final L/H "
+                    "decision: "
+                    f"**{terminal_replay['terminal_bracket_replays_recorded_decision']}**"
+                )
         lines.extend(["", search["scope_note"]])
 
     point = result["fan_operating_point"]

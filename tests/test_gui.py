@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import flatten_json, main, unit_hint
-from cleanroomx.project import load_project_document
+from cleanroomx.gui import CleanroomXApp, flatten_json, main, unit_hint
+from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +22,40 @@ def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows
     assert ("$.room.enabled", "true", "") in rows
+
+
+def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Text:
+        def get(self, *args):
+            return '{"value": 2}'
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(id="a", name="A", kind="room_verification", input={"value": 1}),
+            AnalysisDocument(id="b", name="B", kind="room_verification", input={"value": 9}),
+        ],
+        active_analysis_id="b",
+    )
+    app._editor_analysis_id = "a"
+    app.input_text = Text()
+    app.name_var = Value("Demo")
+    app.description_var = Value("Preserve editor state")
+
+    committed = app._commit_editor()
+
+    assert committed.id == "a"
+    assert app.project.analysis_by_id("a").input == {"value": 2}
+    assert app.project.analysis_by_id("b").input == {"value": 9}
+    assert app.project.description == "Preserve editor state"
 
 
 def test_gui_check_mode_needs_no_display(capsys):

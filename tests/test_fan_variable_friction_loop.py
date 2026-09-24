@@ -454,8 +454,70 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
         "nearest_alternative_candidate_airflow_interval_gap_m3_h"
     ] == pytest.approx(1500.0)
     assert len(selected["nearest_alternative_candidate_features"]) == 1
+    assert alternatives[0]["relative_to_selected_airflow"] == (
+        "above_selected_airflow"
+    )
+    assert selected["alternative_candidate_below_selected_airflow_count"] == 0
+    assert selected["alternative_candidate_overlap_selected_airflow_count"] == 0
+    assert selected["alternative_candidate_above_selected_airflow_count"] == 1
+    assert selected[
+        "nearest_below_alternative_candidate_airflow_interval_gap_m3_h"
+    ] is None
+    assert selected[
+        "nearest_above_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert len(selected["nearest_above_alternative_candidate_features"]) == 1
     assert (
         selected["selected_airflow_overlaps_alternative_candidate_interval"]
         is False
     )
+    assert (
+        selected["alternative_candidates_on_both_sides_of_selected_airflow"]
+        is False
+    )
 
+
+
+def test_directional_candidate_topology_retains_alternatives_on_both_sides() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    checks = [
+        {"airflow_m3_h": 0.0, "pressure_margin_pa": 10.0},
+        {"airflow_m3_h": 1000.0, "pressure_margin_pa": -10.0},
+        {"airflow_m3_h": 2000.0, "pressure_margin_pa": 10.0},
+        {"airflow_m3_h": 3000.0, "pressure_margin_pa": -10.0},
+        {"airflow_m3_h": 4000.0, "pressure_margin_pa": 10.0},
+        {"airflow_m3_h": 5000.0, "pressure_margin_pa": -10.0},
+    ]
+    audit = _fan_curve_supplied_point_residual_audit(study, checks)
+    assert audit["candidate_crossing_feature_count"] == 3
+
+    selected = _with_selected_crossing_feature(
+        audit,
+        termination_reason="pressure_residual",
+        selected_airflow_m3_h=2500.0,
+        selected_segment_index=2,
+    )
+    alternatives = selected["alternative_candidate_features"]
+    assert alternatives is not None
+    assert selected["selected_candidate_feature_rank"] == 1
+    assert selected["alternative_candidate_below_selected_airflow_count"] == 1
+    assert selected["alternative_candidate_overlap_selected_airflow_count"] == 0
+    assert selected["alternative_candidate_above_selected_airflow_count"] == 1
+    assert alternatives[0]["relative_to_selected_airflow"] == (
+        "below_selected_airflow"
+    )
+    assert alternatives[1]["relative_to_selected_airflow"] == (
+        "above_selected_airflow"
+    )
+    assert selected[
+        "nearest_below_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert selected[
+        "nearest_above_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert (
+        selected["alternative_candidates_on_both_sides_of_selected_airflow"]
+        is True
+    )

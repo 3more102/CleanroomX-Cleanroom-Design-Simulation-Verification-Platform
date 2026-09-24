@@ -959,8 +959,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{residual_summary['solved_with_additional_candidate_feature_corner_count']}**",
                 "- Solved corners with alternative-candidate separation evidence: "
                 f"**{residual_summary['alternative_candidate_separation_evidence_corner_count']}**",
+                "- Solved corners with alternative candidates below selected airflow: "
+                f"**{residual_summary['selected_airflow_with_below_alternative_corner_count']}**",
                 "- Solved corners whose selected airflow overlaps an alternative candidate interval: "
                 f"**{residual_summary['selected_airflow_overlap_alternative_interval_corner_count']}**",
+                "- Solved corners with alternative candidates above selected airflow: "
+                f"**{residual_summary['selected_airflow_with_above_alternative_corner_count']}**",
+                "- Solved corners with alternative candidates on both sides of selected airflow: "
+                f"**{residual_summary['selected_airflow_with_bidirectional_alternative_corner_count']}**",
                 "- Corners with residual-increase transitions: "
                 f"**{residual_summary['residual_increase_corner_count']}**",
                 "- Corners with multiple discrete candidate crossing features: "
@@ -1009,6 +1015,28 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             lines.append(
                 "- Minimum selected-to-alternative candidate interval gap: "
                 f"**{alternative_gap['value']} {alternative_gap['unit']}** "
+                f"({' / '.join(source_texts)})"
+            )
+        for gap_key, label in (
+            (
+                "minimum_selected_to_below_alternative_candidate_interval_gap_m3_h",
+                "Minimum selected-to-below alternative candidate interval gap",
+            ),
+            (
+                "minimum_selected_to_above_alternative_candidate_interval_gap_m3_h",
+                "Minimum selected-to-above alternative candidate interval gap",
+            ),
+        ):
+            directional_gap = residual_summary.get(gap_key)
+            if directional_gap is None:
+                continue
+            source_texts = [
+                _fmt_extreme_source(source)
+                for source in directional_gap["sources"]
+            ]
+            lines.append(
+                f"- {label}: "
+                f"**{directional_gap['value']} {directional_gap['unit']}** "
                 f"({' / '.join(source_texts)})"
             )
         if residual_summary["residual_increase_corner_indices"]:

@@ -881,23 +881,23 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "- Trace network-state replay consistent corners: "
                 f"**{search_summary['bisection_trace_network_state_replay_consistent_corner_count']}**",
                 "- Trace network-state projection replay evidence corners: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_evidence_corner_count']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_evidence_corner_count')}**",
                 "- Trace network-state projection replay complete coverage: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_complete_coverage']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_complete_coverage')}**",
                 "- Trace network-state projection replay incomplete corners: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_incomplete_corner_indices']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_incomplete_corner_indices')}**",
                 "- Trace network-state projection replay consistent corners: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_consistent_corner_count']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_consistent_corner_count')}**",
                 "- Trace network-state projection replay violation corners: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_violation_corner_indices']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_violation_corner_indices')}**",
                 "- Trace network-state projection mismatch positions across corners: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_violation_count']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_violation_count')}**",
                 "- Trace network-state projection leaf mismatches across corners: "
-                f"**{search_summary['bisection_trace_network_state_projection_mismatch_count']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_mismatch_count')}**",
                 "- Exact trace network-state projection mismatch details: "
-                f"**{search_summary['bisection_trace_network_state_projection_replay_violation_details']}**",
+                f"**{search_summary.get('bisection_trace_network_state_projection_replay_violation_details')}**",
                 "- Maximum trace network-state projection numeric errors by field: "
-                f"**{search_summary['maximum_bisection_trace_network_state_projection_numeric_errors']}**",
+                f"**{search_summary.get('maximum_bisection_trace_network_state_projection_numeric_errors')}**",
                 "- Terminal pressure-component replay violation corners: "
                 f"**{search_summary['terminal_pressure_component_replay_violation_corner_indices']}**",
                 "- Maximum terminal pressure-component replay error: "
@@ -1011,9 +1011,9 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         "- Nominal full-bracket network-state fingerprint replay consistent: "
                         f"**{nominal_trace_audit['all_trace_network_states_match_independent_replay']}**",
                         "- Nominal full-bracket network-state projection replay consistent: "
-                        f"**{nominal_trace_audit['all_trace_network_state_projections_match_independent_replay']}**",
+                        f"**{nominal_trace_audit.get('all_trace_network_state_projections_match_independent_replay')}**",
                         "- Nominal trace network-state projection mismatches: "
-                        f"**{nominal_trace_audit['network_state_projection_replay_violations']}**",
+                        f"**{nominal_trace_audit.get('network_state_projection_replay_violations')}**",
                         "- Nominal terminal pressure-component replay consistent: "
                         f"**{nominal_trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
                         "- Nominal terminal pressure-component replay violations: "

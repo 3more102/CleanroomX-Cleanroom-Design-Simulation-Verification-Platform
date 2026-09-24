@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.96 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.97 desktop application.
 
 ## Verified development status
 
-The current application release branch is `codex/cleanroomx-v096-application-gui`, package/runtime version **0.96.0**. It starts from integrated v0.95 commit `e62567d4e9c730ca1fb3439c38e340796208d4fe`, preserves the verified v0.91 → v0.92 → v0.93 → v0.94 → v0.95 provenance line, and adds the shared application layer, versioned project persistence, and desktop GUI without replacing the validated backend workflows. The default `main` branch remains older than this development line until repository integration is completed.
+The current release is **v0.97.0**. It is a clean descendant of integrated v0.95 commit `e62567d4e9c730ca1fb3439c38e340796208d4fe`, preserves the verified v0.91 → v0.92 → v0.93 → v0.94 → v0.95 provenance line, and carries the v0.96 shared application layer, versioned project persistence, and desktop GUI forward with complete application-workflow execution coverage and GUI lifecycle/data-loss hardening.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.96 additionally launches the installed desktop entry point under Xvfb on Python 3.13 and executes the demonstration project through the real GUI smoke path.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates; runs the v0.97 application/workflow/lifecycle regression gate and complete test suite on Python **3.11, 3.12, and 3.13**; runs representative nonlinear loop/uncertainty/dossier CLI smoke checks; and launches the installed desktop entry point under Xvfb on Python 3.13 to execute the demonstration project through the real GUI smoke path.
 
 ### Network-state replay provenance ladder
 
@@ -23,6 +23,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.94 | signed-zero-stable canonical network-result identity with named-collection order invariance and solver metadata/configuration/history provenance |
 | v0.95 | complete standalone solver-result identity/self-audit with uncertainty-corner and dossier linkage |
 | v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
+| v0.97 | complete application-workflow execution gate plus GUI lifecycle, strict-JSON, and multi-analysis hardening |
+
+### v0.97 application completeness and lifecycle hardening
+
+v0.97 verifies every GUI-exposed backend workflow end to end against real repository examples, including consistency and dossier execution. The desktop layer preserves uncommitted editor state across analysis navigation, blocks unsafe project/analysis mutations while a backend run is active, prompts before replacing or closing a project with unsaved changes, and enforces strict JSON for project and editor inputs. These changes harden application operation without duplicating or changing the validated engineering calculation backends.
 
 ### v0.96 desktop application
 
@@ -658,7 +663,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer provenance/dependency handling across supplied performance datasets, followed by desktop/web UI work and CFD adapters.
+Potential future extensions include richer provenance/dependency handling across supplied performance datasets, optional web UI work, and separately validated CFD adapters.
 
 ## Standards references
 

@@ -2458,6 +2458,27 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, invariant in invariant_cases
         if not invariant["selected_airflow_is_bracket_midpoint"]
     ]
+    iteration_limit_invariant_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence["iteration_limit_evidence"][
+                "remaining_bisection_bracket"
+            ].get("invariant_audit"),
+        )
+        for corner_index, corner, evidence in iteration_limit_cases
+        if evidence["iteration_limit_evidence"][
+            "remaining_bisection_bracket"
+        ].get("invariant_audit")
+        is not None
+    ]
+    iteration_limit_sign_change_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, invariant
+        in iteration_limit_invariant_cases
+        if not invariant["strict_sign_change_preserved"]
+    ]
 
     trace_cases = [
         (
@@ -2494,37 +2515,10 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["all_midpoints_are_arithmetic_bracket_midpoints"]
     ]
-    trace_termination_violation_corner_indices = [
-        corner_index
-        for corner_index, _corner, _evidence, audit in solved_trace_cases
-        if not audit["termination_record_is_last"]
-    ]
     trace_outcome_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["terminal_outcome_consistent"]
-    ]
-
-    iteration_limit_invariant_cases = [
-        (
-            corner_index,
-            corner,
-            evidence,
-            evidence["iteration_limit_evidence"][
-                "remaining_bisection_bracket"
-            ].get("invariant_audit"),
-        )
-        for corner_index, corner, evidence in iteration_limit_cases
-        if evidence["iteration_limit_evidence"][
-            "remaining_bisection_bracket"
-        ].get("invariant_audit")
-        is not None
-    ]
-    iteration_limit_sign_change_violation_corner_indices = [
-        corner_index
-        for corner_index, _corner, _evidence, invariant
-        in iteration_limit_invariant_cases
-        if not invariant["strict_sign_change_preserved"]
     ]
 
     def _maximum_bracket_evidence(
@@ -2624,9 +2618,6 @@ def _operating_point_search_resolution_summary(
             source.update(
                 {
                     "search_method": evidence["method"],
-                    "supplied_segment_index": evidence[
-                        "supplied_segment_index"
-                    ],
                     "operating_iterations": evidence["operating_iterations"],
                     "bisection_trace_audit": audit,
                 }
@@ -2715,16 +2706,15 @@ def _operating_point_search_resolution_summary(
         "selected_midpoint_violation_corner_indices": (
             midpoint_violation_corner_indices
         ),
+        "maximum_absolute_width_fraction_consistency_error": (
+            _maximum_invariant_error_evidence()
+        ),
         "bisection_trace_evidence_corner_count": len(trace_cases),
         "solved_bisection_trace_evidence_corner_count": (
             len(solved_trace_cases)
         ),
         "iteration_limit_bisection_trace_evidence_corner_count": (
             len(iteration_limit_trace_cases)
-        ),
-        "bisection_trace_complete_coverage": (
-            len(solved_trace_cases) == len(bisection_cases)
-            and len(iteration_limit_trace_cases) == len(iteration_limit_cases)
         ),
         "bisection_trace_length_match_corner_count": (
             len(trace_cases) - len(trace_length_violation_corner_indices)
@@ -2744,13 +2734,6 @@ def _operating_point_search_resolution_summary(
         "bisection_trace_midpoint_violation_corner_indices": (
             trace_midpoint_violation_corner_indices
         ),
-        "bisection_trace_terminal_last_corner_count": (
-            len(solved_trace_cases)
-            - len(trace_termination_violation_corner_indices)
-        ),
-        "bisection_trace_terminal_violation_corner_indices": (
-            trace_termination_violation_corner_indices
-        ),
         "bisection_trace_outcome_consistent_corner_count": (
             len(trace_cases) - len(trace_outcome_violation_corner_indices)
         ),
@@ -2759,9 +2742,6 @@ def _operating_point_search_resolution_summary(
         ),
         "maximum_bisection_trace_step_count": (
             _maximum_trace_step_count_evidence()
-        ),
-        "maximum_absolute_width_fraction_consistency_error": (
-            _maximum_invariant_error_evidence()
         ),
         "iteration_limit_search_evidence_corner_count": (
             len(iteration_limit_cases)
@@ -2818,13 +2798,10 @@ def _operating_point_search_resolution_summary(
             "and iteration-implied binary width contraction. v0.70 preserves "
             "the remaining signed bracket after a bisection iteration limit, "
             "including its completed-step contraction audit, without "
-            "accepting or fabricating an operating point. v0.72 retains the "
-            "complete bounded-bisection decision trace for solved bisection "
-            "corners. v0.73 extends the same trace provenance to bounded-"
-            "bisection iteration-limit outcomes and audits trace length, per-"
-            "step sign bracketing, midpoint geometry, and outcome-aware "
-            "terminal-decision consistency without adding any physical "
-            "acceptance limit."
+            "accepting or fabricating an operating point. Decision-trace "
+            "evidence is aggregated for both solved and iteration-limit "
+            "bisection outcomes, with exact corner indices for trace-length, "
+            "per-step sign/midpoint, and terminal-outcome inconsistencies."
         ),
     }
 

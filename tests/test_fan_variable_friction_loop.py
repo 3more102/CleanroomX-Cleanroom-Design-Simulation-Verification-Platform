@@ -11,6 +11,7 @@ from cleanroomx.fan_loop_network import (
 from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
     _bisection_decision_trace_audit,
+    _fan_curve_supplied_point_network_state_replay_audit,
     _fan_curve_supplied_point_residual_audit,
     _network_state_sha256,
     _selected_operating_state_replay_audit,
@@ -136,6 +137,72 @@ def test_network_state_fingerprint_is_order_invariant_for_named_collections() ->
 
     reordered["edges"][0]["airflow_m3_h"] += 1.0
     assert _network_state_sha256(reordered) != baseline
+
+
+def test_supplied_point_network_state_replay_is_complete_and_reported() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+
+    assert result["status"] == "solved"
+    checks = result["fan_curve_point_checks"]
+    replay = result["fan_curve_supplied_point_network_state_replay"]
+    assert replay["available"] is True
+    assert replay["algorithm"] == "sha256"
+    assert replay["evaluated_supplied_point_count"] == len(checks)
+    assert replay["expected_supplied_point_count"] == len(checks)
+    assert replay["replay_check_count"] == len(checks)
+    assert replay["complete_supplied_point_coverage"] is True
+    assert replay["replay_evidence_complete"] is True
+    assert replay[
+        "all_evaluated_supplied_point_network_states_match_independent_replay"
+    ] is True
+    assert replay["complete_supplied_point_network_state_replay"] is True
+    assert replay["matching_supplied_point_count"] == len(checks)
+    assert replay["violation_point_indices"] == []
+    assert replay["violation_count"] == 0
+    assert replay["violations"] == []
+    for check in checks:
+        assert len(check["network_state_sha256"]) == 64
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Supplied-point network-state replay audit" in report
+    assert (
+        "All evaluated supplied-point network states match independent replay: "
+        "**True**"
+        in report
+    )
+    assert "Supplied-point network-state replay violation points: **[]**" in report
+
+
+def test_supplied_point_network_state_replay_detects_hash_corruption() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+    checks = [dict(check) for check in result["fan_curve_point_checks"]]
+    assert len(checks) >= 2
+
+    original_hash = checks[1]["network_state_sha256"]
+    checks[1]["network_state_sha256"] = "0" * 64
+    replay = _fan_curve_supplied_point_network_state_replay_audit(
+        study,
+        checks,
+    )
+
+    assert replay["complete_supplied_point_coverage"] is True
+    assert replay[
+        "all_evaluated_supplied_point_network_states_match_independent_replay"
+    ] is False
+    assert replay["complete_supplied_point_network_state_replay"] is False
+    assert replay["violation_point_indices"] == [1]
+    assert replay["violation_count"] == 1
+    violation = replay["violations"][0]
+    assert violation["point_index"] == 1
+    assert violation["recorded_network_state_sha256"] == "0" * 64
+    assert violation["recomputed_network_state_sha256"] == original_hash
+    assert violation["network_state_matches_independent_replay"] is False
 
 
 def test_fixed_resistance_case_matches_existing_fan_loop_solver() -> None:
@@ -1797,6 +1864,13 @@ def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:
     assert audit["complete_supplied_point_coverage"] is True
     assert audit["candidate_crossing_feature_count"] == 0
     assert audit["residual_monotonic_non_increasing_with_tolerance"] is True
+    network_replay = result["fan_curve_supplied_point_network_state_replay"]
+    assert network_replay["complete_supplied_point_coverage"] is True
+    assert network_replay[
+        "all_evaluated_supplied_point_network_states_match_independent_replay"
+    ] is True
+    assert network_replay["complete_supplied_point_network_state_replay"] is True
+    assert network_replay["violation_point_indices"] == []
 
 
 def test_network_nonconvergence_is_reported_without_fake_operating_point() -> None:
@@ -1825,6 +1899,13 @@ def test_network_nonconvergence_is_reported_without_fake_operating_point() -> No
     assert audit["evaluated_supplied_point_count"] < (
         audit["expected_supplied_point_count"]
     )
+    network_replay = result["fan_curve_supplied_point_network_state_replay"]
+    assert network_replay["complete_supplied_point_coverage"] is False
+    assert network_replay["complete_supplied_point_network_state_replay"] is False
+    assert network_replay["replay_check_count"] == (
+        network_replay["evaluated_supplied_point_count"]
+    )
+    assert network_replay["violation_point_indices"] == []
 
 
 def test_unknown_solver_option_is_rejected() -> None:

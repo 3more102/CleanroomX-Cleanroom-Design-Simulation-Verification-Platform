@@ -2489,6 +2489,21 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_origin_replay_violation_corner_indices"
     ] == []
     assert summary[
+        "bisection_trace_numeric_sign_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_sign_flag_mismatch_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_numeric_midpoint_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_midpoint_flag_mismatch_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_raw_state_violation_corner_indices"
+    ] == []
+    assert summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert summary["bisection_trace_length_match_corner_count"] == (
@@ -2515,6 +2530,13 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "bisection_trace_origin_replay_corner_count"
     ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_raw_state_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    midpoint_error = summary["maximum_bisection_trace_midpoint_error_m3_h"]
+    assert midpoint_error is not None
+    assert midpoint_error["value"] <= 1e-9
+    assert midpoint_error["sources"]
     assert summary["iteration_limit_trace_terminal_replay_corner_count"] == 0
 
     errors = []
@@ -2555,6 +2577,19 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         assert trace_audit[
             "all_midpoints_are_arithmetic_bracket_midpoints"
         ] is True
+        assert trace_audit[
+            "all_numeric_brackets_preserve_strict_sign_change"
+        ] is True
+        assert trace_audit[
+            "all_recorded_sign_flags_match_numeric_residuals"
+        ] is True
+        assert trace_audit[
+            "all_numeric_midpoints_are_arithmetic_bracket_midpoints"
+        ] is True
+        assert trace_audit[
+            "all_recorded_midpoint_flags_match_numeric_geometry"
+        ] is True
+        assert trace_audit["all_trace_raw_state_consistent"] is True
         assert trace_audit[
             "all_recorded_widths_match_airflow_brackets"
         ] is True
@@ -2602,6 +2637,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace iteration-sequence violations" in report
     assert "Trace state-transition replay violations" in report
     assert "Trace origin-to-terminal replay violations: **[]**" in report
+    assert "Recomputed trace sign-bracket violations: **[]**" in report
+    assert "Trace sign-flag mismatches vs numeric residuals: **[]**" in report
+    assert "Recomputed trace midpoint violations: **[]**" in report
+    assert "Trace midpoint-flag mismatches vs numeric geometry: **[]**" in report
+    assert "Trace raw-state audit violation corners: **[]**" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report

@@ -274,10 +274,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout = empty_layout()
         self.selected: _Hit | None = None
         self._drag_anchor: tuple[float, float] | None = None
+        self._resize_handle: str | None = None
+        self._resize_start: dict | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
+        self._summary_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
         self._property_vars: dict[str, tk.StringVar] = {}
 
@@ -305,9 +308,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             ).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Reset 3D", command=self.reset_3d).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=6
+        )
+        ttk.Label(toolbar, text="Wheel: zoom  ·  Right-drag: pan  ·  Drag corners: resize").pack(
+            side="left", padx=(8, 2)
         )
         ttk.Button(
             toolbar,
@@ -325,7 +333,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
         self.canvas_2d.pack(fill="both", expand=True)
-        ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=2)
+        footer2d = ttk.Frame(two_d)
+        footer2d.pack(fill="x", padx=4, pady=2)
+        ttk.Label(footer2d, textvariable=self._coord_var, anchor="w").pack(side="left")
+        ttk.Label(footer2d, textvariable=self._summary_var, anchor="e").pack(side="right")
 
         right = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=4)
@@ -402,12 +413,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
 
+        self.bind_all("<Delete>", lambda event: self.delete_selected())
+        self.bind_all("<Escape>", lambda event: self.clear_selection())
+        self.bind_all("<Control-0>", lambda event: self.fit_views())
+
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
         if self.selected and not self._selected_object():
             self.selected = None
+        self._update_summary()
         self._load_property_panel()
         self.redraw()
 
@@ -416,7 +432,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
         self._on_change()
+        self._update_summary()
         self._status_setter(message)
+        self.redraw()
+
+    def _update_summary(self) -> None:
+        room_count = len(self.layout["rooms"])
+        device_count = len(self.layout["devices"])
+        self._summary_var.set(f"{room_count} room{'s' if room_count != 1 else ''} · {device_count} device{'s' if device_count != 1 else ''}")
+
+    def clear_selection(self) -> None:
+        self.selected = None
+        self._resize_handle = None
+        self._resize_start = None
+        self._drag_anchor = None
+        self._load_property_panel()
         self.redraw()
 
     def _selected_object(self) -> dict | None:
@@ -618,6 +648,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
             )
+            if selected:
+                handle_size = 5
+                for handle, hx, hy in (
+                    ("nw", x0, y0),
+                    ("ne", x1, y0),
+                    ("se", x1, y1),
+                    ("sw", x0, y1),
+                ):
+                    canvas.create_rectangle(
+                        hx - handle_size,
+                        hy - handle_size,
+                        hx + handle_size,
+                        hy + handle_size,
+                        fill="#ffffff",
+                        outline="#1d4ed8",
+                        width=2,
+                        tags=(f"resize:{room['id']}:{handle}", "resize"),
+                    )
 
         symbols = {
             "door": "D",
@@ -642,6 +690,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 x, y, text=symbols.get(device["type"], "?"),
                 tags=(f"device:{device['id']}", "device"),
             )
+            if selected:
+                canvas.create_text(
+                    x,
+                    y - 18,
+                    text=device.get("name", device["type"]),
+                    fill="#1f2937",
+                    font=("TkDefaultFont", 9, "bold"),
+                    tags=(f"device:{device['id']}", "device"),
+                )
+
+        if pressures:
+            self._draw_pressure_legend(canvas, pmin, pmax, dark=False)
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -651,6 +711,36 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 fill="#667788",
             )
+
+    def _draw_pressure_legend(
+        self,
+        canvas: tk.Canvas,
+        min_pressure: float | None,
+        max_pressure: float | None,
+        *,
+        dark: bool,
+    ) -> None:
+        if min_pressure is None or max_pressure is None:
+            return
+        width = 150
+        height = 10
+        margin = 14
+        x1 = max(margin + width, canvas.winfo_width() - margin)
+        x0 = x1 - width
+        y1 = max(margin + 34, canvas.winfo_height() - margin)
+        y0 = y1 - height
+        steps = 30
+        for index in range(steps):
+            ratio = index / max(1, steps - 1)
+            pressure = min_pressure + (max_pressure - min_pressure) * ratio
+            fill = _pressure_fill(pressure, min_pressure, max_pressure)
+            sx0 = x0 + width * index / steps
+            sx1 = x0 + width * (index + 1) / steps
+            canvas.create_rectangle(sx0, y0, sx1, y1, fill=fill, outline=fill, tags=("legend",))
+        text_fill = "#dce8f4" if dark else "#334155"
+        canvas.create_text(x0, y0 - 10, text="Pressure", anchor="w", fill=text_fill, font=("TkDefaultFont", 8, "bold"), tags=("legend",))
+        canvas.create_text(x0, y1 + 10, text=f"{min_pressure:g} Pa", anchor="w", fill=text_fill, font=("TkDefaultFont", 8), tags=("legend",))
+        canvas.create_text(x1, y1 + 10, text=f"{max_pressure:g} Pa", anchor="e", fill=text_fill, font=("TkDefaultFont", 8), tags=("legend",))
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -682,6 +772,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+
+        margin = 0.75
+        floor = [
+            self._project_3d(min_x - cx - margin, min_y - cy - margin, 0),
+            self._project_3d(max_x - cx + margin, min_y - cy - margin, 0),
+            self._project_3d(max_x - cx + margin, max_y - cy + margin, 0),
+            self._project_3d(min_x - cx - margin, max_y - cy + margin, 0),
+        ]
+        canvas.create_polygon(*sum(floor, ()), fill="#17212b", outline="#344b5f", width=1, tags=("floor",))
+
+        origin = self._project_3d(min_x - cx - margin, min_y - cy - margin, 0)
+        axis_x = self._project_3d(min_x - cx + 0.8, min_y - cy - margin, 0)
+        axis_y = self._project_3d(min_x - cx - margin, min_y - cy + 0.8, 0)
+        axis_z = self._project_3d(min_x - cx - margin, min_y - cy - margin, 0.8)
+        canvas.create_line(*origin, *axis_x, fill="#fb7185", width=2, arrow="last")
+        canvas.create_line(*origin, *axis_y, fill="#4ade80", width=2, arrow="last")
+        canvas.create_line(*origin, *axis_z, fill="#60a5fa", width=2, arrow="last")
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -737,6 +844,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
                 width=2, tags=(tag, "device3d"),
             )
+            if selected:
+                canvas.create_text(
+                    x,
+                    y - 14,
+                    text=device.get("name", device["type"]),
+                    fill="#f8fafc",
+                    font=("TkDefaultFont", 8, "bold"),
+                    tags=(tag, "device3d"),
+                )
+
+        if pressures:
+            self._draw_pressure_legend(canvas, pmin, pmax, dark=True)
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:
@@ -746,24 +865,76 @@ class SpatialDesignWorkspace(ttk.Frame):
                 return _Hit("device", tag.split(":", 1)[1])
         return None
 
+    def _parse_resize_handle(self, tags: tuple[str, ...]) -> tuple[str, str] | None:
+        for tag in tags:
+            if tag.startswith("resize:"):
+                _, room_id, handle = tag.split(":", 2)
+                return room_id, handle
+        return None
+
     def _on_left_down(self, event: tk.Event) -> None:
         current = self.canvas_2d.find_withtag("current")
         hit = None
+        resize = None
         if current:
-            hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
-        self.selected = hit
-        self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
+            tags = self.canvas_2d.gettags(current[0])
+            resize = self._parse_resize_handle(tags)
+            hit = self._parse_hit(tags)
+        if resize is not None:
+            room_id, handle = resize
+            self.selected = _Hit("room", room_id)
+            room = self._selected_object()
+            self._resize_handle = handle
+            self._resize_start = copy.deepcopy(room) if room is not None else None
+            self._drag_anchor = None
+        else:
+            self.selected = hit
+            self._resize_handle = None
+            self._resize_start = None
+            self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
         self._load_property_panel()
         self.redraw()
 
     def _on_left_drag(self, event: tk.Event) -> None:
         item = self._selected_object()
-        if item is None or self._drag_anchor is None:
+        if item is None:
             return
         world = self._canvas_to_world(event.x, event.y)
+        grid = max(0.05, self.layout["grid_m"])
+
+        if self._resize_handle and self._resize_start and self.selected and self.selected.kind == "room":
+            start = self._resize_start
+            x0 = start["x_m"]
+            y0 = start["y_m"]
+            x1 = x0 + start["length_m"]
+            y1 = y0 + start["width_m"]
+            px = round(world[0] / grid) * grid
+            py = round(world[1] / grid) * grid
+            min_size = grid
+            if "w" in self._resize_handle:
+                nx0 = min(px, x1 - min_size)
+                item["x_m"] = nx0
+                item["length_m"] = x1 - nx0
+            if "e" in self._resize_handle:
+                nx1 = max(px, x0 + min_size)
+                item["x_m"] = x0
+                item["length_m"] = nx1 - x0
+            if "n" in self._resize_handle:
+                ny0 = min(py, y1 - min_size)
+                item["y_m"] = ny0
+                item["width_m"] = y1 - ny0
+            if "s" in self._resize_handle:
+                ny1 = max(py, y0 + min_size)
+                item["y_m"] = y0
+                item["width_m"] = ny1 - y0
+            self._load_property_panel()
+            self.redraw()
+            return
+
+        if self._drag_anchor is None:
+            return
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
-        grid = self.layout["grid_m"]
         item["x_m"] = round((item["x_m"] + dx) / grid) * grid
         item["y_m"] = round((item["y_m"] + dy) / grid) * grid
         self._drag_anchor = world
@@ -771,9 +942,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_left_up(self, event: tk.Event) -> None:
-        if self._drag_anchor is not None and self.selected is not None:
+        if self._resize_handle is not None and self.selected is not None:
+            self._persist("Room resized")
+        elif self._drag_anchor is not None and self.selected is not None:
             self._persist("Spatial item moved")
         self._drag_anchor = None
+        self._resize_handle = None
+        self._resize_start = None
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)

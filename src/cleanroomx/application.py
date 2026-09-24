@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, is_dataclass
 from importlib import import_module
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -186,6 +187,11 @@ def validate_application_registry() -> dict:
         raise RuntimeError(
             "duplicate application analysis keys: " + ", ".join(duplicate_keys)
         )
+
+    mapping_keys = set(ANALYSIS_SPECS)
+    catalog_keys = set(keys)
+    if mapping_keys != catalog_keys or len(ANALYSIS_SPECS) != len(_ANALYSES):
+        raise RuntimeError("application analysis mapping is inconsistent with the catalog")
 
     callable_target_count = 0
     fallback_reporter_count = 0
@@ -489,6 +495,113 @@ def rebase_analysis_file_references(
     return rebased
 
 
+
+_APPLICATION_INPUT_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+
+
+def _canonical_input_sha256(payload: dict) -> str:
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str, str]]:
+    references: list[tuple[str, str]] = []
+    if kind == "consistency":
+        for key in ("verification_project", "hvac_project"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                references.append((key, value))
+    elif kind == "dossier":
+        for key in _DOSSIER_SINGLE_PATH_KEYS:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                references.append((key, value))
+        for key in _DOSSIER_LIST_PATH_KEYS:
+            values = payload.get(key, [])
+            if isinstance(values, list):
+                for index, value in enumerate(values):
+                    if isinstance(value, str) and value.strip():
+                        references.append((f"{key}[{index}]", value))
+    return references
+
+
+def _capture_external_dependencies(
+    kind: str, payload: dict, base_dir: Path | None
+) -> list[dict]:
+    records: list[dict] = []
+    for field, declared_path in _external_dependency_references(kind, payload):
+        path = _resolve_relative(base_dir, declared_path)
+        records.append(
+            {
+                "field": field,
+                "declared_path": declared_path,
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256_file(path),
+            }
+        )
+    return records
+
+
+def _application_execution_provenance(
+    kind: str,
+    input_sha256: str,
+    dependencies_before: list[dict],
+    dependencies_after: list[dict],
+) -> dict:
+    if len(dependencies_before) != len(dependencies_after):
+        raise RuntimeError("external dependency set changed during analysis execution")
+
+    dependencies: list[dict] = []
+    for before, after in zip(dependencies_before, dependencies_after):
+        if (
+            before["field"] != after["field"]
+            or before["declared_path"] != after["declared_path"]
+        ):
+            raise RuntimeError("external dependency identity changed during analysis execution")
+        stable = (
+            before["sha256"] == after["sha256"]
+            and before["size_bytes"] == after["size_bytes"]
+        )
+        dependencies.append(
+            {
+                "field": before["field"],
+                "declared_path": before["declared_path"],
+                "sha256_before": before["sha256"],
+                "sha256_after": after["sha256"],
+                "size_bytes_before": before["size_bytes"],
+                "size_bytes_after": after["size_bytes"],
+                "stable_during_run": stable,
+            }
+        )
+
+    return {
+        "schema": "cleanroomx.application-execution-provenance",
+        "schema_version": 1,
+        "cleanroomx_version": __version__,
+        "analysis_kind": kind,
+        "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
+        "input_sha256": input_sha256,
+        "external_dependency_count": len(dependencies),
+        "external_dependencies_stable": all(
+            item["stable_during_run"] for item in dependencies
+        ),
+        "external_dependencies": dependencies,
+    }
+
 def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
     if not isinstance(payload.get("name"), str) or not payload["name"].strip():
         raise ValueError("dossier name must be a non-empty string")
@@ -593,14 +706,18 @@ def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
 
 def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
     from .dossier import build_dossier
-    if base_dir is None:
-        raise ValueError(
-            "dossier execution requires a saved project/base directory so relative references remain reproducible"
-        )
-    base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Validation rejects relative references when no base directory is available.
+    # Absolute references are location-independent, so an unsaved desktop project
+    # can execute them using a temporary manifest outside the project tree.
+    temp_dir = None
+    if base_dir is not None:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = base_dir
+
     handle = tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", suffix=".json",
-        prefix=".cleanroomx-dossier-", dir=base_dir, delete=False,
+        prefix=".cleanroomx-dossier-", dir=temp_dir, delete=False,
     )
     temp_path = Path(handle.name)
     try:
@@ -613,8 +730,10 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     validate_analysis_input(kind, payload, base_dir=base_dir)
+    input_sha256 = _canonical_input_sha256(payload)
     spec = ANALYSIS_SPECS[kind]
     base = Path(base_dir) if base_dir is not None else None
+    dependencies_before = _capture_external_dependencies(kind, payload, base)
 
     if kind == "consistency":
         result = _run_consistency(payload, base)
@@ -630,13 +749,21 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         if spec.reporter is None
         else _load_callable(spec.reporter)(normalized)
     )
+    dependencies_after = _capture_external_dependencies(kind, payload, base)
+    diagnostics = diagnostic_summary(normalized)
+    diagnostics["application_execution_provenance"] = _application_execution_provenance(
+        kind,
+        input_sha256,
+        dependencies_before,
+        dependencies_after,
+    )
     return AnalysisRun(
         kind=kind,
         title=spec.title,
         status=_derive_status(normalized),
         result=normalized,
         markdown=markdown,
-        diagnostics=diagnostic_summary(normalized),
+        diagnostics=diagnostics,
         plot=build_plot_model(payload, normalized),
     )
 

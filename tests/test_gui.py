@@ -410,3 +410,54 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+
+def test_abandon_waits_for_worker_exit_before_reenabling_ui():
+    import queue
+
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 7
+    app._queue = queue.Queue()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+
+    app.cancel_run()
+
+    assert app._running is True
+    assert app._abandon_requested is True
+    assert app._run_generation == 7
+    assert app.cancel_button.state == "disabled"
+    assert "waiting" in app.status_var.value.lower()
+
+    app._queue.put(("success", 7, "analysis-a", object()))
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._abandon_requested is False
+    assert app.run_button.state == "normal"
+    assert app.cancel_button.state == "disabled"
+    assert app.input_text.state == "normal"
+    assert "worker finished" in app.status_var.value.lower()
+    assert app.root.delay == 100

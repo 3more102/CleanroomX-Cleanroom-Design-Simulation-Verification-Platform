@@ -7,6 +7,7 @@
 - Makes registry validation return auditable metadata (analysis count, resolved callable count, custom adapters, and fallback-reporter count) and exposes that evidence through `application_info()` and headless `cleanroomx-gui --check`.
 - Adds regressions for duplicate-key rejection, custom-adapter contract enforcement, metadata consistency, and headless GUI exposure.
 - Bumps package/runtime/demo metadata to v0.99.0 and synchronizes CI version assertions while retaining the complete Python 3.11/3.12/3.13 suite, provenance compatibility gates, CLI smokes, and real Tk/Xvfb GUI smoke.
+- Hardens **Abandon** so the UI suppresses the abandoned result/error but remains busy until the worker exits, preventing a second backend analysis from overlapping the abandoned computation.
 - This gate validates software registry completeness and wiring only; it does not establish engineering certification, CFD validity, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
 
 ## v0.98 release completion — 2026-09-24

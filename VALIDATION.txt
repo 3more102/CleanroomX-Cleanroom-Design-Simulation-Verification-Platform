@@ -1,0 +1,45 @@
+CLEANROOMX RELEASE VALIDATION
+=============================
+
+Release: CleanroomX v0.99.0
+Validation date: 2026-09-24
+
+VERIFIED INTEGRATED BASELINE
+main commit:
+1f035d08f893573868610d35296e3947445318e6
+
+Merged implementation PR:
+#217
+
+GitHub Actions:
+run #780
+run id 36045390557
+status COMPLETED
+conclusion SUCCESS
+
+TEST MATRIX
+Python 3.11: 558 passed
+Python 3.12: 558 passed
+Python 3.13: 558 passed
+
+ADDITIONAL RELEASE GATES
+PASS - v0.91 compatibility regressions
+PASS - v0.92 compatibility regressions
+PASS - v0.93 compatibility regressions
+PASS - v0.94 compatibility regressions
+PASS - v0.95 compatibility regressions
+PASS - representative CLI JSON/Markdown smoke checks
+PASS - package/runtime version synchronization at 0.99.0
+PASS - Python 3.13 cleanroomx-gui --check
+PASS - Python 3.13 real Tk GUI smoke under Xvfb
+
+FINAL LIFECYCLE GATE
+The final release branch adds abandoned-worker exclusivity: Abandon suppresses
+the eventual result/error but keeps the application busy until the worker exits.
+The release branch must pass its own full CI matrix before merge.
+
+ENGINEERING BOUNDARY
+This validation is software regression evidence. It does not establish ISO
+cleanroom certification, CFD validation, commissioning/TAB acceptance,
+manufacturer approval, physical/statistical uncertainty, or regulatory
+compliance.

@@ -1,0 +1,52 @@
+CLEANROOMX RELEASE VALIDATION
+=============================
+
+Release: CleanroomX v0.99.0
+Validation date: 2026-09-24
+
+VERIFIED RELEASE BASELINE
+main commit:
+1f035d08f893573868610d35296e3947445318e6
+
+GitHub Actions:
+run #790
+run id 36045911650
+status COMPLETED
+conclusion SUCCESS
+
+FULL TEST MATRIX
+Python 3.11: 558 passed
+Python 3.12: 558 passed
+Python 3.13: 558 passed
+
+ADDITIONAL VERIFIED GATES
+PASS - v0.91 compatibility regressions
+PASS - v0.92 compatibility regressions
+PASS - v0.93 compatibility regressions
+PASS - v0.94 compatibility regressions
+PASS - v0.95 solver-result-integrity compatibility regressions
+PASS - package/runtime/demo/CI version synchronization at 0.99.0
+PASS - structural application-registry integrity
+PASS - Python 3.13 cleanroomx-gui --check
+PASS - Python 3.13 real Tk GUI smoke under Xvfb
+PASS - representative CLI JSON/Markdown smoke checks
+
+RELEASE-DOCUMENT CLOSURE
+Added:
+ARCHITECTURE.md
+MIGRATIONS.md
+SECURITY.md
+DEPLOYMENT.md
+ROLLBACK.md
+TEST_EVIDENCE.md
+VALIDATION.txt
+
+The documentation closure changes no runtime source or validated
+engineering/numerical behavior. Its pull request and resulting main
+push must both complete CI successfully.
+
+ENGINEERING BOUNDARY
+This validation is software regression evidence. It does not establish
+ISO cleanroom certification, CFD validation, commissioning/TAB
+acceptance, manufacturer approval, physical/statistical uncertainty,
+or regulatory compliance.

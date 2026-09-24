@@ -87,6 +87,66 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     return rows
 
 
+def extract_room_visuals(payload: dict) -> list[dict]:
+    """Extract room-like records for the lightweight 2D/3D engineering workspace."""
+    if not isinstance(payload, dict):
+        return []
+
+    room_lists: list[list] = []
+
+    def visit(value) -> None:
+        if isinstance(value, dict):
+            rooms = value.get("rooms")
+            if isinstance(rooms, list) and any(isinstance(item, dict) for item in rooms):
+                room_lists.append(rooms)
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    if not room_lists:
+        return []
+
+    rooms: list[dict] = []
+    seen: set[str] = set()
+    for item in room_lists[0]:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or item.get("id") or f"Room {len(rooms) + 1}")
+        if name in seen:
+            continue
+        seen.add(name)
+
+        def positive_number(key: str, fallback: float) -> tuple[float, bool]:
+            value = item.get(key)
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return fallback, False
+            if number <= 0:
+                return fallback, False
+            return number, True
+
+        length_m, length_real = positive_number("length_m", 4.0)
+        width_m, width_real = positive_number("width_m", 4.0)
+        height_m, height_real = positive_number("height_m", 3.0)
+        airflow = item.get("supply_airflow_m3_h", item.get("cleanroom_airflow_m3_h"))
+        pressure = item.get("observed_pressure_pa", item.get("pressure_pa"))
+        rooms.append({
+            "name": name,
+            "length_m": length_m,
+            "width_m": width_m,
+            "height_m": height_m,
+            "dimensions_real": length_real and width_real,
+            "height_real": height_real,
+            "airflow_m3_h": airflow,
+            "pressure_pa": pressure,
+        })
+    return rooms
+
+
 class AnalysisPicker(tk.Toplevel):
     def __init__(self, parent: tk.Misc):
         super().__init__(parent)
@@ -156,8 +216,9 @@ class CleanroomXApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
-        self.root.geometry("1180x760")
-        self.root.minsize(900, 600)
+        self.root.geometry("1360x860")
+        self.root.minsize(1024, 680)
+        self._configure_styles()
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
@@ -187,6 +248,34 @@ class CleanroomXApp:
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
+
+    def _configure_styles(self) -> None:
+        """Apply a restrained engineering-oriented visual system using stock ttk only."""
+        self.root.configure(background="#0b1220")
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+
+        style.configure(".", font=("Segoe UI", 10))
+        style.configure("TFrame", background="#0f172a")
+        style.configure("Header.TFrame", background="#111c31")
+        style.configure("Sidebar.TFrame", background="#101827")
+        style.configure("TLabel", background="#0f172a", foreground="#dbeafe")
+        style.configure("Header.TLabel", background="#111c31", foreground="#e2e8f0")
+        style.configure("Brand.TLabel", background="#111c31", foreground="#f8fafc", font=("Segoe UI", 16, "bold"))
+        style.configure("Muted.TLabel", background="#0f172a", foreground="#94a3b8")
+        style.configure("SidebarTitle.TLabel", background="#101827", foreground="#f8fafc", font=("Segoe UI", 11, "bold"))
+        style.configure("TButton", padding=(10, 6))
+        style.configure("Primary.TButton", padding=(12, 7), font=("Segoe UI", 10, "bold"))
+        style.configure("Tool.TButton", padding=(8, 5))
+        style.configure("TEntry", fieldbackground="#172033", foreground="#f8fafc", insertcolor="#f8fafc", padding=5)
+        style.configure("Treeview", background="#111827", fieldbackground="#111827", foreground="#e5e7eb", rowheight=27, borderwidth=0)
+        style.configure("Treeview.Heading", background="#1e293b", foreground="#e2e8f0", font=("Segoe UI", 9, "bold"), relief="flat")
+        style.map("Treeview", background=[("selected", "#1d4ed8")], foreground=[("selected", "#ffffff")])
+        style.configure("TNotebook", background="#0f172a", borderwidth=0)
+        style.configure("TNotebook.Tab", background="#172033", foreground="#cbd5e1", padding=(14, 8))
+        style.map("TNotebook.Tab", background=[("selected", "#1e293b")], foreground=[("selected", "#ffffff")])
+        style.configure("Status.TLabel", background="#111827", foreground="#cbd5e1", padding=(8, 5))
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -219,6 +308,9 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
+        view_menu.add_separator()
+        view_menu.add_command(label="2D Workspace", accelerator="Ctrl+2", command=lambda: self.notebook.select(self.visual2d_tab))
+        view_menu.add_command(label="3D Preview", accelerator="Ctrl+3", command=lambda: self.notebook.select(self.visual3d_tab))
         view_menu.add_checkbutton(
             label="Wrap output text",
             variable=self.wrap_outputs_var,
@@ -235,38 +327,31 @@ class CleanroomXApp:
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
         self.root.bind("<F5>", lambda event: self.run_current())
+        self.root.bind("<Control-Key-2>", lambda event: self.notebook.select(self.visual2d_tab))
+        self.root.bind("<Control-Key-3>", lambda event: self.notebook.select(self.visual3d_tab))
 
     def _build_layout(self) -> None:
-        metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
+        metadata = ttk.Frame(self.root, style="Header.TFrame", padding=(14, 10, 14, 10))
         metadata.pack(fill="x")
-        ttk.Label(metadata, text="Project").grid(row=0, column=0, sticky="w")
-        ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
-            row=0, column=1, sticky="ew", padx=(6, 12)
-        )
-        ttk.Label(metadata, text="Description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(metadata, textvariable=self.description_var).grid(
-            row=0, column=3, sticky="ew", padx=(6, 12)
-        )
-        ttk.Button(metadata, text="Validate", command=self.validate_current).grid(
-            row=0, column=4, padx=3
-        )
-        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
-        self.run_button.grid(row=0, column=5, padx=3)
-        self.cancel_button = ttk.Button(
-            metadata, text="Abandon", command=self.cancel_run, state="disabled"
-        )
-        self.cancel_button.grid(row=0, column=6, padx=3)
-        metadata.columnconfigure(1, weight=1)
-        metadata.columnconfigure(3, weight=2)
+        ttk.Label(metadata, text="CleanroomX", style="Brand.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 16))
+        ttk.Label(metadata, text="Project", style="Header.TLabel").grid(row=0, column=1, sticky="w")
+        ttk.Entry(metadata, textvariable=self.name_var, width=30).grid(row=0, column=2, sticky="ew", padx=(6, 12))
+        ttk.Label(metadata, text="Description", style="Header.TLabel").grid(row=0, column=3, sticky="w")
+        ttk.Entry(metadata, textvariable=self.description_var).grid(row=0, column=4, sticky="ew", padx=(6, 12))
+        ttk.Button(metadata, text="Validate", style="Tool.TButton", command=self.validate_current).grid(row=0, column=5, padx=3)
+        self.run_button = ttk.Button(metadata, text="Run Analysis", style="Primary.TButton", command=self.run_current)
+        self.run_button.grid(row=0, column=6, padx=3)
+        self.cancel_button = ttk.Button(metadata, text="Abandon", style="Tool.TButton", command=self.cancel_run, state="disabled")
+        self.cancel_button.grid(row=0, column=7, padx=3)
+        metadata.columnconfigure(2, weight=1)
+        metadata.columnconfigure(4, weight=2)
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
-        panes.pack(fill="both", expand=True, padx=8, pady=4)
+        panes.pack(fill="both", expand=True, padx=10, pady=(8, 6))
 
-        sidebar = ttk.Frame(panes, padding=4)
+        sidebar = ttk.Frame(panes, style="Sidebar.TFrame", padding=8)
         panes.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="Analyses", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", pady=(0, 4)
-        )
+        ttk.Label(sidebar, text="ANALYSES", style="SidebarTitle.TLabel").pack(anchor="w", pady=(0, 7))
         self.analysis_tree = ttk.Treeview(
             sidebar, columns=("kind",), show="tree headings", selectmode="browse"
         )
@@ -276,9 +361,17 @@ class CleanroomXApp:
         self.analysis_tree.column("kind", width=155)
         scroll = ttk.Scrollbar(sidebar, orient="vertical", command=self.analysis_tree.yview)
         self.analysis_tree.configure(yscrollcommand=scroll.set)
-        self.analysis_tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        tree_host = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        tree_host.pack(fill="both", expand=True)
+        self.analysis_tree.pack(in_=tree_host, side="left", fill="both", expand=True)
+        scroll.pack(in_=tree_host, side="right", fill="y")
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_analysis_selected)
+
+        sidebar_actions = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        sidebar_actions.pack(fill="x", pady=(8, 0))
+        ttk.Button(sidebar_actions, text="+ Add", style="Tool.TButton", command=self.add_analysis).pack(side="left")
+        ttk.Button(sidebar_actions, text="Rename", style="Tool.TButton", command=self.rename_analysis).pack(side="left", padx=4)
+        ttk.Button(sidebar_actions, text="Remove", style="Tool.TButton", command=self.remove_analysis).pack(side="left")
 
         content = ttk.Frame(panes)
         panes.add(content, weight=4)
@@ -337,12 +430,33 @@ class CleanroomXApp:
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
+        self.visual2d_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.visual2d_tab, text="2D Workspace")
+        visual2d_toolbar = ttk.Frame(self.visual2d_tab, padding=(10, 8))
+        visual2d_toolbar.pack(fill="x")
+        ttk.Label(visual2d_toolbar, text="Room layout / engineering schematic", font=("Segoe UI", 10, "bold")).pack(side="left")
+        ttk.Label(visual2d_toolbar, text="Auto-layout is marked when coordinates are unavailable.", style="Muted.TLabel").pack(side="left", padx=12)
+        ttk.Button(visual2d_toolbar, text="Refresh", style="Tool.TButton", command=self._refresh_visuals).pack(side="right")
+        self.visual2d_canvas = tk.Canvas(self.visual2d_tab, background="#0b1220", highlightthickness=0)
+        self.visual2d_canvas.pack(fill="both", expand=True)
+        self.visual2d_canvas.bind("<Configure>", lambda event: self._draw_2d_workspace())
+
+        self.visual3d_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.visual3d_tab, text="3D Preview")
+        visual3d_toolbar = ttk.Frame(self.visual3d_tab, padding=(10, 8))
+        visual3d_toolbar.pack(fill="x")
+        ttk.Label(visual3d_toolbar, text="Conceptual 3D room massing", font=("Segoe UI", 10, "bold")).pack(side="left")
+        ttk.Label(visual3d_toolbar, text="Visualization only — not CFD or certification geometry.", style="Muted.TLabel").pack(side="left", padx=12)
+        ttk.Button(visual3d_toolbar, text="Refresh", style="Tool.TButton", command=self._refresh_visuals).pack(side="right")
+        self.visual3d_canvas = tk.Canvas(self.visual3d_tab, background="#08111f", highlightthickness=0)
+        self.visual3d_canvas.pack(fill="both", expand=True)
+        self.visual3d_canvas.bind("<Configure>", lambda event: self._draw_3d_workspace())
+
         status = ttk.Label(
             self.root,
             textvariable=self.status_var,
             anchor="w",
-            relief="sunken",
-            padding=(6, 3),
+            style="Status.TLabel",
         )
         status.pack(fill="x", side="bottom")
 
@@ -405,6 +519,7 @@ class CleanroomXApp:
             return
         self.input_text.edit_modified(False)
         self._invalidate_last_run_for(self._editor_analysis_id)
+        self._refresh_visuals()
         self._update_title()
 
     def _current_analysis(self) -> AnalysisDocument | None:
@@ -587,6 +702,7 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        self._refresh_visuals()
 
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():
@@ -976,6 +1092,7 @@ class CleanroomXApp:
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
         self._draw_plot()
+        self._refresh_visuals()
         if select_results:
             self.notebook.select(1)
 
@@ -1059,6 +1176,132 @@ class CleanroomXApp:
             px, py = point(marker["x"], marker["y"])
             canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2)
             canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
+
+    def _visual_payload(self) -> dict:
+        text = self.input_text.get("1.0", "end-1c").strip() if hasattr(self, "input_text") else ""
+        if not text:
+            return {}
+        try:
+            payload = _strict_json_loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _refresh_visuals(self) -> None:
+        if hasattr(self, "visual2d_canvas"):
+            self._draw_2d_workspace()
+        if hasattr(self, "visual3d_canvas"):
+            self._draw_3d_workspace()
+
+    def _room_layout(self, rooms: list[dict]) -> tuple[list[dict], bool]:
+        """Return deterministic schematic positions; coordinates are intentionally not invented."""
+        if not rooms:
+            return [], False
+        columns = max(1, min(4, int(len(rooms) ** 0.5 + 0.999)))
+        max_length = max(room["length_m"] for room in rooms)
+        max_width = max(room["width_m"] for room in rooms)
+        gap = max(max_length, max_width) * 0.22 + 0.7
+        placed: list[dict] = []
+        for index, room in enumerate(rooms):
+            col = index % columns
+            row = index // columns
+            placed.append({
+                **room,
+                "x": col * (max_length + gap),
+                "y": row * (max_width + gap),
+            })
+        return placed, all(room["dimensions_real"] for room in rooms)
+
+    def _draw_2d_workspace(self) -> None:
+        canvas = self.visual2d_canvas
+        canvas.delete("all")
+        width = max(canvas.winfo_width(), 640)
+        height = max(canvas.winfo_height(), 420)
+        rooms = extract_room_visuals(self._visual_payload())
+        if not rooms:
+            canvas.create_text(width / 2, height / 2 - 12, text="No room geometry found in the selected analysis.", fill="#e2e8f0", font=("Segoe UI", 13, "bold"))
+            canvas.create_text(width / 2, height / 2 + 18, text="Use an analysis containing a rooms[] list to populate the 2D workspace.", fill="#94a3b8", font=("Segoe UI", 10))
+            return
+
+        placed, fully_scaled = self._room_layout(rooms)
+        min_x = min(room["x"] for room in placed)
+        min_y = min(room["y"] for room in placed)
+        max_x = max(room["x"] + room["length_m"] for room in placed)
+        max_y = max(room["y"] + room["width_m"] for room in placed)
+        pad = 52
+        scale = min((width - 2 * pad) / max(max_x - min_x, 1.0), (height - 2 * pad) / max(max_y - min_y, 1.0))
+        scale = max(8.0, min(scale, 95.0))
+
+        canvas.create_text(18, 18, anchor="nw", text=("Dimensions to scale; placement auto-arranged." if fully_scaled else "Schematic view: one or more room dimensions are unavailable."), fill="#94a3b8", font=("Segoe UI", 9))
+        palette = ("#164e63", "#1e3a8a", "#3f3f46", "#14532d", "#581c87", "#7c2d12")
+        for index, room in enumerate(placed):
+            x0 = pad + (room["x"] - min_x) * scale
+            y0 = pad + (room["y"] - min_y) * scale
+            x1 = x0 + room["length_m"] * scale
+            y1 = y0 + room["width_m"] * scale
+            canvas.create_rectangle(x0, y0, x1, y1, fill=palette[index % len(palette)], outline="#93c5fd", width=2)
+            canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2 - 10, text=room["name"], fill="#f8fafc", font=("Segoe UI", 10, "bold"))
+            dims = f'{room["length_m"]:.2g} × {room["width_m"]:.2g} m' if room["dimensions_real"] else "size not specified"
+            canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2 + 9, text=dims, fill="#dbeafe", font=("Segoe UI", 9))
+            meta = []
+            if room["airflow_m3_h"] is not None:
+                meta.append(f'Q {room["airflow_m3_h"]} m³/h')
+            if room["pressure_pa"] is not None:
+                meta.append(f'P {room["pressure_pa"]} Pa')
+            if meta:
+                canvas.create_text((x0 + x1) / 2, min(y1 - 12, (y0 + y1) / 2 + 28), text="  •  ".join(meta), fill="#bfdbfe", font=("Segoe UI", 8))
+
+    def _draw_3d_workspace(self) -> None:
+        canvas = self.visual3d_canvas
+        canvas.delete("all")
+        width = max(canvas.winfo_width(), 640)
+        height = max(canvas.winfo_height(), 420)
+        rooms = extract_room_visuals(self._visual_payload())
+        if not rooms:
+            canvas.create_text(width / 2, height / 2 - 12, text="No room geometry found for 3D preview.", fill="#e2e8f0", font=("Segoe UI", 13, "bold"))
+            canvas.create_text(width / 2, height / 2 + 18, text="The preview activates when the selected analysis contains rooms[].", fill="#94a3b8", font=("Segoe UI", 10))
+            return
+
+        placed, fully_scaled = self._room_layout(rooms)
+        scene_w = max(room["x"] + room["length_m"] for room in placed)
+        scene_h = max(room["y"] + room["width_m"] for room in placed)
+        scene_z = max(room["height_m"] for room in placed)
+        iso_x = 0.74
+        iso_y = 0.38
+        z_scale = 0.78
+        extent = max(scene_w + scene_h, 1.0)
+        scale = min((width - 150) / extent, (height - 130) / max((scene_w + scene_h) * iso_y + scene_z * z_scale, 1.0))
+        scale = max(7.0, min(scale, 55.0))
+        origin_x = width * 0.50
+        origin_y = 70
+
+        def project(x: float, y: float, z: float = 0.0) -> tuple[float, float]:
+            return (origin_x + (x - y) * iso_x * scale, origin_y + (x + y) * iso_y * scale - z * z_scale * scale)
+
+        palette = ("#0e7490", "#1d4ed8", "#52525b", "#15803d", "#7e22ce", "#c2410c")
+        ordered = sorted(enumerate(placed), key=lambda pair: pair[1]["x"] + pair[1]["y"], reverse=True)
+        for index, room in ordered:
+            x, y = room["x"], room["y"]
+            l, w, h = room["length_m"], room["width_m"], room["height_m"]
+            p000 = project(x, y, 0)
+            p100 = project(x + l, y, 0)
+            p110 = project(x + l, y + w, 0)
+            p010 = project(x, y + w, 0)
+            p001 = project(x, y, h)
+            p101 = project(x + l, y, h)
+            p111 = project(x + l, y + w, h)
+            p011 = project(x, y + w, h)
+            base = palette[index % len(palette)]
+            canvas.create_polygon(*p010, *p110, *p111, *p011, fill="#123047", outline="#60a5fa")
+            canvas.create_polygon(*p100, *p110, *p111, *p101, fill="#102a43", outline="#60a5fa")
+            canvas.create_polygon(*p001, *p101, *p111, *p011, fill=base, outline="#bfdbfe", width=2)
+            cx, cy = project(x + l / 2, y + w / 2, h)
+            canvas.create_text(cx, cy - 8, text=room["name"], fill="#ffffff", font=("Segoe UI", 9, "bold"))
+            if room["height_real"]:
+                canvas.create_text(cx, cy + 9, text=f'h={h:.2g} m', fill="#dbeafe", font=("Segoe UI", 8))
+
+        note = "Scaled room dimensions; auto-arranged for preview." if fully_scaled else "Conceptual preview; missing dimensions use display defaults."
+        canvas.create_text(18, 18, anchor="nw", text=note, fill="#94a3b8", font=("Segoe UI", 9))
 
     def export_result_json(self) -> None:
         if self.last_run is None:

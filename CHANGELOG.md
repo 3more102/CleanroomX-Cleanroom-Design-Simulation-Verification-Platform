@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99 final desktop registry integrity — 2026-09-24
+
+- Builds on the merged v0.98 desktop release and the registry-integrity hardening already integrated on `main`.
+- Enforces unique application workflow keys, complete parser/runner contracts for ordinary workflows, explicit custom-adapter contracts for `consistency` and `dossier`, and callable resolution for declared bindings.
+- Exposes structured registry-validation evidence through `cleanroomx-gui --check`.
+- Synchronizes package/runtime/demo/test/CI metadata to v0.99.0 and adds a focused v0.99 registry-integrity CI gate.
+- Adds release architecture, migration, security, deployment, rollback, test-evidence, and validation records.
+- Preserves the complete v0.91-v0.95 numerical/provenance compatibility gates and does not change validated solver equations, numerical tolerances, no-extrapolation policy, uncertainty semantics, or engineering acceptance rules.
+- Automated verification remains software regression evidence, not cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

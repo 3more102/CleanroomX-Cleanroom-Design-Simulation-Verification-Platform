@@ -413,9 +413,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
 
-        self.bind_all("<Delete>", lambda event: self.delete_selected())
+        self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
+        self.canvas_3d.bind("<Delete>", lambda event: self.delete_selected())
         self.bind_all("<Escape>", lambda event: self.clear_selection())
-        self.bind_all("<Control-0>", lambda event: self.fit_views())
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -873,6 +873,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return None
 
     def _on_left_down(self, event: tk.Event) -> None:
+        self.canvas_2d.focus_set()
         current = self.canvas_2d.find_withtag("current")
         hit = None
         resize = None
@@ -1019,6 +1020,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         if not current:
             return

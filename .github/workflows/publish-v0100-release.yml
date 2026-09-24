@@ -1,0 +1,69 @@
+name: Publish CleanroomX v0.100.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-v0100-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish immutable v0.100.0 release
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.100.0
+      TARGET_SHA: 30c43983d87d6e6de2fe81c6f38610c238b1a5f4
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify validated release baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${TARGET_SHA}^{commit}"
+          test "$(git show "${TARGET_SHA}:pyproject.toml" | grep -E '^version = "0\.100\.0"$')" = 'version = "0.100.0"'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'Release: CleanroomX v0.100.0'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'conclusion SUCCESS'
+
+      - name: Publish tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; nothing to do."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            remote_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${remote_sha}" = "${TARGET_SHA}"
+          else
+            git tag "${TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          CleanroomX v0.100.0 is the validated consolidated desktop release.
+
+          Validated baseline:
+          - Commit: `30c43983d87d6e6de2fe81c6f38610c238b1a5f4`
+          - Main CI: run #830 — success
+          - Python 3.11 / 3.12 / 3.13 full regression matrix: 576 passed on each interpreter
+          - Installed wheel, CLI readiness, packaged demo, and Tk/Xvfb desktop smoke: passed
+
+          Release scope includes execution provenance, portable external-file path handling, atomic persistence/exports, abandoned-worker exclusivity, and backend-evidence fan/system plotting. Validated solver equations, numerical tolerances, uncertainty semantics, and engineering acceptance criteria were not intentionally changed.
+
+          See `TEST_EVIDENCE.md`, `VALIDATION.txt`, `DEPLOYMENT.md`, `MIGRATIONS.md`, `ROLLBACK.md`, and `SECURITY.md` for release evidence and operational boundaries.
+          EOF
+
+          gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.100.0" --notes-file /tmp/release-notes.md

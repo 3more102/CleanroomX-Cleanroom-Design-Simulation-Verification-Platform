@@ -342,9 +342,17 @@ def _fan_curve_supplied_point_residual_audit(
         "additional_candidate_feature_count": None,
         "selected_candidate_is_only_discrete_feature": None,
         "alternative_candidate_features": None,
+        "alternative_candidate_below_selected_airflow_count": None,
+        "alternative_candidate_overlap_selected_airflow_count": None,
+        "alternative_candidate_above_selected_airflow_count": None,
         "nearest_alternative_candidate_airflow_interval_gap_m3_h": None,
         "nearest_alternative_candidate_features": None,
+        "nearest_below_alternative_candidate_airflow_interval_gap_m3_h": None,
+        "nearest_below_alternative_candidate_features": None,
+        "nearest_above_alternative_candidate_airflow_interval_gap_m3_h": None,
+        "nearest_above_alternative_candidate_features": None,
         "selected_airflow_overlaps_alternative_candidate_interval": None,
+        "alternative_candidates_on_both_sides_of_selected_airflow": None,
         "selection_policy": (
             "first supplied-point tolerance contact in point order; otherwise "
             "first strict positive-to-negative sign-change segment in segment "
@@ -369,8 +377,10 @@ def _fan_curve_supplied_point_residual_audit(
             "using the solver's actual selection priority, while selected-"
             "candidate provenance is added only for solved results. For solved "
             "cases with additional candidates, airflow separation is measured "
-            "only to each alternative discrete point or sign-change interval; "
-            "no alternate continuous root location is inferred. Candidate "
+            "only to each alternative discrete point or sign-change interval, "
+            "and each alternative is classified as below, overlapping, or above "
+            "the selected airflow. No alternate continuous root location is "
+            "inferred. Candidate "
             "crossing features are not a count or proof of continuous physical "
             "intersections, and sampled monotonicity is not a dynamic stability, stall/surge, "
             "manufacturer-region, or equipment-acceptance criterion."
@@ -415,15 +425,25 @@ def _with_selected_crossing_feature(
     )
 
     alternative_features = None
+    alternative_below_count = None
+    alternative_overlap_count = None
+    alternative_above_count = None
     nearest_alternative_gap = None
     nearest_alternative_features = None
+    nearest_below_gap = None
+    nearest_below_features = None
+    nearest_above_gap = None
+    nearest_above_features = None
     selected_overlaps_alternative_interval = None
+    alternatives_on_both_sides = None
+
     if selected_copy is not None:
         alternative_features = []
         airflow = float(selected_airflow_m3_h)
         for feature in candidates:
             if feature["solver_priority_rank"] == selected_rank:
                 continue
+
             alternative = dict(feature)
             if feature["feature_kind"] == "supplied_point_tolerance_contact":
                 low_airflow = float(feature["airflow_m3_h"])
@@ -431,16 +451,22 @@ def _with_selected_crossing_feature(
             else:
                 low_airflow = float(feature["low_airflow_m3_h"])
                 high_airflow = float(feature["high_airflow_m3_h"])
+
             if airflow < low_airflow:
                 gap = low_airflow - airflow
+                relative_position = "above_selected_airflow"
             elif airflow > high_airflow:
                 gap = airflow - high_airflow
+                relative_position = "below_selected_airflow"
             else:
                 gap = 0.0
+                relative_position = "overlaps_selected_airflow"
+
             alternative.update(
                 {
                     "airflow_interval_low_m3_h": round(low_airflow, 9),
                     "airflow_interval_high_m3_h": round(high_airflow, 9),
+                    "relative_to_selected_airflow": relative_position,
                     "selected_airflow_to_feature_interval_gap_m3_h": round(
                         gap,
                         9,
@@ -449,39 +475,63 @@ def _with_selected_crossing_feature(
             )
             alternative_features.append(alternative)
 
-        if alternative_features:
-            nearest_alternative_gap = min(
+        below_features = [
+            feature
+            for feature in alternative_features
+            if feature["relative_to_selected_airflow"] == "below_selected_airflow"
+        ]
+        overlap_features = [
+            feature
+            for feature in alternative_features
+            if feature["relative_to_selected_airflow"] == "overlaps_selected_airflow"
+        ]
+        above_features = [
+            feature
+            for feature in alternative_features
+            if feature["relative_to_selected_airflow"] == "above_selected_airflow"
+        ]
+        alternative_below_count = len(below_features)
+        alternative_overlap_count = len(overlap_features)
+        alternative_above_count = len(above_features)
+        selected_overlaps_alternative_interval = bool(overlap_features)
+        alternatives_on_both_sides = bool(below_features and above_features)
+
+        def _nearest_features(features: list[dict]) -> tuple[float | None, list[dict]]:
+            if not features:
+                return None, []
+            nearest_gap = min(
                 float(
                     feature[
                         "selected_airflow_to_feature_interval_gap_m3_h"
                     ]
                 )
-                for feature in alternative_features
+                for feature in features
             )
-            nearest_alternative_features = [
+            nearest = [
                 dict(feature)
-                for feature in alternative_features
+                for feature in features
                 if math.isclose(
                     float(
                         feature[
                             "selected_airflow_to_feature_interval_gap_m3_h"
                         ]
                     ),
-                    nearest_alternative_gap,
+                    nearest_gap,
                     rel_tol=1e-12,
                     abs_tol=1e-9,
                 )
             ]
-            selected_overlaps_alternative_interval = math.isclose(
-                nearest_alternative_gap,
-                0.0,
-                rel_tol=0.0,
-                abs_tol=1e-9,
-            )
-            nearest_alternative_gap = round(nearest_alternative_gap, 9)
-        else:
-            nearest_alternative_features = []
-            selected_overlaps_alternative_interval = False
+            return round(nearest_gap, 9), nearest
+
+        nearest_alternative_gap, nearest_alternative_features = (
+            _nearest_features(alternative_features)
+        )
+        nearest_below_gap, nearest_below_features = _nearest_features(
+            below_features
+        )
+        nearest_above_gap, nearest_above_features = _nearest_features(
+            above_features
+        )
 
     enriched.update(
         {
@@ -496,19 +546,42 @@ def _with_selected_crossing_feature(
                 None if selected_copy is None else len(candidates) == 1
             ),
             "alternative_candidate_features": alternative_features,
+            "alternative_candidate_below_selected_airflow_count": (
+                alternative_below_count
+            ),
+            "alternative_candidate_overlap_selected_airflow_count": (
+                alternative_overlap_count
+            ),
+            "alternative_candidate_above_selected_airflow_count": (
+                alternative_above_count
+            ),
             "nearest_alternative_candidate_airflow_interval_gap_m3_h": (
                 nearest_alternative_gap
             ),
             "nearest_alternative_candidate_features": (
                 nearest_alternative_features
             ),
+            "nearest_below_alternative_candidate_airflow_interval_gap_m3_h": (
+                nearest_below_gap
+            ),
+            "nearest_below_alternative_candidate_features": (
+                nearest_below_features
+            ),
+            "nearest_above_alternative_candidate_airflow_interval_gap_m3_h": (
+                nearest_above_gap
+            ),
+            "nearest_above_alternative_candidate_features": (
+                nearest_above_features
+            ),
             "selected_airflow_overlaps_alternative_candidate_interval": (
                 selected_overlaps_alternative_interval
+            ),
+            "alternative_candidates_on_both_sides_of_selected_airflow": (
+                alternatives_on_both_sides
             ),
         }
     )
     return enriched
-
 
 def _nonconverged_result(
     study: FanVariableFrictionLoopStudy,

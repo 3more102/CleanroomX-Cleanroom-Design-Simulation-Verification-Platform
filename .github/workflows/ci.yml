@@ -27,6 +27,7 @@ jobs:
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_localizes_power_evidence
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_orders_multiple_positions
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_orders_multiple_iterations
+          tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_preserves_tied_numeric_witnesses
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_records_structure_mismatch
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_marks_incomplete_coverage
           tests/test_fan_variable_friction_loop.py::test_full_bisection_projection_replay_preserves_iteration_limit_semantics

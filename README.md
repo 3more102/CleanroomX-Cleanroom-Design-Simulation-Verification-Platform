@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.99.1**, hardening the integrated v0.99 desktop application. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current release candidate is **CleanroomX v0.100.0**, built directly on the integrated v0.99.1 `main` release. It preserves the validated solver/provenance lineage while closing desktop execution-integrity, path-context, export-durability, plotting, and provenance gaps without changing engineering solver or acceptance semantics.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99.1 additionally prevents overlapping backend runs after UI abandonment, packages a self-contained demo in the wheel, validates clean-wheel installation on Python 3.11/3.12/3.13, and launches the installed wheel under Xvfb on Python 3.13.
+CI preserves the dedicated v0.91-v0.95 compatibility gates, runs focused v0.100 application/project/GUI regressions plus the complete suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel; Python 3.13 additionally launches the installed self-contained demo under Xvfb.
 
 ### Network-state replay provenance ladder
 
@@ -27,6 +27,15 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
 | v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
+| v0.100 | application execution provenance, portable file-reference context, atomic exports, system-curve plotting, and pre-window registry integrity |
+
+### v0.100 desktop execution integrity
+
+v0.100 records a canonical SHA-256 identity for every submitted application input. File-backed `consistency` and `dossier` workflows also record before/after dependency SHA-256 and byte-size evidence, surface it in Diagnostics, and preserve it through **Export Run Bundle JSON**. The application validates catalog/mapping parity before creating the Tk root.
+
+Relative consistency/dossier paths remain project-context dependent. Importing analysis JSON and **Save Project As** rebase those paths so they continue to identify the same external files; changing the project base clears cached results. Dossiers containing only absolute references can run before the GUI project is saved.
+
+Project saves and JSON/Markdown exports use same-directory atomic replacement with flush/fsync, and export failures are surfaced to the operator. Fan workflows render backend-computed system-pressure evidence beside supplied fan curves when available. The v0.99.1 packaged demo and clean-wheel installation/Tk smoke gates remain part of the release validation.
 
 ### v0.99 application registry integrity
 

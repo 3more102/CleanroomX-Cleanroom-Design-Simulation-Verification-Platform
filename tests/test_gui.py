@@ -7,7 +7,7 @@ import pytest
 
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
+from cleanroomx.gui import (\n    CleanroomXApp,\n    _strict_json_loads,\n    design_rooms,\n    flatten_json,\n    main,\n    unit_hint,\n)
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
 
 
@@ -32,6 +32,47 @@ def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows
     assert ("$.room.enabled", "true", "") in rows
+
+
+def test_design_rooms_extracts_explicit_room_geometry_and_context():
+    rooms = design_rooms(
+        {
+            "rooms": [
+                {
+                    "name": "ISO 7 Process",
+                    "width_m": 8.0,
+                    "length_m": 6.0,
+                    "height_m": 3.2,
+                    "supply_airflow_m3_h": 5400.0,
+                    "differential_pressure_pa": 15.0,
+                }
+            ]
+        }
+    )
+
+    assert len(rooms) == 1
+    room = rooms[0]
+    assert room["name"] == "ISO 7 Process"
+    assert room["width_m"] == 8.0
+    assert room["length_m"] == 6.0
+    assert room["height_m"] == 3.2
+    assert room["area_m2"] == 48.0
+    assert room["supply_airflow_m3_h"] == 5400.0
+    assert room["pressure_pa"] == 15.0
+    assert room["geometry_source"] == "explicit dimensions"
+
+
+def test_design_rooms_marks_area_only_footprint_as_derived_schematic():
+    rooms = design_rooms(
+        {"room": {"room_name": "Airlock", "floor_area_m2": 25.0, "height_m": 2.8}}
+    )
+
+    assert len(rooms) == 1
+    room = rooms[0]
+    assert room["width_m"] == pytest.approx(5.0)
+    assert room["length_m"] == pytest.approx(5.0)
+    assert room["height_m"] == 2.8
+    assert room["geometry_source"] == "area-derived schematic"
 
 
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():

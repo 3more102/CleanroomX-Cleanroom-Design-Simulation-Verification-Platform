@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 from pathlib import Path
 import queue
 import threading
@@ -85,6 +86,17 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
         text = json.dumps(value, ensure_ascii=False)
         rows.append((path, text, unit_hint(path)))
     return rows
+
+
+def analysis_matches_filter(analysis: AnalysisDocument, query: str) -> bool:
+    """Case-insensitive sidebar filtering across analysis name, kind, and catalog title."""
+    needle = query.strip().casefold()
+    if not needle:
+        return True
+    spec = ANALYSIS_SPECS.get(analysis.kind)
+    title = "" if spec is None else spec.title
+    haystack = " ".join((analysis.name, analysis.kind, title)).casefold()
+    return needle in haystack
 
 
 def extract_room_visuals(payload: dict) -> list[dict]:
@@ -238,6 +250,15 @@ class CleanroomXApp:
         self.description_var = tk.StringVar(value=self.project.description)
         self.status_var = tk.StringVar(value="Ready")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
+        self.analysis_filter_var = tk.StringVar(value="")
+        self.dashboard_project_var = tk.StringVar(value="")
+        self.dashboard_analysis_var = tk.StringVar(value="")
+        self.dashboard_runs_var = tk.StringVar(value="")
+        self.dashboard_rooms_var = tk.StringVar(value="")
+        self.dashboard_active_var = tk.StringVar(value="")
+        self.dashboard_result_var = tk.StringVar(value="")
+        self._visual_zoom = 1.0
+        self._visual3d_yaw_deg = 0.0
 
         self._build_menu()
         self._build_layout()
@@ -245,7 +266,9 @@ class CleanroomXApp:
         self._capture_saved_state()
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
+        self.analysis_filter_var.trace_add("write", lambda *_: self._refresh_analysis_list())
         self._update_title()
+        self._refresh_dashboard()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
 
@@ -309,6 +332,7 @@ class CleanroomXApp:
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_separator()
+        view_menu.add_command(label="Overview", accelerator="Ctrl+1", command=lambda: self.notebook.select(self.overview_tab))
         view_menu.add_command(label="2D Workspace", accelerator="Ctrl+2", command=lambda: self.notebook.select(self.visual2d_tab))
         view_menu.add_command(label="3D Preview", accelerator="Ctrl+3", command=lambda: self.notebook.select(self.visual3d_tab))
         view_menu.add_checkbutton(
@@ -327,8 +351,10 @@ class CleanroomXApp:
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
         self.root.bind("<F5>", lambda event: self.run_current())
+        self.root.bind("<Control-Key-1>", lambda event: self.notebook.select(self.overview_tab))
         self.root.bind("<Control-Key-2>", lambda event: self.notebook.select(self.visual2d_tab))
         self.root.bind("<Control-Key-3>", lambda event: self.notebook.select(self.visual3d_tab))
+        self.root.bind("<Control-f>", lambda event: self.analysis_filter_entry.focus_set())
 
     def _build_layout(self) -> None:
         metadata = ttk.Frame(self.root, style="Header.TFrame", padding=(14, 10, 14, 10))
@@ -354,6 +380,21 @@ class CleanroomXApp:
         ttk.Label(sidebar, text="ANALYSES", style="SidebarTitle.TLabel").pack(
             anchor="w", pady=(0, 7)
         )
+        search_row = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        search_row.pack(fill="x", pady=(0, 7))
+        ttk.Label(search_row, text="Filter", style="Muted.TLabel").pack(side="left")
+        self.analysis_filter_entry = ttk.Entry(
+            search_row, textvariable=self.analysis_filter_var, width=22
+        )
+        self.analysis_filter_entry.pack(side="left", fill="x", expand=True, padx=(6, 4))
+        ttk.Button(
+            search_row,
+            text="×",
+            style="Tool.TButton",
+            width=3,
+            command=lambda: self.analysis_filter_var.set(""),
+        ).pack(side="right")
+
         tree_host = ttk.Frame(sidebar, style="Sidebar.TFrame")
         tree_host.pack(fill="both", expand=True)
         self.analysis_tree = ttk.Treeview(
@@ -381,6 +422,95 @@ class CleanroomXApp:
         panes.add(content, weight=4)
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
+
+        self.overview_tab = ttk.Frame(self.notebook, padding=16)
+        self.notebook.add(self.overview_tab, text="Overview")
+        overview_header = ttk.Frame(self.overview_tab)
+        overview_header.pack(fill="x", pady=(0, 14))
+        ttk.Label(
+            overview_header,
+            text="Project Overview",
+            font=("Segoe UI", 18, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            overview_header,
+            textvariable=self.dashboard_project_var,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(4, 0))
+
+        cards = ttk.Frame(self.overview_tab)
+        cards.pack(fill="x")
+        for column in range(4):
+            cards.columnconfigure(column, weight=1)
+        card_specs = (
+            ("Analyses", self.dashboard_analysis_var),
+            ("Session runs", self.dashboard_runs_var),
+            ("Detected rooms", self.dashboard_rooms_var),
+            ("Active workflow", self.dashboard_active_var),
+        )
+        for column, (title, variable) in enumerate(card_specs):
+            card = ttk.Frame(cards, padding=14)
+            card.grid(
+                row=0,
+                column=column,
+                sticky="nsew",
+                padx=(0 if column == 0 else 6, 6 if column < 3 else 0),
+            )
+            ttk.Label(card, text=title, style="Muted.TLabel").pack(anchor="w")
+            ttk.Label(
+                card,
+                textvariable=variable,
+                font=("Segoe UI", 16, "bold"),
+            ).pack(anchor="w", pady=(8, 0))
+
+        overview_body = ttk.Frame(self.overview_tab)
+        overview_body.pack(fill="both", expand=True, pady=(16, 0))
+        overview_body.columnconfigure(0, weight=3)
+        overview_body.columnconfigure(1, weight=2)
+        overview_body.rowconfigure(0, weight=1)
+
+        active_card = ttk.Frame(overview_body, padding=16)
+        active_card.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        ttk.Label(
+            active_card,
+            text="Active analysis",
+            font=("Segoe UI", 12, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            active_card,
+            textvariable=self.dashboard_result_var,
+            justify="left",
+            wraplength=620,
+        ).pack(anchor="w", pady=(10, 0))
+
+        actions_card = ttk.Frame(overview_body, padding=16)
+        actions_card.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        ttk.Label(
+            actions_card,
+            text="Quick actions",
+            font=("Segoe UI", 12, "bold"),
+        ).pack(anchor="w")
+        ttk.Button(
+            actions_card,
+            text="Run active analysis",
+            style="Primary.TButton",
+            command=self.run_current,
+        ).pack(fill="x", pady=(12, 6))
+        ttk.Button(
+            actions_card,
+            text="Validate input",
+            command=self.validate_current,
+        ).pack(fill="x", pady=6)
+        ttk.Button(
+            actions_card,
+            text="Open 2D workspace",
+            command=lambda: self.notebook.select(self.visual2d_tab),
+        ).pack(fill="x", pady=6)
+        ttk.Button(
+            actions_card,
+            text="Open 3D preview",
+            command=lambda: self.notebook.select(self.visual3d_tab),
+        ).pack(fill="x", pady=6)
 
         input_tab = ttk.Frame(self.notebook)
         self.notebook.add(input_tab, text="Input")

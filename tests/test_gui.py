@@ -352,12 +352,30 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.99.0"
+    assert payload["version"] == "0.99.1"
     assert payload["analysis_count"] >= 20
     assert payload["bindings_valid"] is True
     assert payload["registry_validation"]["status"] == "ok"
     assert payload["registry_validation"]["analysis_count"] == payload["analysis_count"]
     assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
+
+
+def test_bundled_demo_project_is_self_contained_and_active_analysis_runs():
+    path = gui_module.bundled_demo_project_path()
+    assert path.is_file()
+    for dependency in (
+        "facility_project.json",
+        "consistency_hvac_demo.json",
+        "fan_variable_friction_uncertainty_demo.json",
+    ):
+        assert (path.parent / dependency).is_file()
+
+    project = load_project_document(path)
+    assert len(project.analyses) >= 5
+    active = project.analysis_by_id(project.active_analysis_id)
+    run = run_analysis(active.kind, active.input, base_dir=path.parent)
+    assert run.result
+    json.dumps(run.to_dict(), allow_nan=False)
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():
@@ -527,3 +545,51 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+def test_export_writer_reports_filesystem_failure(monkeypatch, tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+
+    def fail_write(self, content, encoding=None):
+        raise OSError("disk is read-only")
+
+    captured = {}
+    monkeypatch.setattr(gui_module.Path, "write_text", fail_write)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    assert app._write_export_file(
+        str(tmp_path / "result.json"),
+        "{}\n",
+        label="Result",
+    ) is False
+    assert app.status_var.value == "Result export failed"
+    assert captured["title"] == "Result export failed"
+    assert captured["message"] == "disk is read-only"
+    assert captured["parent"] is app.root
+
+
+def test_export_writer_writes_content_and_updates_status(tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+    path = tmp_path / "report.md"
+
+    assert app._write_export_file(str(path), "# Report\n", label="Report") is True
+    assert path.read_text(encoding="utf-8") == "# Report\n"
+    assert app.status_var.value == "Exported report — report.md"
+

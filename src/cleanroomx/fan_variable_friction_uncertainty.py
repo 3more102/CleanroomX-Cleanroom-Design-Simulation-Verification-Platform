@@ -5223,6 +5223,10 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "inconsistent_result_count": len(
             solver_result_integrity_violation_details
         ),
+        "incomplete_result_count": (
+            len(solver_result_integrity_cases)
+            - solver_result_integrity_evidence_count
+        ),
         "nominal_consistent": (
             nominal_solver_result_integrity_audit.get("consistent") is True
         ),

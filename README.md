@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.98 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.98.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 release was completed from `codex/cleanroomx-v098-release-completion`, based on the live v0.97 application-completeness lineage, and merged into `main` after the Python 3.11/3.12/3.13 CI matrix, CLI smoke checks, and real Tk/Xvfb GUI smoke passed.
+The current integrated release is **CleanroomX v0.99.0** on the v0.99 release-finalization line derived directly from the integrated registry-hardening `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 release was completed from `codex/cleanroomx-v098-release-completion`, based on the live v0.97 application-completeness lineage, and merged into `main` after the Python 3.11/3.12/3.13 CI matrix, CLI smoke checks, and real Tk/Xvfb GUI smoke passed. The first v0.99 registry-hardening merge then added duplicate-key and custom-adapter validation; this finalization synchronizes the release metadata and closes the remaining startup/mapping-integrity gaps.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.98 also validates every declared application parser/runner/reporter binding and launches the installed desktop entry point under Xvfb on Python 3.13 against the bundled demonstration project.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 adds a focused release-integrity gate covering catalog uniqueness, catalog/mapping parity, standard parser/runner contracts, custom-adapter contracts, binding resolution, headless capability reporting, and fail-fast desktop startup before the real Xvfb GUI smoke.
 
 ### Network-state replay provenance ladder
 
@@ -25,6 +25,13 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
+| v0.99 | complete registry-integrity validation, catalog/mapping parity, release metadata synchronization, and fail-fast desktop startup |
+
+### v0.99 release-integrity finalization
+
+v0.99 closes the remaining application-registry integrity gap on top of the integrated v0.98 desktop release. The shared validator rejects duplicate workflow keys, catalog/mapping drift, missing parser/runner bindings on standard workflows, and parser/runner leakage into the dedicated consistency/dossier custom adapters. It returns structured capability counts for headless readiness checks, and ordinary GUI startup now runs the same validation before creating the Tk root so a broken application catalog fails deterministically instead of surfacing later during user interaction.
+
+Package metadata, runtime version, the bundled desktop demonstration, GUI regression assertions, and CI version checks are synchronized at **0.99.0**. These safeguards are application-shell/release-integrity changes only; they do not alter engineering models, solver equations, numerical tolerances, uncertainty methods, acceptance rules, or provenance calculations.
 
 ### v0.98 desktop application
 

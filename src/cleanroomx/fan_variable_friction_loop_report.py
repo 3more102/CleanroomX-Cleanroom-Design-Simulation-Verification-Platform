@@ -66,6 +66,10 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{selected_replay.get('network_state_projection_mismatch_count')}**",
                     "- Selected network-state projection mismatch paths: "
                     f"**{selected_replay.get('network_state_projection_mismatch_paths', [])}**",
+                    "- Selected network-state projection mismatch details: "
+                    f"**{selected_replay.get('network_state_projection_mismatches', [])}**",
+                    "- Selected network-state projection maximum numerical replay errors by field: "
+                    f"**{selected_replay.get('network_state_projection_maximum_numeric_errors', [])}**",
                     "- Complete selected operating-state replay consistent: "
                     f"**{selected_replay['all_selected_operating_state_matches_independent_replay']}**",
                     "- Selected-state replay violation count: "

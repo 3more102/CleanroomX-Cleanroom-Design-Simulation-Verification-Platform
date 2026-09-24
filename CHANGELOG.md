@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.99.1 desktop release integrity — 2026-09-24
+
+- Continues directly from integrated v0.99.0 `main` commit `1f035d08f893573868610d35296e3947445318e6`, which was validated with 558 tests passing on each of Python 3.11, 3.12, and 3.13 plus CLI and Tk/Xvfb smoke.
+- Preserves external `consistency` and `dossier` file referents when importing analysis JSON or relocating a saved project with Save As.
+- Keeps abandoned backend work exclusive until its worker exits, suppressing abandoned output without enabling an overlapping second analysis.
+- Centralizes flushed same-directory atomic UTF-8 writes for project persistence and GUI exports, with user-visible export failure reporting.
+- Adds system-curve plotting from backend `curve_point_checks` alongside supplied fan curves and the operating-point marker.
+- Adds focused regressions for path portability, abandoned-worker lifecycle safety, atomic export behavior, fan/system plot completeness, and the existing v0.99 registry contract.
+- Synchronizes package/runtime/demo/docs/CI metadata at v0.99.1 while preserving the full Python 3.11/3.12/3.13 suite, v0.91-v0.95 compatibility gates, CLI JSON/Markdown smokes, and real Tk/Xvfb GUI smoke.
+- No validated solver equations, numerical tolerances, no-extrapolation behavior, uncertainty semantics, or engineering acceptance rules are changed.
+
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.

@@ -68,7 +68,11 @@ The application catalog is built from the shared backend registry and includes r
 
 Consistency and dossier workflows resolve relative file references against project path context. Imported JSON is rebased from its source directory, and **Save Project As** rebases relative references when the destination directory changes. Absolute-only dossier inputs can run before the project is saved; relative references still require an explicit base directory. The installed `--demo` project ships its referenced files beside the project file.
 
-## Results and plots
+## 2D/3D workspace, results, and plots
+
+The desktop shell includes dedicated **2D Layout** and **3D View** workspaces (keyboard shortcuts **F6** and **F7**). These views scan the active analysis input for positive `length_m`, `width_m`, and `height_m` geometry, including uncertainty objects that expose a nominal `value`. The 2D view provides a scaled plan preview and the 3D view provides a dependency-free isometric wireframe. Both refresh as the active JSON changes and clear when geometry is absent or invalid.
+
+The 2D/3D views are geometric operator previews only. They do not perform CFD, airflow distribution, contamination transport, pressure-field, clash-detection, or certification calculations, and they do not replace the validated backend analyses.
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.
 

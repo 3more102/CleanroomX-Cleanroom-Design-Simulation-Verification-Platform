@@ -361,6 +361,82 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
 
 
 
+
+def test_dossier_preserves_solver_result_integrity_linkage_corruption(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count == 2:
+            result["solver_diagnostics"]["operating_iterations"] += 1
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    dossier = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = dossier["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["solver_result_integrity_summary"]
+
+    assert summary["complete_coverage"] is True
+    assert summary["inconsistent_result_count"] == 1
+    assert summary["inconsistent_corner_count"] == 1
+    assert summary["incomplete_corner_count"] == 0
+    assert summary["violating_corner_indices"] == [0]
+    assert summary["coverage_gap_corner_indices"] == []
+    assert summary["violation_details"][0]["corner_index"] == 0
+    assert (
+        summary["violation_details"][0]["recorded_sha256"]
+        != summary["violation_details"][0]["recomputed_sha256"]
+    )
+
+    json.dumps(dossier, sort_keys=True, allow_nan=False)
+    report = markdown_dossier_report(dossier)
+    assert "Solver-result integrity linkage" in report
+    assert "inconsistent=1" in report
+    assert "violating_corners=[0]" in report
+
+
+
+def test_dossier_solver_result_integrity_component_summary_counts() -> None:
+    result = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["solver_result_integrity_summary"]
+    component = result["executive_summary"]["components"][
+        "fan_variable_friction_uncertainty"
+    ]
+
+    assert summary["complete_corner_coverage"] is True
+    assert summary["consistent_corner_count"] == analysis["corner_count"]
+    assert summary["inconsistent_corner_count"] == 0
+    assert summary["incomplete_corner_count"] == 0
+    assert component[
+        "solver_result_integrity_complete_coverage_analyses"
+    ] == 1
+    assert component[
+        "solver_result_integrity_inconsistent_corner_count"
+    ] == 0
+    assert component[
+        "solver_result_integrity_coverage_gap_corner_count"
+    ] == 0
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_dossier_report(result)
+    assert "Solver-result integrity linkage for" in report
+    assert "corner_complete=True" in report
+
+
+
 def test_dossier_preserves_selected_projection_corruption_evidence(
     monkeypatch,
 ) -> None:

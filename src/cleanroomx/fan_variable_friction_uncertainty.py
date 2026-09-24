@@ -11,6 +11,7 @@ from .fan_curve import FanCurve
 from .fan_speed import scale_fan_curve_for_speed
 from .fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
+    _solver_result_integrity_audit,
     solve_fan_variable_friction_loop,
 )
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
@@ -4882,6 +4883,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
             else None
         ),
     )
+    nominal_solver_result_integrity_audit = (
+        _solver_result_integrity_audit(nominal)
+    )
 
     fixed_values = sorted(
         {study.fixed_pressure_pa.lower, study.fixed_pressure_pa.upper}
@@ -5029,6 +5033,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                         fan_speed_ratio,
                         fan_curve_case["fan_curve"],
                     )
+                    solver_result_integrity_audit = (
+                        _solver_result_integrity_audit(result)
+                    )
                     point = result["fan_operating_point"]
                     network = result["operating_network_solution"]
                     edge_airflows = None
@@ -5099,6 +5106,12 @@ def analyze_fan_variable_friction_loop_uncertainty(
                                 "edge_rectangular_height_m"
                             ],
                             "status": result["status"],
+                            "solver_result_integrity": result.get(
+                                "result_integrity"
+                            ),
+                            "solver_result_integrity_audit": (
+                                solver_result_integrity_audit
+                            ),
                             "operating_point_search_evidence": result.get(
                                 "operating_point_search_evidence"
                             ),
@@ -5142,6 +5155,152 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "solver_diagnostics": result["solver_diagnostics"],
                         }
                     )
+
+    solver_result_integrity_cases = [
+        {
+            "case": "nominal",
+            "corner_index": None,
+            "status": nominal["status"],
+            "integrity": nominal.get("result_integrity"),
+            "audit": nominal_solver_result_integrity_audit,
+        },
+        *[
+            {
+                "case": "corner",
+                "corner_index": corner_index,
+                "status": corner["status"],
+                "integrity": corner.get("solver_result_integrity"),
+                "audit": corner.get("solver_result_integrity_audit", {}),
+            }
+            for corner_index, corner in enumerate(corners)
+        ],
+    ]
+    solver_result_integrity_records = [
+        {
+            "case": case["case"],
+            "corner_index": case["corner_index"],
+            "status": case["status"],
+            "sha256": (
+                case["integrity"].get("sha256")
+                if isinstance(case["integrity"], dict)
+                else None
+            ),
+        }
+        for case in solver_result_integrity_cases
+    ]
+    solver_result_integrity_violation_details = [
+        {
+            "case": case["case"],
+            "corner_index": case["corner_index"],
+            "status": case["status"],
+            "verdict": case["audit"].get("verdict"),
+            "metadata_matches_expected": case["audit"].get(
+                "metadata_matches_expected"
+            ),
+            "sha256_matches_recomputed": case["audit"].get(
+                "sha256_matches_recomputed"
+            ),
+            "recorded_sha256": case["audit"].get("recorded_sha256"),
+            "recomputed_sha256": case["audit"].get("recomputed_sha256"),
+        }
+        for case in solver_result_integrity_cases
+        if (
+            case["audit"].get("available") is True
+            and case["audit"].get("consistent") is not True
+        )
+    ]
+    solver_result_integrity_coverage_gap_details = [
+        {
+            "case": case["case"],
+            "corner_index": case["corner_index"],
+            "status": case["status"],
+            "verdict": case["audit"].get("verdict"),
+        }
+        for case in solver_result_integrity_cases
+        if case["audit"].get("available") is not True
+    ]
+    solver_result_integrity_evidence_count = sum(
+        case["audit"].get("available") is True
+        for case in solver_result_integrity_cases
+    )
+    solver_result_integrity_consistent_count = sum(
+        case["audit"].get("consistent") is True
+        for case in solver_result_integrity_cases
+    )
+    corner_integrity_cases = [
+        case
+        for case in solver_result_integrity_cases
+        if case["case"] == "corner"
+    ]
+    corner_integrity_evidence_count = sum(
+        case["audit"].get("available") is True
+        for case in corner_integrity_cases
+    )
+    corner_integrity_consistent_count = sum(
+        case["audit"].get("consistent") is True
+        for case in corner_integrity_cases
+    )
+    violating_corner_indices = [
+        detail["corner_index"]
+        for detail in solver_result_integrity_violation_details
+        if detail["case"] == "corner"
+    ]
+    coverage_gap_corner_indices = [
+        detail["corner_index"]
+        for detail in solver_result_integrity_coverage_gap_details
+        if detail["case"] == "corner"
+    ]
+    solver_result_integrity_summary = {
+        "applicable": True,
+        "expected_result_count": len(solver_result_integrity_cases),
+        "evidence_result_count": solver_result_integrity_evidence_count,
+        "complete_coverage": (
+            solver_result_integrity_evidence_count
+            == len(solver_result_integrity_cases)
+        ),
+        "consistent_result_count": solver_result_integrity_consistent_count,
+        "inconsistent_result_count": len(
+            solver_result_integrity_violation_details
+        ),
+        "incomplete_result_count": len(
+            solver_result_integrity_coverage_gap_details
+        ),
+        "nominal_available": (
+            nominal_solver_result_integrity_audit.get("available") is True
+        ),
+        "nominal_consistent": (
+            nominal_solver_result_integrity_audit.get("consistent") is True
+        ),
+        "expected_corner_count": len(corner_integrity_cases),
+        "evidence_corner_count": corner_integrity_evidence_count,
+        "complete_corner_coverage": (
+            corner_integrity_evidence_count == len(corner_integrity_cases)
+        ),
+        "consistent_corner_count": corner_integrity_consistent_count,
+        "inconsistent_corner_count": len(violating_corner_indices),
+        "incomplete_corner_count": len(coverage_gap_corner_indices),
+        "violating_corner_indices": violating_corner_indices,
+        "coverage_gap_corner_indices": coverage_gap_corner_indices,
+        "source_solver_result_sha256": solver_result_integrity_records,
+        "violation_details": solver_result_integrity_violation_details,
+        "coverage_gap_details": (
+            solver_result_integrity_coverage_gap_details
+        ),
+        "all_evaluated_solver_results_integrity_consistent": (
+            solver_result_integrity_evidence_count
+            == len(solver_result_integrity_cases)
+            and not solver_result_integrity_violation_details
+        ),
+        "scope_note": (
+            "The nominal solve and every evaluated uncertainty corner retain "
+            "the deterministic SHA-256 identity of their complete standalone "
+            "solver result. Missing evidence is reported as incomplete "
+            "coverage separately from retained evidence whose digest or "
+            "metadata does not recompute consistently. These digests prove "
+            "deterministic content identity only, not source authenticity, "
+            "certification, commissioning acceptance, or physical correctness."
+        ),
+    }
 
     unresolved_corner_count = sum(
         corner["status"] != "solved" for corner in corners
@@ -5577,6 +5736,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "nominal_operating_point": nominal["fan_operating_point"],
         "nominal_power_evidence": nominal["power_evidence"],
         "nominal_result": nominal,
+        "solver_result_integrity_summary": (
+            solver_result_integrity_summary
+        ),
         "corner_count": len(corners),
         "solved_corner_count": len(solved_points),
         "unresolved_corner_count": unresolved_corner_count,

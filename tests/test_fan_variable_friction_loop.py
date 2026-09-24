@@ -14,6 +14,8 @@ from cleanroomx.fan_variable_friction_loop import (
     _fan_curve_supplied_point_residual_audit,
     _fan_curve_supplied_point_network_state_replay_audit,
     _network_state_sha256,
+    _solver_result_integrity_audit,
+    _solver_result_sha256,
     _point_check,
     _selected_operating_state_replay_audit,
     _solve_network_at_airflow,
@@ -194,6 +196,100 @@ def test_network_state_fingerprint_is_order_invariant_for_named_collections() ->
     assert _network_state_sha256(history_reordered) != baseline
 
 
+
+def test_solver_result_integrity_is_recomputable_and_detects_corruption() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    first = solve_fan_variable_friction_loop(study)
+    second = solve_fan_variable_friction_loop(study)
+
+    integrity = first["result_integrity"]
+    assert integrity["algorithm"] == "sha256"
+    assert integrity["canonicalization"] == (
+        "fan-variable-friction-loop-result-sort-named-collections-"
+        "normalize-signed-zero-json-sort-keys-compact-utf8-v1"
+    )
+    assert integrity["scope"] == (
+        "cleanroomx.fan_variable_friction_loop."
+        "result_without_result_integrity.v1"
+    )
+    assert len(integrity["sha256"]) == 64
+    assert _solver_result_sha256(first) == integrity["sha256"]
+    assert second["result_integrity"]["sha256"] == integrity["sha256"]
+
+    audit = _solver_result_integrity_audit(first)
+    assert audit["available"] is True
+    assert audit["metadata_matches_expected"] is True
+    assert audit["sha256_matches_recomputed"] is True
+    assert audit["consistent"] is True
+
+    corrupted = json.loads(json.dumps(first))
+    corrupted["solver_diagnostics"]["operating_iterations"] += 1
+    corrupted_audit = _solver_result_integrity_audit(corrupted)
+    assert corrupted_audit["available"] is True
+    assert corrupted_audit["metadata_matches_expected"] is True
+    assert corrupted_audit["sha256_matches_recomputed"] is False
+    assert corrupted_audit["consistent"] is False
+    assert corrupted_audit["recorded_sha256"] == integrity["sha256"]
+    assert corrupted_audit["recomputed_sha256"] != integrity["sha256"]
+
+    json.dumps(first, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_report(first)
+    assert "## Solver result integrity" in report
+    assert integrity["sha256"] in report
+
+
+def test_solver_result_integrity_canonicalizes_signed_zero_and_named_collections() -> None:
+    baseline = {
+        "status": "solved",
+        "operating_network_solution": {
+            "nodes": [
+                {"name": "B", "value": -0.0},
+                {"name": "A", "value": 1.0},
+            ],
+            "edges": [
+                {"name": "E2", "value": 2.0},
+                {"name": "E1", "value": 1.0},
+            ],
+            "variable_friction": {
+                "edge_closure": [
+                    {"name": "E2", "value": -0.0},
+                    {"name": "E1", "value": 1.0},
+                ],
+                "iteration_history": [
+                    {"iteration": 1, "value": 2.0},
+                    {"iteration": 2, "value": 1.0},
+                ],
+            },
+        },
+    }
+    equivalent = json.loads(json.dumps(baseline))
+    equivalent["operating_network_solution"]["nodes"].reverse()
+    equivalent["operating_network_solution"]["edges"].reverse()
+    equivalent["operating_network_solution"]["variable_friction"][
+        "edge_closure"
+    ].reverse()
+    equivalent["operating_network_solution"]["nodes"][0]["value"] = 1.0
+    equivalent["operating_network_solution"]["nodes"][1]["value"] = 0.0
+    equivalent["operating_network_solution"]["variable_friction"][
+        "edge_closure"
+    ][1]["value"] = 0.0
+
+    assert _solver_result_sha256(equivalent) == _solver_result_sha256(
+        baseline
+    )
+
+    reordered_history = json.loads(json.dumps(baseline))
+    reordered_history["operating_network_solution"]["variable_friction"][
+        "iteration_history"
+    ].reverse()
+    assert _solver_result_sha256(reordered_history) != _solver_result_sha256(
+        baseline
+    )
+
+
+
 def test_supplied_point_network_state_replay_is_complete_and_reported() -> None:
     study = load_fan_variable_friction_loop_study(
         "examples/fan_variable_friction_loop_demo.json"
@@ -229,6 +325,7 @@ def test_supplied_point_network_state_replay_is_complete_and_reported() -> None:
     assert replay["replay_verdict"] == (
         "supplied_point_network_state_replay_consistent"
     )
+    assert _solver_result_integrity_audit(result)["consistent"] is True
     for check in checks:
         assert len(check["network_state_sha256"]) == 64
         assert check["network_state_projection"]
@@ -2934,6 +3031,7 @@ def test_network_nonconvergence_is_reported_without_fake_operating_point() -> No
     assert audit["evaluated_supplied_point_count"] < (
         audit["expected_supplied_point_count"]
     )
+    assert _solver_result_integrity_audit(result)["consistent"] is True
 
 
 def test_unknown_solver_option_is_rejected() -> None:

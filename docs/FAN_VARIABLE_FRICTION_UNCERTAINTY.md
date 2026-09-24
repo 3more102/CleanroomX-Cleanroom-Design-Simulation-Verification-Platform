@@ -1,5 +1,11 @@
 # Fan / variable-friction loop uncertainty
 
+## v0.95 solver-result integrity linkage
+
+Every nominal and evaluated nonlinear uncertainty solve retains the standalone solver-result integrity audit. Aggregation reports expected/evidence result counts, complete coverage, consistent/inconsistent/incomplete result counts, expected/evidence corner counts, complete corner coverage, exact violating corner indices, and exact coverage-gap corner indices. Missing evidence is not counted as corruption, and corruption is not hidden as a generic coverage gap.
+
+The uncertainty result's existing top-level result-integrity digest remains a distinct identity for the full uncertainty payload. Solver-result integrity linkage does not change corner generation, fan-curve bounds, no-extrapolation behavior, nonlinear solving, uncertainty envelopes, or engineering acceptance semantics.
+
 CleanroomX v0.81 adds independent fan/system residual replay provenance on top of the v0.80 pressure-state audit. Each retained bisection low/high/midpoint state is reconstructed from the selected supplied fan segment and L/H/T chain, the nonlinear loop is freshly re-solved, and the retained fan-minus-system residual is checked against that independent model evaluation. Exact violating corner indices and tied maximum replay-error witnesses are preserved. This is numerical implementation provenance only, not physical uncertainty or equipment acceptance.
 
 v0.82 independently replays retained midpoint fan, loop-network, and total system pressure components. v0.83 extends that evidence to every retained low/midpoint/high bisection state, so uncertainty summaries now classify a corner as pressure-component-replay consistent only when the complete active bracket pressure state matches a fresh nonlinear model replay. Exact violation-corner indices and tied maximum replay errors remain numerical provenance, not engineering acceptance criteria.

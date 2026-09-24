@@ -1361,6 +1361,29 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{residual_topology} | "
                 f"{item['traceability']['complete']} |"
             )
+            solver_result_integrity = item.get(
+                "solver_result_integrity_summary"
+            )
+            if solver_result_integrity:
+                lines.append(
+                    "- Solver-result integrity linkage for "
+                    f"**{item['analysis']}**: "
+                    f"coverage={solver_result_integrity['evidence_result_count']}/"
+                    f"{solver_result_integrity['expected_result_count']}; "
+                    f"complete={solver_result_integrity['complete_coverage']}; "
+                    f"consistent={solver_result_integrity['consistent_result_count']}; "
+                    f"inconsistent={solver_result_integrity['inconsistent_result_count']}; "
+                    f"incomplete={solver_result_integrity['incomplete_result_count']}; "
+                    f"corner_coverage="
+                    f"{solver_result_integrity['evidence_corner_count']}/"
+                    f"{solver_result_integrity['expected_corner_count']}; "
+                    f"corner_complete="
+                    f"{solver_result_integrity['complete_corner_coverage']}; "
+                    "violating_corners="
+                    f"{solver_result_integrity['violating_corner_indices']}; "
+                    "coverage_gap_corners="
+                    f"{solver_result_integrity['coverage_gap_corner_indices']}"
+                )
             integrity = item.get("result_integrity")
             if integrity:
                 lines.append(

@@ -18,6 +18,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
       - run: pip install -e .[dev]
+      - name: Run v0.95 solver-result-integrity regressions
+        run: >-
+          python -m pytest -q
+          tests/test_fan_variable_friction_loop.py::test_solver_result_integrity_is_recomputable_and_detects_corruption
+          tests/test_fan_variable_friction_loop.py::test_solver_result_integrity_canonicalizes_signed_zero_and_named_collections
+          tests/test_fan_variable_friction_uncertainty.py::test_solver_result_integrity_linkage_covers_nominal_and_all_corners
+          tests/test_fan_variable_friction_uncertainty.py::test_solver_result_integrity_linkage_detects_corrupted_corner_result
+          tests/test_fan_variable_friction_uncertainty.py::test_solver_result_integrity_linkage_marks_missing_corner_evidence
+          tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_solver_result_integrity_linkage_corruption
+          tests/test_dossier_variable_friction_uncertainty.py::test_dossier_solver_result_integrity_component_summary_counts
       - name: Run v0.94 canonical solver-provenance regressions
         run: >-
           python -m pytest -q
@@ -68,7 +78,7 @@ jobs:
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_selected_projection_corruption_evidence
       - name: Run complete test suite
         run: python -m pytest -q
-      - name: Run representative v0.94 CLI smoke checks
+      - name: Run representative v0.95 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format markdown --output /tmp/cleanroomx-loop.md
@@ -86,7 +96,7 @@ jobs:
           metadata = tomllib.loads(
               Path("pyproject.toml").read_text(encoding="utf-8")
           )
-          assert metadata["project"]["version"] == "0.94.0"
+          assert metadata["project"]["version"] == "0.95.0"
           assert cleanroomx.__version__ == metadata["project"]["version"]
 
           for path in (

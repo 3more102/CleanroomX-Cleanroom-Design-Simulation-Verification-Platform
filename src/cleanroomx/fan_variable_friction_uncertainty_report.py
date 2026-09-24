@@ -814,6 +814,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_numeric_midpoint_violation_corner_indices']}**",
                 "- Trace midpoint-flag mismatches vs numeric geometry: "
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
+                "- Trace pressure-residual identity violations: "
+                f"**{search_summary['bisection_trace_pressure_residual_identity_violation_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
@@ -830,6 +832,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_state_transition_violation_corner_indices']}**",
                 "- Trace decision-semantic violations: "
                 f"**{search_summary['bisection_trace_decision_semantic_violation_corner_indices']}**",
+                "- Trace pressure-component decision-semantic violations: "
+                f"**{search_summary['bisection_trace_pressure_component_decision_semantic_violation_corner_indices']}**",
                 "- Trace origin-to-terminal replay violations: "
                 f"**{search_summary['bisection_trace_origin_replay_violation_corner_indices']}**",
                 "- Trace terminal-outcome violations: "
@@ -982,6 +986,21 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum trace midpoint-centering error | "
                 f"{trace_midpoint_error['value']} | "
                 f"{trace_midpoint_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_pressure_residual_error = search_summary.get(
+            "maximum_bisection_trace_pressure_residual_identity_error_pa"
+        )
+        if trace_pressure_residual_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_pressure_residual_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace midpoint residual identity error | "
+                f"{trace_pressure_residual_error['value']} | "
+                f"{trace_pressure_residual_error['unit']} | "
                 f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(

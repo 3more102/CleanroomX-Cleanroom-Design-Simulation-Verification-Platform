@@ -895,6 +895,42 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                selected_network_state_projection_replay_applicable_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_applicable_corner_count",
+                        solved_search_evidence_count,
+                    )
+                )
+                selected_network_state_projection_replay_coverage_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                selected_network_state_projection_replay_complete_coverage = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_complete_coverage",
+                        False,
+                    )
+                )
+                selected_network_state_projection_mismatch_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_mismatch_count",
+                        0,
+                    )
+                )
+                selected_network_state_projection_violation_details = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_violation_details",
+                        [],
+                    )
+                )
+                selected_network_state_projection_maximum_numeric_errors = (
+                    search_summary.get(
+                        "maximum_selected_operating_network_state_projection_numeric_errors",
+                        [],
+                    )
+                )
                 trace_network_state_replay_count = search_summary.get(
                     "bisection_trace_network_state_replay_consistent_corner_count",
                     0,
@@ -1052,9 +1088,19 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{selected_network_state_replay_violations}; "
                     f"selected-network-state-projection-replay "
                     f"{selected_network_state_projection_replay_count}/"
-                    f"{solved_search_evidence_count}; "
+                    f"{selected_network_state_projection_replay_applicable_count}; "
+                    f"selected-network-state-projection-replay coverage "
+                    f"{selected_network_state_projection_replay_coverage_count}/"
+                    f"{selected_network_state_projection_replay_applicable_count} "
+                    f"complete={selected_network_state_projection_replay_complete_coverage}; "
                     f"selected-network-state-projection-replay violations "
                     f"{selected_network_state_projection_replay_violations}; "
+                    f"selected-network-state-projection mismatches "
+                    f"{selected_network_state_projection_mismatch_count}; "
+                    f"selected-network-state-projection details "
+                    f"{selected_network_state_projection_violation_details}; "
+                    f"selected-network-state-projection max-numeric-errors "
+                    f"{selected_network_state_projection_maximum_numeric_errors}; "
                     f"network-state-replay "
                     f"{trace_network_state_replay_count}/{trace_count}; "
                     f"network-state-replay violations "

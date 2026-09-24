@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.80 independent bisection midpoint-residual model recheck — 2026-09-24
+
+- Re-evaluates every retained bounded-bisection midpoint directly from the active supplied fan segment plus a fresh variable-friction network solve instead of trusting the stored midpoint residual.
+- Compares each recorded midpoint fan-minus-system residual with the freshly recomputed model value and retains the absolute pressure-domain discrepancy per iteration.
+- Independently checks each retained L/H/T decision against the recomputed midpoint residual and the configured operating-pressure tolerance, alongside the existing v0.78 check against the recorded residual.
+- Aggregates exact nonlinear uncertainty-corner indices for midpoint-residual recheck failures and recomputed-residual decision-semantic failures, plus tied worst absolute residual-error witnesses.
+- Surfaces the new evidence in standalone loop, nonlinear uncertainty, and engineering-dossier Markdown and adds a corruption regression where the recorded residual value is wrong while its sign and recorded decision remain self-consistent.
+- Does not change candidate priority, bounded root selection, root-acceptance tolerance, iteration budgets, no-extrapolation behavior, or any engineering acceptance criterion.
+- Treats the recheck strictly as deterministic numerical implementation provenance using the same configured physical model inputs; it is not an independent physical model, measurement uncertainty, interpolation-error bound, root stability/uniqueness proof, stall/surge evidence, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.

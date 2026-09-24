@@ -570,7 +570,32 @@ class CleanroomXApp:
         visual2d_toolbar.pack(fill="x")
         ttk.Label(visual2d_toolbar, text="Room layout / engineering schematic", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(visual2d_toolbar, text="Auto-layout is marked when coordinates are unavailable.", style="Muted.TLabel").pack(side="left", padx=12)
-        ttk.Button(visual2d_toolbar, text="Refresh", style="Tool.TButton", command=self._refresh_visuals).pack(side="right")
+        ttk.Button(
+            visual2d_toolbar,
+            text="+",
+            style="Tool.TButton",
+            width=3,
+            command=lambda: self._change_visual_zoom(1.2),
+        ).pack(side="right")
+        ttk.Button(
+            visual2d_toolbar,
+            text="Fit",
+            style="Tool.TButton",
+            command=self._reset_visual_view,
+        ).pack(side="right", padx=4)
+        ttk.Button(
+            visual2d_toolbar,
+            text="−",
+            style="Tool.TButton",
+            width=3,
+            command=lambda: self._change_visual_zoom(1 / 1.2),
+        ).pack(side="right")
+        ttk.Button(
+            visual2d_toolbar,
+            text="Refresh",
+            style="Tool.TButton",
+            command=self._refresh_visuals,
+        ).pack(side="right", padx=(0, 8))
         self.visual2d_canvas = tk.Canvas(self.visual2d_tab, background="#0b1220", highlightthickness=0)
         self.visual2d_canvas.pack(fill="both", expand=True)
         self.visual2d_canvas.bind("<Configure>", lambda event: self._draw_2d_workspace())
@@ -581,7 +606,38 @@ class CleanroomXApp:
         visual3d_toolbar.pack(fill="x")
         ttk.Label(visual3d_toolbar, text="Conceptual 3D room massing", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(visual3d_toolbar, text="Visualization only — not CFD or certification geometry.", style="Muted.TLabel").pack(side="left", padx=12)
-        ttk.Button(visual3d_toolbar, text="Refresh", style="Tool.TButton", command=self._refresh_visuals).pack(side="right")
+        ttk.Button(
+            visual3d_toolbar,
+            text="Rotate ↻",
+            style="Tool.TButton",
+            command=lambda: self._rotate_3d(30.0),
+        ).pack(side="right")
+        ttk.Button(
+            visual3d_toolbar,
+            text="+",
+            style="Tool.TButton",
+            width=3,
+            command=lambda: self._change_visual_zoom(1.2),
+        ).pack(side="right", padx=(4, 0))
+        ttk.Button(
+            visual3d_toolbar,
+            text="Fit",
+            style="Tool.TButton",
+            command=self._reset_visual_view,
+        ).pack(side="right", padx=4)
+        ttk.Button(
+            visual3d_toolbar,
+            text="−",
+            style="Tool.TButton",
+            width=3,
+            command=lambda: self._change_visual_zoom(1 / 1.2),
+        ).pack(side="right")
+        ttk.Button(
+            visual3d_toolbar,
+            text="Refresh",
+            style="Tool.TButton",
+            command=self._refresh_visuals,
+        ).pack(side="right", padx=(0, 8))
         self.visual3d_canvas = tk.Canvas(self.visual3d_tab, background="#08111f", highlightthickness=0)
         self.visual3d_canvas.pack(fill="both", expand=True)
         self.visual3d_canvas.bind("<Configure>", lambda event: self._draw_3d_workspace())
@@ -757,7 +813,13 @@ class CleanroomXApp:
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
-        for analysis in self.project.analyses:
+        query = self.analysis_filter_var.get() if hasattr(self, "analysis_filter_var") else ""
+        visible = [
+            analysis
+            for analysis in self.project.analyses
+            if analysis_matches_filter(analysis, query)
+        ]
+        for analysis in visible:
             self.analysis_tree.insert(
                 "",
                 "end",
@@ -770,18 +832,20 @@ class CleanroomXApp:
             self.analysis_tree.selection_set(target)
             self.analysis_tree.focus(target)
             self.analysis_tree.see(target)
-            self._load_analysis_into_editor(self.project.analysis_by_id(target))
-        elif self.project.analyses:
-            first = self.project.analyses[0].id
+            if self._editor_analysis_id != target:
+                self._load_analysis_into_editor(self.project.analysis_by_id(target))
+        elif visible:
+            first = visible[0].id
             self.project.active_analysis_id = first
             self.analysis_tree.selection_set(first)
             self.analysis_tree.focus(first)
-            self._load_analysis_into_editor(self.project.analyses[0])
-        else:
+            self._load_analysis_into_editor(visible[0])
+        elif not self.project.analyses:
             self._editor_analysis_id = None
             self.input_text.delete("1.0", "end")
             self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
+        self._refresh_dashboard()
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:
@@ -836,6 +900,7 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        self._refresh_dashboard()
         self._refresh_visuals()
 
     def refresh_structure(self, silent: bool = False) -> None:
@@ -1227,8 +1292,9 @@ class CleanroomXApp:
         )
         self._draw_plot()
         self._refresh_visuals()
+        self._refresh_dashboard()
         if select_results:
-            self.notebook.select(1)
+            self.notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
@@ -1310,6 +1376,66 @@ class CleanroomXApp:
             px, py = point(marker["x"], marker["y"])
             canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2)
             canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
+
+    def _refresh_dashboard(self) -> None:
+        if not hasattr(self, "dashboard_project_var"):
+            return
+        project_name = (
+            self.name_var.get().strip()
+            if hasattr(self, "name_var")
+            else self.project.name
+        )
+        description = (
+            self.description_var.get().strip()
+            if hasattr(self, "description_var")
+            else self.project.description
+        )
+        path_text = "Unsaved project" if self.project_path is None else str(self.project_path)
+        self.dashboard_project_var.set(
+            f"{project_name}  •  {path_text}"
+            + (f"\n{description}" if description else "")
+        )
+        self.dashboard_analysis_var.set(str(len(self.project.analyses)))
+        self.dashboard_runs_var.set(str(len(self._runs_by_analysis)))
+
+        active = self._editor_analysis() or self._current_analysis()
+        payload = self._visual_payload() if hasattr(self, "input_text") else {}
+        rooms = extract_room_visuals(payload)
+        self.dashboard_rooms_var.set(str(len(rooms)))
+        if active is None:
+            self.dashboard_active_var.set("None")
+            self.dashboard_result_var.set(
+                "Add or select an analysis to inspect inputs, run engineering checks, "
+                "and open the visual workspaces."
+            )
+            return
+
+        spec = ANALYSIS_SPECS.get(active.kind)
+        title = active.kind if spec is None else spec.title
+        self.dashboard_active_var.set(title)
+        run = self._runs_by_analysis.get(active.id)
+        run_line = "No session result yet." if run is None else f"Latest status: {run.status}"
+        room_line = (
+            f"Detected {len(rooms)} room record(s) for 2D/3D visualization."
+            if rooms
+            else "No room geometry detected in this analysis input."
+        )
+        self.dashboard_result_var.set(
+            f"{active.name}\nWorkflow: {title}\n{run_line}\n{room_line}"
+        )
+
+    def _change_visual_zoom(self, factor: float) -> None:
+        self._visual_zoom = max(0.45, min(3.0, self._visual_zoom * factor))
+        self._refresh_visuals()
+
+    def _reset_visual_view(self) -> None:
+        self._visual_zoom = 1.0
+        self._visual3d_yaw_deg = 0.0
+        self._refresh_visuals()
+
+    def _rotate_3d(self, delta_deg: float) -> None:
+        self._visual3d_yaw_deg = (self._visual3d_yaw_deg + delta_deg) % 360.0
+        self._draw_3d_workspace()
 
     def _visual_payload(self) -> dict:
         text = self.input_text.get("1.0", "end-1c").strip() if hasattr(self, "input_text") else ""

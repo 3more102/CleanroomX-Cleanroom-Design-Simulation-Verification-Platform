@@ -601,6 +601,7 @@ def _bisection_decision_trace_audit(
     trace: list[dict] | None,
     *,
     operating_iterations: int,
+    termination_reason: str,
 ) -> dict | None:
     if trace is None:
         return None
@@ -618,6 +619,16 @@ def _bisection_decision_trace_audit(
     symbol_by_decision = {
         decision: symbol for symbol, decision in legend.items()
     }
+    if termination_reason == "pressure_residual":
+        terminal_outcome_consistent = (
+            termination_indices == [len(trace) - 1]
+        )
+    elif termination_reason == "bisection_iteration_limit":
+        terminal_outcome_consistent = (
+            len(termination_indices) == 0 and len(trace) > 0
+        )
+    else:
+        terminal_outcome_consistent = False
     iteration_sequence = [int(step["iteration"]) for step in trace]
     transition_checks = []
     for transition_index, (step, next_step) in enumerate(
@@ -706,6 +717,7 @@ def _bisection_decision_trace_audit(
 
     return {
         "step_count": len(trace),
+        "termination_reason": termination_reason,
         "trace_matches_operating_iterations": (
             len(trace) == operating_iterations
         ),
@@ -725,6 +737,7 @@ def _bisection_decision_trace_audit(
         "termination_record_is_last": (
             termination_indices == [len(trace) - 1]
         ),
+        "terminal_outcome_consistent": terminal_outcome_consistent,
         "replace_low_endpoint_count": sum(
             step["decision"] == "replace_low_endpoint" for step in trace
         ),
@@ -750,14 +763,15 @@ def _bisection_decision_trace_audit(
         ),
         "decision_legend": legend,
         "scope_note": (
-            "The decision trace preserves every bounded-bisection midpoint "
-            "evaluation that led to the solved operating point. L replaces "
-            "the positive-residual low endpoint, H replaces the negative-"
-            "residual high endpoint, and T accepts a midpoint within the "
-            "configured operating-pressure tolerance. The replay audit "
-            "verifies that each nonterminal L/H decision produces the next "
-            "recorded airflow/residual bracket and that iteration numbering "
-            "is contiguous. This is numerical implementation provenance "
+            "The decision trace preserves every completed bounded-bisection "
+            "midpoint evaluation. L replaces the positive-residual low "
+            "endpoint, H replaces the negative-residual high endpoint, and T "
+            "accepts a midpoint within the configured operating-pressure "
+            "tolerance. Solved and iteration-limit outcomes use distinct "
+            "terminal-decision checks. The replay audit verifies that each "
+            "nonterminal L/H decision produces the next recorded airflow/"
+            "residual bracket and that iteration numbering is contiguous. "
+            "This is numerical implementation provenance "
             "only; it is not physical uncertainty, an interpolation-error "
             "bound, a stability margin, or an equipment-acceptance "
             "criterion."
@@ -1120,6 +1134,12 @@ def solve_fan_variable_friction_loop(
                     "selected_supplied_point_index": None,
                     "operating_iterations": operating_iterations,
                     "final_bisection_bracket": None,
+                    "bisection_trace": bisection_trace,
+                    "bisection_trace_audit": _bisection_decision_trace_audit(
+                        bisection_trace,
+                        operating_iterations=operating_iterations,
+                        termination_reason=termination_reason,
+                    ),
                     "iteration_limit_evidence": {
                         "last_evaluated_midpoint_airflow_m3_h": round(
                             selected_airflow,
@@ -1269,6 +1289,7 @@ def solve_fan_variable_friction_loop(
         "bisection_trace_audit": _bisection_decision_trace_audit(
             bisection_trace,
             operating_iterations=operating_iterations,
+            termination_reason=termination_reason,
         ),
         "scope_note": (
             "The final bisection bracket is the active signed-residual search "

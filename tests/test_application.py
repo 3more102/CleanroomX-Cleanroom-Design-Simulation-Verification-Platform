@@ -34,8 +34,46 @@ def test_application_catalog_exposes_major_existing_workflows():
 
 
 def test_application_registry_resolves_every_declared_backend_binding():
-    validate_application_registry()
-    assert application_info()["bindings_valid"] is True
+    validation = validate_application_registry()
+    expected_target_count = sum(
+        target is not None
+        for spec in ANALYSIS_SPECS.values()
+        for target in (spec.parser, spec.runner, spec.reporter)
+    )
+    assert validation["status"] == "ok"
+    assert validation["analysis_count"] == len(ANALYSIS_SPECS)
+    assert validation["callable_target_count"] == expected_target_count
+    assert set(validation["custom_adapters"]) == {"consistency", "dossier"}
+    info = application_info()
+    assert info["bindings_valid"] is True
+    assert info["registry_validation"] == validation
+
+
+def test_application_registry_rejects_duplicate_keys(monkeypatch):
+    import cleanroomx.application as application_module
+
+    monkeypatch.setattr(
+        application_module,
+        "_ANALYSES",
+        application_module._ANALYSES + (application_module._ANALYSES[0],),
+    )
+    with pytest.raises(RuntimeError, match="duplicate application analysis keys"):
+        application_module.validate_application_registry()
+
+
+def test_application_registry_enforces_custom_adapter_contract(monkeypatch):
+    import cleanroomx.application as application_module
+    from dataclasses import replace
+
+    specs = tuple(
+        replace(spec, parser=("io", "project_from_dict"))
+        if spec.key == "consistency"
+        else spec
+        for spec in application_module._ANALYSES
+    )
+    monkeypatch.setattr(application_module, "_ANALYSES", specs)
+    with pytest.raises(RuntimeError, match="consistency must use its registered custom"):
+        application_module.validate_application_registry()
 
 
 def test_hvac_application_service_reuses_real_backend():

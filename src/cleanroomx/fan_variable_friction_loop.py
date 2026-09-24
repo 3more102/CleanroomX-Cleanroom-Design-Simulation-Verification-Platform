@@ -1305,6 +1305,7 @@ def _bisection_decision_trace_audit(
             )
         ]
         if maximum_pressure_component_replay_error is not None
+        and maximum_pressure_component_replay_error > 0.0
         else []
     )
 

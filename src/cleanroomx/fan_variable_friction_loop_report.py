@@ -142,6 +142,15 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_recorded_midpoint_flags_match_numeric_geometry']}**",
                     "- Complete trace raw-state audit consistent: "
                     f"**{trace_audit['all_trace_raw_state_consistent']}**",
+                    "- Residual-component audit coverage: "
+                    f"**{trace_audit['residual_component_check_count']}/"
+                    f"{trace_audit['step_count']}**",
+                    "- Every trace residual matches retained fan/system pressure components: "
+                    f"**{trace_audit['all_trace_residuals_match_pressure_components']}**",
+                    "- Maximum absolute trace residual-component error: "
+                    f"**{trace_audit['maximum_absolute_trace_residual_component_error_pa']} Pa**",
+                    "- Trace decisions match pressure-component recomputed residual semantics: "
+                    f"**{trace_audit['all_decisions_match_pressure_component_residual_semantics']}**",
                     "- Maximum absolute trace midpoint-centering error: "
                     f"**{trace_audit['maximum_absolute_trace_midpoint_error_m3_h']} m³/h**",
                     "- Every recorded trace width matches its airflow endpoints: "

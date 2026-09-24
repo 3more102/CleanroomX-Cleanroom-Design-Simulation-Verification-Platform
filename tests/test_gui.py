@@ -68,6 +68,57 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.description == "Preserve editor state"
 
 
+def test_abandon_waits_for_worker_exit_before_reenabling_ui():
+    import queue
+
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 7
+    app._queue = queue.Queue()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+
+    app.cancel_run()
+
+    assert app._running is True
+    assert app._abandon_requested is True
+    assert app._run_generation == 7
+    assert app.cancel_button.state == "disabled"
+    assert "waiting" in app.status_var.value.lower()
+
+    app._queue.put(("success", 7, "analysis-a", object()))
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._abandon_requested is False
+    assert app.run_button.state == "normal"
+    assert app.cancel_button.state == "disabled"
+    assert app.input_text.state == "normal"
+    assert "worker finished" in app.status_var.value.lower()
+    assert app.root.delay == 100
+
+
 def test_running_analysis_prevents_switching_to_another_analysis():
     class Tree:
         def __init__(self):
@@ -196,6 +247,57 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
     assert "Saved" in app.status_var.value
 
 
+def test_save_project_as_invalidates_results_when_base_directory_changes(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    old_dir = tmp_path / "old"
+    new_dir = tmp_path / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Demo")
+    app.project_path = old_dir / "demo.cleanroomx.json"
+    app._editor_analysis_id = None
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+    app._baseline_state = None
+    app._runs_by_analysis = {"analysis-a": object()}
+    app.last_run = app._runs_by_analysis["analysis-a"]
+    app.last_run_analysis_id = "analysis-a"
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    destination = new_dir / "demo.cleanroomx.json"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+
+    app.save_project_as()
+
+    assert app.project_path == destination
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+
+
 def test_remove_analysis_invalidates_matching_result(monkeypatch):
     analysis = AnalysisDocument(
         id="a", name="A", kind="room_verification", input={"value": 1}
@@ -229,6 +331,21 @@ def test_remove_analysis_invalidates_matching_result(monkeypatch):
     assert app.last_run is None
     assert app.last_run_analysis_id is None
     assert app._runs_by_analysis == {}
+
+
+def test_gui_launch_validates_registry_before_creating_tk_root(monkeypatch):
+    root_created = []
+
+    def fail_registry_validation():
+        raise RuntimeError("broken registry")
+
+    monkeypatch.setattr(gui_module, "validate_application_registry", fail_registry_validation)
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root_created.append(True))
+
+    with pytest.raises(RuntimeError, match="broken registry"):
+        main([])
+
+    assert root_created == []
 
 
 def test_gui_check_mode_needs_no_display(capsys):

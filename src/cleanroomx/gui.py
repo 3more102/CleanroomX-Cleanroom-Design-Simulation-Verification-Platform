@@ -30,6 +30,12 @@ from .project import (
     new_project,
     save_project_document,
 )
+from .gui_design import (
+    BG as DESIGN_BG,
+    TEXT as DESIGN_TEXT,
+    draw_plan_2d,
+    draw_preview_3d,
+)
 
 
 _UNIT_SUFFIXES = (
@@ -156,8 +162,8 @@ class CleanroomXApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
-        self.root.geometry("1180x760")
-        self.root.minsize(900, 600)
+        self.root.geometry("1380x860")
+        self.root.minsize(1040, 680)
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
@@ -178,6 +184,7 @@ class CleanroomXApp:
         self.status_var = tk.StringVar(value="Ready")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
+        self._configure_style()
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
@@ -187,6 +194,95 @@ class CleanroomXApp:
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
+
+    def _configure_style(self) -> None:
+        """Apply a restrained engineering-workbench theme using stock Tk widgets."""
+        self.root.configure(background="#0b1220")
+        self.root.option_add("*Font", ("Segoe UI", 9))
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure("TFrame", background="#0f172a")
+        style.configure("TLabel", background="#0f172a", foreground="#dbe7f3")
+        style.configure(
+            "Title.TLabel",
+            background="#0b1220",
+            foreground="#f8fafc",
+            font=("Segoe UI", 17, "bold"),
+        )
+        style.configure(
+            "Subtitle.TLabel",
+            background="#0b1220",
+            foreground="#94a3b8",
+            font=("Segoe UI", 9),
+        )
+        style.configure(
+            "TButton",
+            background="#1e293b",
+            foreground="#e2e8f0",
+            borderwidth=0,
+            padding=(10, 6),
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#334155"), ("pressed", "#0ea5e9")],
+            foreground=[("disabled", "#64748b")],
+        )
+        style.configure(
+            "Accent.TButton",
+            background="#0284c7",
+            foreground="#ffffff",
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.map(
+            "Accent.TButton",
+            background=[("active", "#0ea5e9"), ("pressed", "#0369a1")],
+        )
+        style.configure(
+            "TEntry",
+            fieldbackground="#111827",
+            foreground="#e5edf7",
+            insertcolor="#e5edf7",
+            bordercolor="#334155",
+            lightcolor="#334155",
+            darkcolor="#334155",
+        )
+        style.configure(
+            "Treeview",
+            background="#111827",
+            fieldbackground="#111827",
+            foreground="#dbe7f3",
+            rowheight=26,
+            borderwidth=0,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#1e293b",
+            foreground="#f8fafc",
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", "#075985")],
+            foreground=[("selected", "#ffffff")],
+        )
+        style.configure("TNotebook", background="#0f172a", borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            background="#111827",
+            foreground="#94a3b8",
+            padding=(14, 8),
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", "#1e293b"), ("active", "#172033")],
+            foreground=[("selected", "#f8fafc"), ("active", "#e2e8f0")],
+        )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -218,6 +314,15 @@ class CleanroomXApp:
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
+        view_menu.add_command(
+            label="2D Facility Plan",
+            command=lambda: self.notebook.select(self.design_2d_tab),
+        )
+        view_menu.add_command(
+            label="3D Facility Preview",
+            command=lambda: self.notebook.select(self.design_3d_tab),
+        )
+        view_menu.add_separator()
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
         view_menu.add_checkbutton(
             label="Wrap output text",
@@ -237,7 +342,21 @@ class CleanroomXApp:
         self.root.bind("<F5>", lambda event: self.run_current())
 
     def _build_layout(self) -> None:
-        metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
+        brand = ttk.Frame(self.root, padding=(14, 10, 14, 6))
+        brand.pack(fill="x")
+        ttk.Label(brand, text="CleanroomX", style="Title.TLabel").pack(side="left")
+        ttk.Label(
+            brand,
+            text="Design · Simulation · Verification Workbench",
+            style="Subtitle.TLabel",
+        ).pack(side="left", padx=(12, 0), pady=(7, 0))
+        ttk.Label(
+            brand,
+            text=f"v{__version__}",
+            style="Subtitle.TLabel",
+        ).pack(side="right", pady=(7, 0))
+
+        metadata = ttk.Frame(self.root, padding=(12, 6, 12, 8))
         metadata.pack(fill="x")
         ttk.Label(metadata, text="Project").grid(row=0, column=0, sticky="w")
         ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
@@ -250,7 +369,9 @@ class CleanroomXApp:
         ttk.Button(metadata, text="Validate", command=self.validate_current).grid(
             row=0, column=4, padx=3
         )
-        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
+        self.run_button = ttk.Button(
+            metadata, text="Run Analysis", command=self.run_current, style="Accent.TButton"
+        )
         self.run_button.grid(row=0, column=5, padx=3)
         self.cancel_button = ttk.Button(
             metadata, text="Abandon", command=self.cancel_run, state="disabled"
@@ -285,6 +406,32 @@ class CleanroomXApp:
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
 
+        self.design_2d_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.design_2d_tab, text="2D Plan")
+        self.plan_canvas = tk.Canvas(
+            self.design_2d_tab,
+            background=DESIGN_BG,
+            highlightthickness=0,
+            cursor="crosshair",
+        )
+        self.plan_canvas.pack(fill="both", expand=True)
+        self.plan_canvas.bind(
+            "<Configure>", lambda event: self._refresh_design_views()
+        )
+
+        self.design_3d_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.design_3d_tab, text="3D Preview")
+        self.preview3d_canvas = tk.Canvas(
+            self.design_3d_tab,
+            background=DESIGN_BG,
+            highlightthickness=0,
+            cursor="fleur",
+        )
+        self.preview3d_canvas.pack(fill="both", expand=True)
+        self.preview3d_canvas.bind(
+            "<Configure>", lambda event: self._refresh_design_views()
+        )
+
         input_tab = ttk.Frame(self.notebook)
         self.notebook.add(input_tab, text="Input")
         input_notebook = ttk.Notebook(input_tab)
@@ -312,7 +459,19 @@ class CleanroomXApp:
 
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
-        self.input_text = tk.Text(json_tab, wrap="none", undo=True)
+        self.input_text = tk.Text(
+            json_tab,
+            wrap="none",
+            undo=True,
+            background="#0b1220",
+            foreground="#dbe7f3",
+            insertbackground="#f8fafc",
+            selectbackground="#075985",
+            selectforeground="#ffffff",
+            relief="flat",
+            padx=10,
+            pady=10,
+        )
         input_scroll_y = ttk.Scrollbar(json_tab, orient="vertical", command=self.input_text.yview)
         input_scroll_x = ttk.Scrollbar(json_tab, orient="horizontal", command=self.input_text.xview)
         self.input_text.configure(
@@ -324,6 +483,7 @@ class CleanroomXApp:
         json_tab.rowconfigure(0, weight=1)
         json_tab.columnconfigure(0, weight=1)
         self.input_text.bind("<FocusOut>", lambda event: self.refresh_structure(silent=True))
+        self.input_text.bind("<KeyRelease>", lambda event: self._refresh_design_views())
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
@@ -349,7 +509,19 @@ class CleanroomXApp:
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text=title)
-        text = tk.Text(frame, wrap="none", state="disabled")
+        text = tk.Text(
+            frame,
+            wrap="none",
+            state="disabled",
+            background="#0b1220",
+            foreground="#dbe7f3",
+            insertbackground="#f8fafc",
+            selectbackground="#075985",
+            selectforeground="#ffffff",
+            relief="flat",
+            padx=10,
+            pady=10,
+        )
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
         text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -588,11 +760,27 @@ class CleanroomXApp:
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
 
+    def _refresh_design_views(self, payload=None) -> None:
+        if not hasattr(self, "plan_canvas") or not hasattr(self, "preview3d_canvas"):
+            return
+        if payload is None:
+            text = self.input_text.get("1.0", "end-1c").strip()
+            if not text:
+                payload = {}
+            else:
+                try:
+                    payload = _strict_json_loads(text)
+                except (json.JSONDecodeError, ValueError):
+                    payload = {}
+        draw_plan_2d(self.plan_canvas, payload)
+        draw_preview_3d(self.preview3d_canvas, payload)
+
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():
             self.structure_tree.delete(item)
         text = self.input_text.get("1.0", "end-1c").strip()
         if not text:
+            self._refresh_design_views({})
             return
         try:
             payload = _strict_json_loads(text)
@@ -604,12 +792,14 @@ class CleanroomXApp:
                     else str(exc)
                 )
                 messagebox.showerror("Invalid JSON", detail, parent=self.root)
+            self._refresh_design_views({})
             return
         for index, (path, value, unit) in enumerate(flatten_json(payload)):
             display = value if len(value) <= 160 else value[:157] + "..."
             self.structure_tree.insert(
                 "", "end", iid=f"row-{index}", text=path, values=(display, unit)
             )
+        self._refresh_design_views(payload)
 
     def new_project(self) -> None:
         if self._running:
@@ -977,7 +1167,7 @@ class CleanroomXApp:
         )
         self._draw_plot()
         if select_results:
-            self.notebook.select(1)
+            self.notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

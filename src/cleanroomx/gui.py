@@ -595,8 +595,17 @@ class CleanroomXApp:
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
-        self.result_text = self._add_text_tab("Results")
-        self.report_text = self._add_text_tab("Report")
+        self.result_text = self._add_text_tab(
+            "Results",
+            actions=(
+                ("Export Result", self.export_result_json),
+                ("Export Bundle", self.export_run_bundle_json),
+            ),
+        )
+        self.report_text = self._add_text_tab(
+            "Report",
+            actions=(("Export Markdown", self.export_report_markdown),),
+        )
         self.diagnostics_text = self._add_text_tab("Diagnostics")
 
         plot_tab = ttk.Frame(self.notebook)
@@ -617,9 +626,21 @@ class CleanroomXApp:
         )
         status.pack(fill="x", side="bottom")
 
-    def _add_text_tab(self, title: str) -> tk.Text:
+    def _add_text_tab(self, title: str, actions=()) -> tk.Text:
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text=title)
+
+        text_row = 0
+        if actions:
+            toolbar = ttk.Frame(frame, style="Surface.TFrame", padding=(8, 5))
+            toolbar.grid(row=0, column=0, columnspan=2, sticky="ew")
+            ttk.Label(toolbar, text=title.upper(), style="Section.TLabel").pack(side="left")
+            for label, command in reversed(actions):
+                ttk.Button(toolbar, text=label, command=command).pack(
+                    side="right", padx=(4, 0)
+                )
+            text_row = 1
+
         text = tk.Text(
             frame,
             wrap="none",
@@ -635,10 +656,10 @@ class CleanroomXApp:
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
         text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
-        text.grid(row=0, column=0, sticky="nsew")
-        yscroll.grid(row=0, column=1, sticky="ns")
-        xscroll.grid(row=1, column=0, sticky="ew")
-        frame.rowconfigure(0, weight=1)
+        text.grid(row=text_row, column=0, sticky="nsew")
+        yscroll.grid(row=text_row, column=1, sticky="ns")
+        xscroll.grid(row=text_row + 1, column=0, sticky="ew")
+        frame.rowconfigure(text_row, weight=1)
         frame.columnconfigure(0, weight=1)
         return text
 

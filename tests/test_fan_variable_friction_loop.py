@@ -477,9 +477,17 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
     assert alternatives[0][
         "selected_airflow_to_feature_interval_gap_m3_h"
     ] == pytest.approx(1500.0)
+    supplied_span = selected["supplied_fan_curve_airflow_span_m3_h"]
+    assert supplied_span > 0.0
+    assert alternatives[0][
+        "selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span"
+    ] == pytest.approx(1500.0 / supplied_span)
     assert selected[
         "nearest_alternative_candidate_airflow_interval_gap_m3_h"
     ] == pytest.approx(1500.0)
+    assert selected[
+        "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+    ] == pytest.approx(1500.0 / supplied_span)
     assert len(selected["nearest_alternative_candidate_features"]) == 1
     assert (
         selected["selected_airflow_overlaps_alternative_candidate_interval"]

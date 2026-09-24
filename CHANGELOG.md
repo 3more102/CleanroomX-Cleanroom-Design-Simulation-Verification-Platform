@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.73 iteration-limit bisection decision-trace provenance — 2026-09-24
+
+- Extends bounded-bisection decision traces to searches that exhaust the configured operating-point iteration budget before reaching the pressure-residual tolerance.
+- Retains every completed midpoint evaluation for iteration-limit cases while keeping the result explicitly `non_converged` and leaving `fan_operating_point` unset.
+- Makes terminal trace auditing outcome-aware: solved pressure-residual termination requires one final `T` decision, while iteration-limit termination requires a non-empty L/H-only trace with no fabricated tolerance acceptance.
+- Aggregates solved and iteration-limit trace evidence across nonlinear uncertainty corners, including separate coverage counts, exact length/sign/midpoint/terminal-outcome violation corner indices, and tied provenance for maximum trace length.
+- Surfaces the expanded trace audit in standalone fan-loop, nonlinear uncertainty, and engineering-dossier Markdown.
+- Adds deterministic solver, uncertainty, and dossier regression coverage while preserving all no-extrapolation and unresolved-case withholding rules.
+- Treats the retained trace strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, a continuous root guarantee, stability/stall/surge evidence, a manufacturer operating limit, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.73.0.
+
 ## v0.72 bounded-bisection decision-trace provenance — 2026-09-24
 
 - Retains every midpoint evaluation used by a successful bounded fan/system bisection solve, including the active signed-residual bracket, midpoint residual, normalized bracket width, and exact endpoint-replacement or tolerance-acceptance decision.

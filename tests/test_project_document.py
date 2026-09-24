@@ -74,6 +74,19 @@ def test_project_loader_rejects_duplicate_analysis_ids():
         })
 
 
+def test_project_loader_rejects_non_finite_json(tmp_path):
+    path = tmp_path / "nonfinite.cleanroomx.json"
+    path.write_text(
+        '{"schema":"cleanroomx.project","schema_version":1,'
+        '"project":{"name":"Bad"},"analyses":['
+        '{"id":"a","name":"A","kind":"room_verification","input":{"value":NaN}}'
+        '],"active_analysis_id":"a"}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ProjectFormatError, match="non-finite"):
+        load_project_document(path)
+
+
 def test_project_loader_reports_invalid_json(tmp_path):
     path = tmp_path / "bad.cleanroomx.json"
     path.write_text("{broken", encoding="utf-8")

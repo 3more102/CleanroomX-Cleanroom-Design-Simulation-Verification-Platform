@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.99 desktop lifecycle and execution provenance — 2026-09-24
+
+- Continues from the integrated v0.99 registry-integrity runtime on `main` without replacing validated solver workflows.
+- Keeps the desktop application busy after **Abandon** until the backend worker exits, preventing overlapping backend analyses while suppressing abandoned results/errors.
+- Adds deterministic SHA-256 identity for every submitted application input using sorted compact UTF-8 JSON canonicalization.
+- Records each direct consistency/dossier file dependency by declared field/path, byte size, and SHA-256 both before and after backend execution.
+- Reports per-dependency and aggregate stability evidence without changing engineering acceptance semantics.
+- Adds `application_execution_provenance` to Diagnostics for every successful application workflow and adds **Export Run Bundle JSON** for the complete strict-JSON analysis envelope.
+- Adds focused regressions for registry integrity, abandoned-worker exclusivity, canonical input hashing, exact dependency identities, dossier dependency coverage, every catalog workflow, and GUI run-bundle export.
+- Synchronizes package/runtime/demo/CI/docs metadata at v0.99.0 while retaining all v0.91-v0.95 compatibility gates, full Python 3.11/3.12/3.13 suite, CLI smoke, and real Tk/Xvfb GUI smoke.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

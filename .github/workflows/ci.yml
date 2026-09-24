@@ -110,7 +110,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb tk
-      - name: Run v0.99.1 desktop GUI smoke from installed wheel
+      - name: Run v0.100 desktop GUI smoke from installed wheel
         if: matrix.python-version == '3.13'
         run: |
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check

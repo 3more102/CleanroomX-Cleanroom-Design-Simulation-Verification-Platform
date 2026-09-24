@@ -2639,7 +2639,7 @@ def _operating_point_search_resolution_summary(
             "audits implementation invariants using the unrounded live "
             "bisection state: strict residual-sign bracketing, selected "
             "midpoint centering, and the absolute discrepancy between actual "
-            "and iteration-implied binary width contraction. v0.68 preserves "
+            "and iteration-implied binary width contraction. v0.70 preserves "
             "the remaining signed bracket after a bisection iteration limit, "
             "including its completed-step contraction audit, without "
             "accepting or fabricating an operating point."

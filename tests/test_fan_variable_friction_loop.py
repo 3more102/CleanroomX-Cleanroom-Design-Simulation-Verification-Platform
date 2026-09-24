@@ -743,6 +743,132 @@ def test_bisection_trace_pressure_state_audit_detects_corruption() -> None:
     assert fixed_audit["all_trace_pressure_state_consistent"] is False
 
 
+def test_independent_residual_replay_detects_self_consistent_pressure_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Independent residual replay",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    trace = evidence["bisection_trace"]
+    audit = evidence["bisection_trace_audit"]
+    assert trace is not None
+    assert audit is not None
+    assert audit["pressure_state_evidence_complete"] is True
+    assert audit["all_trace_pressure_state_consistent"] is True
+    assert audit["residual_replay_available"] is True
+    assert audit["residual_replay_check_count"] == len(trace)
+    assert audit[
+        "all_recorded_low_residuals_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_recorded_high_residuals_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_recorded_midpoint_residuals_match_independent_replay"
+    ] is True
+    assert audit["all_trace_residuals_match_independent_replay"] is True
+    assert audit[
+        "maximum_absolute_trace_residual_replay_error_pa"
+    ] <= 1e-9
+
+    corrupted = [dict(step) for step in trace]
+    terminal = corrupted[-1]
+    assert terminal["decision"] == "accept_pressure_tolerance"
+    tolerance = study.operating_pressure_tolerance_pa
+    original_residual = float(
+        terminal["midpoint_fan_minus_system_pressure_pa"]
+    )
+    replacement_residual = (
+        -0.9 * tolerance if original_residual >= 0.0 else 0.9 * tolerance
+    )
+    residual_delta = replacement_residual - original_residual
+    terminal["midpoint_fan_minus_system_pressure_pa"] = replacement_residual
+    terminal["midpoint_fan_pressure_pa"] = (
+        float(terminal["midpoint_fan_pressure_pa"]) + residual_delta
+    )
+
+    segment_index = evidence["supplied_segment_index"]
+    corrupted_audit = _bisection_decision_trace_audit(
+        corrupted,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=tolerance,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+    )
+    assert corrupted_audit is not None
+    assert corrupted_audit["all_trace_raw_state_consistent"] is True
+    assert corrupted_audit["all_trace_pressure_state_consistent"] is True
+    assert corrupted_audit[
+        "all_decisions_match_midpoint_residual_semantics"
+    ] is True
+    assert corrupted_audit[
+        "trace_origin_to_terminal_replay_consistent"
+    ] is True
+    assert corrupted_audit[
+        "all_trace_residuals_match_independent_replay"
+    ] is False
+    assert corrupted_audit[
+        "maximum_absolute_trace_residual_replay_error_pa"
+    ] > 1e-9
+    assert corrupted_audit["residual_replay_checks"][-1][
+        "midpoint_residual_matches_independent_replay"
+    ] is False
+
+    limit_study = FanVariableFrictionLoopStudy(
+        name="Independent residual replay iteration limit",
+        fan_curve=study.fan_curve,
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+        operating_pressure_tolerance_pa=1e-15,
+        max_operating_iterations=1,
+    )
+    limited = solve_fan_variable_friction_loop(limit_study)
+    assert limited["status"] == "non_converged"
+    limit_evidence = limited["operating_point_search_evidence"]
+    assert limit_evidence is not None
+    limit_trace = limit_evidence["bisection_trace"]
+    limit_audit = limit_evidence["bisection_trace_audit"]
+    assert limit_trace is not None
+    assert limit_audit is not None
+    assert limit_audit["all_trace_pressure_state_consistent"] is True
+    assert limit_audit["residual_replay_available"] is True
+    assert limit_audit["residual_replay_check_count"] == len(limit_trace)
+    assert limit_audit[
+        "all_trace_residuals_match_independent_replay"
+    ] is True
+    assert limit_audit[
+        "maximum_absolute_trace_residual_replay_error_pa"
+    ] <= 1e-9
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Independent fan/system residual replay available: **True**" in report
+    assert (
+        "Every retained trace residual matches independent fan/system replay: "
+        "**True**"
+        in report
+    )
+    assert "Maximum absolute trace residual-replay error" in report
+
+
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
     result = solve_fan_variable_friction_loop(
         FanVariableFrictionLoopStudy(

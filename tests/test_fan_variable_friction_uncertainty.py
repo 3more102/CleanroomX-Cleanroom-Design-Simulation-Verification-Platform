@@ -2405,3 +2405,41 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Bisection corners with invariant evidence" in report
     assert "Strict sign-bracket violations" in report
     assert "Maximum absolute binary-width consistency error" in report
+def test_bisection_iteration_limit_evidence_propagates_when_unsolved() -> None:
+    data = _example_data()
+    data["fixed_pressure_pa"] = {"value": 20.0, "uncertainty_abs": 0.0}
+    data["edge_local_loss_uncertainty"] = {}
+    data["solver"]["operating_pressure_tolerance_pa"] = 1e-12
+    data["solver"]["max_operating_iterations"] = 1
+
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    assert result["status"] == "indeterminate"
+    assert result["nominal_status"] == "non_converged"
+    assert result["corner_count"] == 1
+    assert result["solved_corner_count"] == 0
+    nominal = result["nominal_terminal_bisection_failure_evidence"]
+    assert nominal is not None
+    summary = result["operating_point_search_resolution_summary"]
+    assert summary["bisection_iteration_limit_corner_count"] == 1
+    assert summary["bisection_iteration_limit_corner_indices"] == [0]
+    assert summary[
+        "bisection_iteration_limit_strict_sign_change_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_iteration_limit_endpoint_violation_corner_indices"
+    ] == []
+    assert summary[
+        "maximum_iteration_limit_terminal_bracket_half_width_m3_h"
+    ] is not None
+    assert result["corners"][0][
+        "terminal_bisection_failure_evidence"
+    ] is not None
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Bisection iteration-limit corners" in report
+    assert "Nominal terminal iteration-limit bracket" in report
+    assert "Iteration-limit terminal bracket half-width" in report
+

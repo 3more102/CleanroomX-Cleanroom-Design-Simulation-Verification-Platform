@@ -1082,6 +1082,22 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     assert audit[
         "all_trace_pressure_components_match_independent_replay"
     ] is True
+    assert audit["network_state_replay_available"] is True
+    assert audit["network_state_replay_evidence_complete"] is True
+    assert audit["network_state_replay_check_count"] == len(trace)
+    assert audit[
+        "all_low_network_states_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_midpoint_network_states_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_high_network_states_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_trace_network_states_match_independent_replay"
+    ] is True
+    assert audit["network_state_replay_violation_iterations"] == []
 
     corrupted = [dict(step) for step in trace]
     delta_pa = 1.0
@@ -1138,6 +1154,77 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     ] is True
     assert first_check["low"][
         "fan_pressure_matches_independent_replay"
+    ] is False
+
+
+def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Network-state replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    assert trace
+
+    original_sha256 = trace[0]["low_network_state_sha256"]
+    assert len(original_sha256) == 64
+    trace[0]["low_network_state_sha256"] = "0" * 64
+
+    segment_index = evidence["supplied_segment_index"]
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+    )
+    assert audit is not None
+    assert audit["all_trace_raw_state_consistent"] is True
+    assert audit["all_trace_pressure_state_consistent"] is True
+    assert audit["all_trace_residuals_match_independent_replay"] is True
+    assert audit[
+        "all_trace_pressure_components_match_independent_replay"
+    ] is True
+    assert audit["network_state_replay_evidence_complete"] is True
+    assert audit[
+        "all_low_network_states_match_independent_replay"
+    ] is False
+    assert audit[
+        "all_midpoint_network_states_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_high_network_states_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_trace_network_states_match_independent_replay"
+    ] is False
+    assert audit["network_state_replay_violation_iterations"] == [1]
+    first_check = audit["network_state_replay_checks"][0]
+    assert first_check["low"][
+        "recorded_network_state_sha256"
+    ] == "0" * 64
+    assert first_check["low"][
+        "recomputed_network_state_sha256"
+    ] == original_sha256
+    assert first_check["low"][
+        "network_state_matches_independent_replay"
     ] is False
 
 

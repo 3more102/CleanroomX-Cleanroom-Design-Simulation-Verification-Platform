@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.99.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current integrated release is **CleanroomX v0.100.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, preserves the v0.99 application-registry integrity gate, and hardens file-reference path context in the completed desktop application.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 additionally validates application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, every declared callable binding, and the installed desktop entry point under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.100 retains the v0.99 registry-contract validation, adds file-reference path-context regressions, and launches the installed desktop entry point under Xvfb on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -26,6 +26,13 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
+| v0.100 | file-reference path-context provenance with unsaved absolute dossiers and Save As stale-result invalidation |
+
+### v0.100 file-reference path-context provenance
+
+v0.100 closes two desktop workflow correctness gaps without changing engineering calculations. Engineering dossiers can execute before the first project save when every referenced analysis path is absolute; relative references still require an explicit saved-project/base directory and fail validation otherwise. This makes validation and execution agree instead of accepting an absolute-reference dossier and then rejecting it only because the GUI project has no path yet.
+
+When **Save Project As** changes the project directory, CleanroomX now clears all in-memory analysis results before they can be exported under a different relative-path context. Inputs remain unchanged and can be rerun from the new location. Saving under a different filename in the same directory keeps the same path context.
 
 ### v0.99 application registry integrity
 

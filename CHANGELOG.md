@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.80 bisection trace residual-arithmetic audit — 2026-09-24
+
+- Retains midpoint fan pressure and total system pressure for every bounded-bisection decision-trace record.
+- Independently recomputes each retained midpoint fan-minus-system residual by subtracting those pressure components and compares it with the stored residual using an explicit rounding-aware tolerance.
+- Reports trace-level component coverage, exact mismatch iterations, and maximum absolute residual-component arithmetic error.
+- Propagates exact residual-component coverage/mismatch violation corner indices and worst-error provenance through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Adds direct corruption-detection regression coverage while preserving v0.79 raw-state checks, v0.78 decision semantics, origin/transition replay, iteration-limit handling, and no-extrapolation behavior.
+- Treats the audit strictly as numerical implementation provenance; it is not physical airflow uncertainty, a fan-model validation, interpolation-error bound, root uniqueness/stability evidence, stall/surge evidence, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from every retained bounded-bisection trace record instead of trusting stored audit booleans.

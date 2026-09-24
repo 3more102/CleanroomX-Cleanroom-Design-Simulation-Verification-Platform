@@ -13,6 +13,15 @@ from tkinter import ttk
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+DEVICE_COLORS = {
+    "door": "#94a3b8",
+    "supply": "#38bdf8",
+    "return": "#818cf8",
+    "exhaust": "#f97316",
+    "ffu": "#22c55e",
+    "equipment": "#f59e0b",
+    "sensor": "#e879f9",
+}
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -279,6 +288,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._show_labels = tk.BooleanVar(value=True)
+        self._show_pressure = tk.BooleanVar(value=True)
+        self._show_devices = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._summary_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
@@ -316,7 +328,16 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Reset 3D", command=self.reset_3d).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+            side="left", padx=(6, 2)
+        )
+        ttk.Checkbutton(toolbar, text="Labels", variable=self._show_labels, command=self.redraw).pack(
+            side="left", padx=2
+        )
+        ttk.Checkbutton(toolbar, text="Pressure", variable=self._show_pressure, command=self.redraw).pack(
+            side="left", padx=2
+        )
+        ttk.Checkbutton(toolbar, text="Devices", variable=self._show_devices, command=self.redraw).pack(
+            side="left", padx=(2, 6)
         )
         ttk.Label(toolbar, text="Wheel: zoom  ·  Right-drag: pan  ·  Drag corners: resize").pack(
             side="left", padx=(8, 2)
@@ -406,6 +427,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(header3, text="↓", width=3, command=lambda: self.tilt_3d(-5)).pack(side="right", padx=2)
         ttk.Button(header3, text="↑", width=3, command=lambda: self.tilt_3d(5)).pack(side="right", padx=2)
         ttk.Button(header3, text="Reset", command=self.reset_3d).pack(side="right", padx=2)
+        ttk.Button(header3, text="Front", command=lambda: self.set_3d_preset("front")).pack(side="right", padx=2)
+        ttk.Button(header3, text="Top", command=lambda: self.set_3d_preset("top")).pack(side="right", padx=2)
+        ttk.Button(header3, text="ISO", command=lambda: self.set_3d_preset("iso")).pack(side="right", padx=2)
         self.canvas_3d = tk.Canvas(three_d, background="#111820", highlightthickness=1)
         self.canvas_3d.pack(fill="both", expand=True)
 
@@ -527,9 +551,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _update_summary(self) -> None:
-        room_count = len(self.layout["rooms"])
+        rooms = self.layout["rooms"]
+        room_count = len(rooms)
         device_count = len(self.layout["devices"])
-        self._summary_var.set(f"{room_count} room{'s' if room_count != 1 else ''} · {device_count} device{'s' if device_count != 1 else ''}")
+        total_area = sum(room["length_m"] * room["width_m"] for room in rooms)
+        total_volume = sum(
+            room["length_m"] * room["width_m"] * room["height_m"] for room in rooms
+        )
+        self._summary_var.set(
+            f"{room_count} room{'s' if room_count != 1 else ''} · "
+            f"{device_count} device{'s' if device_count != 1 else ''} · "
+            f"{total_area:.1f} m² · {total_volume:.1f} m³"
+        )
 
     def clear_selection(self) -> None:
         self.selected = None
@@ -744,20 +777,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
             outline = "#1d4ed8" if selected else "#34495e"
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = (
+                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                if self._show_pressure.get()
+                else "#eef2f7"
+            )
             canvas.create_rectangle(
                 x0, y0, x1, y1,
                 fill=fill, outline=outline, width=3 if selected else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
-            pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
-            canvas.create_text(
-                (x0 + x1) / 2,
-                (y0 + y1) / 2,
-                text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
-                justify="center",
-                tags=(f"room:{room['id']}", "room"),
-            )
+            if self._show_labels.get() or selected:
+                pressure_text = (
+                    ""
+                    if room.get("pressure_pa") is None or not self._show_pressure.get()
+                    else f"\n{room['pressure_pa']:g} Pa"
+                )
+                canvas.create_text(
+                    (x0 + x1) / 2,
+                    (y0 + y1) / 2,
+                    text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
+                    justify="center",
+                    fill="#0f172a",
+                    tags=(f"room:{room['id']}", "room"),
+                )
             if selected:
                 handle_size = 5
                 for handle, hx, hy in (
@@ -786,32 +829,41 @@ class SpatialDesignWorkspace(ttk.Frame):
             "equipment": "Q",
             "sensor": "●",
         }
-        for device in self.layout["devices"]:
-            x, y = self._world_to_canvas(device["x_m"], device["y_m"])
-            selected = self.selected == _Hit("device", device["id"])
-            radius = 9 if selected else 7
-            canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
-                width=3 if selected else 2,
-                tags=(f"device:{device['id']}", "device"),
-            )
-            canvas.create_text(
-                x, y, text=symbols.get(device["type"], "?"),
-                tags=(f"device:{device['id']}", "device"),
-            )
-            if selected:
-                canvas.create_text(
-                    x,
-                    y - 18,
-                    text=device.get("name", device["type"]),
-                    fill="#1f2937",
-                    font=("TkDefaultFont", 9, "bold"),
+        if self._show_devices.get():
+            for device in self.layout["devices"]:
+                x, y = self._world_to_canvas(device["x_m"], device["y_m"])
+                selected = self.selected == _Hit("device", device["id"])
+                radius = 9 if selected else 7
+                fill = DEVICE_COLORS.get(device["type"], "#cbd5e1")
+                canvas.create_oval(
+                    x - radius, y - radius, x + radius, y + radius,
+                    fill=fill, outline="#0f172a" if selected else "#334155",
+                    width=3 if selected else 2,
                     tags=(f"device:{device['id']}", "device"),
                 )
+                canvas.create_text(
+                    x,
+                    y,
+                    text=symbols.get(device["type"], "?"),
+                    fill="#0f172a",
+                    font=("TkDefaultFont", 8, "bold"),
+                    tags=(f"device:{device['id']}", "device"),
+                )
+                if selected or self._show_labels.get():
+                    canvas.create_text(
+                        x,
+                        y - 18,
+                        text=device.get("name", device["type"]),
+                        fill="#1f2937",
+                        font=("TkDefaultFont", 8, "bold" if selected else "normal"),
+                        tags=(f"device:{device['id']}", "device"),
+                    )
 
-        if pressures:
+        if pressures and self._show_pressure.get():
             self._draw_pressure_legend(canvas, pmin, pmax, dark=False)
+        if self.layout["devices"] and self._show_devices.get():
+            self._draw_device_legend(canvas, dark=False)
+        self._draw_2d_hud(canvas)
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -821,6 +873,69 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 fill="#667788",
             )
+
+    def _draw_2d_hud(self, canvas: tk.Canvas) -> None:
+        """Draw compact CAD-style view state and a scale bar."""
+        zoom = self.layout["view"]["zoom_2d"]
+        grid = self.layout["grid_m"]
+        canvas.create_rectangle(10, 10, 178, 36, fill="#ffffff", outline="#cbd5e1", tags=("hud",))
+        canvas.create_text(
+            18,
+            23,
+            anchor="w",
+            text=f"2D  ·  {zoom * 100:.0f}%  ·  grid {grid:g} m",
+            fill="#334155",
+            font=("TkDefaultFont", 8, "bold"),
+            tags=("hud",),
+        )
+
+        scale = self._scale_2d()
+        target_px = 90.0
+        raw_m = target_px / max(scale, 1e-9)
+        candidates = (0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0)
+        scale_m = min(candidates, key=lambda value: abs(value - raw_m))
+        length_px = scale_m * scale
+        x0 = 18.0
+        y = max(24.0, canvas.winfo_height() - 22.0)
+        canvas.create_line(x0, y, x0 + length_px, y, fill="#334155", width=3, tags=("hud",))
+        canvas.create_line(x0, y - 4, x0, y + 4, fill="#334155", width=2, tags=("hud",))
+        canvas.create_line(x0 + length_px, y - 4, x0 + length_px, y + 4, fill="#334155", width=2, tags=("hud",))
+        canvas.create_text(
+            x0 + length_px / 2,
+            y - 9,
+            text=f"{scale_m:g} m",
+            fill="#334155",
+            font=("TkDefaultFont", 8),
+            tags=("hud",),
+        )
+
+    def _draw_device_legend(self, canvas: tk.Canvas, *, dark: bool) -> None:
+        present = [kind for kind in DEVICE_TYPES if any(d["type"] == kind for d in self.layout["devices"])]
+        if not present:
+            return
+        fg = "#dbeafe" if dark else "#334155"
+        bg = "#18232f" if dark else "#ffffff"
+        outline = "#334b60" if dark else "#cbd5e1"
+        x0 = 12
+        y0 = 48
+        width = 120
+        row_h = 18
+        height = 10 + row_h * len(present)
+        canvas.create_rectangle(x0, y0, x0 + width, y0 + height, fill=bg, outline=outline, tags=("legend",))
+        y = y0 + 9
+        for kind in present:
+            color = DEVICE_COLORS.get(kind, "#cbd5e1")
+            canvas.create_oval(x0 + 8, y - 5, x0 + 18, y + 5, fill=color, outline=fg, tags=("legend",))
+            canvas.create_text(
+                x0 + 25,
+                y,
+                anchor="w",
+                text=kind.upper(),
+                fill=fg,
+                font=("TkDefaultFont", 7, "bold"),
+                tags=("legend",),
+            )
+            y += row_h
 
     def _draw_pressure_legend(
         self,
@@ -924,7 +1039,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x1, y1, z),
                 self._project_3d(x0, y1, z),
             ]
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = (
+                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                if self._show_pressure.get()
+                else "#8fa3b8"
+            )
             selected = self.selected == _Hit("room", room["id"])
             outline = "#7dd3fc" if selected else "#c8d5e3"
             tag = f"room:{room['id']}"
@@ -937,35 +1056,60 @@ class SpatialDesignWorkspace(ttk.Frame):
                 *sum((base[2], base[3], top[3], top[2]), ()),
                 fill="#53687c", outline=outline, tags=(tag, "room3d")
             )
-            canvas.create_text(
-                *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=room["name"],
-                fill="#f0f6fc",
-                tags=(tag, "room3d"),
-            )
+            if self._show_labels.get() or selected:
+                canvas.create_text(
+                    *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
+                    text=room["name"],
+                    fill="#f0f6fc",
+                    font=("TkDefaultFont", 8, "bold" if selected else "normal"),
+                    tags=(tag, "room3d"),
+                )
 
-        for device in self.layout["devices"]:
-            x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
+        if self._show_devices.get():
+                x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
-            radius = 5 if selected else 4
+            radius = 6 if selected else 4
+            fill = DEVICE_COLORS.get(device["type"], "#fbbf24")
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
+                fill=fill, outline="#ffffff" if selected else "#dbeafe",
                 width=2, tags=(tag, "device3d"),
             )
-            if selected:
+            if selected or self._show_labels.get():
                 canvas.create_text(
                     x,
                     y - 14,
                     text=device.get("name", device["type"]),
                     fill="#f8fafc",
-                    font=("TkDefaultFont", 8, "bold"),
+                    font=("TkDefaultFont", 8, "bold" if selected else "normal"),
                     tags=(tag, "device3d"),
                 )
 
-        if pressures:
+        canvas.create_text(*axis_x, text="  X", anchor="w", fill="#fb7185", font=("TkDefaultFont", 8, "bold"))
+        canvas.create_text(*axis_y, text="  Y", anchor="w", fill="#4ade80", font=("TkDefaultFont", 8, "bold"))
+        canvas.create_text(*axis_z, text="  Z", anchor="w", fill="#60a5fa", font=("TkDefaultFont", 8, "bold"))
+
+        if pressures and self._show_pressure.get():
             self._draw_pressure_legend(canvas, pmin, pmax, dark=True)
+        if self.layout["devices"] and self._show_devices.get():
+            self._draw_device_legend(canvas, dark=True)
+        self._draw_3d_hud(canvas)
+
+    def _draw_3d_hud(self, canvas: tk.Canvas) -> None:
+        az = self.layout["view"]["azimuth_deg"] % 360
+        el = self.layout["view"]["elevation_deg"]
+        zoom = self.layout["view"]["zoom_3d"]
+        canvas.create_rectangle(10, 10, 220, 36, fill="#18232f", outline="#334b60", tags=("hud",))
+        canvas.create_text(
+            18,
+            23,
+            anchor="w",
+            text=f"3D  ·  az {az:.0f}°  ·  el {el:.0f}°  ·  {zoom * 100:.0f}%",
+            fill="#dbeafe",
+            font=("TkDefaultFont", 8, "bold"),
+            tags=("hud",),
+        )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:
@@ -1112,6 +1256,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["elevation_deg"] = max(
             5.0, min(75.0, self.layout["view"]["elevation_deg"] + delta)
         )
+        self._draw_3d()
+
+    def set_3d_preset(self, preset: str) -> None:
+        presets = {
+            "iso": (35.0, 28.0),
+            "top": (0.0, 75.0),
+            "front": (0.0, 5.0),
+        }
+        if preset not in presets:
+            return
+        azimuth, elevation = presets[preset]
+        self.layout["view"]["azimuth_deg"] = azimuth
+        self.layout["view"]["elevation_deg"] = elevation
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
+        self._status_setter(f"3D view preset: {preset.upper()}")
         self._draw_3d()
 
     def reset_3d(self) -> None:

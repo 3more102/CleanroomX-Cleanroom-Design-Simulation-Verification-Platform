@@ -1237,6 +1237,78 @@ def _bisection_decision_trace_audit(
             elif decision == "replace_high_endpoint":
                 replay_high_airflow = replay_midpoint_airflow
 
+    pressure_component_replay_violations = []
+    pressure_component_replay_candidates = []
+    component_specs = (
+        (
+            "fan",
+            "recorded_fan_pressure_pa",
+            "recomputed_fan_pressure_pa",
+            "absolute_fan_pressure_replay_error_pa",
+            "fan_pressure_matches_independent_replay",
+        ),
+        (
+            "loop_network",
+            "recorded_loop_network_pressure_pa",
+            "recomputed_loop_network_pressure_pa",
+            "absolute_loop_pressure_replay_error_pa",
+            "loop_pressure_matches_independent_replay",
+        ),
+        (
+            "system",
+            "recorded_system_pressure_pa",
+            "recomputed_system_pressure_pa",
+            "absolute_system_pressure_replay_error_pa",
+            "system_pressure_matches_independent_replay",
+        ),
+    )
+    for replay_check in pressure_component_replay_checks:
+        iteration = int(replay_check["iteration"])
+        for position in ("low", "midpoint", "high"):
+            position_check = replay_check[position]
+            for (
+                component,
+                recorded_key,
+                recomputed_key,
+                error_key,
+                matches_key,
+            ) in component_specs:
+                witness = {
+                    "iteration": iteration,
+                    "position": position,
+                    "component": component,
+                    "recorded_pressure_pa": position_check[recorded_key],
+                    "recomputed_pressure_pa": position_check[recomputed_key],
+                    "absolute_error_pa": position_check[error_key],
+                }
+                pressure_component_replay_candidates.append(witness)
+                if not position_check[matches_key]:
+                    pressure_component_replay_violations.append(witness)
+
+    maximum_pressure_component_replay_error = (
+        max(
+            witness["absolute_error_pa"]
+            for witness in pressure_component_replay_candidates
+        )
+        if pressure_component_replay_candidates
+        else None
+    )
+    maximum_pressure_component_replay_error_witnesses = (
+        [
+            witness
+            for witness in pressure_component_replay_candidates
+            if math.isclose(
+                witness["absolute_error_pa"],
+                maximum_pressure_component_replay_error,
+                rel_tol=0.0,
+                abs_tol=1e-15,
+            )
+        ]
+        if maximum_pressure_component_replay_error is not None
+        and maximum_pressure_component_replay_error > 0.0
+        else []
+    )
+
     decision_semantic_checks = []
     tolerance = float(operating_pressure_tolerance_pa)
     for step in trace:
@@ -1838,14 +1910,38 @@ def _bisection_decision_trace_audit(
             else None
         ),
         "maximum_absolute_trace_pressure_component_replay_error_pa": (
-            max(
-                check[
-                    "maximum_absolute_pressure_component_replay_error_pa"
-                ]
-                for check in pressure_component_replay_checks
+            maximum_pressure_component_replay_error
+        ),
+        "pressure_component_replay_violation_count": len(
+            pressure_component_replay_violations
+        ),
+        "pressure_component_replay_violation_iterations": sorted(
+            {
+                witness["iteration"]
+                for witness in pressure_component_replay_violations
+            }
+        ),
+        "pressure_component_replay_violation_positions": [
+            position
+            for position in ("low", "midpoint", "high")
+            if any(
+                witness["position"] == position
+                for witness in pressure_component_replay_violations
             )
-            if pressure_component_replay_checks
-            else None
+        ],
+        "pressure_component_replay_violation_components": [
+            component
+            for component in ("fan", "loop_network", "system")
+            if any(
+                witness["component"] == component
+                for witness in pressure_component_replay_violations
+            )
+        ],
+        "pressure_component_replay_violations": (
+            pressure_component_replay_violations
+        ),
+        "maximum_trace_pressure_component_replay_error_witnesses": (
+            maximum_pressure_component_replay_error_witnesses
         ),
         "pressure_component_replay_checks": (
             pressure_component_replay_checks
@@ -1959,7 +2055,10 @@ def _bisection_decision_trace_audit(
             "reconstructs the active bisection states from the selected "
             "supplied fan segment, freshly re-solves the nonlinear loop at "
             "each low/high/midpoint airflow, and checks retained residuals "
-            "against that independent fan/system evaluation. The decision-semantics audit "
+            "against that independent fan/system evaluation. The independent "
+            "pressure-component replay additionally records exact violating "
+            "iteration/position/component tuples and tied maximum-error "
+            "witnesses. The decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "

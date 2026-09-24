@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.84 exact pressure-component replay violation provenance — 2026-09-24
+
+- Adds deterministic violation records for every independent pressure-component replay mismatch with exact bisection iteration, bracket position (low/midpoint/high), pressure component (fan/loop-network/system), recorded value, independently recomputed value, and absolute error.
+- Preserves tied maximum-error witnesses so the worst replay discrepancy can be traced to the exact retained component state instead of only a scalar maximum.
+- Propagates exact pressure-component replay violation details, aggregate violation counts, and tied maximum-error witnesses across evaluated nonlinear uncertainty corners.
+- Extends standalone and uncertainty Markdown reports with the new violation/witness provenance while preserving all v0.83 compatibility aliases and solver behavior.
+- No engineering acceptance criteria, root-selection policy, interpolation behavior, or numerical tolerance changed; this is audit/provenance hardening only.
+- Bumped package/runtime metadata to v0.84.0.
+
+
 ## v0.83 full-bracket pressure-component replay — 2026-09-24
 
 - Retains low and high endpoint fan pressure, nonlinear loop-network pressure, and total system pressure in every bounded-bisection trace step, complementing the v0.82 midpoint pressure state.

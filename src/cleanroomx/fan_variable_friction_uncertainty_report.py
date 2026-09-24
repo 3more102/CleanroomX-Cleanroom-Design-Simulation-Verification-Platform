@@ -826,6 +826,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_pressure_component_replay_violation_corner_indices']}**",
                 "- Maximum trace pressure-component replay error: "
                 f"**{search_summary['maximum_bisection_trace_pressure_component_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_pressure_component_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Pressure-component replay violation records across corners: "
+                f"**{search_summary['bisection_trace_pressure_component_replay_violation_count']}**",
+                "- Exact pressure-component replay violation details: "
+                f"**{search_summary['bisection_trace_pressure_component_replay_violation_details']}**",
+                "- Tied maximum pressure-component replay witnesses across corners: "
+                f"**{search_summary['maximum_bisection_trace_pressure_component_replay_error_witnesses']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "

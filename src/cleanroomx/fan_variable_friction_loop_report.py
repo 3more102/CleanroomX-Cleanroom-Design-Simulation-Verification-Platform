@@ -184,6 +184,16 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_trace_pressure_components_match_independent_replay']}**",
                     "- Maximum absolute trace pressure-component replay error: "
                     f"**{trace_audit['maximum_absolute_trace_pressure_component_replay_error_pa']} Pa**",
+                    "- Pressure-component replay violation count: "
+                    f"**{trace_audit['pressure_component_replay_violation_count']}**",
+                    "- Pressure-component replay violating iterations: "
+                    f"**{trace_audit['pressure_component_replay_violation_iterations']}**",
+                    "- Pressure-component replay violating bracket positions: "
+                    f"**{trace_audit['pressure_component_replay_violation_positions']}**",
+                    "- Pressure-component replay violating components: "
+                    f"**{trace_audit['pressure_component_replay_violation_components']}**",
+                    "- Tied maximum pressure-component replay witnesses: "
+                    f"**{trace_audit['maximum_trace_pressure_component_replay_error_witnesses']}**",
                     "- Maximum absolute trace system-pressure balance error: "
                     f"**{trace_audit['maximum_absolute_trace_system_pressure_balance_error_pa']} Pa**",
                     "- Maximum absolute trace residual balance error: "

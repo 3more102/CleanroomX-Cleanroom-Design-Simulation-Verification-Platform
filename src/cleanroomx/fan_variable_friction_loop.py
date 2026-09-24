@@ -1155,6 +1155,7 @@ def _bisection_decision_trace_audit(
     residual_replay_checks = []
     pressure_component_replay_checks = []
     network_state_replay_checks = []
+    network_state_projection_replay_checks = []
     terminal_pressure_component_replay = None
     terminal_network_state_replay = None
     residual_replay_available = (
@@ -1520,16 +1521,21 @@ def _bisection_decision_trace_audit(
                     }
                 )
 
+            network_position_states = {
+                "low": low_state,
+                "midpoint": midpoint_state,
+                "high": high_state,
+            }
+            network_position_airflows = {
+                "low": replay_low_airflow,
+                "midpoint": replay_midpoint_airflow,
+                "high": replay_high_airflow,
+            }
             network_state_fields = tuple(
                 f"{position}_network_state_sha256"
                 for position in ("low", "midpoint", "high")
             )
             if all(field in step for field in network_state_fields):
-                network_position_states = {
-                    "low": low_state,
-                    "midpoint": midpoint_state,
-                    "high": high_state,
-                }
                 network_position_checks = {}
                 for position, recomputed_state in (
                     network_position_states.items()
@@ -1568,11 +1574,174 @@ def _bisection_decision_trace_audit(
                     }
                 )
 
+            projection_position_checks = {}
+            for position in ("low", "midpoint", "high"):
+                projection_field = (
+                    f"{position}_network_state_projection"
+                )
+                if projection_field not in step:
+                    continue
+                recorded_projection = step[projection_field]
+                recomputed_projection = network_position_states[position][
+                    "network_state_projection"
+                ]
+                projection_mismatches = (
+                    _network_state_projection_differences(
+                        recorded_projection,
+                        recomputed_projection,
+                    )
+                )
+                projection_position_checks[position] = {
+                    "replayed_airflow_m3_h": float(
+                        network_position_airflows[position]
+                    ),
+                    "network_state_projection_matches_independent_replay": (
+                        not projection_mismatches
+                    ),
+                    "network_state_projection_mismatch_count": len(
+                        projection_mismatches
+                    ),
+                    "network_state_projection_mismatch_paths": [
+                        mismatch["path"]
+                        for mismatch in projection_mismatches
+                    ],
+                    "network_state_projection_mismatches": (
+                        projection_mismatches
+                    ),
+                    "network_state_projection_maximum_numeric_errors": (
+                        _maximum_network_state_projection_numeric_errors(
+                            projection_mismatches
+                        )
+                    ),
+                }
+            checked_positions = [
+                position
+                for position in ("low", "midpoint", "high")
+                if position in projection_position_checks
+            ]
+            network_state_projection_replay_checks.append(
+                {
+                    "iteration": int(step["iteration"]),
+                    "expected_positions": ["low", "midpoint", "high"],
+                    "checked_positions": checked_positions,
+                    "checked_position_count": len(checked_positions),
+                    "coverage_complete": len(checked_positions) == 3,
+                    "low": projection_position_checks.get("low"),
+                    "midpoint": projection_position_checks.get("midpoint"),
+                    "high": projection_position_checks.get("high"),
+                    "all_checked_projections_match_independent_replay": all(
+                        check[
+                            "network_state_projection_matches_independent_replay"
+                        ]
+                        for check in projection_position_checks.values()
+                    ),
+                }
+            )
+
             decision = step["decision"]
             if decision == "replace_low_endpoint":
                 replay_low_airflow = replay_midpoint_airflow
             elif decision == "replace_high_endpoint":
                 replay_high_airflow = replay_midpoint_airflow
+
+    network_state_projection_replay_mismatches = []
+    network_state_projection_replay_violation_iteration_positions = []
+    network_state_projection_replay_coverage_gaps = []
+    for replay_check in network_state_projection_replay_checks:
+        iteration = int(replay_check["iteration"])
+        for position in ("low", "midpoint", "high"):
+            position_check = replay_check.get(position)
+            if position_check is None:
+                network_state_projection_replay_coverage_gaps.append(
+                    {
+                        "iteration": iteration,
+                        "position": position,
+                    }
+                )
+                continue
+            if position_check[
+                "network_state_projection_matches_independent_replay"
+            ]:
+                continue
+            network_state_projection_replay_violation_iteration_positions.append(
+                {
+                    "iteration": iteration,
+                    "position": position,
+                }
+            )
+            for mismatch in position_check[
+                "network_state_projection_mismatches"
+            ]:
+                network_state_projection_replay_mismatches.append(
+                    {
+                        "iteration": iteration,
+                        "position": position,
+                        **mismatch,
+                    }
+                )
+
+    projection_expected_iteration_count = (
+        len(trace) if residual_replay_available else 0
+    )
+    projection_expected_state_position_count = (
+        projection_expected_iteration_count * 3
+    )
+    projection_checked_iteration_count = sum(
+        check["checked_position_count"] > 0
+        for check in network_state_projection_replay_checks
+    )
+    projection_checked_state_position_count = sum(
+        int(check["checked_position_count"])
+        for check in network_state_projection_replay_checks
+    )
+    projection_inconsistent_state_position_count = len(
+        network_state_projection_replay_violation_iteration_positions
+    )
+    projection_consistent_state_position_count = (
+        projection_checked_state_position_count
+        - projection_inconsistent_state_position_count
+    )
+    projection_inconsistent_iterations = sorted(
+        {
+            item["iteration"]
+            for item in (
+                network_state_projection_replay_violation_iteration_positions
+            )
+        }
+    )
+    projection_consistent_iteration_count = sum(
+        check["coverage_complete"]
+        and check["all_checked_projections_match_independent_replay"]
+        for check in network_state_projection_replay_checks
+    )
+    projection_complete_coverage = (
+        projection_checked_state_position_count
+        == projection_expected_state_position_count
+        and len(network_state_projection_replay_checks)
+        == projection_expected_iteration_count
+    )
+    projection_replay_applicable = (
+        residual_replay_available and projection_expected_iteration_count > 0
+    )
+    projection_replay_available = (
+        projection_checked_state_position_count > 0
+    )
+    if not projection_replay_applicable:
+        projection_replay_verdict = (
+            "bisection_network_state_projection_replay_not_applicable"
+        )
+    elif network_state_projection_replay_mismatches:
+        projection_replay_verdict = (
+            "bisection_network_state_projection_replay_inconsistent"
+        )
+    elif not projection_complete_coverage:
+        projection_replay_verdict = (
+            "bisection_network_state_projection_replay_incomplete_coverage"
+        )
+    else:
+        projection_replay_verdict = (
+            "bisection_network_state_projection_replay_consistent"
+        )
 
     pressure_component_replay_violations = []
     pressure_component_replay_candidates = []
@@ -2730,6 +2899,87 @@ def _bisection_decision_trace_audit(
             if not check["all_network_states_match_independent_replay"]
         ],
         "network_state_replay_checks": network_state_replay_checks,
+        "network_state_projection_replay_applicable": (
+            projection_replay_applicable
+        ),
+        "network_state_projection_replay_available": (
+            projection_replay_available
+        ),
+        "network_state_projection_replay_expected_iteration_count": (
+            projection_expected_iteration_count
+        ),
+        "network_state_projection_replay_checked_iteration_count": (
+            projection_checked_iteration_count
+        ),
+        "network_state_projection_replay_expected_state_position_count": (
+            projection_expected_state_position_count
+        ),
+        "network_state_projection_replay_checked_state_position_count": (
+            projection_checked_state_position_count
+        ),
+        "network_state_projection_replay_complete_coverage": (
+            projection_complete_coverage
+            if projection_replay_applicable
+            else None
+        ),
+        "network_state_projection_replay_consistent_iteration_count": (
+            projection_consistent_iteration_count
+        ),
+        "network_state_projection_replay_inconsistent_iteration_count": len(
+            projection_inconsistent_iterations
+        ),
+        "network_state_projection_replay_consistent_state_position_count": (
+            projection_consistent_state_position_count
+        ),
+        "network_state_projection_replay_inconsistent_state_position_count": (
+            projection_inconsistent_state_position_count
+        ),
+        "network_state_projection_replay_violation_iterations": (
+            projection_inconsistent_iterations
+        ),
+        "network_state_projection_replay_violation_iteration_positions": (
+            network_state_projection_replay_violation_iteration_positions
+        ),
+        "network_state_projection_replay_coverage_gaps": (
+            network_state_projection_replay_coverage_gaps
+        ),
+        "network_state_projection_replay_mismatch_count": len(
+            network_state_projection_replay_mismatches
+        ),
+        "network_state_projection_replay_mismatch_paths": [
+            {
+                "iteration": mismatch["iteration"],
+                "position": mismatch["position"],
+                "path": mismatch["path"],
+            }
+            for mismatch in network_state_projection_replay_mismatches
+        ],
+        "network_state_projection_replay_unique_mismatch_paths": sorted(
+            {
+                mismatch["path"]
+                for mismatch in network_state_projection_replay_mismatches
+            }
+        ),
+        "network_state_projection_replay_mismatches": (
+            network_state_projection_replay_mismatches
+        ),
+        "network_state_projection_replay_maximum_numeric_errors": (
+            _maximum_network_state_projection_numeric_errors(
+                network_state_projection_replay_mismatches
+            )
+        ),
+        "network_state_projection_replay_verdict": (
+            projection_replay_verdict
+        ),
+        "all_trace_network_state_projections_match_independent_replay": (
+            projection_complete_coverage
+            and not network_state_projection_replay_mismatches
+            if projection_replay_applicable
+            else None
+        ),
+        "network_state_projection_replay_checks": (
+            network_state_projection_replay_checks
+        ),
         "terminal_pressure_component_replay_available": (
             terminal_pressure_component_replay is not None
         ),
@@ -3472,6 +3722,9 @@ def solve_fan_variable_friction_loop(
                             "low_network_state_sha256": (
                                 low_network_state_sha256
                             ),
+                            "low_network_state_projection": (
+                                low_network_state_projection
+                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
                                 9,
@@ -3490,6 +3743,9 @@ def solve_fan_variable_friction_loop(
                             ),
                             "high_network_state_sha256": (
                                 high_network_state_sha256
+                            ),
+                            "high_network_state_projection": (
+                                high_network_state_projection
                             ),
                             "midpoint_fan_pressure_pa": round(
                                 fan_pressure,
@@ -3513,6 +3769,9 @@ def solve_fan_variable_friction_loop(
                             ),
                             "midpoint_network_state_sha256": (
                                 midpoint_network_state_sha256
+                            ),
+                            "midpoint_network_state_projection": (
+                                midpoint_network_state_projection
                             ),
                             "decision": decision,
                             "strict_sign_change_before_evaluation": (

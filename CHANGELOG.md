@@ -10,6 +10,8 @@
 - Hardens **Abandon** so the UI suppresses the abandoned result but remains exclusive until its worker exits, preventing overlapping backend computations.
 - Adds a focused v0.98.1 application/GUI CI gate before the complete suite while preserving all v0.91-v0.95 provenance/replay gates, CLI smoke checks, and the real Tk/Xvfb desktop smoke.
 - Synchronizes package/runtime/demo/CI metadata at v0.98.1.
+- Packages the GUI demonstration project plus its relative consistency/dossier inputs inside the installable wheel and adds `cleanroomx-gui --demo` for repository-independent launch.
+- Adds clean-wheel installation verification on Python 3.11/3.12/3.13 and runs the real Python 3.13 Tk/Xvfb smoke from the installed wheel rather than relying on repository paths.
 
 ## v0.98 release completion — 2026-09-24
 

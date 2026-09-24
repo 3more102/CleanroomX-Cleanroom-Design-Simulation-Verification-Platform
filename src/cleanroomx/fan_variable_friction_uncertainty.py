@@ -974,6 +974,7 @@ def _edge_airflow_corner_ranges(
         )
     return rows
 
+
 def _corner_outcome_diagnostics(corners: list[dict]) -> dict:
     status_counts: dict[str, int] = {}
     termination_reason_counts: dict[str, int] = {}

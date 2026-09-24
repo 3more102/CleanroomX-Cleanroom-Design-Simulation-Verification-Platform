@@ -132,12 +132,20 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_steps_preserve_strict_sign_change_before_evaluation']}**",
                     "- Every trace midpoint is the arithmetic bracket midpoint: "
                     f"**{trace_audit['all_midpoints_are_arithmetic_bracket_midpoints']}**",
-                    "- Terminal tolerance decision is the final trace record: "
+                    "- Trace termination reason: "
+                    f"**{trace_audit['termination_reason']}**",
+                    "- Tolerance-accept record is the final trace record (when applicable): "
                     f"**{trace_audit['termination_record_is_last']}**",
                     "- Trace iteration sequence is contiguous from one: "
                     f"**{trace_audit['iterations_are_contiguous_from_one']}**",
                     "- Trace state transitions replay recorded L/H decisions: "
                     f"**{trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                    "- Terminal decision pattern matches termination mode: "
+                    f"**{trace_audit['terminal_decision_pattern_consistent']}**",
+                    "- Terminal bracket replays the final trace decision: "
+                    f"**{trace_audit['terminal_bracket_matches_replayed_last_decision']}**",
+                    "- Terminal trace outcome is consistent: "
+                    f"**{trace_audit['terminal_outcome_consistent']}**",
                     "- Trace endpoint replacements (low/high): "
                     f"**{trace_audit['replace_low_endpoint_count']}/"
                     f"{trace_audit['replace_high_endpoint_count']}**",

@@ -178,6 +178,7 @@ class CleanroomXApp:
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
         self.status_var = tk.StringVar(value="Ready")
+        self.run_state_var = tk.StringVar(value="READY")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
         self._build_menu()
@@ -249,6 +250,13 @@ class CleanroomXApp:
             background=self._colors["surface_alt"],
             foreground=self._colors["muted"],
             padding=(10, 5),
+        )
+        style.configure(
+            "RunState.TLabel",
+            background="#17324a",
+            foreground="#9bdcf5",
+            font=("TkDefaultFont", 9, "bold"),
+            padding=(9, 5),
         )
         style.configure(
             "TButton",
@@ -399,6 +407,12 @@ class CleanroomXApp:
 
         actions = ttk.Frame(header, style="Header.TFrame")
         actions.pack(side="right")
+        self.run_state_label = ttk.Label(
+            actions,
+            textvariable=self.run_state_var,
+            style="RunState.TLabel",
+        )
+        self.run_state_label.pack(side="left", padx=(0, 8))
         ttk.Button(actions, text="Validate", command=self.validate_current).pack(
             side="left", padx=3
         )
@@ -594,6 +608,11 @@ class CleanroomXApp:
         self._set_text(self.result_text, "")
         self._set_text(self.report_text, "")
         self._set_text(self.diagnostics_text, "")
+        if hasattr(self, "notebook") and hasattr(self, "result_text"):
+            try:
+                self.notebook.tab(self.result_text.master, text="Results")
+            except (tk.TclError, AttributeError):
+                pass
         self._draw_plot()
 
     def _clear_run_cache(self) -> None:
@@ -1206,6 +1225,8 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        if hasattr(self, "run_state_var"):
+            self.run_state_var.set("RUNNING" if running else "READY")
 
     def _poll_worker(self) -> None:
         try:
@@ -1220,6 +1241,8 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    if hasattr(self, "run_state_var"):
+                        self.run_state_var.set("FAILED")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -1227,6 +1250,8 @@ class CleanroomXApp:
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
+                    if hasattr(self, "run_state_var"):
+                        self.run_state_var.set(str(payload.status).upper())
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
                     )
@@ -1245,8 +1270,13 @@ class CleanroomXApp:
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
         self._draw_plot()
+        try:
+            self.notebook.tab(self.result_text.master, text=f"Results · {run.status}")
+        except (tk.TclError, AttributeError):
+            pass
         if select_results:
-            self.notebook.select(1)
+            # Select the actual Results frame rather than a fragile numeric tab index.
+            self.notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
@@ -1257,6 +1287,8 @@ class CleanroomXApp:
                 max(canvas.winfo_width() / 2, 150),
                 max(canvas.winfo_height() / 2, 100),
                 text="No plot is available for the selected result.",
+                fill=self._colors.get("muted", "#93a4ba"),
+                font=("TkDefaultFont", 10),
             )
             return
         plot = run.plot

@@ -869,6 +869,16 @@ def markdown_dossier_report(result: dict) -> str:
                     if trace_pressure_component_replay_error is None
                     else trace_pressure_component_replay_error["value"]
                 )
+                trace_network_state_replay_count = search_summary.get(
+                    "bisection_trace_network_state_replay_consistent_corner_count",
+                    0,
+                )
+                trace_network_state_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_replay_violation_corner_indices",
+                        [],
+                    )
+                )
                 trace_midpoint_error = search_summary.get(
                     "maximum_bisection_trace_midpoint_error_m3_h"
                 )
@@ -987,6 +997,10 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_pressure_component_replay_violations}; "
                     f"max pressure-component-replay error "
                     f"{max_trace_pressure_component_replay_error} Pa; "
+                    f"network-state-replay "
+                    f"{trace_network_state_replay_count}/{trace_count}; "
+                    f"network-state-replay violations "
+                    f"{trace_network_state_replay_violations}; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "
                     f"max trace normalized-width error "

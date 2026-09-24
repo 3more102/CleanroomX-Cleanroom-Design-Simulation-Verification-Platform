@@ -2730,6 +2730,41 @@ def _operating_point_search_resolution_summary(
             }
         )
         terminal_pressure_component_replay_violation_details.append(detail)
+
+    terminal_network_state_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_terminal_network_states_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
+    terminal_network_state_replay_violation_details = []
+    for corner_index, corner, evidence, audit in trace_cases:
+        violation_positions = audit.get(
+            "terminal_network_state_replay_violation_positions",
+            [],
+        )
+        if not violation_positions:
+            continue
+        detail = _critical_case_summary(corner_index, corner)
+        terminal_replay = audit.get("terminal_network_state_replay")
+        detail.update(
+            {
+                "search_method": evidence["method"],
+                "supplied_segment_index": evidence["supplied_segment_index"],
+                "operating_iterations": evidence["operating_iterations"],
+                "terminal_kind": (
+                    terminal_replay.get("terminal_kind")
+                    if terminal_replay is not None
+                    else None
+                ),
+                "violation_positions": violation_positions,
+            }
+        )
+        terminal_network_state_replay_violation_details.append(detail)
+
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -3391,6 +3426,16 @@ def _operating_point_search_resolution_summary(
         ),
         "maximum_terminal_pressure_component_replay_error_witnesses": (
             _maximum_terminal_pressure_component_replay_witnesses()
+        ),
+        "terminal_network_state_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(terminal_network_state_replay_violation_corner_indices)
+        ),
+        "terminal_network_state_replay_violation_corner_indices": (
+            terminal_network_state_replay_violation_corner_indices
+        ),
+        "terminal_network_state_replay_violation_details": (
+            terminal_network_state_replay_violation_details
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)

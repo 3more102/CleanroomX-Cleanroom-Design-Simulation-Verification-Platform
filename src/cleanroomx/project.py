@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import tempfile
 from typing import Any
@@ -203,25 +204,35 @@ def load_project_document(path: str | Path) -> ProjectDocument:
     return project_from_dict(data)
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+def atomic_write_text(path: str | Path, text: str) -> Path:
+    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
+            suffix=".tmp", dir=destination.parent, delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        temp_path.replace(destination)
+    except Exception:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
+    return destination
+
+
+def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+    destination = Path(path)
     data = project.to_dict()
     project_from_dict(data)
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-        suffix=".tmp", dir=destination.parent, delete=False,
-    ) as handle:
-        temp_path = Path(handle.name)
-        handle.write(text)
-
-    try:
-        temp_path.replace(destination)
-    except Exception:
-        temp_path.unlink(missing_ok=True)
-        raise
-    return destination
+    return atomic_write_text(destination, text)

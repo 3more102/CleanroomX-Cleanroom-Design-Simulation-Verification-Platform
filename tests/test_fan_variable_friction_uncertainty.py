@@ -210,6 +210,43 @@ def test_markdown_report_and_cli_surface_corner_evidence(
     assert payload["corner_count"] == 8
 
 
+def test_uncertainty_markdown_accepts_pre_v095_projection_summary() -> None:
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    legacy = json.loads(json.dumps(result))
+    summary = legacy["operating_point_search_resolution_summary"]
+    for key in (
+        "bisection_trace_network_state_projection_replay_evidence_corner_count",
+        "bisection_trace_network_state_projection_replay_complete_coverage",
+        "bisection_trace_network_state_projection_replay_incomplete_corner_indices",
+        "bisection_trace_network_state_projection_replay_consistent_corner_count",
+        "bisection_trace_network_state_projection_replay_violation_corner_indices",
+        "bisection_trace_network_state_projection_replay_violation_count",
+        "bisection_trace_network_state_projection_mismatch_count",
+        "bisection_trace_network_state_projection_replay_violation_details",
+        "maximum_bisection_trace_network_state_projection_numeric_errors",
+    ):
+        summary.pop(key, None)
+    nominal = legacy.get("nominal_result")
+    if nominal is not None:
+        search = nominal.get("operating_point_search_evidence")
+        if search is not None and search.get("bisection_trace_audit") is not None:
+            audit = search["bisection_trace_audit"]
+            audit.pop(
+                "all_trace_network_state_projections_match_independent_replay",
+                None,
+            )
+            audit.pop("network_state_projection_replay_violations", None)
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(legacy)
+
+    assert "Variable-Friction Loop Uncertainty Report" in report
+    assert "Trace network-state projection replay evidence corners: **None**" in report
+
+
 def test_physical_darcy_input_uncertainty_produces_complete_envelope() -> None:
     result = analyze_fan_variable_friction_loop_uncertainty(
         load_fan_variable_friction_loop_uncertainty(

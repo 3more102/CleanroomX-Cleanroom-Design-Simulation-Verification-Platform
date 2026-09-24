@@ -818,6 +818,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
                 "- Trace independent residual-replay violation corners: "
                 f"**{search_summary['bisection_trace_residual_replay_violation_corner_indices']}**",
+                "- Trace independent residual-replay decision violations: "
+                f"**{search_summary['bisection_trace_independent_residual_decision_violation_corner_indices']}**",
                 "- Maximum trace residual-replay error: "
                 f"**{search_summary['maximum_bisection_trace_residual_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_residual_replay_error_pa'] is not None else 'not available'} Pa**",
                 "- Trace recorded-width violations: "

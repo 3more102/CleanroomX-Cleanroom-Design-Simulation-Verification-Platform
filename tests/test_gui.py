@@ -787,3 +787,46 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+
+def test_overview_snapshot_reports_project_spatial_and_run_state():
+    class Run:
+        status = "pass"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        metadata={
+            "spatial_layout": {
+                "rooms": [{"id": "r1"}, {"id": "r2"}],
+                "devices": [{"id": "d1"}],
+            }
+        },
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="Facility",
+                kind="project_verification",
+                input={},
+            ),
+            AnalysisDocument(
+                id="b",
+                name="Fan",
+                kind="fan_operating_point",
+                input={},
+            ),
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app._runs_by_analysis = {"a": Run()}
+
+    snapshot = app._overview_snapshot()
+
+    assert snapshot["analysis_count"] == 2
+    assert snapshot["category_count"] >= 1
+    assert snapshot["run_count"] == 1
+    assert snapshot["room_count"] == 2
+    assert snapshot["device_count"] == 1
+    assert snapshot["active_status"] == "pass"
+    assert snapshot["active_title"]

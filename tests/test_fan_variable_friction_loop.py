@@ -485,4 +485,61 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
         selected["selected_airflow_overlaps_alternative_candidate_interval"]
         is False
     )
+def test_bisection_iteration_limit_retains_terminal_signed_bracket() -> None:
+    result = solve_fan_variable_friction_loop(
+        FanVariableFrictionLoopStudy(
+            name="Bisection iteration limit evidence",
+            fan_curve=FanCurve(
+                "Bisection curve",
+                (
+                    FanCurvePoint(0.0, 500.0),
+                    FanCurvePoint(3600.0, 200.0),
+                    FanCurvePoint(7200.0, 0.0),
+                ),
+            ),
+            loop_network=_fixed_network(),
+            fan_discharge_node="Supply",
+            fan_suction_node="Return",
+            operating_pressure_tolerance_pa=1e-12,
+            max_operating_iterations=1,
+        )
+    )
+
+    assert result["status"] == "non_converged"
+    assert result["fan_operating_point"] is None
+    assert result["operating_point_search_evidence"] is None
+    assert result["solver_diagnostics"]["termination_reason"] == (
+        "bisection_iteration_limit"
+    )
+    evidence = result["terminal_bisection_failure_evidence"]
+    assert evidence is not None
+    assert evidence["method"] == "bounded_bisection_iteration_limit"
+    assert evidence["operating_iterations"] == 1
+    bracket = evidence["terminal_bisection_bracket"]
+    assert bracket["low_fan_minus_system_pressure_pa"] > 0.0
+    assert bracket["high_fan_minus_system_pressure_pa"] < 0.0
+    assert bracket["width_fraction_of_supplied_segment"] == pytest.approx(
+        0.5,
+        abs=1e-12,
+    )
+    invariant = bracket["invariant_audit"]
+    assert invariant["strict_sign_change_preserved"] is True
+    assert invariant[
+        "last_evaluated_airflow_is_terminal_bracket_endpoint"
+    ] is True
+    assert invariant["binary_contraction_step_count"] == 1
+    assert invariant[
+        "expected_width_fraction_of_supplied_segment"
+    ] == pytest.approx(0.5, abs=1e-15)
+    assert invariant[
+        "actual_width_fraction_of_supplied_segment"
+    ] == pytest.approx(0.5, abs=1e-15)
+    assert invariant[
+        "absolute_width_fraction_consistency_error"
+    ] == pytest.approx(0.0, abs=1e-18)
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Terminal bisection iteration-limit evidence" in report
+    assert "Strict sign-change bracket preserved" in report
+    assert "numerical failure-state provenance only" in report
 

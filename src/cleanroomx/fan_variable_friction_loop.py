@@ -214,43 +214,55 @@ def _solve_network_at_airflow(
 def _network_state_sha256(network: dict) -> str:
     variable_friction = network.get("variable_friction", {})
     canonical_state = {
-        "nodes": [
-            {
-                "name": row["name"],
-                "relative_pressure_pa": row["relative_pressure_pa"],
-                "specified_injection_m3_h": row["specified_injection_m3_h"],
-                "net_edge_outflow_m3_h": row["net_edge_outflow_m3_h"],
-                "mass_balance_residual_m3_h": row[
-                    "mass_balance_residual_m3_h"
-                ],
-                "specified_pressure_power_w": row[
-                    "specified_pressure_power_w"
-                ],
-            }
-            for row in network["nodes"]
-        ],
-        "edges": [
-            {
-                "name": row["name"],
-                "start_node": row["start_node"],
-                "end_node": row["end_node"],
-                "resistance_pa_per_m3_s_squared": row[
-                    "resistance_pa_per_m3_s_squared"
-                ],
-                "airflow_m3_s": row["airflow_m3_s"],
-                "airflow_m3_h": row["airflow_m3_h"],
-                "flow_direction": row["flow_direction"],
-                "pressure_difference_pa": row["pressure_difference_pa"],
-                "constitutive_pressure_difference_pa": row[
-                    "constitutive_pressure_difference_pa"
-                ],
-                "pressure_law_residual_pa": row["pressure_law_residual_pa"],
-                "dissipated_pressure_power_w": row[
-                    "dissipated_pressure_power_w"
-                ],
-            }
-            for row in network["edges"]
-        ],
+        "nodes": sorted(
+            [
+                {
+                    "name": row["name"],
+                    "relative_pressure_pa": row["relative_pressure_pa"],
+                    "specified_injection_m3_h": row[
+                        "specified_injection_m3_h"
+                    ],
+                    "net_edge_outflow_m3_h": row["net_edge_outflow_m3_h"],
+                    "mass_balance_residual_m3_h": row[
+                        "mass_balance_residual_m3_h"
+                    ],
+                    "specified_pressure_power_w": row[
+                        "specified_pressure_power_w"
+                    ],
+                }
+                for row in network["nodes"]
+            ],
+            key=lambda row: str(row["name"]),
+        ),
+        "edges": sorted(
+            [
+                {
+                    "name": row["name"],
+                    "start_node": row["start_node"],
+                    "end_node": row["end_node"],
+                    "resistance_pa_per_m3_s_squared": row[
+                        "resistance_pa_per_m3_s_squared"
+                    ],
+                    "airflow_m3_s": row["airflow_m3_s"],
+                    "airflow_m3_h": row["airflow_m3_h"],
+                    "flow_direction": row["flow_direction"],
+                    "pressure_difference_pa": row[
+                        "pressure_difference_pa"
+                    ],
+                    "constitutive_pressure_difference_pa": row[
+                        "constitutive_pressure_difference_pa"
+                    ],
+                    "pressure_law_residual_pa": row[
+                        "pressure_law_residual_pa"
+                    ],
+                    "dissipated_pressure_power_w": row[
+                        "dissipated_pressure_power_w"
+                    ],
+                }
+                for row in network["edges"]
+            ],
+            key=lambda row: str(row["name"]),
+        ),
         "max_abs_mass_balance_residual_m3_h": network[
             "max_abs_mass_balance_residual_m3_h"
         ],
@@ -269,7 +281,10 @@ def _network_state_sha256(network: dict) -> str:
             "max_relative_resistance_closure_error": variable_friction.get(
                 "max_relative_resistance_closure_error"
             ),
-            "edge_closure": variable_friction.get("edge_closure", []),
+            "edge_closure": sorted(
+                variable_friction.get("edge_closure", []),
+                key=lambda row: str(row.get("name", "")),
+            ),
         },
     }
     encoded = json.dumps(
@@ -280,8 +295,6 @@ def _network_state_sha256(network: dict) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
 def _point_check(
     study: FanVariableFrictionLoopStudy,
     point: FanCurvePoint,
@@ -1342,7 +1355,7 @@ def _bisection_decision_trace_audit(
                         "iteration": int(step["iteration"]),
                         "algorithm": "sha256",
                         "canonicalization": (
-                            "network-state-projection-json-sort-keys-compact-utf8-v1"
+                            "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
                         ),
                         "low": network_position_checks["low"],
                         "midpoint": network_position_checks["midpoint"],
@@ -1692,7 +1705,7 @@ def _bisection_decision_trace_audit(
             "iteration": int(operating_iterations),
             "algorithm": "sha256",
             "canonicalization": (
-                "network-state-projection-json-sort-keys-compact-utf8-v1"
+                "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
             ),
             "low": terminal_network_position_checks["low"],
             "high": terminal_network_position_checks["high"],
@@ -2356,7 +2369,7 @@ def _bisection_decision_trace_audit(
             "sha256" if residual_replay_available else None
         ),
         "network_state_replay_canonicalization": (
-            "network-state-projection-json-sort-keys-compact-utf8-v1"
+            "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
             if residual_replay_available
             else None
         ),

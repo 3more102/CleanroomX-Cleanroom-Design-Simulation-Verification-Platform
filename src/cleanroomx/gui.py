@@ -77,6 +77,11 @@ def _configure_theme(root: tk.Misc) -> None:
         foreground=_UI["text"],
     )
     style.configure(
+        "Panel.TLabel",
+        background=_UI["surface"],
+        foreground=_UI["text"],
+    )
+    style.configure(
         "Title.TLabel",
         background=_UI["surface"],
         foreground=_UI["text"],

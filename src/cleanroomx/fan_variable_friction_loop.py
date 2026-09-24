@@ -2682,6 +2682,7 @@ def _selected_operating_state_replay_audit(
     recorded_loop_network_pressure_pa: float,
     recorded_system_pressure_pa: float,
     recorded_residual_pa: float,
+    recorded_network_state_sha256: str,
     segment_left: FanCurvePoint,
     segment_right: FanCurvePoint,
     selected_supplied_point_index: int | None = None,
@@ -2703,6 +2704,11 @@ def _selected_operating_state_replay_audit(
         study.fixed_pressure_pa + replayed_loop_pressure
     )
     replayed_residual = replayed_fan_pressure - replayed_system_pressure
+    recorded_network_state = str(recorded_network_state_sha256)
+    replayed_network_state = _network_state_sha256(_replayed_network)
+    network_state_matches_independent_replay = (
+        recorded_network_state == replayed_network_state
+    )
 
     recorded_pressures = {
         "fan": float(recorded_fan_pressure_pa),
@@ -2741,6 +2747,15 @@ def _selected_operating_state_replay_audit(
                     **component_checks[component],
                 }
             )
+
+    if not network_state_matches_independent_replay:
+        violations.append(
+            {
+                "component": "network_state_sha256",
+                "recorded_network_state_sha256": recorded_network_state,
+                "recomputed_network_state_sha256": replayed_network_state,
+            }
+        )
 
     if selected_supplied_point_index is not None:
         selection_source = "supplied_fan_curve_point"
@@ -2809,6 +2824,16 @@ def _selected_operating_state_replay_audit(
         ),
         "absolute_selection_airflow_error_m3_h": selection_airflow_error,
         "selected_airflow_matches_search_origin": selection_origin_matches,
+        "network_state_replay_available": True,
+        "network_state_replay_algorithm": "sha256",
+        "network_state_replay_canonicalization": (
+            "network-state-projection-json-sort-keys-compact-utf8-v1"
+        ),
+        "recorded_network_state_sha256": recorded_network_state,
+        "recomputed_network_state_sha256": replayed_network_state,
+        "network_state_matches_independent_replay": (
+            network_state_matches_independent_replay
+        ),
         "component_checks": component_checks,
         "all_pressure_components_match_independent_replay": all(
             check["matches_independent_replay"]
@@ -2822,6 +2847,7 @@ def _selected_operating_state_replay_audit(
         ),
         "all_selected_operating_state_matches_independent_replay": (
             selection_origin_matches
+            and network_state_matches_independent_replay
             and all(
                 check["matches_independent_replay"]
                 for check in component_checks.values()
@@ -3412,6 +3438,9 @@ def solve_fan_variable_friction_loop(
             recorded_loop_network_pressure_pa=selected_network_pressure,
             recorded_system_pressure_pa=system_pressure,
             recorded_residual_pa=residual,
+            recorded_network_state_sha256=_network_state_sha256(
+                selected_network
+            ),
             segment_left=left,
             segment_right=right,
             selected_supplied_point_index=selected_supplied_point_index,

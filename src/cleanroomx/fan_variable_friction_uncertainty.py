@@ -2605,7 +2605,7 @@ def _operating_point_search_resolution_summary(
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
         if audit.get(
-            "all_midpoint_pressure_components_match_independent_replay",
+            "all_trace_pressure_components_match_independent_replay",
             False,
         )
         is not True

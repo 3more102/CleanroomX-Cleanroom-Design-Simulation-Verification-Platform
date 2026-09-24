@@ -140,6 +140,12 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "maximum_bisection_trace_pressure_component_replay_error_pa"
     ]["value"] <= 1e-9
     assert search_summary[
+        "bisection_trace_network_state_replay_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "bisection_trace_network_state_replay_consistent_corner_count"
+    ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary[
         "maximum_bisection_trace_midpoint_error_m3_h"
     ]["value"] <= 1e-9
     assert search_summary[

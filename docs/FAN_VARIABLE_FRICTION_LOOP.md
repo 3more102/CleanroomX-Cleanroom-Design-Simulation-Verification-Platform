@@ -30,6 +30,8 @@ v0.85 closes the remaining solved-result provenance gap by independently re-solv
 
 v0.86 extends independent replay to the terminal bisection bracket itself. Solved final brackets retain low/high fan, nonlinear loop-network, and total system pressures; iteration-limit evidence retains the post-decision remaining bracket after the last budgeted L/H update. Each terminal endpoint is freshly re-solved from the selected supplied fan segment and retained decision chain, with exact mismatch records and tied maximum-error witnesses. This remains numerical implementation provenance, not physical uncertainty, stability evidence, or equipment acceptance.
 
+v0.87 independently replays the internal nonlinear network state behind every retained low, midpoint, and high bisection position. CleanroomX stores a SHA-256 fingerprint over a canonical projection of solved node pressures/balances, edge flows/resistances and pressure-law residuals, pressure-power balance, and variable-friction closure evidence, then freshly re-solves the reconstructed airflow and recomputes the fingerprint. This closes the provenance gap where scalar fan/loop/system pressure evidence can remain unchanged while the internal solved network state changes. The fingerprint is deterministic implementation evidence, not physical uncertainty, stability, commissioning, certification, or equipment-acceptance evidence.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

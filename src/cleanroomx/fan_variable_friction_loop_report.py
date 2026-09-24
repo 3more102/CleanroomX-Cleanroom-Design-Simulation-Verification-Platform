@@ -216,6 +216,20 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['pressure_component_replay_violation_components']}**",
                     "- Tied maximum pressure-component replay witnesses: "
                     f"**{trace_audit['maximum_trace_pressure_component_replay_error_witnesses']}**",
+                    "- Independent network-state fingerprint replay available: "
+                    f"**{trace_audit['network_state_replay_available']}**",
+                    "- Network-state fingerprint replay complete: "
+                    f"**{trace_audit['network_state_replay_evidence_complete']}**",
+                    "- Every retained low-endpoint network state matches independent replay: "
+                    f"**{trace_audit['all_low_network_states_match_independent_replay']}**",
+                    "- Every retained midpoint network state matches independent replay: "
+                    f"**{trace_audit['all_midpoint_network_states_match_independent_replay']}**",
+                    "- Every retained high-endpoint network state matches independent replay: "
+                    f"**{trace_audit['all_high_network_states_match_independent_replay']}**",
+                    "- Every retained low/midpoint/high network state matches independent replay: "
+                    f"**{trace_audit['all_trace_network_states_match_independent_replay']}**",
+                    "- Network-state replay violation iterations: "
+                    f"**{trace_audit['network_state_replay_violation_iterations']}**",
                     "- Terminal bisection-bracket pressure components match independent replay: "
                     f"**{trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
                     "- Terminal pressure-component replay violation count: "

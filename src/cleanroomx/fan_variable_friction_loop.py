@@ -1940,7 +1940,7 @@ def _bisection_decision_trace_audit(
                 "network_state_matches_independent_replay"
             ]
         ]
-        terminal_network_projection_mismatches = [
+        terminal_network_projection_mismatch_details = [
             {
                 "iteration": int(operating_iterations),
                 "position": position,
@@ -1961,6 +1961,14 @@ def _bisection_decision_trace_audit(
             and not terminal_network_position_checks[position][
                 "network_state_projection_matches_independent_replay"
             ]
+        ]
+        terminal_network_projection_mismatches = [
+            {
+                "iteration": detail["iteration"],
+                "position": detail["position"],
+                "mismatch_paths": detail["mismatch_paths"],
+            }
+            for detail in terminal_network_projection_mismatch_details
         ]
         terminal_network_state_replay = {
             "terminal_kind": (
@@ -2014,6 +2022,9 @@ def _bisection_decision_trace_audit(
             ],
             "network_state_projection_mismatches": (
                 terminal_network_projection_mismatches
+            ),
+            "network_state_projection_mismatch_details": (
+                terminal_network_projection_mismatch_details
             ),
         }
 
@@ -2824,6 +2835,14 @@ def _bisection_decision_trace_audit(
             if terminal_network_state_replay is not None
             else []
         ),
+        "terminal_network_state_projection_mismatch_details": (
+            terminal_network_state_replay.get(
+                "network_state_projection_mismatch_details",
+                [],
+            )
+            if terminal_network_state_replay is not None
+            else []
+        ),
         "terminal_network_state_replay": terminal_network_state_replay,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
@@ -3126,12 +3145,6 @@ def _selected_operating_state_replay_audit(
             {
                 "component": "network_state_projection",
                 "mismatch_paths": network_state_projection_mismatch_paths,
-                "mismatches": network_state_projection_mismatches,
-                "maximum_numeric_errors": (
-                    _maximum_network_state_projection_numeric_errors(
-                        network_state_projection_mismatches
-                    )
-                ),
             }
         )
 
@@ -3184,6 +3197,19 @@ def _selected_operating_state_replay_audit(
         )
     ]
 
+    if not network_state_projection_replay_available:
+        network_state_projection_replay_verdict = (
+            "selected_network_state_projection_replay_not_available"
+        )
+    elif network_state_projection_matches_independent_replay:
+        network_state_projection_replay_verdict = (
+            "selected_network_state_projection_replay_consistent"
+        )
+    else:
+        network_state_projection_replay_verdict = (
+            "selected_network_state_projection_replay_inconsistent"
+        )
+
     return {
         "available": True,
         "pressure_replay_absolute_tolerance_pa": pressure_tolerance_pa,
@@ -3227,6 +3253,9 @@ def _selected_operating_state_replay_audit(
         ),
         "selected_network_state_projection_replay_consistent": (
             network_state_projection_matches_independent_replay
+        ),
+        "network_state_projection_replay_verdict": (
+            network_state_projection_replay_verdict
         ),
         "network_state_projection_mismatch_count": (
             len(network_state_projection_mismatches)

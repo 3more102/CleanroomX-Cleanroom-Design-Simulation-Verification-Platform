@@ -1,6 +1,6 @@
 # CleanroomX Desktop Application
 
-CleanroomX v0.98 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
+CleanroomX v0.99 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
 
 ## Install and launch
 
@@ -58,7 +58,7 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
 
-Consistency and dossier workflows resolve relative file references against the saved project directory. Save the GUI project before running those workflows when their inputs use relative paths.
+Consistency and dossier workflows resolve relative file references against the saved project directory. Save the GUI project before running those workflows when their inputs use relative paths. Absolute file references remain runnable before the first project save, including engineering dossiers. If **Save Project As** changes the project directory, CleanroomX clears in-memory analysis results because the path context for relative references has changed; rerun affected analyses before exporting results.
 
 ## Results and plots
 

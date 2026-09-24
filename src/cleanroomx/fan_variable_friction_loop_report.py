@@ -250,6 +250,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     [
                         "- Nearest alternative candidate interval gap: "
                         f"**{alternative_gap} m³/h**",
+                        "- Nearest alternative candidate gap / supplied fan-curve span: "
+                        f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span']}**",
                         "- Selected airflow overlaps an alternative candidate interval: "
                         f"**{audit['selected_airflow_overlaps_alternative_candidate_interval']}**",
                     ]
@@ -259,8 +261,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     lines.extend(
                         [
                             "",
-                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) |",
-                            "|---:|---|---|---:|",
+                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span |",
+                            "|---:|---|---|---:|---:|",
                         ]
                     )
                     for feature in alternatives:
@@ -282,7 +284,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                             f"{feature_text} | "
                             f"{feature['airflow_interval_low_m3_h']}–"
                             f"{feature['airflow_interval_high_m3_h']} | "
-                            f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} |"
+                            f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} | "
+                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span']} |"
                         )
         if audit["residual_transitions"]:
             lines.extend(

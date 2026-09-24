@@ -93,6 +93,8 @@ v0.68 extends v0.66 alternative-candidate separation with a dimensionless scale-
 
 v0.69 completes the sampled sign-topology record by retaining strict negative-to-positive supplied-point residual crossings separately from the solver-eligible positive-to-negative crossing segments. The report exposes each reverse segment and the total bidirectional strict sign-change count, while the solver candidate list and selection policy remain unchanged. Reverse segments are audit-only sampled-data evidence and do not establish an additional continuous root or any physical acceptance/stability conclusion.
 
+v0.70 extends the same auditability to bounded-bisection iteration-limit failures. When the operating-point iteration budget is exhausted, no operating point is accepted; instead, the result preserves the remaining strict signed-residual bracket after the final budgeted midpoint evaluation and audits its width against the completed binary contraction count. This remaining bracket is numerical search-state evidence only, not physical airflow uncertainty, interpolation error, stability evidence, or an acceptance margin.
+
 ## CLI
 
 ```text

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.81 independent fan/system residual replay — 2026-09-24
+
+- Reconstructs every retained bounded-bisection low/high/midpoint airflow from the selected supplied fan segment and recorded L/H/T decision chain, then freshly re-solves the nonlinear variable-friction loop at each replayed state.
+- Recomputes interpolated fan pressure and total system pressure independently of retained trace pressure/residual fields, and checks every retained low/high/midpoint fan-minus-system residual against that fresh model evaluation.
+- Keeps the v0.80 pressure-state identity audit intact as a complementary retained-state check; v0.81 additionally detects self-consistent stored fan-pressure/residual corruption that can satisfy those identities.
+- Retains per-step replay evidence, a strict 1e-9 Pa comparison tolerance, maximum replay error, exact nonlinear uncertainty-corner violation indices, and tied worst-error provenance.
+- Propagates the replay evidence through standalone loop reports, nonlinear uncertainty reports, engineering dossiers, README/docs, solved cases, and iteration-limit cases.
+- Adds regression coverage where terminal fan pressure and residual are corrupted together so raw-state, pressure-state, decision-semantic, and origin replay checks remain consistent while independent model replay correctly fails.
+- Does not change candidate priority, bounded root selection, root-acceptance tolerance, iteration budgets, fan-curve no-extrapolation behavior, or any engineering acceptance criterion.
+- Bumped package/runtime metadata to v0.81.0.
+
+
 ## v0.80 bisection trace pressure-state audit — 2026-09-24
 
 - Retains midpoint fan pressure, variable-friction loop pressure, fixed pressure, total system pressure, and fan-minus-system residual for every bounded-bisection trace evaluation.

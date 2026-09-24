@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.99 final desktop release hardening — 2026-09-24
+
+- Continues directly from integrated `main` commit `9563507252f204bd8d88fa53f67d4afe2999f040`, retaining the registry-integrity merge and verified clean v0.91→v0.98 ancestry.
+- Synchronizes package, runtime, demonstration project, documentation, and CI version metadata at **0.99.0**.
+- Retains duplicate workflow-key rejection, direct parser/runner contract checks, custom-adapter enforcement, callable binding validation, and headless registry-readiness metadata.
+- Hardens **Abandon** so an abandoned result/error is discarded while the UI remains exclusive until the original worker exits, preventing overlapping backend analyses.
+- Adds a focused application/project/GUI lifecycle CI gate before the complete Python 3.11/3.12/3.13 suite, while preserving v0.91-v0.95 compatibility gates, representative CLI smoke checks, and the real Tk/Xvfb GUI smoke.
+- Adds architecture, migration, deployment, rollback, security, and validation/test-evidence release documentation.
+- No validated engineering solver equations, tolerances, uncertainty semantics, or acceptance criteria are changed.
+
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

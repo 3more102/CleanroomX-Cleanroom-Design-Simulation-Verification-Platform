@@ -806,6 +806,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_sign_violation_corner_indices']}**",
                 "- Trace midpoint-geometry violations: "
                 f"**{search_summary['bisection_trace_midpoint_violation_corner_indices']}**",
+                "- Trace recorded-width violations: "
+                f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
+                "- Trace binary width-fraction violations: "
+                f"**{search_summary['bisection_trace_width_fraction_violation_corner_indices']}**",
+                "- Trace geometry violation corners: "
+                f"**{search_summary['bisection_trace_geometry_violation_corner_indices']}**",
                 "- Trace terminal-position violations: "
                 f"**{search_summary['bisection_trace_terminal_violation_corner_indices']}**",
                 "- Trace iteration-sequence violations: "
@@ -869,7 +875,11 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         "- Nominal bisection decision sequence (L/H/T): "
                         f"**{nominal_trace_audit['decision_sequence']}**",
                         "- Nominal trace invariants all satisfied: "
-                        f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['terminal_outcome_consistent'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                        f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['all_trace_geometry_consistent'] and nominal_trace_audit['terminal_outcome_consistent'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                        "- Nominal trace recorded widths match airflow endpoints: "
+                        f"**{nominal_trace_audit['all_recorded_widths_match_airflow_brackets']}**",
+                        "- Nominal trace width fractions match binary iteration contraction: "
+                        f"**{nominal_trace_audit['all_recorded_width_fractions_match_iteration_sequence']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
@@ -944,6 +954,35 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum absolute binary-width consistency error | "
                 f"{invariant_error['value']} | {invariant_error['unit']} | "
                 f"{' / '.join(invariant_sources)} |"
+            )
+        trace_width_error = search_summary.get(
+            "maximum_bisection_trace_width_error_m3_h"
+        )
+        if trace_width_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_width_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace recorded-width consistency error | "
+                f"{trace_width_error['value']} | {trace_width_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_width_fraction_error = search_summary.get(
+            "maximum_bisection_trace_width_fraction_error"
+        )
+        if trace_width_fraction_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_width_fraction_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace binary width-fraction consistency error | "
+                f"{trace_width_fraction_error['value']} | "
+                f"{trace_width_fraction_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
             )
         trace_steps = search_summary.get("maximum_bisection_trace_step_count")
         if trace_steps is not None:

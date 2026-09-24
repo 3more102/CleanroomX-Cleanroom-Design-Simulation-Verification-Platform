@@ -2581,11 +2581,33 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["all_recorded_midpoint_flags_match_numeric_geometry"]
     ]
+    trace_pressure_component_incomplete_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get("complete_pressure_component_coverage", False)
+    ]
+    trace_pressure_residual_identity_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get(
+            "all_midpoint_residuals_match_pressure_components",
+            False,
+        )
+    ]
+    trace_pressure_component_decision_semantic_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get(
+            "all_decisions_match_pressure_component_semantics",
+            False,
+        )
+    ]
     trace_raw_state_violation_corner_indices = sorted(
         set(trace_numeric_sign_violation_corner_indices)
         | set(trace_sign_flag_mismatch_corner_indices)
         | set(trace_numeric_midpoint_violation_corner_indices)
         | set(trace_midpoint_flag_mismatch_corner_indices)
+        | set(trace_pressure_residual_identity_violation_corner_indices)
     )
     trace_width_violation_corner_indices = [
         corner_index
@@ -2953,6 +2975,35 @@ def _operating_point_search_resolution_summary(
         "bisection_trace_midpoint_flag_mismatch_corner_indices": (
             trace_midpoint_flag_mismatch_corner_indices
         ),
+        "bisection_trace_pressure_component_complete_corner_count": (
+            len(trace_cases)
+            - len(trace_pressure_component_incomplete_corner_indices)
+        ),
+        "bisection_trace_pressure_component_incomplete_corner_indices": (
+            trace_pressure_component_incomplete_corner_indices
+        ),
+        "bisection_trace_pressure_residual_identity_match_corner_count": (
+            len(trace_cases)
+            - len(trace_pressure_residual_identity_violation_corner_indices)
+        ),
+        "bisection_trace_pressure_residual_identity_violation_corner_indices": (
+            trace_pressure_residual_identity_violation_corner_indices
+        ),
+        "maximum_bisection_trace_pressure_residual_identity_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_midpoint_residual_identity_error_pa",
+                "Pa",
+            )
+        ),
+        "bisection_trace_pressure_component_decision_semantic_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                trace_pressure_component_decision_semantic_violation_corner_indices
+            )
+        ),
+        "bisection_trace_pressure_component_decision_semantic_violation_corner_indices": (
+            trace_pressure_component_decision_semantic_violation_corner_indices
+        ),
         "bisection_trace_raw_state_consistent_corner_count": (
             len(trace_cases) - len(trace_raw_state_violation_corner_indices)
         ),
@@ -3118,7 +3169,12 @@ def _operating_point_search_resolution_summary(
             "signed-residual bracket without accepting an operating point. "
             "v0.76 audits every retained trace step's recorded bracket width "
             "against its airflow endpoints and its normalized width against "
-            "the binary contraction implied by the iteration number."
+            "the binary contraction implied by the iteration number. v0.79 "
+            "recomputes sign and midpoint raw-state facts from retained numeric "
+            "fields. v0.80 additionally retains midpoint fan/system pressure, "
+            "checks complete component coverage, independently verifies the "
+            "fan-minus-system residual identity, and audits each decision "
+            "against that recomputed residual without changing root selection."
         ),
     }
 

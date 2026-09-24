@@ -473,7 +473,7 @@ def _capture_external_dependencies(
 
 def _application_execution_provenance(
     kind: str,
-    payload: dict,
+    input_sha256: str,
     dependencies_before: list[dict],
     dependencies_after: list[dict],
 ) -> dict:
@@ -509,7 +509,7 @@ def _application_execution_provenance(
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
-        "input_sha256": _canonical_input_sha256(payload),
+        "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
         "external_dependencies_stable": all(
             item["stable_during_run"] for item in dependencies
@@ -641,6 +641,7 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
+    input_sha256 = _canonical_input_sha256(payload)
     validate_analysis_input(kind, payload, base_dir=base_dir)
     spec = ANALYSIS_SPECS[kind]
     base = Path(base_dir) if base_dir is not None else None
@@ -664,7 +665,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     diagnostics = diagnostic_summary(normalized)
     diagnostics["application_execution_provenance"] = _application_execution_provenance(
         kind,
-        payload,
+        input_sha256,
         dependencies_before,
         dependencies_after,
     )

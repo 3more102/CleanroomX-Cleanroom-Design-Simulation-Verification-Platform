@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99 application execution provenance — 2026-09-24
+
+- Adds deterministic SHA-256 identity for every submitted application input using sorted compact UTF-8 JSON canonicalization.
+- Records each direct consistency/dossier file dependency by declared field/path, byte size, and SHA-256 both before and after backend execution.
+- Reports per-dependency and aggregate stability evidence without changing engineering acceptance semantics.
+- Adds `application_execution_provenance` to the Diagnostics view for every successful application workflow.
+- Adds **Export Run Bundle JSON** so operators can preserve result, report, diagnostics/provenance, plot model, status, and workflow identity in one strict-JSON artifact.
+- Adds regression coverage for canonical hash order-invariance, exact external file hashes, dossier dependency coverage, every catalog workflow, and GUI run-bundle export.
+- Synchronizes package/runtime/demo/CI metadata at v0.99.0 while retaining the v0.91-v0.95 compatibility gates and v0.98.1 registry-integrity gate.
+
 ## v0.98.1 application registry integrity hardening — 2026-09-24
 
 - Ports the strongest verified application-registry integrity checks forward onto the integrated v0.98 `main` lineage.

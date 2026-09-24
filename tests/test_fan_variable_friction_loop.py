@@ -61,6 +61,139 @@ def _fixed_curve() -> FanCurve:
     )
 
 
+def test_network_state_fingerprint_is_order_invariant_for_named_collections() -> None:
+    network = {
+        "network": "Fingerprint fixture",
+        "status": "solved",
+        "reference_node": "Supply",
+        "iterations": 4,
+        "mass_balance_tolerance_m3_h": 1e-6,
+        "nodes": [
+            {
+                "name": "Supply",
+                "relative_pressure_pa": 10.0,
+                "specified_injection_m3_h": 100.0,
+                "net_edge_outflow_m3_h": 100.0,
+                "mass_balance_residual_m3_h": 0.0,
+                "specified_pressure_power_w": 1.0,
+            },
+            {
+                "name": "Return",
+                "relative_pressure_pa": 0.0,
+                "specified_injection_m3_h": -100.0,
+                "net_edge_outflow_m3_h": -100.0,
+                "mass_balance_residual_m3_h": 0.0,
+                "specified_pressure_power_w": 0.0,
+            },
+        ],
+        "edges": [
+            {
+                "name": "A",
+                "start_node": "Supply",
+                "end_node": "Return",
+                "resistance_pa_per_m3_s_squared": 100.0,
+                "airflow_m3_s": 0.02,
+                "airflow_m3_h": 72.0,
+                "flow_direction": "Supply -> Return",
+                "pressure_difference_pa": 10.0,
+                "constitutive_pressure_difference_pa": 10.0,
+                "pressure_law_residual_pa": 0.0,
+                "dissipated_pressure_power_w": 0.2,
+            },
+            {
+                "name": "B",
+                "start_node": "Supply",
+                "end_node": "Return",
+                "resistance_pa_per_m3_s_squared": 200.0,
+                "airflow_m3_s": 0.01,
+                "airflow_m3_h": 36.0,
+                "flow_direction": "Supply -> Return",
+                "pressure_difference_pa": 10.0,
+                "constitutive_pressure_difference_pa": 10.0,
+                "pressure_law_residual_pa": 0.0,
+                "dissipated_pressure_power_w": 0.1,
+            },
+        ],
+        "max_abs_mass_balance_residual_m3_h": 0.0,
+        "max_abs_pressure_law_residual_pa": 0.0,
+        "pressure_power": {
+            "net_node_injection_power_w": 0.3,
+            "total_edge_dissipation_w": 0.3,
+            "balance_residual_w": 0.0,
+        },
+        "variable_friction": {
+            "converged": True,
+            "outer_iterations": 2,
+            "resistance_relative_tolerance": 1e-6,
+            "relaxation": 0.5,
+            "near_zero_airflow_m3_h": 1e-6,
+            "automatic_friction_edge_count": 2,
+            "near_zero_frozen_edge_count": 0,
+            "max_relative_resistance_closure_error": 1e-8,
+            "iteration_history": [
+                {
+                    "outer_iteration": 1,
+                    "max_relative_resistance_change": 0.25,
+                    "max_abs_mass_balance_residual_m3_h": 1e-10,
+                    "near_zero_frozen_edge_count": 0,
+                },
+                {
+                    "outer_iteration": 2,
+                    "max_relative_resistance_change": 1e-8,
+                    "max_abs_mass_balance_residual_m3_h": 0.0,
+                    "near_zero_frozen_edge_count": 0,
+                },
+            ],
+            "edge_closure": [
+                {"name": "A", "state": "automatic"},
+                {"name": "B", "state": "automatic"},
+            ],
+        },
+    }
+
+    baseline = _network_state_sha256(network)
+
+    reordered = json.loads(json.dumps(network))
+    reordered["nodes"].reverse()
+    reordered["edges"].reverse()
+    reordered["variable_friction"]["edge_closure"].reverse()
+    assert _network_state_sha256(reordered) == baseline
+
+    signed_zero = json.loads(json.dumps(network))
+    signed_zero["nodes"][0]["mass_balance_residual_m3_h"] = -0.0
+    signed_zero["nodes"][1]["specified_pressure_power_w"] = -0.0
+    signed_zero["edges"][0]["pressure_law_residual_pa"] = -0.0
+    signed_zero["max_abs_mass_balance_residual_m3_h"] = -0.0
+    signed_zero["max_abs_pressure_law_residual_pa"] = -0.0
+    signed_zero["pressure_power"]["balance_residual_w"] = -0.0
+    signed_zero["variable_friction"]["iteration_history"][1][
+        "max_abs_mass_balance_residual_m3_h"
+    ] = -0.0
+    assert _network_state_sha256(signed_zero) == baseline
+
+    numeric_mutated = json.loads(json.dumps(network))
+    numeric_mutated["edges"][0]["airflow_m3_h"] += 1.0
+    assert _network_state_sha256(numeric_mutated) != baseline
+
+    metadata_mutated = json.loads(json.dumps(network))
+    metadata_mutated["iterations"] += 1
+    assert _network_state_sha256(metadata_mutated) != baseline
+
+    config_mutated = json.loads(json.dumps(network))
+    config_mutated["variable_friction"]["relaxation"] = 0.4
+    assert _network_state_sha256(config_mutated) != baseline
+
+    history_mutated = json.loads(json.dumps(network))
+    history_mutated["variable_friction"]["iteration_history"][0][
+        "max_relative_resistance_change"
+    ] += 1e-3
+    assert _network_state_sha256(history_mutated) != baseline
+
+    history_reordered = json.loads(json.dumps(network))
+    history_reordered["variable_friction"]["iteration_history"].reverse()
+    assert _network_state_sha256(history_reordered) != baseline
+
+
 def test_supplied_point_network_state_replay_is_complete_and_reported() -> None:
     study = load_fan_variable_friction_loop_study(
         "examples/fan_variable_friction_loop_demo.json"

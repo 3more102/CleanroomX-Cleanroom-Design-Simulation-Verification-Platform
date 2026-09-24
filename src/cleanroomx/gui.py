@@ -813,6 +813,21 @@ class CleanroomXApp:
         self.status_var.set(f"Imported {Path(path).name}")
         self._update_title()
 
+    def _write_export_file(self, path: str, content: str, *, label: str) -> bool:
+        target = Path(path)
+        try:
+            target.write_text(content, encoding="utf-8")
+        except Exception as exc:
+            self.status_var.set(f"{label} export failed")
+            messagebox.showerror(
+                f"{label} export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        self.status_var.set(f"Exported {label.lower()} — {target.name}")
+        return True
+
     def export_input_json(self) -> None:
         try:
             analysis = self._commit_editor()
@@ -824,9 +839,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
-                json.dumps(analysis.input, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-                encoding="utf-8",
+            self._write_export_file(
+                path,
+                json.dumps(
+                    analysis.input, indent=2, ensure_ascii=False, allow_nan=False
+                ) + "\n",
+                label="Input",
             )
 
     def validate_current(self) -> None:
@@ -974,15 +992,34 @@ class CleanroomXApp:
         canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e")
         canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e")
 
-        for series in plot["series"]:
+        for index, series in enumerate(plot["series"]):
             coords = []
             for x, y in zip(series["x"], series["y"]):
                 coords.extend(point(x, y))
+            line_options = {"width": 2}
+            if index % 2:
+                line_options["dash"] = (6, 4)
             if len(coords) >= 4:
-                canvas.create_line(*coords, width=2)
+                canvas.create_line(*coords, **line_options)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
                 canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill="black")
+
+            legend_x = max(left + 20, width - right - 170)
+            legend_y = top + index * 18
+            canvas.create_line(
+                legend_x,
+                legend_y,
+                legend_x + 28,
+                legend_y,
+                **line_options,
+            )
+            canvas.create_text(
+                legend_x + 34,
+                legend_y,
+                text=series.get("name", f"Series {index + 1}"),
+                anchor="w",
+            )
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])
@@ -998,11 +1035,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
+            self._write_export_file(
+                path,
                 json.dumps(
                     self.last_run.result, indent=2, ensure_ascii=False, allow_nan=False
                 ) + "\n",
-                encoding="utf-8",
+                label="Result",
             )
 
     def export_report_markdown(self) -> None:
@@ -1014,7 +1052,7 @@ class CleanroomXApp:
             filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt")],
         )
         if path:
-            Path(path).write_text(self.last_run.markdown, encoding="utf-8")
+            self._write_export_file(path, self.last_run.markdown, label="Report")
 
     def show_about(self) -> None:
         messagebox.showinfo(
@@ -1052,12 +1090,25 @@ class CleanroomXApp:
         self.root.destroy()
 
 
+def bundled_demo_project_path() -> Path:
+    """Return the self-contained demonstration project shipped in the package."""
+    path = Path(__file__).resolve().parent / "demo" / "gui_demo.cleanroomx.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"bundled CleanroomX demo is missing: {path}")
+    return path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cleanroomx-gui",
         description="CleanroomX desktop engineering application",
     )
     parser.add_argument("project", nargs="?", help="Optional CleanroomX project file to open")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Open the self-contained demonstration project bundled with CleanroomX",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -1072,17 +1123,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.demo and args.project:
+        parser.error("project path and --demo cannot be used together")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
     validate_application_registry()
+    project_path = bundled_demo_project_path() if args.demo else args.project
+
     root = tk.Tk()
     app = CleanroomXApp(root)
-    if args.project:
+    if project_path:
         try:
-            app.load_project_path(args.project)
+            app.load_project_path(project_path)
         except Exception as exc:
             if args.smoke:
                 root.destroy()
@@ -1091,7 +1147,7 @@ def main(argv: list[str] | None = None) -> int:
             messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.smoke:
-        if args.project and app.project.analyses:
+        if project_path and app.project.analyses:
             run = app.smoke_run_active()
             json.dumps(run.to_dict(), allow_nan=False)
         root.update_idletasks()

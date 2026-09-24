@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.91 terminal network-state projection replay diagnostics — 2026-09-24
+
+- Retains canonical low/high terminal network-state projections alongside their SHA-256 fingerprints on solved final and post-decision iteration-limit brackets.
+- Independently re-solves each terminal endpoint and compares the retained canonical node, edge, pressure-power, and variable-friction closure projection with the fresh projection.
+- Localizes projection corruption to deterministic JSON-style field paths such as `$.nodes[0].relative_pressure_pa`, even when the retained SHA-256 fingerprint itself is not modified.
+- Uses the v0.90 order-invariant v2 canonical projection, so named node, edge, and closure enumeration order does not create false mismatches.
+- Aggregates projection-replay consistency, exact violating endpoint positions, mismatch paths, and corner-level details through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Preserves v0.90 order-invariant fingerprint canonicalization, v0.89 selected-operating-state fingerprint replay, v0.88 terminal fingerprint replay, solver tolerances, root selection, no-extrapolation behavior, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.91.0.
+
 ## v0.90 order-invariant network-state fingerprint canonicalization — 2026-09-24
 
 - Canonicalizes semantically unordered named network-state collections before SHA-256 hashing by sorting solved nodes, solved edges, and variable-friction edge-closure rows by name.

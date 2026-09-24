@@ -233,7 +233,7 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.96.0"
+    assert payload["version"] == "0.97.0"
     assert payload["analysis_count"] >= 20
 
 

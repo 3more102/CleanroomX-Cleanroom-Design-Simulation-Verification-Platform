@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99 release-integrity finalization — 2026-09-24
+
+- Continues directly from integrated `main` commit `9563507252f204bd8d88fa53f67d4afe2999f040`, which already merged the first registry-integrity hardening on top of the verified v0.98 desktop release.
+- Adds catalog/mapping parity validation so the immutable application tuple and public analysis lookup cannot silently drift apart.
+- Runs registry validation before ordinary Tk startup, preventing a broken application catalog from opening a partially usable desktop session.
+- Adds dedicated regressions for catalog/mapping drift, missing parser/runner bindings on standard workflows, and pre-display GUI fail-fast behavior, while retaining the existing duplicate-key and custom-adapter contract tests.
+- Synchronizes package/runtime/demo metadata, GUI assertions, README/docs, and CI checks at v0.99.0.
+- Adds a focused v0.99 CI release-integrity gate before the complete test suite, then retains the Python 3.11/3.12/3.13 matrix, v0.91-v0.95 compatibility gates, representative CLI smoke checks, and real Python 3.13 Tk/Xvfb GUI smoke.
+- No engineering solver equations, tolerances, uncertainty methods, acceptance semantics, or numerical/provenance algorithms are changed.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

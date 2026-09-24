@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.86 terminal-bracket pressure-component replay — 2026-09-24
+
+- Retains low/high fan, nonlinear loop-network, and total system pressure on solved final bisection brackets and post-decision iteration-limit remaining brackets.
+- Independently replays the terminal low/high pressure components from the selected supplied fan segment and the complete retained L/H/T decision chain.
+- Closes the post-final-decision iteration-limit provenance gap where a newly replaced endpoint previously retained its residual but not a directly replay-auditable pressure-component state.
+- Extends v0.84 exact mismatch provenance to terminal brackets with exact position/component, recorded/recomputed pressure, absolute error, violation records, and tied maximum-error witnesses.
+- Propagates terminal replay consistency, violation corners/details, aggregate violation counts, maximum error, and tied worst witnesses through nonlinear uncertainty summaries and reports.
+- Preserves v0.85 selected operating-state replay, v0.84 exact per-step mismatch provenance, v0.83 full-bracket replay, root-selection/no-extrapolation behavior, iteration budgets, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.86.0.
+
+
 ## v0.85 selected operating-state independent replay — 2026-09-24
 
 - Adds a fresh nonlinear replay of every solved selected operating airflow after the bounded search completes, independently recomputing fan pressure, loop-network pressure, total system pressure, and fan-minus-system residual.

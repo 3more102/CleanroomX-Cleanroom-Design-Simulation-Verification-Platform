@@ -28,6 +28,8 @@ v0.84 makes any pressure-component replay failure directly traceable. Each misma
 
 v0.85 closes the remaining solved-result provenance gap by independently re-solving the selected operating airflow itself after search completion. The replay verifies that the selected airflow is anchored to the retained search origin and that the final fan, loop-network, total-system, and residual pressures match a fresh model evaluation. This is implementation-provenance hardening only; it does not add physical uncertainty or equipment-acceptance criteria.
 
+v0.86 extends independent replay to the terminal bisection bracket itself. Solved final brackets retain low/high fan, nonlinear loop-network, and total system pressures; iteration-limit evidence retains the post-decision remaining bracket after the last budgeted L/H update. Each terminal endpoint is freshly re-solved from the selected supplied fan segment and retained decision chain, with exact mismatch records and tied maximum-error witnesses. This remains numerical implementation provenance, not physical uncertainty, stability evidence, or equipment acceptance.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

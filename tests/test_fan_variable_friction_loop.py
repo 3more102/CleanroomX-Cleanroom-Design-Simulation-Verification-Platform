@@ -1082,6 +1082,12 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     assert audit[
         "all_trace_pressure_components_match_independent_replay"
     ] is True
+    assert audit["pressure_component_replay_violation_count"] == 0
+    assert audit["pressure_component_replay_violation_iterations"] == []
+    assert audit["pressure_component_replay_violation_positions"] == []
+    assert audit["pressure_component_replay_violation_components"] == []
+    assert audit["pressure_component_replay_violations"] == []
+    assert audit["maximum_trace_pressure_component_replay_error_witnesses"]
 
     corrupted = [dict(step) for step in trace]
     delta_pa = 1.0
@@ -1129,6 +1135,32 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     assert corrupted_audit[
         "maximum_absolute_trace_pressure_component_replay_error_pa"
     ] == pytest.approx(delta_pa, abs=1e-9)
+    assert corrupted_audit["pressure_component_replay_violation_count"] == 3
+    assert corrupted_audit["pressure_component_replay_violation_iterations"] == [1]
+    assert corrupted_audit["pressure_component_replay_violation_positions"] == [
+        "low"
+    ]
+    assert corrupted_audit["pressure_component_replay_violation_components"] == [
+        "fan",
+        "loop_network",
+        "system",
+    ]
+    violations = corrupted_audit["pressure_component_replay_violations"]
+    assert [(item["position"], item["component"]) for item in violations] == [
+        ("low", "fan"),
+        ("low", "loop_network"),
+        ("low", "system"),
+    ]
+    assert all(item["iteration"] == 1 for item in violations)
+    witnesses = corrupted_audit[
+        "maximum_trace_pressure_component_replay_error_witnesses"
+    ]
+    assert witnesses
+    assert all(item["position"] == "low" for item in witnesses)
+    assert all(
+        item["absolute_error_pa"] == pytest.approx(delta_pa, abs=1e-9)
+        for item in witnesses
+    )
     first_check = corrupted_audit["pressure_component_replay_checks"][0]
     assert first_check[
         "all_low_pressure_components_match_independent_replay"

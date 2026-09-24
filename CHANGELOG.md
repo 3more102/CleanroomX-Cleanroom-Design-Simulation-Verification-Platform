@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.97 application completeness and GUI lifecycle hardening — 2026-09-24
+
+- Executes every GUI-exposed application workflow end to end against real repository examples, including consistency and engineering dossier adapters.
+- Preserves uncommitted editor state across multi-analysis navigation and prevents unsafe project/analysis mutation or cross-analysis switching while a backend run is active.
+- Adds unsaved-change detection and save/discard/cancel protection before project replacement or application close.
+- Enforces strict JSON in project files and GUI inputs, rejecting non-finite constants such as NaN and Infinity.
+- Clears stale result/report/diagnostic state when the analysis that produced it is removed.
+- Adds a dedicated v0.97 application/workflow/lifecycle CI gate before the complete suite while retaining all v0.91-v0.95 compatibility gates, CLI smoke checks, and the real Tk/Xvfb GUI smoke.
+- Bumps package/runtime/demo metadata to v0.97.0.
+- Does not alter validated engineering backend acceptance semantics or claim cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
 ## v0.96 desktop application and project workflow — 2026-09-24
 
 - Adds a shared application-service registry over the existing validated CleanroomX backend parsers, solvers, reporters, consistency checks, and engineering dossier workflow.

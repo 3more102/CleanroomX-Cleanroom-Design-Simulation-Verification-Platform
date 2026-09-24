@@ -2429,3 +2429,71 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Bisection corners with invariant evidence" in report
     assert "Strict sign-bracket violations" in report
     assert "Maximum absolute binary-width consistency error" in report
+
+
+def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
+    data = _example_data()
+    data["solver"]["operating_pressure_tolerance_pa"] = 1e-15
+    data["solver"]["max_operating_iterations"] = 1
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        fan_variable_friction_loop_uncertainty_from_dict(data)
+    )
+
+    summary = result["operating_point_search_resolution_summary"]
+    limit_corners = [
+        corner
+        for corner in result["corners"]
+        if corner.get("operating_point_search_evidence") is not None
+        and corner["operating_point_search_evidence"].get(
+            "iteration_limit_evidence"
+        )
+        is not None
+    ]
+
+    assert result["status"] == "indeterminate"
+    assert summary["iteration_limit_search_evidence_corner_count"] == len(
+        limit_corners
+    )
+    assert summary["iteration_limit_search_evidence_corner_count"] > 0
+    assert summary["iteration_limit_invariant_evidence_corner_count"] == len(
+        limit_corners
+    )
+    assert (
+        summary[
+            "iteration_limit_strict_sign_change_violation_corner_indices"
+        ]
+        == []
+    )
+    assert summary[
+        "iteration_limit_strict_sign_change_preserved_corner_count"
+    ] == len(limit_corners)
+    max_error = summary[
+        "maximum_iteration_limit_absolute_width_fraction_consistency_error"
+    ]
+    assert max_error is not None
+    assert max_error["value"] == pytest.approx(0.0, abs=1e-18)
+    assert max_error["sources"]
+
+    for corner in limit_corners:
+        evidence = corner["operating_point_search_evidence"]
+        assert evidence["final_bisection_bracket"] is None
+        remaining = evidence["iteration_limit_evidence"][
+            "remaining_bisection_bracket"
+        ]
+        invariant = remaining["invariant_audit"]
+        assert invariant["strict_sign_change_preserved"] is True
+        assert invariant["binary_contraction_step_count"] == 1
+        assert invariant[
+            "expected_width_fraction_of_supplied_segment"
+        ] == pytest.approx(0.5, abs=1e-15)
+        assert invariant[
+            "actual_width_fraction_of_supplied_segment"
+        ] == pytest.approx(0.5, abs=1e-12)
+
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Bisection iteration-limit corners with search evidence" in report
+    assert "Iteration-limit remaining-bracket invariant evidence" in report
+    assert (
+        "Maximum iteration-limit remaining-bracket binary-width consistency error"
+        in report
+    )

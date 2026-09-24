@@ -60,19 +60,23 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
 
-Consistency and dossier workflows resolve relative file references against the saved project directory. Relative references therefore require a saved project/base directory; dossiers containing only absolute references can run before the project is saved. **Save Project As** clears cached results when the base directory changes so path-dependent outputs cannot survive a resolution-context change.
+Consistency and dossier workflows resolve relative file references against the saved project directory. Relative references therefore require a saved project/base directory; dossiers containing only absolute references can run before the project is saved. Importing analysis JSON rebases its declared file references into the current project context, and **Save Project As** rewrites relative references so they continue to identify the same files after relocation. Cached results are cleared when the base directory changes so path-dependent outputs cannot survive a resolution-context change.
 
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Every successful application run also records canonical input SHA-256 provenance; file-backed consistency/dossier runs record dependency SHA-256 and byte-size evidence before and after execution. The result tab shows complete normalized JSON, Diagnostics exposes engineering plus application-execution provenance, and **Export Run Bundle JSON** preserves the complete result/report/diagnostics/plot bundle. The report tab shows the backend Markdown reporter when one exists, otherwise a deterministic JSON-backed fallback report.
 
-When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives, avoiding a GUI-only numerical dependency.
+When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives, avoiding a GUI-only numerical dependency. Backend-computed system-pressure evidence is rendered as a distinct system-curve series when available.
 
 ## Validation and automated smoke
 
 Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus catalog/mapping parity and binding resolution, canonical execution-provenance hashing, dependency stability evidence, absolute/relative dossier path behavior, Save-As cache invalidation, abandoned-worker exclusivity, run-bundle export, strict result serialization, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, headless `--check`, and execution of the active demonstration analysis.
 
-CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
+Project saves and desktop JSON/Markdown exports use a same-directory temporary file followed by replacement; write failures are surfaced through the GUI instead of being silently ignored.
+
+The installed package includes a self-contained demonstration project and its referenced JSON dependencies. Launch it with `cleanroomx-gui --demo`.
+
+CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally builds and installs a wheel in a fresh virtual environment, validates the packaged demo dependencies, runs `cleanroomx-gui --check`, and launches both source-tree and installed real Tk GUI smoke checks under Xvfb.
 
 ## Engineering boundary
 

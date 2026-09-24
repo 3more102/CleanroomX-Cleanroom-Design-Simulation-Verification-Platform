@@ -465,6 +465,13 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
         in report
     )
+    assert (
+        "Terminal bisection-bracket pressure components match independent replay: **True**"
+        in report
+    )
+    assert "Terminal pressure-component replay violation count: **0**" in report
+    assert "Maximum absolute terminal pressure-component replay error" in report
+    assert "Exact terminal pressure-component replay violations: **[]**" in report
     assert "Every recorded trace width matches its airflow endpoints: **True**" in report
     assert (
         "Every recorded trace width fraction matches binary iteration contraction: **True**"

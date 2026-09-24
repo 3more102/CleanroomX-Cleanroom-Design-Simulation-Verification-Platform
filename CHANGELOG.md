@@ -1,4 +1,17 @@
 # Changelog
+## v0.70 iteration-limit bisection provenance — 2026-09-24
+
+- Preserves structured operating-point search evidence when bounded fan/system bisection exhausts `max_operating_iterations` before satisfying the configured pressure residual tolerance.
+- Retains the remaining strict signed-residual bracket after the final budgeted midpoint evaluation, including width, half-width, supplied-segment-normalized width, and endpoint residuals.
+- Audits the remaining bracket against completed binary contraction steps and records expected/actual width fractions plus raw floating-point consistency error without accepting or fabricating an operating point.
+- Separates solved search-evidence coverage from non-converged iteration-limit evidence across nonlinear uncertainty corners.
+- Aggregates exact iteration-limit corner indices, strict sign-bracket violation accounting, and tied source-corner provenance for the maximum remaining-bracket consistency error.
+- Surfaces the evidence in standalone nonlinear fan-loop, uncertainty, and engineering-dossier reports.
+- Adds solver and nonlinear uncertainty regression coverage across the CI Python matrix.
+- Preserves v0.69 bidirectional sampled residual topology, v0.68 scale-aware alternative-candidate separation, and existing no-extrapolation/unresolved-case withholding rules.
+- Treats the remaining bracket as numerical solver/search-state evidence only; it is not physical airflow uncertainty, an interpolation-error bound, a continuous worst-case guarantee, stability evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.70.0.
+
 ## v0.69 bidirectional sampled residual sign-change topology audit — 2026-09-24
 
 - Retains strict negative-to-positive fan-minus-system residual sign-change segments across supplied fan-curve samples as explicit audit-only evidence.

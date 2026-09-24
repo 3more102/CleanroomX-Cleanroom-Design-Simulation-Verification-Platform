@@ -42,7 +42,10 @@ def _analysis_room_candidates(analysis_input: dict, room: Room) -> list[dict]:
     for item in rooms:
         if not isinstance(item, dict):
             continue
-        if room.analysis_room_ref and item.get("id") == room.analysis_room_ref:
+        if room.analysis_room_ref and (
+            item.get("id") == room.analysis_room_ref
+            or item.get("name") == room.analysis_room_ref
+        ):
             by_ref.append(item)
         if item.get("name") == room.name:
             by_name.append(item)

@@ -874,6 +874,31 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_network_state_replay_violation_corner_indices']}**",
                 "- Trace network-state replay consistent corners: "
                 f"**{search_summary['bisection_trace_network_state_replay_consistent_corner_count']}**",
+                "- Full-trace network-state projection replay applicable: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_applicable']}**",
+                "- Full-trace network-state projection replay coverage: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_evidence_corner_count']}/"
+                f"{search_summary['bisection_trace_network_state_projection_replay_applicable_corner_count']} corners**",
+                "- Full-trace network-state projection replay complete coverage: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_complete_coverage']}**",
+                "- Full-trace network-state projection replay consistent corners: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_consistent_corner_count']}**",
+                "- Full-trace network-state projection replay inconsistent corners: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_inconsistent_corner_count']}**",
+                "- Full-trace network-state projection replay incomplete-coverage corners: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_incomplete_coverage_corner_count']}**",
+                "- Full-trace network-state projection replay violation corners: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_violation_corner_indices']}**",
+                "- Full-trace network-state projection replay coverage-gap corners: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_coverage_gap_corner_indices']}**",
+                "- Full-trace network-state projection replay mismatch records: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_mismatch_count']}**",
+                "- Full-trace network-state projection replay violation details: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_violation_details']}**",
+                "- Full-trace network-state projection replay coverage-gap details: "
+                f"**{search_summary['bisection_trace_network_state_projection_replay_coverage_gap_details']}**",
+                "- Full-trace network-state projection replay maximum numerical errors by field: "
+                f"**{search_summary['maximum_bisection_trace_network_state_projection_numeric_errors']}**",
                 "- Terminal pressure-component replay violation corners: "
                 f"**{search_summary['terminal_pressure_component_replay_violation_corner_indices']}**",
                 "- Maximum terminal pressure-component replay error: "

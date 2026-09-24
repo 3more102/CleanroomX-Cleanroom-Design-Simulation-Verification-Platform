@@ -4,7 +4,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current release-completion branch is `codex/cleanroomx-v098-release-completion`, package/runtime version **0.98.0**. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 baseline was taken from live v0.97 application-completeness head `1fe0474addc9c1bd3086cdf50207520fcadb95cf`. The default `main` branch remains older than this development line until repository integration is completed.
+The current release-completion branch is `codex/cleanroomx-v098-release-completion`, package/runtime version **0.98.0**. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 baseline was taken from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8`. The default `main` branch remains older than this development line until repository integration is completed.
 
 CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.98 also validates every declared application parser/runner/reporter binding and launches the installed desktop entry point under Xvfb on Python 3.13 against the bundled demonstration project.
 
@@ -660,7 +660,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer provenance/dependency handling across supplied performance datasets, followed by desktop/web UI work and CFD adapters.
+The desktop GUI is implemented in v0.96-v0.98. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.98 workflows.
 
 ## Standards references
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.99 final desktop release hardening — 2026-09-24
+
+- Builds directly on the integrated v0.98 desktop release and the merged structural registry-integrity gate.
+- Rejects duplicate analysis keys, enforces parser/runner contracts for direct workflows, preserves the dedicated consistency/dossier adapter contract, and reports auditable registry readiness metadata.
+- Hardens GUI **Abandon** so abandoned results/errors are suppressed while the application remains busy until the backend worker exits, preventing overlapping backend analyses.
+- Synchronizes package, runtime, GUI demo, tests, documentation, and CI metadata at v0.99.0.
+- Preserves the v0.91-v0.95 numerical/provenance compatibility gates and does not change validated solver equations, acceptance criteria, or no-extrapolation semantics.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

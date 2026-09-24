@@ -34,6 +34,8 @@ v0.87 independently replays the internal nonlinear network state behind every re
 
 v0.88 extends the same canonical network-state identity to the terminal bisection bracket. Both solved final brackets and post-decision iteration-limit remaining brackets retain low/high SHA-256 fingerprints, and the audit independently re-solves those endpoint airflows before comparing the internal network state. This specifically covers an endpoint created by the final budgeted L/H update, which can exist after the last retained trace row. The evidence remains deterministic implementation provenance only.
 
+v0.89 retains the canonical low/high terminal network-state projections themselves in addition to the fingerprints. Each endpoint projection is independently reconstructed from a fresh nonlinear solve and compared field-by-field, with exact deterministic JSON-style mismatch paths for node, edge, pressure-power, or variable-friction closure differences. This makes a fingerprint failure explainable and also detects retained projection corruption when the stored hash is left unchanged. The projection is implementation provenance only and does not create a physical uncertainty or acceptance criterion.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

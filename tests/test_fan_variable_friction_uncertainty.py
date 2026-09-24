@@ -2427,6 +2427,12 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary["bisection_trace_sign_violation_corner_indices"] == []
     assert summary["bisection_trace_midpoint_violation_corner_indices"] == []
     assert summary["bisection_trace_terminal_violation_corner_indices"] == []
+    assert summary[
+        "bisection_trace_iteration_sequence_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_state_transition_violation_corner_indices"
+    ] == []
     assert summary["bisection_trace_length_match_corner_count"] == (
         summary["bisection_corner_count"]
     )
@@ -2439,6 +2445,12 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary["bisection_trace_terminal_last_corner_count"] == (
         summary["bisection_corner_count"]
     )
+    assert summary[
+        "bisection_trace_iteration_sequence_match_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_state_transition_replay_corner_count"
+    ] == summary["bisection_corner_count"]
 
     errors = []
     trace_lengths = []
@@ -2479,6 +2491,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
             "all_midpoints_are_arithmetic_bracket_midpoints"
         ] is True
         assert trace_audit["termination_record_is_last"] is True
+        assert trace_audit["iterations_are_contiguous_from_one"] is True
+        assert trace_audit[
+            "all_state_transitions_replay_recorded_decisions"
+        ] is True
+        assert trace_audit["transition_record_count"] == len(trace) - 1
         assert trace_audit["decision_sequence"].endswith("T")
         trace_lengths.append(len(trace))
 
@@ -2498,6 +2515,8 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Bisection corners with invariant evidence" in report
     assert "Bisection corners with decision-trace evidence" in report
     assert "Trace-length violations" in report
+    assert "Trace iteration-sequence violations" in report
+    assert "Trace state-transition replay violations" in report
     assert "Maximum absolute binary-width consistency error" in report
     assert "Maximum retained bisection decision-trace steps" in report
 

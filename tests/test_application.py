@@ -9,6 +9,7 @@ from cleanroomx.application import (
     ANALYSIS_SPECS,
     analysis_catalog,
     application_info,
+    rebase_analysis_file_references,
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
@@ -90,7 +91,15 @@ def test_fan_operating_point_application_service_produces_real_plot_model():
     assert run.status == "solved"
     assert run.result["operating_point"] is not None
     assert run.plot is not None
+    assert [series["name"] for series in run.plot["series"]] == [
+        "Fan curve",
+        "System curve",
+    ]
     assert run.plot["series"][0]["x"]
+    assert run.plot["series"][1]["x"] == run.plot["series"][0]["x"]
+    assert run.plot["series"][1]["y"] == [
+        point["system_pressure_pa"] for point in run.result["curve_point_checks"]
+    ]
     assert run.plot["markers"][0]["name"] == "Operating point"
 
 
@@ -115,6 +124,68 @@ def test_consistency_adapter_resolves_relative_project_files():
     assert run.result["shared_room_count"] > 0
     assert run.status in {"pass", "fail", "pass_with_scope_difference", "not_comparable"}
     assert "consistency" in run.markdown.lower()
+
+
+def test_rebase_analysis_file_references_preserves_consistency_referents(tmp_path):
+    source = tmp_path / "source"
+    target = tmp_path / "moved" / "project"
+    source.mkdir()
+    target.mkdir(parents=True)
+    payload = {
+        "verification_project": "inputs/facility.json",
+        "hvac_project": "../shared/hvac.json",
+    }
+
+    rebased = rebase_analysis_file_references(
+        "consistency",
+        payload,
+        source_base=source,
+        target_base=target,
+    )
+
+    for key in ("verification_project", "hvac_project"):
+        assert (target / rebased[key]).resolve() == (source / payload[key]).resolve()
+    assert payload["verification_project"] == "inputs/facility.json"
+
+
+def test_rebase_analysis_file_references_handles_dossier_lists_and_unsaved_target(tmp_path):
+    source = tmp_path / "import"
+    source.mkdir()
+    payload = {
+        "name": "Portable dossier",
+        "verification_project": "facility.json",
+        "recovery_tests": ["recovery/a.json", "recovery/b.json"],
+        "fan_loop_speed_studies": ["studies/speed.json"],
+    }
+
+    rebased = rebase_analysis_file_references(
+        "dossier",
+        payload,
+        source_base=source,
+        target_base=None,
+    )
+
+    assert Path(rebased["verification_project"]).is_absolute()
+    assert all(Path(value).is_absolute() for value in rebased["recovery_tests"])
+    assert Path(rebased["fan_loop_speed_studies"][0]).is_absolute()
+    assert Path(rebased["verification_project"]).resolve() == (source / "facility.json").resolve()
+
+
+def test_rebase_analysis_file_references_leaves_absolute_and_non_file_workflows_unchanged(tmp_path):
+    absolute = str((tmp_path / "facility.json").resolve())
+    payload = {"verification_project": absolute, "hvac_project": "hvac.json"}
+    rebased = rebase_analysis_file_references(
+        "consistency",
+        payload,
+        source_base=tmp_path,
+        target_base=tmp_path / "other",
+    )
+    assert rebased["verification_project"] == absolute
+
+    ordinary = {"path_like_note": "not-a-file-reference.json"}
+    assert rebase_analysis_file_references(
+        "hvac", ordinary, source_base=tmp_path, target_base=tmp_path / "other"
+    ) == ordinary
 
 
 def test_dossier_adapter_runs_real_file_referenced_workflow():

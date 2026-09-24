@@ -22,7 +22,7 @@ Open the bundled demonstration project:
 cleanroomx-gui examples/gui_demo.cleanroomx.json
 ```
 
-Check that the application layer and GUI imports are usable without opening a window:
+Check the application layer without opening a window. This validates every registered parser, runner, and reporter binding before printing the capability catalog:
 
 ```bash
 cleanroomx-gui --check
@@ -66,7 +66,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, registry binding integrity for every parser/runner/reporter target, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
 

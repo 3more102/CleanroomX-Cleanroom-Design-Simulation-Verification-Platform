@@ -30,6 +30,7 @@ from .project import (
     new_project,
     save_project_document,
 )
+from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
 _UNIT_SUFFIXES = (
@@ -156,8 +157,8 @@ class CleanroomXApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
-        self.root.geometry("1180x760")
-        self.root.minsize(900, 600)
+        self.root.geometry("1440x900")
+        self.root.minsize(1050, 680)
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
@@ -219,6 +220,14 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
+        view_menu.add_command(
+            label="Refresh Spatial Workspace",
+            command=lambda: self.spatial_workspace.refresh(),
+        )
+        view_menu.add_command(
+            label="Fit Spatial Views",
+            command=lambda: self.spatial_workspace.fit_views(),
+        )
         view_menu.add_checkbutton(
             label="Wrap output text",
             variable=self.wrap_outputs_var,
@@ -284,6 +293,16 @@ class CleanroomXApp:
         panes.add(content, weight=4)
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
+
+        self.spatial_workspace = SpatialDesignWorkspace(
+            self.notebook,
+            project_getter=lambda: self.project,
+            analysis_getter=self._editor_analysis,
+            on_change=self._on_spatial_changed,
+            on_sync_requested=self._sync_spatial_to_current_analysis,
+            status_setter=self.status_var.set,
+        )
+        self.notebook.add(self.spatial_workspace, text="Design 2D + 3D")
 
         input_tab = ttk.Frame(self.notebook)
         self.notebook.add(input_tab, text="Input")
@@ -533,6 +552,8 @@ class CleanroomXApp:
             self.input_text.delete("1.0", "end")
             self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
+        if hasattr(self, "spatial_workspace"):
+            self.spatial_workspace.refresh()
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:
@@ -587,6 +608,56 @@ class CleanroomXApp:
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
+        if hasattr(self, "spatial_workspace"):
+            self.spatial_workspace.refresh()
+
+    def _on_spatial_changed(self) -> None:
+        self._update_title()
+
+    def _sync_spatial_to_current_analysis(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before synchronizing spatial geometry.",
+                parent=self.root,
+            )
+            return
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None:
+            messagebox.showinfo(
+                "No active analysis",
+                "Select a room-verification or multi-room verification analysis first.",
+                parent=self.root,
+            )
+            return
+        try:
+            self._commit_editor(analysis)
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot synchronize geometry",
+                f"Fix the current analysis input before synchronizing.\n\n{exc}",
+                parent=self.root,
+            )
+            return
+        if analysis.kind not in {"room_verification", "project_verification"}:
+            messagebox.showinfo(
+                "Spatial synchronization",
+                "Geometry synchronization currently targets room-verification and "
+                "multi-room project-verification inputs. The spatial layout remains "
+                "available for all projects.",
+                parent=self.root,
+            )
+            return
+        changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
+        if not changed:
+            self.status_var.set("Spatial geometry already matches the active analysis")
+            return
+        self._invalidate_last_run_for(analysis.id)
+        self._load_analysis_into_editor(analysis)
+        self._update_title()
+        self.status_var.set(
+            f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
+        )
 
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():

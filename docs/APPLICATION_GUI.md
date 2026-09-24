@@ -38,7 +38,7 @@ xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, and invalid JSON. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ## Operator workflow
 
@@ -50,7 +50,7 @@ Project saves are validated before writing and use an atomic temporary-file repl
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export result JSON or report Markdown and save the project.
 
-The **Cancel** action abandons the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. The status line explicitly reports this behavior.
+The **Abandon** action invalidates the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot. The status line explicitly reports abandonment behavior.
 
 ## Supported workflows
 
@@ -66,7 +66,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes application-catalog/backend reuse, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
 

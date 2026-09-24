@@ -18,6 +18,8 @@ For each candidate total airflow, CleanroomX:
 
 The fan operating point is found only inside a supplied fan-curve segment. No fan-curve extrapolation is performed.
 
+For bounded-bisection traces, v0.81 independently replays the supplied-segment low/high/midpoint states, freshly re-solves the nonlinear loop, re-interpolates fan pressure, and verifies the retained fan-minus-system residuals against those fresh model evaluations. This is deterministic numerical provenance only, not a physical uncertainty, stability, or equipment-acceptance margin.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

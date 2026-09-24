@@ -2554,6 +2554,21 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "maximum_bisection_trace_residual_replay_error_pa"
     ]["value"] <= 1e-9
+    assert summary[
+        "bisection_trace_pressure_state_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_pressure_state_replay_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "maximum_bisection_trace_midpoint_fan_pressure_replay_error_pa"
+    ]["value"] <= 1e-9
+    assert summary[
+        "maximum_bisection_trace_midpoint_loop_pressure_replay_error_pa"
+    ]["value"] <= 1e-9
+    assert summary[
+        "maximum_bisection_trace_midpoint_system_pressure_replay_error_pa"
+    ]["value"] <= 1e-9
     system_pressure_error = summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"
     ]
@@ -2641,6 +2656,20 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         ] is True
         assert trace_audit[
             "maximum_absolute_trace_residual_replay_error_pa"
+        ] <= 1e-9
+        assert trace_audit["pressure_state_replay_available"] is True
+        assert trace_audit["pressure_state_replay_check_count"] == len(trace)
+        assert trace_audit[
+            "all_midpoint_pressure_states_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "maximum_absolute_midpoint_fan_pressure_replay_error_pa"
+        ] <= 1e-9
+        assert trace_audit[
+            "maximum_absolute_midpoint_loop_pressure_replay_error_pa"
+        ] <= 1e-9
+        assert trace_audit[
+            "maximum_absolute_midpoint_system_pressure_replay_error_pa"
         ] <= 1e-9
         assert trace_audit[
             "all_recorded_widths_match_airflow_brackets"
@@ -2813,6 +2842,15 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         "maximum_bisection_trace_residual_replay_error_pa"
     ]["value"] <= 1e-9
     assert summary[
+        "bisection_trace_pressure_state_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_pressure_state_replay_consistent_corner_count"
+    ] == len(limit_corners)
+    assert summary[
+        "maximum_bisection_trace_midpoint_system_pressure_replay_error_pa"
+    ]["value"] <= 1e-9
+    assert summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"
     ]["value"] <= 2e-9
     assert summary[
@@ -2884,6 +2922,20 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         ] is True
         assert trace_audit[
             "maximum_absolute_trace_residual_replay_error_pa"
+        ] <= 1e-9
+        assert trace_audit["pressure_state_replay_available"] is True
+        assert trace_audit["pressure_state_replay_check_count"] == len(trace)
+        assert trace_audit[
+            "all_midpoint_pressure_states_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "maximum_absolute_midpoint_fan_pressure_replay_error_pa"
+        ] <= 1e-9
+        assert trace_audit[
+            "maximum_absolute_midpoint_loop_pressure_replay_error_pa"
+        ] <= 1e-9
+        assert trace_audit[
+            "maximum_absolute_midpoint_system_pressure_replay_error_pa"
         ] <= 1e-9
         assert trace_audit[
             "all_decisions_match_midpoint_residual_semantics"

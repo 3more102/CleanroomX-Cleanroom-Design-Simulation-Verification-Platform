@@ -755,6 +755,10 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_decision_semantic_consistent_corner_count",
                     0,
                 )
+                trace_pressure_component_decision_count = search_summary.get(
+                    "bisection_trace_pressure_component_decision_semantic_consistent_corner_count",
+                    0,
+                )
                 trace_origin_replay_count = search_summary.get(
                     "bisection_trace_origin_replay_corner_count",
                     0,
@@ -806,6 +810,20 @@ def markdown_dossier_report(result: dict) -> str:
                         "bisection_trace_raw_state_violation_corner_indices",
                         [],
                     )
+                )
+                trace_pressure_residual_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_residual_identity_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_pressure_residual_error = search_summary.get(
+                    "maximum_bisection_trace_pressure_residual_identity_error_pa"
+                )
+                max_trace_pressure_residual_error = (
+                    "—"
+                    if trace_pressure_residual_error is None
+                    else trace_pressure_residual_error["value"]
                 )
                 trace_midpoint_error = search_summary.get(
                     "maximum_bisection_trace_midpoint_error_m3_h"
@@ -861,6 +879,12 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_pressure_component_decision_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_component_decision_semantic_violation_corner_indices",
+                        [],
+                    )
+                )
                 trace_origin_replay_violations = len(
                     search_summary.get(
                         "bisection_trace_origin_replay_violation_corner_indices",
@@ -910,11 +934,19 @@ def markdown_dossier_report(result: dict) -> str:
                     f"trace-geometry {trace_geometry_count}/{trace_count}; "
                     f"trace-raw-state {trace_raw_state_count}/{trace_count}; "
                     f"raw-state violations {trace_raw_state_violations}; "
+                    f"pressure-residual identity violations "
+                    f"{trace_pressure_residual_violations}; "
+                    f"max trace pressure-residual identity error "
+                    f"{max_trace_pressure_residual_error} Pa; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "
                     f"max trace normalized-width error "
                     f"{max_trace_width_fraction_error}; "
                     f"trace-decision {trace_decision_semantic_count}/{trace_count}; "
+                    f"trace-pressure-decision "
+                    f"{trace_pressure_component_decision_count}/{trace_count}; "
+                    f"pressure-decision violations "
+                    f"{trace_pressure_component_decision_violations}; "
                     f"trace-origin {trace_origin_replay_count}/{trace_count}; "
                     f"trace-outcome {trace_outcome_count}/{trace_count}; "
                     f"limit-final-replay {limit_terminal_replay_count}/"

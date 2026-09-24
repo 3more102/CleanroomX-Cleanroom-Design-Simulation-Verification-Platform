@@ -49,6 +49,60 @@ _UNIT_SUFFIXES = (
     ("_m", "m"),
 )
 
+_UI = {
+    "bg": "#0b1220",
+    "surface": "#111827",
+    "surface_alt": "#182235",
+    "panel": "#0f172a",
+    "border": "#2a3a52",
+    "text": "#e5eefc",
+    "muted": "#93a4bd",
+    "accent": "#22d3ee",
+    "accent_hover": "#67e8f9",
+    "success": "#34d399",
+    "danger": "#fb7185",
+    "grid": "#223047",
+}
+
+
+def _engineering_number(value) -> float | None:
+    """Return a finite positive engineering value, accepting uncertainty {"value": ...} shapes."""
+    if isinstance(value, dict) and "value" in value:
+        value = value["value"]
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        if number > 0 and number == number and number not in (float("inf"), float("-inf")):
+            return number
+    return None
+
+
+def extract_room_geometries(value, path: str = "$") -> list[dict[str, float | str]]:
+    """Find rectangular room-like geometry in analysis JSON for dependency-free 2D/3D previews."""
+    found: list[dict[str, float | str]] = []
+    if isinstance(value, dict):
+        length = _engineering_number(value.get("length_m"))
+        width = _engineering_number(value.get("width_m"))
+        height = _engineering_number(value.get("height_m"))
+        if length is not None and width is not None and height is not None:
+            name = str(value.get("name") or path.rsplit(".", 1)[-1].replace("[", " ").replace("]", ""))
+            found.append(
+                {
+                    "name": name,
+                    "path": path,
+                    "length_m": length,
+                    "width_m": width,
+                    "height_m": height,
+                }
+            )
+        for key, item in value.items():
+            found.extend(extract_room_geometries(item, f"{path}.{key}"))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            found.extend(extract_room_geometries(item, f"{path}[{index}]"))
+    return found
+
 
 def _reject_json_constant(value: str):
     raise ValueError(f"non-finite JSON constant is not allowed: {value}")
@@ -156,8 +210,9 @@ class CleanroomXApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
-        self.root.geometry("1180x760")
-        self.root.minsize(900, 600)
+        self.root.geometry("1400x900")
+        self.root.minsize(1080, 680)
+        self._configure_style()
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
@@ -187,6 +242,92 @@ class CleanroomXApp:
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
+
+    def _configure_style(self) -> None:
+        self.root.configure(background=_UI["bg"])
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure(".", background=_UI["bg"], foreground=_UI["text"])
+        style.configure("TFrame", background=_UI["bg"])
+        style.configure("Surface.TFrame", background=_UI["surface"])
+        style.configure("Panel.TFrame", background=_UI["panel"])
+        style.configure("TLabel", background=_UI["bg"], foreground=_UI["text"])
+        style.configure("Surface.TLabel", background=_UI["surface"], foreground=_UI["text"])
+        style.configure(
+            "Title.TLabel",
+            background=_UI["surface"],
+            foreground=_UI["text"],
+            font=("TkDefaultFont", 18, "bold"),
+        )
+        style.configure(
+            "Subtitle.TLabel",
+            background=_UI["surface"],
+            foreground=_UI["muted"],
+            font=("TkDefaultFont", 9),
+        )
+        style.configure(
+            "Section.TLabel",
+            background=_UI["bg"],
+            foreground=_UI["muted"],
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        style.configure(
+            "Accent.TButton",
+            background=_UI["accent"],
+            foreground="#06212a",
+            padding=(14, 8),
+            font=("TkDefaultFont", 9, "bold"),
+        )
+        style.map("Accent.TButton", background=[("active", _UI["accent_hover"])])
+        style.configure("Tool.TButton", padding=(10, 7))
+        style.configure(
+            "Treeview",
+            background=_UI["panel"],
+            fieldbackground=_UI["panel"],
+            foreground=_UI["text"],
+            rowheight=28,
+            borderwidth=0,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=_UI["surface_alt"],
+            foreground=_UI["text"],
+            relief="flat",
+            padding=(8, 7),
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", _UI["accent"])],
+            foreground=[("selected", "#06212a")],
+        )
+        style.configure("TNotebook", background=_UI["bg"], borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            background=_UI["surface"],
+            foreground=_UI["muted"],
+            padding=(14, 9),
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", _UI["surface_alt"])],
+            foreground=[("selected", _UI["text"])],
+        )
+        style.configure(
+            "TEntry",
+            fieldbackground=_UI["panel"],
+            foreground=_UI["text"],
+            insertcolor=_UI["text"],
+            padding=6,
+        )
+        style.configure(
+            "Status.TLabel",
+            background=_UI["surface"],
+            foreground=_UI["muted"],
+            padding=(10, 6),
+        )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -219,6 +360,10 @@ class CleanroomXApp:
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
+        view_menu.add_separator()
+        view_menu.add_command(label="2D Layout", accelerator="F6", command=lambda: self.notebook.select(self.preview_2d_tab))
+        view_menu.add_command(label="3D View", accelerator="F7", command=lambda: self.notebook.select(self.preview_3d_tab))
+        view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Wrap output text",
             variable=self.wrap_outputs_var,
@@ -235,49 +380,69 @@ class CleanroomXApp:
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
         self.root.bind("<F5>", lambda event: self.run_current())
+        self.root.bind("<F6>", lambda event: self.notebook.select(self.preview_2d_tab))
+        self.root.bind("<F7>", lambda event: self.notebook.select(self.preview_3d_tab))
 
     def _build_layout(self) -> None:
-        metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
-        metadata.pack(fill="x")
-        ttk.Label(metadata, text="Project").grid(row=0, column=0, sticky="w")
-        ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
-            row=0, column=1, sticky="ew", padx=(6, 12)
-        )
-        ttk.Label(metadata, text="Description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(metadata, textvariable=self.description_var).grid(
-            row=0, column=3, sticky="ew", padx=(6, 12)
-        )
-        ttk.Button(metadata, text="Validate", command=self.validate_current).grid(
-            row=0, column=4, padx=3
-        )
-        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
-        self.run_button.grid(row=0, column=5, padx=3)
-        self.cancel_button = ttk.Button(
-            metadata, text="Abandon", command=self.cancel_run, state="disabled"
-        )
-        self.cancel_button.grid(row=0, column=6, padx=3)
-        metadata.columnconfigure(1, weight=1)
-        metadata.columnconfigure(3, weight=2)
+        header = ttk.Frame(self.root, style="Surface.TFrame", padding=(18, 14))
+        header.pack(fill="x")
+        brand = ttk.Frame(header, style="Surface.TFrame")
+        brand.grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 22))
+        ttk.Label(brand, text="CleanroomX", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(
+            brand,
+            text="Cleanroom Design • Simulation • Verification",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
 
-        panes = ttk.Panedwindow(self.root, orient="horizontal")
-        panes.pack(fill="both", expand=True, padx=8, pady=4)
+        fields = ttk.Frame(header, style="Surface.TFrame")
+        fields.grid(row=0, column=1, rowspan=2, sticky="ew")
+        ttk.Label(fields, text="PROJECT", style="Subtitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(fields, text="DESCRIPTION", style="Subtitle.TLabel").grid(row=0, column=1, sticky="w", padx=(12, 0))
+        ttk.Entry(fields, textvariable=self.name_var, width=28).grid(row=1, column=0, sticky="ew", pady=(3, 0))
+        ttk.Entry(fields, textvariable=self.description_var).grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=(3, 0))
+        fields.columnconfigure(0, weight=1)
+        fields.columnconfigure(1, weight=2)
 
-        sidebar = ttk.Frame(panes, padding=4)
+        actions = ttk.Frame(header, style="Surface.TFrame")
+        actions.grid(row=0, column=2, rowspan=2, sticky="e", padx=(18, 0))
+        ttk.Button(actions, text="Validate", style="Tool.TButton", command=self.validate_current).pack(side="left", padx=(0, 6))
+        self.run_button = ttk.Button(actions, text="Run  F5", style="Accent.TButton", command=self.run_current)
+        self.run_button.pack(side="left", padx=(0, 6))
+        self.cancel_button = ttk.Button(actions, text="Abandon", style="Tool.TButton", command=self.cancel_run, state="disabled")
+        self.cancel_button.pack(side="left")
+        header.columnconfigure(1, weight=1)
+
+        workspace = ttk.Frame(self.root, padding=(10, 10, 10, 0))
+        workspace.pack(fill="both", expand=True)
+        panes = ttk.Panedwindow(workspace, orient="horizontal")
+        panes.pack(fill="both", expand=True)
+
+        sidebar = ttk.Frame(panes, style="Panel.TFrame", padding=10)
         panes.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="Analyses", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", pady=(0, 4)
-        )
+        ttk.Label(sidebar, text="PROJECT ANALYSES", style="Section.TLabel").pack(anchor="w", pady=(0, 8))
+
+        sidebar_actions = ttk.Frame(sidebar, style="Panel.TFrame")
+        sidebar_actions.pack(fill="x", pady=(0, 8))
+        ttk.Button(sidebar_actions, text="+ Add", style="Tool.TButton", command=self.add_analysis).pack(side="left")
+        ttk.Button(sidebar_actions, text="Rename", style="Tool.TButton", command=self.rename_analysis).pack(side="left", padx=5)
+        ttk.Button(sidebar_actions, text="Remove", style="Tool.TButton", command=self.remove_analysis).pack(side="left")
+
+        tree_wrap = ttk.Frame(sidebar, style="Panel.TFrame")
+        tree_wrap.pack(fill="both", expand=True)
         self.analysis_tree = ttk.Treeview(
-            sidebar, columns=("kind",), show="tree headings", selectmode="browse"
+            tree_wrap, columns=("kind",), show="tree headings", selectmode="browse"
         )
         self.analysis_tree.heading("#0", text="Name")
-        self.analysis_tree.heading("kind", text="Kind")
-        self.analysis_tree.column("#0", width=210)
-        self.analysis_tree.column("kind", width=155)
-        scroll = ttk.Scrollbar(sidebar, orient="vertical", command=self.analysis_tree.yview)
+        self.analysis_tree.heading("kind", text="Workflow")
+        self.analysis_tree.column("#0", width=205, minwidth=150)
+        self.analysis_tree.column("kind", width=150, minwidth=110)
+        scroll = ttk.Scrollbar(tree_wrap, orient="vertical", command=self.analysis_tree.yview)
         self.analysis_tree.configure(yscrollcommand=scroll.set)
-        self.analysis_tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        self.analysis_tree.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        tree_wrap.rowconfigure(0, weight=1)
+        tree_wrap.columnconfigure(0, weight=1)
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_analysis_selected)
 
         content = ttk.Frame(panes)
@@ -312,7 +477,21 @@ class CleanroomXApp:
 
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
-        self.input_text = tk.Text(json_tab, wrap="none", undo=True)
+        self.input_text = tk.Text(
+            json_tab,
+            wrap="none",
+            undo=True,
+            background=_UI["panel"],
+            foreground=_UI["text"],
+            insertbackground=_UI["text"],
+            selectbackground=_UI["accent"],
+            selectforeground="#06212a",
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=12,
+            font=("TkFixedFont", 10),
+        )
         input_scroll_y = ttk.Scrollbar(json_tab, orient="vertical", command=self.input_text.yview)
         input_scroll_x = ttk.Scrollbar(json_tab, orient="horizontal", command=self.input_text.xview)
         self.input_text.configure(
@@ -327,29 +506,71 @@ class CleanroomXApp:
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
+        self.preview_2d_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.preview_2d_tab, text="2D Layout  F6")
+        self.preview_2d_canvas = tk.Canvas(
+            self.preview_2d_tab,
+            background=_UI["panel"],
+            highlightthickness=0,
+        )
+        self.preview_2d_canvas.pack(fill="both", expand=True)
+        self.preview_2d_canvas.bind("<Configure>", lambda event: self._draw_2d_preview())
+
+        self.preview_3d_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.preview_3d_tab, text="3D View  F7")
+        self.preview_3d_canvas = tk.Canvas(
+            self.preview_3d_tab,
+            background=_UI["panel"],
+            highlightthickness=0,
+        )
+        self.preview_3d_canvas.pack(fill="both", expand=True)
+        self.preview_3d_canvas.bind("<Configure>", lambda event: self._draw_3d_preview())
+
         self.result_text = self._add_text_tab("Results")
         self.report_text = self._add_text_tab("Report")
         self.diagnostics_text = self._add_text_tab("Diagnostics")
 
         plot_tab = ttk.Frame(self.notebook)
         self.notebook.add(plot_tab, text="Plot")
-        self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
+        self.plot_canvas = tk.Canvas(plot_tab, background=_UI["panel"], highlightthickness=0)
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
-        status = ttk.Label(
-            self.root,
+        status = ttk.Frame(self.root, style="Surface.TFrame")
+        status.pack(fill="x", side="bottom")
+        ttk.Label(
+            status,
             textvariable=self.status_var,
             anchor="w",
-            relief="sunken",
-            padding=(6, 3),
-        )
-        status.pack(fill="x", side="bottom")
+            style="Status.TLabel",
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            status,
+            text=f"v{__version__}   •   F5 Run   •   F6 2D   •   F7 3D",
+            anchor="e",
+            style="Status.TLabel",
+        ).pack(side="right")
+
+        self._refresh_room_previews()
 
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text=title)
-        text = tk.Text(frame, wrap="none", state="disabled")
+        text = tk.Text(
+            frame,
+            wrap="none",
+            state="disabled",
+            background=_UI["panel"],
+            foreground=_UI["text"],
+            insertbackground=_UI["text"],
+            selectbackground=_UI["accent"],
+            selectforeground="#06212a",
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=12,
+            font=("TkFixedFont", 10),
+        )
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
         text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -405,6 +626,7 @@ class CleanroomXApp:
             return
         self.input_text.edit_modified(False)
         self._invalidate_last_run_for(self._editor_analysis_id)
+        self._refresh_room_previews()
         self._update_title()
 
     def _current_analysis(self) -> AnalysisDocument | None:
@@ -586,6 +808,7 @@ class CleanroomXApp:
         self.input_text.edit_modified(False)
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
+        self._refresh_room_previews()
         self._restore_run_for(analysis.id)
 
     def refresh_structure(self, silent: bool = False) -> None:
@@ -609,6 +832,133 @@ class CleanroomXApp:
             display = value if len(value) <= 160 else value[:157] + "..."
             self.structure_tree.insert(
                 "", "end", iid=f"row-{index}", text=path, values=(display, unit)
+            )
+        self._refresh_room_previews(payload)
+
+    def _preview_payload(self) -> dict | None:
+        if not hasattr(self, "input_text"):
+            return None
+        text = self.input_text.get("1.0", "end-1c").strip()
+        if not text:
+            return None
+        try:
+            payload = _strict_json_loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _refresh_room_previews(self, payload: dict | None = None) -> None:
+        if not hasattr(self, "preview_2d_canvas") or not hasattr(self, "preview_3d_canvas"):
+            return
+        payload = payload if payload is not None else self._preview_payload()
+        self._preview_geometries = extract_room_geometries(payload or {})
+        self._draw_2d_preview()
+        self._draw_3d_preview()
+
+    def _draw_preview_empty(self, canvas: tk.Canvas, title: str) -> None:
+        canvas.delete("all")
+        width = max(canvas.winfo_width(), 500)
+        height = max(canvas.winfo_height(), 320)
+        canvas.create_text(
+            28,
+            24,
+            anchor="nw",
+            text=title,
+            fill=_UI["text"],
+            font=("TkDefaultFont", 13, "bold"),
+        )
+        canvas.create_text(
+            width / 2,
+            height / 2,
+            text="No rectangular room geometry found in the current input.\n"
+                 "Add length_m, width_m and height_m fields to enable this view.",
+            fill=_UI["muted"],
+            justify="center",
+            font=("TkDefaultFont", 10),
+        )
+
+    def _draw_2d_preview(self) -> None:
+        canvas = self.preview_2d_canvas
+        geometries = getattr(self, "_preview_geometries", [])
+        if not geometries:
+            self._draw_preview_empty(canvas, "2D Layout")
+            return
+        canvas.delete("all")
+        width = max(canvas.winfo_width(), 560)
+        height = max(canvas.winfo_height(), 360)
+        margin = 70
+        for x in range(0, width, 40):
+            canvas.create_line(x, 0, x, height, fill=_UI["grid"])
+        for y in range(0, height, 40):
+            canvas.create_line(0, y, width, y, fill=_UI["grid"])
+        canvas.create_text(28, 24, anchor="nw", text="2D Layout", fill=_UI["text"], font=("TkDefaultFont", 13, "bold"))
+        canvas.create_text(28, 48, anchor="nw", text="Geometry extracted from active analysis input", fill=_UI["muted"])
+
+        max_l = max(float(g["length_m"]) for g in geometries)
+        max_w = max(float(g["width_m"]) for g in geometries)
+        scale = min((width - margin * 2) / max_l, (height - margin * 2) / max_w) * 0.82
+        offset_step = min(26, max(8, int(90 / max(len(geometries), 1))))
+
+        for index, geometry in enumerate(geometries[:12]):
+            rw = float(geometry["length_m"]) * scale
+            rh = float(geometry["width_m"]) * scale
+            x0 = margin + index * offset_step
+            y0 = margin + index * offset_step
+            x1 = min(x0 + rw, width - 24)
+            y1 = min(y0 + rh, height - 24)
+            canvas.create_rectangle(x0, y0, x1, y1, outline=_UI["accent"], width=2)
+            label = (
+                f'{geometry["name"]}  •  '
+                f'{float(geometry["length_m"]):.3g} × {float(geometry["width_m"]):.3g} m'
+            )
+            canvas.create_text(x0 + 8, y0 + 8, anchor="nw", text=label, fill=_UI["text"], font=("TkDefaultFont", 9, "bold"))
+
+    def _draw_3d_preview(self) -> None:
+        canvas = self.preview_3d_canvas
+        geometries = getattr(self, "_preview_geometries", [])
+        if not geometries:
+            self._draw_preview_empty(canvas, "3D View")
+            return
+        canvas.delete("all")
+        width = max(canvas.winfo_width(), 560)
+        height = max(canvas.winfo_height(), 360)
+        canvas.create_text(28, 24, anchor="nw", text="3D View", fill=_UI["text"], font=("TkDefaultFont", 13, "bold"))
+        canvas.create_text(28, 48, anchor="nw", text="Dependency-free isometric engineering preview", fill=_UI["muted"])
+
+        max_dim = max(
+            max(float(g["length_m"]), float(g["width_m"]), float(g["height_m"]))
+            for g in geometries
+        )
+        scale = min(width, height) * 0.34 / max_dim
+        base_x = width * 0.28
+        base_y = height * 0.72
+
+        for index, geometry in enumerate(geometries[:8]):
+            l = float(geometry["length_m"]) * scale
+            w = float(geometry["width_m"]) * scale
+            h = float(geometry["height_m"]) * scale
+            ox = base_x + index * 28
+            oy = base_y - index * 18
+            dx, dy = w * 0.55, w * 0.32
+            a = (ox, oy)
+            b = (ox + l, oy)
+            c = (ox + l + dx, oy - dy)
+            d = (ox + dx, oy - dy)
+            ah, bh, ch, dh = (
+                (a[0], a[1] - h),
+                (b[0], b[1] - h),
+                (c[0], c[1] - h),
+                (d[0], d[1] - h),
+            )
+            for p1, p2 in ((a, b), (b, c), (c, d), (d, a), (ah, bh), (bh, ch), (ch, dh), (dh, ah), (a, ah), (b, bh), (c, ch), (d, dh)):
+                canvas.create_line(*p1, *p2, fill=_UI["accent"], width=2)
+            canvas.create_text(
+                ah[0] + 8,
+                ah[1] - 8,
+                anchor="sw",
+                text=f'{geometry["name"]}  {float(geometry["height_m"]):.3g} m high',
+                fill=_UI["text"],
+                font=("TkDefaultFont", 9, "bold"),
             )
 
     def new_project(self) -> None:
@@ -977,7 +1327,7 @@ class CleanroomXApp:
         )
         self._draw_plot()
         if select_results:
-            self.notebook.select(1)
+            self.notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas
@@ -988,6 +1338,7 @@ class CleanroomXApp:
                 max(canvas.winfo_width() / 2, 150),
                 max(canvas.winfo_height() / 2, 100),
                 text="No plot is available for the selected result.",
+                fill=_UI["muted"],
             )
             return
         plot = run.plot
@@ -1016,15 +1367,15 @@ class CleanroomXApp:
             py = height - bottom - (y - ymin) / (ymax - ymin) * (height - top - bottom)
             return px, py
 
-        canvas.create_line(left, height - bottom, width - right, height - bottom)
-        canvas.create_line(left, top, left, height - bottom)
-        canvas.create_text(width / 2, 18, text=plot["title"], font=("TkDefaultFont", 11, "bold"))
-        canvas.create_text(width / 2, height - 20, text=plot["x_label"])
-        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90)
-        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n")
-        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n")
-        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e")
-        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e")
+        canvas.create_line(left, height - bottom, width - right, height - bottom, fill=_UI["muted"])
+        canvas.create_line(left, top, left, height - bottom, fill=_UI["muted"])
+        canvas.create_text(width / 2, 18, text=plot["title"], fill=_UI["text"], font=("TkDefaultFont", 11, "bold"))
+        canvas.create_text(width / 2, height - 20, text=plot["x_label"], fill=_UI["muted"])
+        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90, fill=_UI["muted"])
+        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n", fill=_UI["muted"])
+        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n", fill=_UI["muted"])
+        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e", fill=_UI["muted"])
+        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e", fill=_UI["muted"])
 
         for index, series in enumerate(plot["series"]):
             coords = []
@@ -1037,7 +1388,7 @@ class CleanroomXApp:
                 canvas.create_line(*coords, **line_options)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
-                canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill="black")
+                canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill=_UI["accent"], outline=_UI["accent"])
 
             legend_x = max(left + 20, width - right - 170)
             legend_y = top + index * 18
@@ -1046,6 +1397,7 @@ class CleanroomXApp:
                 legend_y,
                 legend_x + 28,
                 legend_y,
+                fill=_UI["accent"],
                 **line_options,
             )
             canvas.create_text(
@@ -1053,12 +1405,13 @@ class CleanroomXApp:
                 legend_y,
                 text=series.get("name", f"Series {index + 1}"),
                 anchor="w",
+                fill=_UI["text"],
             )
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])
-            canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2)
-            canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
+            canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2, outline=_UI["success"])
+            canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw", fill=_UI["success"])
 
     def export_result_json(self) -> None:
         if self.last_run is None:

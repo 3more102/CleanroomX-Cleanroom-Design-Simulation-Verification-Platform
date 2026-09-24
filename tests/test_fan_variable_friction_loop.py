@@ -434,6 +434,9 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         in report
     )
     assert "Complete trace raw-state audit consistent: **True**" in report
+    assert "Complete trace pressure-state audit consistent: **True**" in report
+    assert "Maximum absolute trace system-pressure balance error" in report
+    assert "Maximum absolute trace residual balance error" in report
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
     assert (
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
@@ -650,6 +653,94 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "terminal_bracket_matches_origin_replay"
     ] is True
     assert origin_audit["trace_origin_to_terminal_replay_consistent"] is False
+
+
+def test_bisection_trace_pressure_state_audit_detects_corruption() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+    evidence = result["operating_point_search_evidence"]
+    trace = evidence["bisection_trace"]
+    clean = evidence["bisection_trace_audit"]
+
+    assert result["status"] == "solved"
+    assert evidence["method"] == "bounded_bisection"
+    assert trace is not None
+    assert clean is not None
+    assert clean["pressure_state_check_count"] == len(trace)
+    assert clean["pressure_state_evidence_complete"] is True
+    assert clean["all_recorded_fixed_pressure_values_match_study"] is True
+    assert clean[
+        "all_recorded_system_pressures_match_fixed_plus_loop"
+    ] is True
+    assert clean["all_recorded_residuals_match_fan_minus_system"] is True
+    assert clean["all_trace_pressure_state_consistent"] is True
+    assert clean[
+        "maximum_absolute_trace_system_pressure_balance_error_pa"
+    ] <= 2e-9
+    assert clean[
+        "maximum_absolute_trace_residual_balance_error_pa"
+    ] <= 2e-9
+
+    for step in trace:
+        assert step["midpoint_system_pressure_pa"] == pytest.approx(
+            step["midpoint_fixed_pressure_pa"]
+            + step["midpoint_loop_network_pressure_pa"],
+            abs=2e-9,
+        )
+        assert step["midpoint_fan_minus_system_pressure_pa"] == pytest.approx(
+            step["midpoint_fan_pressure_pa"]
+            - step["midpoint_system_pressure_pa"],
+            abs=2e-9,
+        )
+
+    corrupted = [dict(step) for step in trace]
+    corrupted[0]["midpoint_system_pressure_pa"] += 0.5
+    audit = _bisection_decision_trace_audit(
+        corrupted,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+    )
+    assert audit is not None
+    assert audit["pressure_state_evidence_complete"] is True
+    assert audit[
+        "all_recorded_system_pressures_match_fixed_plus_loop"
+    ] is False
+    assert audit["all_recorded_residuals_match_fan_minus_system"] is False
+    assert audit["all_trace_pressure_state_consistent"] is False
+    assert audit[
+        "maximum_absolute_trace_system_pressure_balance_error_pa"
+    ] == pytest.approx(0.5, abs=2e-9)
+    assert audit[
+        "maximum_absolute_trace_residual_balance_error_pa"
+    ] == pytest.approx(0.5, abs=2e-9)
+
+    fixed_corrupted = [dict(step) for step in trace]
+    fixed_corrupted[0]["midpoint_fixed_pressure_pa"] += 1.0
+    fixed_corrupted[0]["midpoint_loop_network_pressure_pa"] -= 1.0
+    fixed_audit = _bisection_decision_trace_audit(
+        fixed_corrupted,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+    )
+    assert fixed_audit is not None
+    assert fixed_audit[
+        "all_recorded_system_pressures_match_fixed_plus_loop"
+    ] is True
+    assert fixed_audit["all_recorded_residuals_match_fan_minus_system"] is True
+    assert fixed_audit[
+        "all_recorded_fixed_pressure_values_match_study"
+    ] is False
+    assert fixed_audit["all_trace_pressure_state_consistent"] is False
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

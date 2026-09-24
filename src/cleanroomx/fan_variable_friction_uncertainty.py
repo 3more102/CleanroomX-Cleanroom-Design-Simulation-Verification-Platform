@@ -2587,6 +2587,11 @@ def _operating_point_search_resolution_summary(
         | set(trace_numeric_midpoint_violation_corner_indices)
         | set(trace_midpoint_flag_mismatch_corner_indices)
     )
+    trace_pressure_state_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get("all_trace_pressure_state_consistent", False)
+    ]
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2963,6 +2968,24 @@ def _operating_point_search_resolution_summary(
             _maximum_trace_geometry_metric_evidence(
                 "maximum_absolute_trace_midpoint_error_m3_h",
                 "m3/h",
+            )
+        ),
+        "bisection_trace_pressure_state_consistent_corner_count": (
+            len(trace_cases) - len(trace_pressure_state_violation_corner_indices)
+        ),
+        "bisection_trace_pressure_state_violation_corner_indices": (
+            trace_pressure_state_violation_corner_indices
+        ),
+        "maximum_bisection_trace_system_pressure_balance_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_system_pressure_balance_error_pa",
+                "Pa",
+            )
+        ),
+        "maximum_bisection_trace_residual_balance_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_residual_balance_error_pa",
+                "Pa",
             )
         ),
         "bisection_trace_width_match_corner_count": (

@@ -113,6 +113,8 @@ v0.78 independently audits the meaning of every retained decision. A midpoint in
 
 v0.79 independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from each retained trace record's numeric fields, then checks the stored sign-change and midpoint flags against those recomputed facts. It also retains per-step raw-state evidence and the maximum absolute midpoint-centering error, so correct-looking stored booleans cannot hide corrupted numeric trace state. This remains numerical implementation provenance only; it does not add physical airflow uncertainty, interpolation-error, root-uniqueness/stability, stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
 
+v0.80 additionally retains the midpoint fan pressure, variable-friction loop pressure, fixed-pressure component, total system pressure, and fan-minus-system residual for every bounded-bisection evaluation. The audit independently verifies `system = fixed + loop`, `residual = fan - system`, and that the retained fixed-pressure component matches the study input. Maximum absolute pressure-identity errors are reported alongside exact per-step checks. This remains numerical implementation provenance only; it is not physical uncertainty, an interpolation-error bound, a root-stability proof, or an equipment-acceptance criterion.
+
 ## CLI
 
 ```text

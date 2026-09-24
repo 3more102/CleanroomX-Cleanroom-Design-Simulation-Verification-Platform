@@ -807,6 +807,32 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_pressure_state_count = search_summary.get(
+                    "bisection_trace_pressure_state_consistent_corner_count",
+                    0,
+                )
+                trace_pressure_state_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_state_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_system_pressure_error = search_summary.get(
+                    "maximum_bisection_trace_system_pressure_balance_error_pa"
+                )
+                max_trace_system_pressure_error = (
+                    "—"
+                    if trace_system_pressure_error is None
+                    else trace_system_pressure_error["value"]
+                )
+                trace_residual_balance_error = search_summary.get(
+                    "maximum_bisection_trace_residual_balance_error_pa"
+                )
+                max_trace_residual_balance_error = (
+                    "—"
+                    if trace_residual_balance_error is None
+                    else trace_residual_balance_error["value"]
+                )
                 trace_midpoint_error = search_summary.get(
                     "maximum_bisection_trace_midpoint_error_m3_h"
                 )
@@ -910,6 +936,12 @@ def markdown_dossier_report(result: dict) -> str:
                     f"trace-geometry {trace_geometry_count}/{trace_count}; "
                     f"trace-raw-state {trace_raw_state_count}/{trace_count}; "
                     f"raw-state violations {trace_raw_state_violations}; "
+                    f"trace-pressure-state {trace_pressure_state_count}/{trace_count}; "
+                    f"pressure-state violations {trace_pressure_state_violations}; "
+                    f"max trace system-pressure identity error "
+                    f"{max_trace_system_pressure_error} Pa; "
+                    f"max trace residual identity error "
+                    f"{max_trace_residual_balance_error} Pa; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "
                     f"max trace normalized-width error "

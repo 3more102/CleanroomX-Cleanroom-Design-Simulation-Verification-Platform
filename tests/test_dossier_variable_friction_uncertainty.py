@@ -238,6 +238,10 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "trace-geometry" in report
     assert "trace-raw-state" in report
     assert "raw-state violations 0" in report
+    assert "trace-pressure-state" in report
+    assert "pressure-state violations 0" in report
+    assert "max trace system-pressure identity error" in report
+    assert "max trace residual identity error" in report
     assert "max trace midpoint error" in report
     assert "max trace width error" in report
     assert "max trace normalized-width error" in report

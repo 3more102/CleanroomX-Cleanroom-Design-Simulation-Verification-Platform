@@ -140,10 +140,16 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_numeric_midpoints_are_arithmetic_bracket_midpoints']}**",
                     "- Recorded trace midpoint flags match numeric geometry: "
                     f"**{trace_audit['all_recorded_midpoint_flags_match_numeric_geometry']}**",
+                    "- Midpoint residuals equal fan pressure minus system pressure: "
+                    f"**{trace_audit['all_midpoint_residuals_match_recorded_pressures']}**",
+                    "- Midpoint residual arithmetic violation iterations: "
+                    f"**{trace_audit['midpoint_residual_arithmetic_violation_iterations']}**",
                     "- Complete trace raw-state audit consistent: "
                     f"**{trace_audit['all_trace_raw_state_consistent']}**",
                     "- Maximum absolute trace midpoint-centering error: "
                     f"**{trace_audit['maximum_absolute_trace_midpoint_error_m3_h']} m³/h**",
+                    "- Maximum absolute midpoint residual arithmetic error: "
+                    f"**{trace_audit['maximum_absolute_trace_midpoint_residual_arithmetic_error_pa']} Pa**",
                     "- Every recorded trace width matches its airflow endpoints: "
                     f"**{trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                     "- Every recorded trace width fraction matches binary iteration contraction: "

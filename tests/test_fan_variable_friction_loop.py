@@ -526,3 +526,68 @@ def test_reverse_sign_change_is_audit_only_and_not_a_solver_candidate() -> None:
     assert reverse["low_fan_minus_system_pressure_pa"] == pytest.approx(-10.0)
     assert reverse["high_fan_minus_system_pressure_pa"] == pytest.approx(10.0)
 
+
+def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
+    result = solve_fan_variable_friction_loop(
+        FanVariableFrictionLoopStudy(
+            name="Iteration-limit evidence",
+            fan_curve=FanCurve(
+                "Bisection curve",
+                (
+                    FanCurvePoint(0.0, 500.0),
+                    FanCurvePoint(3600.0, 200.0),
+                    FanCurvePoint(7200.0, 0.0),
+                ),
+            ),
+            loop_network=_fixed_network(),
+            fan_discharge_node="Supply",
+            fan_suction_node="Return",
+            operating_pressure_tolerance_pa=1e-15,
+            max_operating_iterations=1,
+        )
+    )
+
+    assert result["status"] == "non_converged"
+    diagnostics = result["solver_diagnostics"]
+    assert diagnostics["termination_reason"] == "bisection_iteration_limit"
+    assert diagnostics["operating_iterations"] == 1
+    assert result["fan_operating_point"] is None
+
+    evidence = result["operating_point_search_evidence"]
+    assert evidence is not None
+    assert evidence["method"] == "bounded_bisection"
+    assert evidence["final_bisection_bracket"] is None
+    limit = evidence["iteration_limit_evidence"]
+    assert limit is not None
+    assert limit["pressure_tolerance_satisfied"] is False
+
+    remaining = limit["remaining_bisection_bracket"]
+    assert remaining["low_fan_minus_system_pressure_pa"] > 0.0
+    assert remaining["high_fan_minus_system_pressure_pa"] < 0.0
+    assert remaining["width_m3_h"] == pytest.approx(
+        remaining["high_airflow_m3_h"] - remaining["low_airflow_m3_h"],
+        abs=1e-9,
+    )
+    assert remaining["half_width_m3_h"] == pytest.approx(
+        0.5 * remaining["width_m3_h"],
+        abs=1e-9,
+    )
+    invariant = remaining["invariant_audit"]
+    assert invariant["strict_sign_change_preserved"] is True
+    assert invariant["binary_contraction_step_count"] == 1
+    assert invariant[
+        "expected_width_fraction_of_supplied_segment"
+    ] == pytest.approx(0.5, abs=1e-15)
+    assert invariant[
+        "actual_width_fraction_of_supplied_segment"
+    ] == pytest.approx(0.5, abs=1e-12)
+    assert invariant[
+        "absolute_width_fraction_consistency_error"
+    ] == pytest.approx(0.0, abs=1e-18)
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Accepted operating point: **none (iteration limit)**" in report
+    assert "Remaining active bisection bracket" in report
+    assert "Remaining bracket strict sign change preserved" in report
+    assert "Remaining-bracket binary-width consistency error" in report
+

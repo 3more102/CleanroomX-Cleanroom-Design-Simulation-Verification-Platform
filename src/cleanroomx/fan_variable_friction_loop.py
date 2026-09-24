@@ -658,6 +658,7 @@ def _bisection_decision_trace_audit(
     *,
     operating_iterations: int,
     termination_reason: str,
+    operating_pressure_tolerance_pa: float,
     initial_bisection_bracket: dict | None = None,
     solved_terminal_bracket: dict | None = None,
     iteration_limit_terminal_bracket: dict | None = None,
@@ -722,6 +723,42 @@ def _bisection_decision_trace_audit(
                         rel_tol=0.0,
                         abs_tol=1e-12,
                     )
+                ),
+            }
+        )
+
+    decision_predicate_checks = []
+    for step in trace:
+        midpoint_residual = float(
+            step["midpoint_fan_minus_system_pressure_pa"]
+        )
+        tolerance_satisfied = (
+            abs(midpoint_residual) <= operating_pressure_tolerance_pa
+        )
+        if tolerance_satisfied:
+            expected_decision = "accept_pressure_tolerance"
+        elif midpoint_residual > 0.0:
+            expected_decision = "replace_low_endpoint"
+        else:
+            expected_decision = "replace_high_endpoint"
+        recorded_decision = step["decision"]
+        decision_predicate_checks.append(
+            {
+                "iteration": int(step["iteration"]),
+                "midpoint_fan_minus_system_pressure_pa": midpoint_residual,
+                "absolute_midpoint_residual_pa": abs(midpoint_residual),
+                "operating_pressure_tolerance_pa": (
+                    operating_pressure_tolerance_pa
+                ),
+                "midpoint_pressure_tolerance_satisfied": (
+                    tolerance_satisfied
+                ),
+                "expected_decision_from_midpoint_residual": (
+                    expected_decision
+                ),
+                "recorded_decision": recorded_decision,
+                "decision_matches_midpoint_residual_predicate": (
+                    recorded_decision == expected_decision
                 ),
             }
         )
@@ -1085,6 +1122,13 @@ def _bisection_decision_trace_audit(
             step["midpoint_is_arithmetic_bracket_midpoint"]
             for step in trace
         ),
+        "decision_predicate_check_count": len(decision_predicate_checks),
+        "all_decisions_match_midpoint_residual_predicate": all(
+            check["decision_matches_midpoint_residual_predicate"]
+            for check in decision_predicate_checks
+        ),
+        "decision_predicate_checks": decision_predicate_checks,
+        "operating_pressure_tolerance_pa": operating_pressure_tolerance_pa,
         "geometry_check_count": len(geometry_checks),
         "all_recorded_widths_match_airflow_brackets": all(
             check["recorded_width_matches_airflow_bracket"]
@@ -1160,7 +1204,10 @@ def _bisection_decision_trace_audit(
             "midpoint evaluation. L replaces the positive-residual low "
             "endpoint, H replaces the negative-residual high endpoint, and T "
             "accepts a midpoint within the configured operating-pressure "
-            "tolerance. The replay audit verifies that each nonterminal L/H "
+            "tolerance. The decision-predicate audit independently verifies "
+            "that every recorded L/H/T choice follows the midpoint residual "
+            "sign and configured pressure-tolerance test. The replay audit "
+            "verifies that each nonterminal L/H "
             "decision produces the next recorded airflow/residual bracket, "
             "that iteration numbering is contiguous, and that every recorded "
             "bracket width equals its endpoint span with the binary width "
@@ -1550,6 +1597,9 @@ def solve_fan_variable_friction_loop(
                         bisection_trace,
                         operating_iterations=operating_iterations,
                         termination_reason=termination_reason,
+                        operating_pressure_tolerance_pa=(
+                            study.operating_pressure_tolerance_pa
+                        ),
                         initial_bisection_bracket=initial_bisection_bracket,
                         iteration_limit_terminal_bracket=terminal_bracket,
                     ),
@@ -1704,6 +1754,9 @@ def solve_fan_variable_friction_loop(
             bisection_trace,
             operating_iterations=operating_iterations,
             termination_reason=termination_reason,
+            operating_pressure_tolerance_pa=(
+                study.operating_pressure_tolerance_pa
+            ),
             initial_bisection_bracket=initial_bisection_bracket,
             solved_terminal_bracket=final_bisection_bracket,
         ),

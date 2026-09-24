@@ -2548,6 +2548,12 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "bisection_trace_residual_replay_consistent_corner_count"
     ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_independent_residual_decision_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_independent_residual_decision_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
     residual_replay_error = summary[
         "maximum_bisection_trace_residual_replay_error_pa"
     ]
@@ -2632,6 +2638,12 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
             "all_trace_residuals_match_independent_replay"
         ] is True
         assert trace_audit[
+            "all_decisions_match_independent_residual_replay_semantics"
+        ] is True
+        assert trace_audit[
+            "independent_residual_decision_semantic_violation_iterations"
+        ] == []
+        assert trace_audit[
             "maximum_absolute_trace_residual_replay_error_pa"
         ] <= 1e-9
         assert trace_audit["pressure_state_evidence_complete"] is True
@@ -2707,6 +2719,10 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Maximum trace fan-minus-system residual identity error" in report
     assert "Maximum trace midpoint-centering error" in report
     assert "Trace independent residual-replay violation corners: **[]**" in report
+    assert (
+        "Trace independent residual-replay decision violations: **[]**"
+        in report
+    )
     assert "Maximum trace residual-replay error" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report

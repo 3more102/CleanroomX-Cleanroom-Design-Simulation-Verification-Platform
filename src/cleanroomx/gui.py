@@ -179,6 +179,7 @@ class CleanroomXApp:
         self.status_var = tk.StringVar(value="Ready")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
+        self._configure_style()
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
@@ -188,6 +189,54 @@ class CleanroomXApp:
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
+
+    def _configure_style(self) -> None:
+        """Apply a compact engineering-workstation theme using stock ttk only."""
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.root.configure(background="#e9eef5")
+        style.configure(".", font=("Segoe UI", 9))
+        style.configure("TFrame", background="#eef2f7")
+        style.configure("Toolbar.TFrame", background="#dde6ef")
+        style.configure("Card.TFrame", background="#f8fafc")
+        style.configure("TLabel", background="#eef2f7", foreground="#243447")
+        style.configure("Header.TLabel", background="#eef2f7", foreground="#102a43", font=("Segoe UI", 10, "bold"))
+        style.configure("Muted.TLabel", background="#eef2f7", foreground="#627d98")
+        style.configure("TButton", padding=(9, 5))
+        style.configure("Accent.TButton", padding=(11, 6), font=("Segoe UI", 9, "bold"))
+        style.configure("Danger.TButton", padding=(9, 5))
+        style.configure(
+            "Treeview",
+            background="#ffffff",
+            fieldbackground="#ffffff",
+            foreground="#243447",
+            rowheight=25,
+            borderwidth=0,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#d9e2ec",
+            foreground="#102a43",
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", "#2f6fb3")],
+            foreground=[("selected", "#ffffff")],
+        )
+        style.configure("TNotebook", background="#eef2f7", borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(12, 7))
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", "#ffffff")],
+            foreground=[("selected", "#102a43")],
+        )
+        style.configure("Status.TLabel", background="#d9e2ec", foreground="#243447", padding=(8, 4))
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -244,25 +293,26 @@ class CleanroomXApp:
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
         self.root.bind("<F5>", lambda event: self.run_current())
+        self.root.bind("<Control-0>", lambda event: self.spatial_workspace.fit_views())
 
     def _build_layout(self) -> None:
-        metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
+        metadata = ttk.Frame(self.root, padding=(10, 9, 10, 7), style="Toolbar.TFrame")
         metadata.pack(fill="x")
-        ttk.Label(metadata, text="Project").grid(row=0, column=0, sticky="w")
+        ttk.Label(metadata, text="Project", style="Header.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
             row=0, column=1, sticky="ew", padx=(6, 12)
         )
-        ttk.Label(metadata, text="Description").grid(row=0, column=2, sticky="w")
+        ttk.Label(metadata, text="Description", style="Header.TLabel").grid(row=0, column=2, sticky="w")
         ttk.Entry(metadata, textvariable=self.description_var).grid(
             row=0, column=3, sticky="ew", padx=(6, 12)
         )
         ttk.Button(metadata, text="Validate", command=self.validate_current).grid(
             row=0, column=4, padx=3
         )
-        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
+        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current, style="Accent.TButton")
         self.run_button.grid(row=0, column=5, padx=3)
         self.cancel_button = ttk.Button(
-            metadata, text="Abandon", command=self.cancel_run, state="disabled"
+            metadata, text="Abandon", command=self.cancel_run, state="disabled", style="Danger.TButton"
         )
         self.cancel_button.grid(row=0, column=6, padx=3)
         metadata.columnconfigure(1, weight=1)
@@ -271,11 +321,12 @@ class CleanroomXApp:
         panes = ttk.Panedwindow(self.root, orient="horizontal")
         panes.pack(fill="both", expand=True, padx=8, pady=4)
 
-        sidebar = ttk.Frame(panes, padding=4)
+        sidebar = ttk.Frame(panes, padding=(6, 4, 8, 4))
         panes.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="Analyses", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", pady=(0, 4)
-        )
+        sidebar_header = ttk.Frame(sidebar)
+        sidebar_header.pack(fill="x", pady=(0, 5))
+        ttk.Label(sidebar_header, text="Analyses", style="Header.TLabel").pack(side="left")
+        ttk.Button(sidebar_header, text="+ Add", command=self.add_analysis).pack(side="right")
         self.analysis_tree = ttk.Treeview(
             sidebar, columns=("kind",), show="tree headings", selectmode="browse"
         )
@@ -360,8 +411,8 @@ class CleanroomXApp:
             self.root,
             textvariable=self.status_var,
             anchor="w",
-            relief="sunken",
-            padding=(6, 3),
+            relief="flat",
+            style="Status.TLabel",
         )
         status.pack(fill="x", side="bottom")
 

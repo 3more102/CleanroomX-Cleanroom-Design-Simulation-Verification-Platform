@@ -7,6 +7,7 @@
 - Requires every direct workflow to declare both parser and runner bindings while enforcing the dedicated custom-adapter contract for `consistency` and `dossier`.
 - Resolves every declared parser, runner, and reporter callable with workflow/role context in failures and reports registry validation counts through the headless capability check.
 - Adds regressions for duplicate keys, malformed custom adapters, binding-load failures, complete workflow execution, project persistence, and GUI lifecycle behavior.
+- Hardens **Abandon** so the UI suppresses the abandoned result but remains exclusive until its worker exits, preventing overlapping backend computations.
 - Adds a focused v0.98.1 application/GUI CI gate before the complete suite while preserving all v0.91-v0.95 provenance/replay gates, CLI smoke checks, and the real Tk/Xvfb desktop smoke.
 - Synchronizes package/runtime/demo/CI metadata at v0.98.1.
 

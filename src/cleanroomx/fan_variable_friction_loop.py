@@ -16,6 +16,16 @@ _NETWORK_STATE_CANONICALIZATION = (
     "network-result-projection-sort-named-collections-normalize-signed-zero-"
     "preserve-iteration-history-json-sort-keys-compact-utf8-v3"
 )
+_SOLVER_RESULT_INTEGRITY_CANONICALIZATION = (
+    "fan-variable-friction-loop-result-sort-named-collections-"
+    "normalize-signed-zero-json-sort-keys-compact-utf8-v1"
+)
+_SOLVER_RESULT_INTEGRITY_SCOPE = (
+    "cleanroomx.fan_variable_friction_loop.result_without_result_integrity.v1"
+)
+_SOLVER_RESULT_NAMED_COLLECTION_KEYS = frozenset(
+    {"nodes", "edges", "edge_closure"}
+)
 
 
 def _positive(value: float, field_name: str) -> float:
@@ -230,6 +240,103 @@ def _normalize_signed_zero(value):
     if isinstance(value, tuple):
         return [_normalize_signed_zero(item) for item in value]
     return value
+
+
+def _canonical_solver_result_payload(result: dict) -> dict:
+    payload = {
+        key: value
+        for key, value in result.items()
+        if key != "result_integrity"
+    }
+    normalized = _normalize_signed_zero(payload)
+
+    def canonicalize(value, *, collection_key: str | None = None):
+        if isinstance(value, dict):
+            return {
+                key: canonicalize(item, collection_key=key)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            items = [canonicalize(item) for item in value]
+            if (
+                collection_key in _SOLVER_RESULT_NAMED_COLLECTION_KEYS
+                and all(
+                    isinstance(item, dict) and "name" in item
+                    for item in items
+                )
+            ):
+                return sorted(items, key=lambda item: str(item["name"]))
+            return items
+        return value
+
+    return canonicalize(normalized)
+
+
+def _solver_result_sha256(result: dict) -> str:
+    encoded = json.dumps(
+        _canonical_solver_result_payload(result),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _with_solver_result_integrity(result: dict) -> dict:
+    result = dict(result)
+    result.pop("result_integrity", None)
+    result["result_integrity"] = {
+        "algorithm": "sha256",
+        "canonicalization": _SOLVER_RESULT_INTEGRITY_CANONICALIZATION,
+        "scope": _SOLVER_RESULT_INTEGRITY_SCOPE,
+        "sha256": _solver_result_sha256(result),
+    }
+    return result
+
+
+def _solver_result_integrity_audit(result: dict) -> dict:
+    retained = result.get("result_integrity")
+    recomputed_sha256 = _solver_result_sha256(result)
+    if not isinstance(retained, dict):
+        return {
+            "available": False,
+            "metadata_matches_expected": False,
+            "sha256_matches_recomputed": False,
+            "consistent": False,
+            "recorded_sha256": None,
+            "recomputed_sha256": recomputed_sha256,
+            "verdict": "solver_result_integrity_missing",
+        }
+
+    metadata_matches_expected = (
+        retained.get("algorithm") == "sha256"
+        and retained.get("canonicalization")
+        == _SOLVER_RESULT_INTEGRITY_CANONICALIZATION
+        and retained.get("scope") == _SOLVER_RESULT_INTEGRITY_SCOPE
+    )
+    recorded_sha256 = retained.get("sha256")
+    sha256_matches_recomputed = (
+        isinstance(recorded_sha256, str)
+        and recorded_sha256 == recomputed_sha256
+    )
+    consistent = metadata_matches_expected and sha256_matches_recomputed
+    return {
+        "available": True,
+        "metadata_matches_expected": metadata_matches_expected,
+        "sha256_matches_recomputed": sha256_matches_recomputed,
+        "consistent": consistent,
+        "algorithm": retained.get("algorithm"),
+        "canonicalization": retained.get("canonicalization"),
+        "scope": retained.get("scope"),
+        "recorded_sha256": recorded_sha256,
+        "recomputed_sha256": recomputed_sha256,
+        "verdict": (
+            "solver_result_integrity_consistent"
+            if consistent
+            else "solver_result_integrity_inconsistent"
+        ),
+    }
 
 
 def _network_state_projection(network: dict) -> dict:
@@ -3581,7 +3688,7 @@ def _nonconverged_result(
     curve_checks: list[dict],
     message: str,
 ) -> dict:
-    return {
+    return _with_solver_result_integrity({
         "study": study.name,
         "status": "non_converged",
         "fan_curve": study.fan_curve.name,
@@ -3620,7 +3727,7 @@ def _nonconverged_result(
         },
         "message": message,
         "scope_note": _scope_note(),
-    }
+    })
 
 
 def _scope_note() -> str:
@@ -4416,7 +4523,7 @@ def solve_fan_variable_friction_loop(
                         "worst-case bound, or an equipment-acceptance limit."
                     ),
                 }
-                return {
+                return _with_solver_result_integrity({
                     **_nonconverged_result(
                         study,
                         curve_checks=curve_checks,
@@ -4436,7 +4543,7 @@ def solve_fan_variable_friction_loop(
                         "bracket_low_airflow_m3_h": round(low, 9),
                         "bracket_high_airflow_m3_h": round(high, 9),
                     },
-                }
+                })
             break
 
     base = {
@@ -4476,7 +4583,7 @@ def solve_fan_variable_friction_loop(
                 "supplied airflow point. No higher-flow fan extrapolation is "
                 "performed."
             )
-        return {
+        return _with_solver_result_integrity({
             **base,
             "status": "no_intersection_in_supplied_range",
             "fan_operating_point": None,
@@ -4492,7 +4599,7 @@ def solve_fan_variable_friction_loop(
             },
             "message": message,
             "scope_note": _scope_note(),
-        }
+        })
 
     assert selected_fan_pressure is not None
     assert selected_network is not None
@@ -4609,7 +4716,7 @@ def solve_fan_variable_friction_loop(
         ),
     }
 
-    return {
+    return _with_solver_result_integrity({
         **base,
         "status": "solved",
         "fan_curve_supplied_point_residual_audit": selected_residual_audit,
@@ -4665,4 +4772,4 @@ def solve_fan_variable_friction_loop(
             "re-solve at every evaluated airflow."
         ),
         "scope_note": _scope_note(),
-    }
+    })

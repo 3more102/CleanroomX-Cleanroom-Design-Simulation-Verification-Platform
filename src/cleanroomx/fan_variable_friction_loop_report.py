@@ -648,5 +648,19 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 )
         lines.extend(["", audit["scope_note"]])
 
+    integrity = result.get("result_integrity")
+    if integrity is not None:
+        lines.extend(
+            [
+                "",
+                "## Solver result integrity",
+                "",
+                f"- Algorithm: **{integrity['algorithm']}**",
+                f"- Canonicalization: `{integrity['canonicalization']}`",
+                f"- Scope: `{integrity['scope']}`",
+                f"- SHA-256: `{integrity['sha256']}`",
+            ]
+        )
+
     lines.extend(["", "## Engineering note", "", result["scope_note"], ""])
     return "\n".join(lines)

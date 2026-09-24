@@ -258,6 +258,15 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     ] is True
     assert trace_audit["all_trace_geometry_consistent"] is True
     assert trace_audit["geometry_check_count"] == len(trace)
+    assert trace_audit["raw_state_check_count"] == len(trace)
+    assert trace_audit["all_trace_raw_state_consistent"] is True
+    assert trace_audit[
+        "all_numeric_brackets_preserve_strict_sign_change"
+    ] is True
+    assert trace_audit[
+        "all_numeric_midpoints_are_arithmetic_bracket_midpoints"
+    ] is True
+    assert trace_audit["maximum_absolute_trace_midpoint_error_m3_h"] <= 1e-9
     assert trace_audit["maximum_absolute_trace_width_error_m3_h"] <= 2e-9
     assert trace_audit["maximum_absolute_trace_width_fraction_error"] <= 1e-12
     assert trace_audit["termination_record_count"] == 1
@@ -302,6 +311,8 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
         in report
     )
+    assert "Complete trace raw-state audit consistent: **True**" in report
+    assert "Maximum absolute trace midpoint-centering error" in report
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
     assert "numerical search" in report
 
@@ -422,6 +433,7 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
         in report
     )
+    assert "Complete trace raw-state audit consistent: **True**" in report
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
     assert (
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
@@ -491,6 +503,7 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     assert clean["all_state_transitions_replay_recorded_decisions"] is True
     assert clean["all_decisions_match_midpoint_residual_semantics"] is True
     assert clean["decision_semantic_violation_iterations"] == []
+    assert clean["trace_origin_to_terminal_replay_consistent"] is True
     assert clean["all_numeric_brackets_preserve_strict_sign_change"] is True
     assert clean["all_recorded_sign_flags_match_numeric_residuals"] is True
     assert clean[
@@ -500,7 +513,10 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
     assert clean["all_trace_raw_state_consistent"] is True
-    assert clean["trace_origin_to_terminal_replay_consistent"] is True
+    assert clean["maximum_absolute_trace_midpoint_error_m3_h"] == pytest.approx(
+        0.0,
+        abs=1e-18,
+    )
     assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
         0.0,
         abs=1e-18,
@@ -508,6 +524,33 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     assert clean[
         "maximum_absolute_trace_width_fraction_error"
     ] == pytest.approx(0.0, abs=1e-18)
+
+    corrupted = [dict(step) for step in trace]
+    corrupted[0]["width_m3_h"] = 7.0
+    corrupted[1]["width_fraction_of_supplied_segment"] = 0.75
+    audit = _bisection_decision_trace_audit(
+        corrupted,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=solved_terminal_bracket,
+    )
+    assert audit is not None
+    assert audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert audit["all_recorded_widths_match_airflow_brackets"] is False
+    assert audit[
+        "all_recorded_width_fractions_match_iteration_sequence"
+    ] is False
+    assert audit["all_trace_geometry_consistent"] is False
+    assert audit["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
+        1.0,
+        abs=1e-18,
+    )
+    assert audit[
+        "maximum_absolute_trace_width_fraction_error"
+    ] == pytest.approx(0.25, abs=1e-18)
+    assert audit["all_decisions_match_midpoint_residual_semantics"] is True
 
     flag_corrupted = [dict(step) for step in trace]
     flag_corrupted[0]["strict_sign_change_before_evaluation"] = False
@@ -536,17 +579,28 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     assert flag_audit["all_trace_raw_state_consistent"] is False
     assert flag_audit["all_decisions_match_midpoint_residual_semantics"] is True
 
-    midpoint_corrupted = [dict(step) for step in trace]
-    midpoint_corrupted[0]["midpoint_airflow_m3_h"] = 4.25
+    self_consistent_wrong_midpoint = [dict(step) for step in trace]
+    self_consistent_wrong_midpoint[0]["midpoint_airflow_m3_h"] = 3.5
+    self_consistent_wrong_midpoint[1]["low_airflow_m3_h"] = 3.5
+    self_consistent_wrong_midpoint[1]["midpoint_airflow_m3_h"] = 5.75
+    self_consistent_wrong_midpoint[1]["width_m3_h"] = 4.5
+    self_consistent_terminal = dict(solved_terminal_bracket)
+    self_consistent_terminal["low_airflow_m3_h"] = 3.5
     midpoint_audit = _bisection_decision_trace_audit(
-        midpoint_corrupted,
+        self_consistent_wrong_midpoint,
         operating_iterations=2,
         termination_reason="pressure_residual",
         operating_pressure_tolerance_pa=0.1,
         initial_bisection_bracket=initial_bracket,
-        solved_terminal_bracket=solved_terminal_bracket,
+        solved_terminal_bracket=self_consistent_terminal,
     )
     assert midpoint_audit is not None
+    assert midpoint_audit[
+        "all_state_transitions_replay_recorded_decisions"
+    ] is True
+    assert midpoint_audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert midpoint_audit["all_decisions_match_midpoint_residual_semantics"] is True
+    assert midpoint_audit["all_trace_geometry_consistent"] is True
     assert midpoint_audit[
         "all_numeric_midpoints_are_arithmetic_bracket_midpoints"
     ] is False
@@ -555,36 +609,8 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     ] is False
     assert midpoint_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
-    ] == pytest.approx(0.25, abs=1e-18)
+    ] == pytest.approx(0.5, abs=1e-18)
     assert midpoint_audit["all_trace_raw_state_consistent"] is False
-    assert midpoint_audit["all_decisions_match_midpoint_residual_semantics"] is True
-
-    corrupted = [dict(step) for step in trace]
-    corrupted[0]["width_m3_h"] = 7.0
-    corrupted[1]["width_fraction_of_supplied_segment"] = 0.75
-    audit = _bisection_decision_trace_audit(
-        corrupted,
-        operating_iterations=2,
-        termination_reason="pressure_residual",
-        operating_pressure_tolerance_pa=0.1,
-        initial_bisection_bracket=initial_bracket,
-        solved_terminal_bracket=solved_terminal_bracket,
-    )
-    assert audit is not None
-    assert audit["trace_origin_to_terminal_replay_consistent"] is True
-    assert audit["all_recorded_widths_match_airflow_brackets"] is False
-    assert audit[
-        "all_recorded_width_fractions_match_iteration_sequence"
-    ] is False
-    assert audit["all_trace_geometry_consistent"] is False
-    assert audit["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
-        1.0,
-        abs=1e-18,
-    )
-    assert audit[
-        "maximum_absolute_trace_width_fraction_error"
-    ] == pytest.approx(0.25, abs=1e-18)
-    assert audit["all_decisions_match_midpoint_residual_semantics"] is True
 
     wrong_decision = [dict(step) for step in trace]
     wrong_decision[0]["decision"] = "replace_high_endpoint"

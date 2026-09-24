@@ -34,6 +34,16 @@ v0.55 adds explicit supplied-endpoint diagnostics for evaluated uncertainty corn
 
 The analysis deliberately avoids assigning one fixed equivalent resistance to a network whose Darcy friction changes with branch airflow. Each uncertainty corner rebuilds the affected geometry evidence and then reuses the complete nonlinear fan/loop solver.
 
+## v0.94 canonical solver provenance hardening
+
+Each nonlinear uncertainty corner continues to retain the existing supplied-point, full-bisection, terminal, and selected replay layers. In v0.94 those layers share a richer canonical network-result identity that includes solver/network metadata and variable-friction convergence/configuration/history in addition to final node/edge/pressure-power state.
+
+Signed zero is normalized only inside canonical identity/projection representation. Semantically named node, edge, and closure collections are order-invariant, while chronological iteration history, uncertainty corner indexing, supplied-point indexing, candidate priority, and bisection iteration/position provenance remain ordered.
+
+Existing uncertainty aggregation already carries arbitrary deterministic mismatch paths and complete mismatch records, so solver-metadata/configuration corruption is preserved with exact corner/path/value/type/numerical-error provenance and strict finite JSON serialization. The top-level nonlinear uncertainty result-integrity SHA-256 still covers the complete result payload before its own integrity block, including the retained per-corner replay evidence.
+
+This is deterministic numerical/software provenance only and does not imply source authenticity, certification, commissioning acceptance, equipment suitability, physical uncertainty, or statistical confidence.
+
 ## Bounded inputs
 
 The workflow supports explicit absolute uncertainty for:

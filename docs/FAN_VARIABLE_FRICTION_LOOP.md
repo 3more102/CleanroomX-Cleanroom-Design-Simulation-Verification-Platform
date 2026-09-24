@@ -26,6 +26,8 @@ v0.83 extends that replay to the complete active bracket at every retained bisec
 
 v0.84 makes any pressure-component replay failure directly traceable. Each mismatch records its exact bisection iteration, low/midpoint/high bracket position, fan/loop-network/system component, recorded pressure, independently recomputed pressure, and absolute error. Tied maximum-error witnesses are preserved without changing the existing 1e-9 Pa implementation-replay tolerance or any engineering acceptance criterion.
 
+v0.85 independently replays the internal nonlinear network state behind each retained low, midpoint, and high bisection position. CleanroomX stores a SHA-256 fingerprint over a canonical projection of solved node pressures/balances, edge flows/resistances and pressure-law residuals, pressure-power balance, and variable-friction closure evidence, then freshly re-solves the reconstructed airflow and recomputes the fingerprint. This closes the provenance gap where the terminal loop pressure can remain unchanged while the internal network solution changes. The fingerprint is deterministic implementation evidence, not physical uncertainty, stability, commissioning, or equipment-acceptance evidence.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

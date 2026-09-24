@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.75 iteration-limit bisection decision-trace replay — 2026-09-24
+
+- Extends complete L/H bisection decision-trace retention to non-converged searches that exhaust `max_operating_iterations`.
+- Replays the final L/H endpoint-replacement decision into the retained remaining signed-residual bracket and verifies exact airflow/residual endpoint consistency.
+- Keeps iteration-limit outcomes explicitly `non_converged`: no T decision, no accepted operating point, and no fabricated root.
+- Makes terminal trace auditing termination-reason aware for solved pressure-residual termination versus iteration-limit termination.
+- Aggregates solved and iteration-limit trace coverage, terminal-outcome violations, final-replay violations, and maximum trace length across nonlinear uncertainty corners with exact corner provenance.
+- Surfaces the evidence in standalone fan-loop, uncertainty, and engineering-dossier Markdown with regression coverage.
+- Preserves v0.74 supplied-point candidate index-separation and all no-extrapolation/solver-selection behavior.
+- Treats the trace strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.75.0.
+
 ## v0.74 supplied-point candidate index-separation audit — 2026-09-24
 
 - Retains exact supplied-point index intervals for solver-eligible tolerance-contact points and positive-to-negative sign-change segments.

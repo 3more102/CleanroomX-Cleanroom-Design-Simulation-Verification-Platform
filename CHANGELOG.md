@@ -3,7 +3,8 @@
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.
-- Hardens the desktop application registry from callable-resolution-only checking to structural integrity validation: duplicate analysis keys are rejected, ordinary analyses must declare parser+runner bindings, and `consistency`/`dossier` must remain registered custom adapters.
+- Hardens the desktop application registry from callable-resolution-only checking to structural integrity validation: duplicate analysis keys are rejected, the public analysis mapping must remain in exact key/count parity with the catalog, ordinary analyses must declare parser+runner bindings, and `consistency`/`dossier` must remain registered custom adapters.
+- Runs the same registry check before ordinary Tk startup so a structurally invalid catalog fails before a desktop window is created.
 - Makes registry validation return auditable metadata (analysis count, resolved callable count, custom adapters, and fallback-reporter count) and exposes that evidence through `application_info()` and headless `cleanroomx-gui --check`.
 - Adds regressions for duplicate-key rejection, custom-adapter contract enforcement, metadata consistency, and headless GUI exposure.
 - Bumps package/runtime/demo metadata to v0.99.0 and synchronizes CI version assertions while retaining the complete Python 3.11/3.12/3.13 suite, provenance compatibility gates, CLI smokes, and real Tk/Xvfb GUI smoke.

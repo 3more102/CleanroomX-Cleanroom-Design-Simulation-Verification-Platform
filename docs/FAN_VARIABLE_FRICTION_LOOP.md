@@ -77,6 +77,7 @@ A solved result includes:
 - edge Reynolds/friction evidence;
 - supplied fan-point system checks;
 - operating-point termination reason;
+- bounded-bisection trace midpoint fan/system pressure components plus a residual-arithmetic audit that independently checks each stored fan-minus-system midpoint residual, with explicit coverage, mismatch iterations, and maximum arithmetic error;
 - a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, solver-eligible strict positive-to-negative sign-change segments, audit-only strict negative-to-positive reverse sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features;
 - for solved cases, selected-candidate provenance containing the documented selection policy, selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate.
 - operating-point search provenance that distinguishes direct supplied-point tolerance contacts from bounded bisection; bisection solutions retain the final active signed-residual bracket, width, half-width, selected midpoint/residual, iteration, and width relative to the original supplied interpolation segment.

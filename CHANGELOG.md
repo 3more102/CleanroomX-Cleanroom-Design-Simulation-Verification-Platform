@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.99 desktop plot and export hardening — 2026-09-24
+
+- Continues directly from the integrated v0.98 desktop release on `main`; no divergent version-named implementation branch is used as the baseline.
+- Extends application plot models with the backend-computed system-pressure samples that correspond to the displayed supplied fan curve, preserving the existing operating-point marker without duplicating engineering calculations in the GUI.
+- Distinguishes multiple plotted series with labeled solid/dashed rendering in the Tk canvas so fan and system curves are visibly identifiable.
+- Converts analysis input, result JSON, and report Markdown exports to a shared guarded write path that reports filesystem failures in the GUI instead of leaking uncaught exceptions.
+- Moves the bundled GUI smoke project to the fan operating-point analysis so the real Xvfb smoke exercises plotted fan/system output as well as project loading, backend execution, result rendering, and application shutdown.
+- Bumps package/runtime/demo metadata and CI release assertions to v0.99.0 while preserving every v0.91-v0.95 numerical/provenance compatibility gate and the complete application workflow matrix.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

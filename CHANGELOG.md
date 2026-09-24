@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.92 full per-bisection network-state projection replay diagnostics — 2026-09-24
+
+- Retains canonical low/midpoint/high internal network-state projections on every bounded-bisection trace row alongside the existing v0.87 SHA-256 fingerprints.
+- Reconstructs the exact retained search-origin airflow sequence and independently re-solves every applicable low/midpoint/high state without routing through presentation rounding.
+- Reuses the v0.90/v0.91 deterministic projection comparator to report every JSON-style mismatch with exact iteration, bracket position, path, recorded/recomputed values, type evidence, mismatch kind, and numerical absolute error when meaningful.
+- Separates SHA-256 replay from field-level projection replay and reports checked-versus-expected iteration/state-position coverage, incomplete-coverage gaps, deterministic replay verdicts, exact violation provenance, and tied per-field worst numerical witnesses.
+- Aggregates full-trace projection replay through nonlinear uncertainty JSON/Markdown and engineering dossiers while preserving solved, no-intersection, iteration-limit, and non-converged engineering semantics.
+- Preserves all v0.85-v0.91 root-selection, interpolation/no-extrapolation, tolerance, iteration-budget, convergence, power, uncertainty-corner, and replay behavior.
+- Projection replay is deterministic numerical/provenance verification only; it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
+- Bumped package/runtime metadata to v0.92.0.
+
 ## v0.91 selected operating network-state projection replay diagnostics — 2026-09-24
 
 - Retains the canonical selected operating network-state projection alongside the existing selected-state SHA-256 fingerprint.

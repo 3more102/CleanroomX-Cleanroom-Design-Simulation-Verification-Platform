@@ -78,17 +78,17 @@ jobs:
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_selected_projection_corruption_evidence
       - name: Run complete test suite
         run: python -m pytest -q
-      - name: Install virtual display for v0.98 GUI smoke
+      - name: Install virtual display for v0.99 GUI smoke
         if: matrix.python-version == '3.13'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb tk
-      - name: Run v0.98 desktop GUI smoke
+      - name: Run v0.99 desktop GUI smoke
         if: matrix.python-version == '3.13'
         run: |
           cleanroomx-gui --check
           xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
-      - name: Run representative v0.98 CLI smoke checks
+      - name: Run representative v0.99 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format markdown --output /tmp/cleanroomx-loop.md
@@ -106,7 +106,7 @@ jobs:
           metadata = tomllib.loads(
               Path("pyproject.toml").read_text(encoding="utf-8")
           )
-          assert metadata["project"]["version"] == "0.98.0"
+          assert metadata["project"]["version"] == "0.99.0"
           assert cleanroomx.__version__ == metadata["project"]["version"]
 
           for path in (

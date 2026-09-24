@@ -808,6 +808,21 @@ class CleanroomXApp:
         self.status_var.set(f"Imported {Path(path).name}")
         self._update_title()
 
+    def _write_export_file(self, path: str, content: str, *, label: str) -> bool:
+        target = Path(path)
+        try:
+            target.write_text(content, encoding="utf-8")
+        except Exception as exc:
+            self.status_var.set(f"{label} export failed")
+            messagebox.showerror(
+                f"{label} export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        self.status_var.set(f"Exported {label.lower()} — {target.name}")
+        return True
+
     def export_input_json(self) -> None:
         try:
             analysis = self._commit_editor()
@@ -819,9 +834,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
-                json.dumps(analysis.input, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-                encoding="utf-8",
+            self._write_export_file(
+                path,
+                json.dumps(
+                    analysis.input, indent=2, ensure_ascii=False, allow_nan=False
+                ) + "\n",
+                label="Input",
             )
 
     def validate_current(self) -> None:
@@ -987,11 +1005,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
+            self._write_export_file(
+                path,
                 json.dumps(
                     self.last_run.result, indent=2, ensure_ascii=False, allow_nan=False
                 ) + "\n",
-                encoding="utf-8",
+                label="Result",
             )
 
     def export_report_markdown(self) -> None:
@@ -1003,7 +1022,7 @@ class CleanroomXApp:
             filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt")],
         )
         if path:
-            Path(path).write_text(self.last_run.markdown, encoding="utf-8")
+            self._write_export_file(path, self.last_run.markdown, label="Report")
 
     def show_about(self) -> None:
         messagebox.showinfo(

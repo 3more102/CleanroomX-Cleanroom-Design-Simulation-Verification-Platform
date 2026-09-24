@@ -3136,7 +3136,12 @@ def _operating_point_search_resolution_summary(
             "signed-residual bracket without accepting an operating point. "
             "v0.76 audits every retained trace step's recorded bracket width "
             "against its airflow endpoints and its normalized width against "
-            "the binary contraction implied by the iteration number."
+            "the binary contraction implied by the iteration number. v0.79 "
+            "recomputes sign-bracket and midpoint facts from retained numeric "
+            "trace state rather than trusting stored flags. v0.80 retains "
+            "fan/system pressure components at each low/high/midpoint trace "
+            "state and independently checks every stored fan-minus-system "
+            "residual against their direct difference."
         ),
     }
 

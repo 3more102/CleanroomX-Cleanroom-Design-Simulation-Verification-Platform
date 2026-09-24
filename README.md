@@ -661,7 +661,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-Next milestones are richer provenance/dependency handling across supplied performance datasets, followed by desktop/web UI work and CFD adapters.
+The desktop GUI is implemented in v0.96-v0.98.1. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.98.1 workflows.
 
 ## Standards references
 

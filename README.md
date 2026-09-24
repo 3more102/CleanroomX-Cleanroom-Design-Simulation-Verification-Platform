@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.99.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current release line is **CleanroomX v0.99.1**. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence; v0.99.1 hardens desktop worker lifecycle so abandoning a run cannot permit an overlapping backend analysis.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 additionally validates application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, every declared callable binding, and the installed desktop entry point under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs a focused v0.99.1 application/desktop lifecycle gate, the complete test suite, and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 validates application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, and every declared callable binding; v0.99.1 also verifies abandoned-worker exclusivity and the installed desktop entry point under Xvfb on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -26,6 +26,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
+| v0.99.1 | abandoned-run worker exclusivity with result/error suppression until worker exit |
+
+### v0.99.1 desktop worker lifecycle hardening
+
+v0.99.1 closes the remaining desktop concurrency gap in **Abandon**. The UI still does not attempt unsafe force-termination of Python worker threads, but it now stays in the running/busy state until the abandoned worker actually exits. The abandoned result or error is discarded, and only then are editing and a new analysis run re-enabled. This prevents two backend analyses from overlapping after an operator abandons a long-running computation.
 
 ### v0.99 application registry integrity
 

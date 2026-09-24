@@ -295,6 +295,8 @@ def _network_state_sha256(network: dict) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
 def _point_check(
     study: FanVariableFrictionLoopStudy,
     point: FanCurvePoint,

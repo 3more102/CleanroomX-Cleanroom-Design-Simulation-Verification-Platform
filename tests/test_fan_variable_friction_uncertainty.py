@@ -2658,6 +2658,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
             "all_midpoint_pressure_components_match_independent_replay"
         ] is True
         assert trace_audit[
+            "all_low_pressure_components_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "all_high_pressure_components_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "all_trace_pressure_components_match_independent_replay"
+        ] is True
+        assert trace_audit[
             "maximum_absolute_trace_pressure_component_replay_error_pa"
         ] <= 1e-9
         assert trace_audit[
@@ -2922,6 +2931,15 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         ] is True
         assert trace_audit[
             "all_midpoint_pressure_components_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "all_low_pressure_components_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "all_high_pressure_components_match_independent_replay"
+        ] is True
+        assert trace_audit[
+            "all_trace_pressure_components_match_independent_replay"
         ] is True
         assert trace_audit[
             "maximum_absolute_trace_pressure_component_replay_error_pa"

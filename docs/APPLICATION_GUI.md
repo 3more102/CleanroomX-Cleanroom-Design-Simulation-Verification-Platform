@@ -16,11 +16,13 @@ Launch a new project:
 cleanroomx-gui
 ```
 
-Open the bundled demonstration project:
+Open the self-contained demonstration bundled with the installed package:
 
 ```bash
-cleanroomx-gui examples/gui_demo.cleanroomx.json
+cleanroomx-gui --demo
 ```
+
+A repository checkout can also open `examples/gui_demo.cleanroomx.json` directly.
 
 Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
 

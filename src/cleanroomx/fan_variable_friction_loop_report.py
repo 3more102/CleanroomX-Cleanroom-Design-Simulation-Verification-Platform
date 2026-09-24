@@ -178,6 +178,18 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_midpoint_pressure_components_match_independent_replay']}**",
                     "- Maximum absolute trace pressure-component replay error: "
                     f"**{trace_audit['maximum_absolute_trace_pressure_component_replay_error_pa']} Pa**",
+                    "- Independent endpoint pressure-component replay complete: "
+                    f"**{trace_audit['endpoint_pressure_component_replay_evidence_complete']}**",
+                    "- Every retained low-endpoint pressure component matches independent replay: "
+                    f"**{trace_audit['all_low_endpoint_pressure_components_match_independent_replay']}**",
+                    "- Every retained high-endpoint pressure component matches independent replay: "
+                    f"**{trace_audit['all_high_endpoint_pressure_components_match_independent_replay']}**",
+                    "- Every retained endpoint pressure component matches independent replay: "
+                    f"**{trace_audit['all_endpoint_pressure_components_match_independent_replay']}**",
+                    "- Every retained full-bracket pressure component matches independent replay: "
+                    f"**{trace_audit['all_bracket_pressure_components_match_independent_replay']}**",
+                    "- Maximum absolute endpoint pressure-component replay error: "
+                    f"**{trace_audit['maximum_absolute_trace_endpoint_pressure_component_replay_error_pa']} Pa**",
                     "- Maximum absolute trace system-pressure balance error: "
                     f"**{trace_audit['maximum_absolute_trace_system_pressure_balance_error_pa']} Pa**",
                     "- Maximum absolute trace residual balance error: "

@@ -309,6 +309,28 @@ def _find_operating_point(value: Any) -> dict | None:
     return None
 
 
+def _find_system_curve_points(value: Any) -> list[dict] | None:
+    if isinstance(value, dict):
+        points = value.get("curve_point_checks")
+        if isinstance(points, list) and len(points) >= 2 and all(
+            isinstance(item, dict)
+            and "airflow_m3_h" in item
+            and "system_pressure_pa" in item
+            for item in points
+        ):
+            return points
+        for item in value.values():
+            found = _find_system_curve_points(item)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_system_curve_points(item)
+            if found is not None:
+                return found
+    return None
+
+
 def build_plot_model(payload: dict, result: dict) -> dict | None:
     curve = _find_fan_curve(payload) or _find_fan_curve(result)
     if curve is None:
@@ -318,6 +340,16 @@ def build_plot_model(payload: dict, result: dict) -> dict | None:
         float(point.get("pressure_pa", point.get("fan_pressure_pa")))
         for point in curve["points"]
     ]
+    series = [{"name": "Fan curve", "x": xs, "y": ys}]
+
+    system_points = _find_system_curve_points(result)
+    if system_points is not None:
+        series.append({
+            "name": "System curve",
+            "x": [float(point["airflow_m3_h"]) for point in system_points],
+            "y": [float(point["system_pressure_pa"]) for point in system_points],
+        })
+
     marker = _find_operating_point(result)
     markers: list[dict] = []
     if marker is not None:
@@ -335,7 +367,7 @@ def build_plot_model(payload: dict, result: dict) -> dict | None:
         "title": str(curve.get("name", "Fan curve")),
         "x_label": "Airflow (m³/h)",
         "y_label": "Pressure (Pa)",
-        "series": [{"name": "Fan curve", "x": xs, "y": ys}],
+        "series": series,
         "markers": markers,
     }
 

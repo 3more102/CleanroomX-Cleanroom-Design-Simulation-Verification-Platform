@@ -2279,6 +2279,9 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
         assert minimum_gap_fraction is None
     assert summary["residual_increase_corner_count"] == 0
     assert summary["residual_increase_corner_indices"] == []
+    assert summary["reverse_strict_sign_change_corner_count"] == 0
+    assert summary["reverse_strict_sign_change_corner_indices"] == []
+    assert summary["reverse_strict_sign_change_segment_count_total"] == 0
     assert summary["maximum_positive_residual_increase_pa"] is None
 
     for corner in result["corners"]:
@@ -2294,6 +2297,7 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "Corners monotonic non-increasing within tolerance" in report
     assert "Solved corners with selected-candidate provenance" in report
     assert "alternative-candidate separation evidence" in report
+    assert "reverse strict negative-to-positive sign changes" in report
     if separation_gaps:
         assert "gap / supplied fan-curve span" in report
     assert "do not prove continuous uniqueness" in report

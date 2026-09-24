@@ -826,6 +826,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_pressure_component_replay_violation_corner_indices']}**",
                 "- Maximum trace pressure-component replay error: "
                 f"**{search_summary['maximum_bisection_trace_pressure_component_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_pressure_component_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Trace endpoint pressure-component replay violation corners: "
+                f"**{search_summary['bisection_trace_endpoint_pressure_component_replay_violation_corner_indices']}**",
+                "- Maximum trace endpoint pressure-component replay error: "
+                f"**{search_summary['maximum_bisection_trace_endpoint_pressure_component_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_endpoint_pressure_component_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Trace full-bracket pressure-component replay violation corners: "
+                f"**{search_summary['bisection_trace_full_bracket_pressure_component_replay_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -908,6 +914,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_trace_pressure_state_consistent']}**",
                         "- Nominal midpoint pressure-component replay consistent: "
                         f"**{nominal_trace_audit['all_midpoint_pressure_components_match_independent_replay']}**",
+                        "- Nominal endpoint pressure-component replay consistent: "
+                        f"**{nominal_trace_audit['all_endpoint_pressure_components_match_independent_replay']}**",
+                        "- Nominal full-bracket pressure-component replay consistent: "
+                        f"**{nominal_trace_audit['all_bracket_pressure_components_match_independent_replay']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")

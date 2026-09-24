@@ -816,6 +816,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
+                "- Trace midpoint-residual model-recheck violations: "
+                f"**{search_summary['bisection_trace_midpoint_residual_recheck_violation_corner_indices']}**",
+                "- Trace recomputed-residual decision-semantic violations: "
+                f"**{search_summary['bisection_trace_recomputed_decision_semantic_violation_corner_indices']}**",
+                "- Maximum absolute trace midpoint residual recheck error: "
+                f"**{search_summary['maximum_bisection_trace_midpoint_residual_error_pa']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "

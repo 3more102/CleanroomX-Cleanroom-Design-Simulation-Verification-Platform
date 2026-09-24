@@ -747,7 +747,15 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{residual_summary['corner_count']}; selected "
                     f"{residual_summary['selected_candidate_feature_corner_count']}/"
                     f"{residual_summary['solved_corner_count']}; multi "
-                    f"{residual_summary['multiple_candidate_feature_corner_count']}"
+                    f"{residual_summary['multiple_candidate_feature_corner_count']}; "
+                    "dirs below "
+                    f"{residual_summary['selected_airflow_with_below_alternative_corner_count']}, "
+                    "overlap "
+                    f"{residual_summary['selected_airflow_overlap_alternative_interval_corner_count']}, "
+                    "above "
+                    f"{residual_summary['selected_airflow_with_above_alternative_corner_count']}, "
+                    "both "
+                    f"{residual_summary['selected_airflow_with_bidirectional_alternative_corner_count']}"
                 )
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "

@@ -77,5 +77,6 @@ def test_dossier_adapter_runs_real_file_referenced_workflow():
     payload = _example("dossier_variable_friction_uncertainty_demo.json")
     run = run_analysis("dossier", payload, base_dir=ROOT / "examples")
     assert run.result["dossier"] == payload["name"]
+    assert run.status == run.result["executive_summary"]["state"]
     assert "CleanroomX Engineering Dossier" in run.markdown
     json.dumps(run.result, allow_nan=False)

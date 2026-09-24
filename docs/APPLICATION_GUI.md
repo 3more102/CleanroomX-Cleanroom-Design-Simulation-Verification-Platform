@@ -83,3 +83,11 @@ CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the co
 ## Engineering boundary
 
 The desktop application does not change CleanroomX acceptance semantics or convert screening calculations into certification evidence. CleanroomX does not by itself establish ISO cleanroom certification, CFD validation, commissioning or TAB acceptance, manufacturer approval, stall/surge safety, physical uncertainty or statistical confidence, or regulatory compliance. Source data, assumptions, boundary conditions, and applicable engineering standards remain the operator's responsibility.
+
+## v0.100.0 application integrity
+
+Normal GUI startup validates the application registry before creating the Tk root. Save As rebases relative consistency/dossier file references so they continue to identify the same files, and importing those JSON inputs preserves the source file's directory context. Project persistence and GUI exports use same-directory atomic UTF-8 replacement.
+
+Every run records deterministic application-execution provenance in diagnostics: canonical sorted compact UTF-8 input JSON is hashed with SHA-256. Consistency and dossier runs additionally record each referenced file's declared path, byte size, and SHA-256 before and after execution, including whether the dependency stayed stable during the run. Export Run Bundle JSON preserves this diagnostics payload.
+
+The installed package continues to provide `cleanroomx-gui --demo` with all required JSON dependencies bundled in the wheel.

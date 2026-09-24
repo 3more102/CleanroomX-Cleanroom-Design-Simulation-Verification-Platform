@@ -89,6 +89,8 @@ v0.65 preserves the actual bounded root-search geometry. When a bisection midpoi
 
 v0.67 audits the retained bisection geometry against implementation invariants using the unrounded live search state. It records whether the active interval still has a strict positive/negative residual sign change, whether the accepted airflow is the active interval midpoint, the number of completed binary contraction steps, the expected width fraction from that iteration count, the actual width fraction, and their absolute floating-point discrepancy. This is solver self-verification evidence only and does not add an engineering acceptance threshold.
 
+v0.68 extends v0.66 alternative-candidate separation with a dimensionless scale-aware value. Each selected-to-alternative discrete point/interval airflow gap is divided by the exact supplied fan-curve airflow span for that solve, and the nearest alternative retains both absolute and normalized separation. This remains sampled-data numerical topology evidence only; it is not a continuous root-separation guarantee, physical robustness margin, stability/stall/surge criterion, manufacturer operating region, commissioning/certification result, or equipment-acceptance limit.
+
 ## CLI
 
 ```text

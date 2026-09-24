@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.99 application integrity and path-context hardening — 2026-09-24
+
+- Continues directly from the latest integrated main, including the post-v0.98 registry-integrity hardening, on the verified clean v0.91 ancestry.
+- Validates unique application-catalog keys, custom-adapter contracts, every declared parser/runner/reporter binding, and exposes structured registry readiness through the headless GUI check.
+- Allows engineering dossiers containing only absolute file references to execute before a GUI project is first saved; relative references still require an explicit project/base directory and fail validation otherwise.
+- Clears all in-memory analysis results when **Save Project As** changes the project directory, preventing cached outputs from surviving a change in the base path used for relative references.
+- Adds regressions for unsaved absolute-reference dossier execution, relative-reference rejection without a base directory, and Save As result-cache invalidation while retaining the registry-integrity regressions already on main.
+- Bumps package/runtime/demo metadata and CI version assertions to v0.99.0 while preserving the complete v0.91-v0.95 numerical/provenance compatibility gates and v0.96-v0.98 desktop behavior.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

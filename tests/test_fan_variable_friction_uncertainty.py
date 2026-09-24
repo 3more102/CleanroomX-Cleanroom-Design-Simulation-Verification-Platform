@@ -2259,11 +2259,29 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
         is not None
     ]
     assert len(normalized_separation_gaps) == len(separation_gaps)
+    index_separation_gaps = [
+        corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_feature_index_interval_gap"
+        )
+        for corner in result["corners"]
+        if corner["status"] == "solved"
+        and corner["fan_curve_supplied_point_residual_audit"] is not None
+        and corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_feature_index_interval_gap"
+        )
+        is not None
+    ]
+    assert summary[
+        "alternative_candidate_index_separation_evidence_corner_count"
+    ] == len(index_separation_gaps)
     minimum_gap = summary[
         "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
     ]
     minimum_gap_fraction = summary[
         "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
+    ]
+    minimum_index_gap = summary[
+        "minimum_selected_to_alternative_candidate_feature_index_interval_gap"
     ]
     if separation_gaps:
         assert minimum_gap is not None
@@ -2274,9 +2292,13 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
             min(normalized_separation_gaps)
         )
         assert minimum_gap_fraction["sources"]
+        assert minimum_index_gap is not None
+        assert minimum_index_gap["value"] == min(index_separation_gaps)
+        assert minimum_index_gap["sources"]
     else:
         assert minimum_gap is None
         assert minimum_gap_fraction is None
+        assert minimum_index_gap is None
     assert summary["residual_increase_corner_count"] == 0
     assert summary["residual_increase_corner_indices"] == []
     assert summary["reverse_strict_sign_change_corner_count"] == 0
@@ -2300,6 +2322,7 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "reverse strict negative-to-positive sign changes" in report
     if separation_gaps:
         assert "gap / supplied fan-curve span" in report
+        assert "supplied-point index-interval gap" in report
     assert "do not prove continuous uniqueness" in report
 
 

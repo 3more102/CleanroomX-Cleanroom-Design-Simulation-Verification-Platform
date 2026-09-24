@@ -563,6 +563,25 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
     assert selected[
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
     ] == pytest.approx(1500.0 / supplied_span)
+    assert selected["selected_candidate_feature"][
+        "supplied_point_index_interval_low"
+    ] == 0
+    assert selected["selected_candidate_feature"][
+        "supplied_point_index_interval_high"
+    ] == 1
+    assert alternatives[0]["supplied_point_index_interval_low"] == 2
+    assert alternatives[0]["supplied_point_index_interval_high"] == 3
+    assert alternatives[0][
+        "selected_feature_to_candidate_feature_index_interval_gap"
+    ] == 1
+    assert selected[
+        "nearest_alternative_candidate_feature_index_interval_gap"
+    ] == 1
+    assert len(
+        selected[
+            "nearest_alternative_candidate_features_by_index_interval_gap"
+        ]
+    ) == 1
     assert len(selected["nearest_alternative_candidate_features"]) == 1
     assert (
         selected["selected_airflow_overlaps_alternative_candidate_interval"]

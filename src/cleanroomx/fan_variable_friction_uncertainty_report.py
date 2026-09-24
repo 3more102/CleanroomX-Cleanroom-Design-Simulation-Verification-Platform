@@ -1039,6 +1039,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{residual_summary['solved_with_additional_candidate_feature_corner_count']}**",
                 "- Solved corners with alternative-candidate separation evidence: "
                 f"**{residual_summary['alternative_candidate_separation_evidence_corner_count']}**",
+                "- Solved corners with supplied-point index-separation evidence: "
+                f"**{residual_summary['alternative_candidate_index_separation_evidence_corner_count']}**",
                 "- Solved corners whose selected airflow overlaps an alternative candidate interval: "
                 f"**{residual_summary['selected_airflow_overlap_alternative_interval_corner_count']}**",
                 "- Corners with residual-increase transitions: "
@@ -1111,6 +1113,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             lines.append(
                 "- Minimum selected-to-alternative candidate gap / supplied fan-curve span: "
                 f"**{normalized_alternative_gap['value']}** "
+                f"({' / '.join(source_texts)})"
+            )
+        index_alternative_gap = residual_summary.get(
+            "minimum_selected_to_alternative_candidate_feature_index_interval_gap"
+        )
+        if index_alternative_gap is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; supplied-points={source['expected_supplied_point_count']}"
+                for source in index_alternative_gap["sources"]
+            ]
+            lines.append(
+                "- Minimum selected-to-alternative candidate supplied-point index-interval gap: "
+                f"**{index_alternative_gap['value']} index step(s)** "
                 f"({' / '.join(source_texts)})"
             )
         if residual_summary["residual_increase_corner_indices"]:

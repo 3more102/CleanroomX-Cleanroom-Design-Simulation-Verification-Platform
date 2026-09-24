@@ -105,6 +105,8 @@ v0.73 makes that trace replayable as a state-transition record. For each nonterm
 
 v0.75 extends the same replay-audited trace to bounded-bisection searches that stop only because the configured operating-iteration budget is exhausted. No operating point is accepted and no terminal `T` record is fabricated. Instead, the final recorded `L` or `H` decision is replayed into the retained remaining signed-residual bracket, and both airflow and residual endpoints must match the retained terminal search state. This is numerical implementation/search-state provenance only; it is not physical airflow uncertainty, an interpolation-error bound, a continuous-root guarantee, stability/stall/surge evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance criterion.
 
+v0.76 anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points, then reconstructs the complete L/H/T chain from that origin through the solved final bracket or the retained iteration-limit bracket. Every recorded airflow and residual bracket state must agree with the replayed chain. This is end-to-end numerical implementation provenance only; it does not add physical uncertainty, interpolation-error, root-uniqueness, stability/stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
+
 ## CLI
 
 ```text

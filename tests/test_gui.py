@@ -152,6 +152,50 @@ def test_unsaved_state_detects_uncommitted_editor_changes():
     assert app._has_unsaved_changes() is True
 
 
+def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_path):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    class Text:
+        def get(self, *args):
+            return '{"value": 2}'
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            ),
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app.input_text = Text()
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+    app.project_path = tmp_path / "demo.cleanroomx.json"
+    app._capture_saved_state = lambda: None
+
+    app.save_project()
+
+    saved = load_project_document(app.project_path)
+    assert saved.analysis_by_id("a").input == {"value": 2}
+    assert "Saved" in app.status_var.value
+
+
 def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)

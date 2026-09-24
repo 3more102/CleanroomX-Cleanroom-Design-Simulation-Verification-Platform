@@ -297,6 +297,95 @@ def _network_state_sha256(network: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _fan_curve_supplied_point_network_state_replay_audit(
+    study: FanVariableFrictionLoopStudy,
+    curve_checks: list[dict],
+) -> dict:
+    expected_count = len(study.fan_curve.points)
+    checks = []
+    violations = []
+
+    for point_index, check in enumerate(curve_checks):
+        point = study.fan_curve.points[point_index]
+        recorded = check.get("network_state_sha256")
+        replay_error = None
+        try:
+            replayed_network, _ = _solve_network_at_airflow(
+                study,
+                point.airflow_m3_h,
+            )
+            recomputed = _network_state_sha256(replayed_network)
+            matches = recorded is not None and str(recorded) == recomputed
+        except RuntimeError as exc:
+            recomputed = None
+            matches = False
+            replay_error = str(exc)
+
+        evidence = {
+            "point_index": point_index,
+            "airflow_m3_h": round(point.airflow_m3_h, 6),
+            "recorded_network_state_sha256": (
+                None if recorded is None else str(recorded)
+            ),
+            "recomputed_network_state_sha256": recomputed,
+            "network_state_matches_independent_replay": matches,
+            "replay_error": replay_error,
+        }
+        checks.append(evidence)
+        if not matches:
+            violations.append(evidence)
+
+    evaluated_count = len(curve_checks)
+    all_evaluated_match = (
+        all(
+            check["network_state_matches_independent_replay"]
+            for check in checks
+        )
+        if checks
+        else None
+    )
+    return {
+        "available": bool(checks),
+        "algorithm": "sha256",
+        "canonicalization": (
+            "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
+        ),
+        "expected_supplied_point_count": expected_count,
+        "evaluated_supplied_point_count": evaluated_count,
+        "replay_check_count": len(checks),
+        "complete_supplied_point_coverage": evaluated_count == expected_count,
+        "replay_evidence_complete": len(checks) == evaluated_count,
+        "matching_supplied_point_count": sum(
+            check["network_state_matches_independent_replay"]
+            for check in checks
+        ),
+        "all_evaluated_supplied_point_network_states_match_independent_replay": (
+            all_evaluated_match
+        ),
+        "complete_supplied_point_network_state_replay": (
+            evaluated_count == expected_count
+            and all_evaluated_match is True
+        ),
+        "checks": checks,
+        "violation_point_indices": [
+            check["point_index"] for check in violations
+        ],
+        "violation_count": len(violations),
+        "violations": violations,
+        "scope_note": (
+            "This audit independently re-solves every successfully evaluated "
+            "supplied fan-curve point and compares the canonical nonlinear "
+            "network-state SHA-256 retained with that point. It extends "
+            "network-state provenance to the supplied-point residual topology "
+            "that precedes root selection, including complete no-intersection "
+            "cases and partial coverage before network-solver failure. It is "
+            "deterministic implementation provenance, not physical "
+            "uncertainty, fan stability, commissioning/certification evidence, "
+            "or equipment acceptance."
+        ),
+    }
+
+
 def _point_check(
     study: FanVariableFrictionLoopStudy,
     point: FanCurvePoint,
@@ -319,6 +408,7 @@ def _point_check(
             "max_relative_resistance_closure_error": vf[
                 "max_relative_resistance_closure_error"
             ],
+            "network_state_sha256": _network_state_sha256(network),
         },
         network,
     )
@@ -2653,6 +2743,12 @@ def _nonconverged_result(
                 curve_checks,
             )
         ),
+        "fan_curve_supplied_point_network_state_replay": (
+            _fan_curve_supplied_point_network_state_replay_audit(
+                study,
+                curve_checks,
+            )
+        ),
         "fan_operating_point": None,
         "operating_point_search_evidence": None,
         "operating_network_solution": None,
@@ -3378,6 +3474,12 @@ def solve_fan_variable_friction_loop(
         "fan_curve_point_checks": curve_checks,
         "fan_curve_supplied_point_residual_audit": (
             _fan_curve_supplied_point_residual_audit(
+                study,
+                curve_checks,
+            )
+        ),
+        "fan_curve_supplied_point_network_state_replay": (
+            _fan_curve_supplied_point_network_state_replay_audit(
                 study,
                 curve_checks,
             )

@@ -140,6 +140,20 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_numeric_midpoints_are_arithmetic_bracket_midpoints']}**",
                     "- Recorded trace midpoint flags match numeric geometry: "
                     f"**{trace_audit['all_recorded_midpoint_flags_match_numeric_geometry']}**",
+                    "- Pressure-component coverage complete: "
+                    f"**{trace_audit['complete_pressure_component_coverage']}**",
+                    "- Missing pressure-component iterations: "
+                    f"**{trace_audit['pressure_component_missing_iterations']}**",
+                    "- Recorded midpoint residuals equal fan minus system pressure: "
+                    f"**{trace_audit['all_midpoint_residuals_match_pressure_components']}**",
+                    "- Pressure-residual identity violation iterations: "
+                    f"**{trace_audit['pressure_residual_identity_violation_iterations']}**",
+                    "- Maximum absolute midpoint residual identity error: "
+                    f"**{trace_audit['maximum_absolute_midpoint_residual_identity_error_pa']} Pa**",
+                    "- Trace decisions match independently recomputed pressure-component semantics: "
+                    f"**{trace_audit['all_decisions_match_pressure_component_semantics']}**",
+                    "- Pressure-component decision-semantic violation iterations: "
+                    f"**{trace_audit['pressure_component_decision_semantic_violation_iterations']}**",
                     "- Complete trace raw-state audit consistent: "
                     f"**{trace_audit['all_trace_raw_state_consistent']}**",
                     "- Maximum absolute trace midpoint-centering error: "

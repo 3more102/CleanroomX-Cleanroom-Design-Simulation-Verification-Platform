@@ -103,6 +103,8 @@ v0.72 retains the complete midpoint decision trace for every successful bounded-
 
 v0.73 makes that trace replayable as a state-transition record. For each nonterminal L/H step, the audit reconstructs the expected next airflow bracket and signed-residual bracket and checks them against the next retained trace record; it also verifies that iteration numbers are contiguous from one. This detects trace corruption or solver/trace divergence without changing the accepted operating point. Replay evidence is numerical implementation provenance only, not physical uncertainty, interpolation error, continuous-root uniqueness/stability evidence, or an equipment-acceptance criterion.
 
+v0.75 extends the same replay-audited trace to bounded-bisection searches that stop only because the configured operating-iteration budget is exhausted. No operating point is accepted and no terminal `T` record is fabricated. Instead, the final recorded `L` or `H` decision is replayed into the retained remaining signed-residual bracket, and both airflow and residual endpoints must match the retained terminal search state. This is numerical implementation/search-state provenance only; it is not physical airflow uncertainty, an interpolation-error bound, a continuous-root guarantee, stability/stall/surge evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance criterion.
+
 ## CLI
 
 ```text

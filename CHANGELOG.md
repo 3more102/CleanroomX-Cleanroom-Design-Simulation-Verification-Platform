@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.75 iteration-limit decision-trace terminal replay — 2026-09-24
+
+- Extends retained bounded-bisection decision traces to non-converged searches that exhaust `max_operating_iterations`.
+- Keeps iteration-limit outcomes explicitly non-converged with no accepted operating point and no fabricated terminal `T` decision.
+- Replays the final recorded `L`/`H` decision into the retained remaining signed-residual bracket and audits exact airflow/residual endpoint agreement.
+- Aggregates solved and iteration-limit trace coverage, terminal-outcome consistency, final replay violations, and maximum trace length across nonlinear uncertainty corners.
+- Surfaces the evidence in standalone loop, uncertainty, and engineering-dossier Markdown with direct solver, uncertainty, and dossier regression coverage.
+- Treats the trace and terminal replay strictly as numerical implementation provenance; they are not physical airflow uncertainty, interpolation-error bounds, continuous-root guarantees, stability/stall/surge evidence, manufacturer operating limits, commissioning/certification evidence, or equipment-acceptance criteria.
+- Bumped package/runtime metadata to v0.75.0.
+
 ## v0.74 supplied-point candidate index-separation audit — 2026-09-24
 
 - Retains exact supplied-point index intervals for solver-eligible tolerance-contact points and positive-to-negative sign-change segments.

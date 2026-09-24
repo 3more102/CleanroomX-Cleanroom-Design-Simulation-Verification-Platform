@@ -1739,6 +1739,15 @@ def _fan_curve_supplied_point_residual_summary(
         for corner_index, _corner, audit in cases
         if audit["candidate_crossing_feature_count"] > 1
     ]
+    reverse_sign_change_indices = [
+        corner_index
+        for corner_index, _corner, audit in cases
+        if audit.get("reverse_strict_sign_change_segment_count", 0) > 0
+    ]
+    reverse_sign_change_segment_count_total = sum(
+        int(audit.get("reverse_strict_sign_change_segment_count", 0))
+        for _corner_index, _corner, audit in cases
+    )
     complete_study_coverage = (
         nominal_audit is not None
         and nominal_audit["complete_supplied_point_coverage"]
@@ -1922,6 +1931,13 @@ def _fan_curve_supplied_point_residual_summary(
         "multiple_candidate_feature_corner_indices": (
             multiple_candidate_indices
         ),
+        "reverse_strict_sign_change_corner_count": len(
+            reverse_sign_change_indices
+        ),
+        "reverse_strict_sign_change_corner_indices": reverse_sign_change_indices,
+        "reverse_strict_sign_change_segment_count_total": (
+            reverse_sign_change_segment_count_total
+        ),
         "complete_study_coverage": complete_study_coverage,
         "maximum_positive_residual_increase_pa": maximum_positive_increase,
         "scope_note": (
@@ -1936,9 +1952,11 @@ def _fan_curve_supplied_point_residual_summary(
             "solution to an alternative discrete point or sign-change interval "
             "in absolute airflow and as a fraction of that corner's supplied "
             "fan-curve airflow span; this does not infer a second continuous "
-            "root. Sampled monotonicity "
-            "and candidate crossing features do not prove "
-            "continuous uniqueness or dynamic stability and do not define "
+            "root. Reverse negative-to-positive strict sign-change segments are "
+            "retained separately as audit-only sampled topology and are never "
+            "promoted into solver candidates. Sampled monotonicity and candidate "
+            "crossing features do not prove continuous uniqueness or dynamic "
+            "stability and do not define "
             "stall/surge, manufacturer-region, commissioning, certification, "
             "or equipment-acceptance criteria."
         ),

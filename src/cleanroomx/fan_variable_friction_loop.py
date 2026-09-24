@@ -872,6 +872,7 @@ def _bisection_decision_trace_audit(
 
     residual_replay_checks = []
     pressure_component_replay_checks = []
+    terminal_pressure_component_replay = None
     residual_replay_available = (
         study is not None
         and segment_left is not None
@@ -1236,6 +1237,148 @@ def _bisection_decision_trace_audit(
                 replay_low_airflow = replay_midpoint_airflow
             elif decision == "replace_high_endpoint":
                 replay_high_airflow = replay_midpoint_airflow
+
+        terminal_bracket_for_pressure_component_replay = (
+            iteration_limit_terminal_bracket
+            if termination_reason == "bisection_iteration_limit"
+            else solved_terminal_bracket
+        )
+        terminal_pressure_component_fields = tuple(
+            f"{position}_{component}_pressure_pa"
+            for position in ("low", "high")
+            for component in ("fan", "loop_network", "system")
+        )
+        if (
+            terminal_bracket_for_pressure_component_replay is not None
+            and all(
+                field in terminal_bracket_for_pressure_component_replay
+                for field in terminal_pressure_component_fields
+            )
+        ):
+            terminal_position_states = {
+                "low": (
+                    replay_low_airflow,
+                    _independent_state(replay_low_airflow),
+                ),
+                "high": (
+                    replay_high_airflow,
+                    _independent_state(replay_high_airflow),
+                ),
+            }
+            terminal_position_checks = {}
+            for position, (
+                replayed_airflow,
+                recomputed_state,
+            ) in terminal_position_states.items():
+                recorded_fan_pressure = float(
+                    terminal_bracket_for_pressure_component_replay[
+                        f"{position}_fan_pressure_pa"
+                    ]
+                )
+                recorded_loop_pressure = float(
+                    terminal_bracket_for_pressure_component_replay[
+                        f"{position}_loop_network_pressure_pa"
+                    ]
+                )
+                recorded_system_pressure = float(
+                    terminal_bracket_for_pressure_component_replay[
+                        f"{position}_system_pressure_pa"
+                    ]
+                )
+                recomputed_fan_pressure = recomputed_state["fan_pressure_pa"]
+                recomputed_loop_pressure = recomputed_state[
+                    "loop_network_pressure_pa"
+                ]
+                recomputed_system_pressure = recomputed_state[
+                    "system_pressure_pa"
+                ]
+                fan_error = abs(
+                    recorded_fan_pressure - recomputed_fan_pressure
+                )
+                loop_error = abs(
+                    recorded_loop_pressure - recomputed_loop_pressure
+                )
+                system_error = abs(
+                    recorded_system_pressure - recomputed_system_pressure
+                )
+                fan_matches = math.isclose(
+                    recorded_fan_pressure,
+                    recomputed_fan_pressure,
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                loop_matches = math.isclose(
+                    recorded_loop_pressure,
+                    recomputed_loop_pressure,
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                system_matches = math.isclose(
+                    recorded_system_pressure,
+                    recomputed_system_pressure,
+                    rel_tol=0.0,
+                    abs_tol=pressure_component_replay_absolute_tolerance_pa,
+                )
+                terminal_position_checks[position] = {
+                    "replayed_airflow_m3_h": round(replayed_airflow, 9),
+                    "recorded_fan_pressure_pa": recorded_fan_pressure,
+                    "recomputed_fan_pressure_pa": round(
+                        recomputed_fan_pressure,
+                        9,
+                    ),
+                    "absolute_fan_pressure_replay_error_pa": fan_error,
+                    "recorded_loop_network_pressure_pa": (
+                        recorded_loop_pressure
+                    ),
+                    "recomputed_loop_network_pressure_pa": round(
+                        recomputed_loop_pressure,
+                        9,
+                    ),
+                    "absolute_loop_pressure_replay_error_pa": loop_error,
+                    "recorded_system_pressure_pa": recorded_system_pressure,
+                    "recomputed_system_pressure_pa": round(
+                        recomputed_system_pressure,
+                        9,
+                    ),
+                    "absolute_system_pressure_replay_error_pa": system_error,
+                    "fan_pressure_matches_independent_replay": fan_matches,
+                    "loop_pressure_matches_independent_replay": loop_matches,
+                    "system_pressure_matches_independent_replay": (
+                        system_matches
+                    ),
+                    "all_pressure_components_match_independent_replay": (
+                        fan_matches and loop_matches and system_matches
+                    ),
+                }
+            terminal_pressure_component_replay = {
+                "termination_reason": termination_reason,
+                "low": terminal_position_checks["low"],
+                "high": terminal_position_checks["high"],
+                "all_terminal_pressure_components_match_independent_replay": (
+                    all(
+                        check[
+                            "all_pressure_components_match_independent_replay"
+                        ]
+                        for check in terminal_position_checks.values()
+                    )
+                ),
+                "maximum_absolute_terminal_pressure_component_replay_error_pa": (
+                    max(
+                        max(
+                            check[
+                                "absolute_fan_pressure_replay_error_pa"
+                            ],
+                            check[
+                                "absolute_loop_pressure_replay_error_pa"
+                            ],
+                            check[
+                                "absolute_system_pressure_replay_error_pa"
+                            ],
+                        )
+                        for check in terminal_position_checks.values()
+                    )
+                ),
+            }
 
     decision_semantic_checks = []
     tolerance = float(operating_pressure_tolerance_pa)
@@ -1850,6 +1993,26 @@ def _bisection_decision_trace_audit(
         "pressure_component_replay_checks": (
             pressure_component_replay_checks
         ),
+        "terminal_pressure_component_replay_available": (
+            terminal_pressure_component_replay is not None
+        ),
+        "all_terminal_pressure_components_match_independent_replay": (
+            terminal_pressure_component_replay[
+                "all_terminal_pressure_components_match_independent_replay"
+            ]
+            if terminal_pressure_component_replay is not None
+            else None
+        ),
+        "maximum_absolute_terminal_pressure_component_replay_error_pa": (
+            terminal_pressure_component_replay[
+                "maximum_absolute_terminal_pressure_component_replay_error_pa"
+            ]
+            if terminal_pressure_component_replay is not None
+            else None
+        ),
+        "terminal_pressure_component_replay": (
+            terminal_pressure_component_replay
+        ),
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -2249,8 +2412,32 @@ def solve_fan_variable_friction_loop(
                                 low_residual,
                                 9,
                             ),
+                            "low_fan_pressure_pa": round(
+                                low_fan_pressure,
+                                9,
+                            ),
+                            "low_loop_network_pressure_pa": round(
+                                low_network_pressure,
+                                9,
+                            ),
+                            "low_system_pressure_pa": round(
+                                low_system_pressure,
+                                9,
+                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
+                                9,
+                            ),
+                            "high_fan_pressure_pa": round(
+                                high_fan_pressure,
+                                9,
+                            ),
+                            "high_loop_network_pressure_pa": round(
+                                high_network_pressure,
+                                9,
+                            ),
+                            "high_system_pressure_pa": round(
+                                high_system_pressure,
                                 9,
                             ),
                             "selected_midpoint_airflow_m3_h": round(
@@ -2356,8 +2543,32 @@ def solve_fan_variable_friction_loop(
                         low_residual,
                         9,
                     ),
+                    "low_fan_pressure_pa": round(
+                        low_fan_pressure,
+                        9,
+                    ),
+                    "low_loop_network_pressure_pa": round(
+                        low_network_pressure,
+                        9,
+                    ),
+                    "low_system_pressure_pa": round(
+                        low_system_pressure,
+                        9,
+                    ),
                     "high_fan_minus_system_pressure_pa": round(
                         high_residual,
+                        9,
+                    ),
+                    "high_fan_pressure_pa": round(
+                        high_fan_pressure,
+                        9,
+                    ),
+                    "high_loop_network_pressure_pa": round(
+                        high_network_pressure,
+                        9,
+                    ),
+                    "high_system_pressure_pa": round(
+                        high_system_pressure,
                         9,
                     ),
                     "width_fraction_of_supplied_segment": round(

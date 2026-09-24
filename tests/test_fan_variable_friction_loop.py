@@ -458,8 +458,14 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     )
     assert clean is not None
     assert clean["all_trace_geometry_consistent"] is True
+    assert clean["all_midpoints_are_arithmetic_bracket_midpoints"] is True
+    assert clean["all_recorded_midpoints_match_airflow_brackets"] is True
     assert clean["all_state_transitions_replay_recorded_decisions"] is True
     assert clean["trace_origin_to_terminal_replay_consistent"] is True
+    assert clean["maximum_absolute_trace_midpoint_error_m3_h"] == pytest.approx(
+        0.0,
+        abs=1e-18,
+    )
     assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
         0.0,
         abs=1e-18,
@@ -514,6 +520,35 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "terminal_bracket_matches_origin_replay"
     ] is True
     assert origin_audit["trace_origin_to_terminal_replay_consistent"] is False
+
+    self_consistent_wrong_midpoint = [dict(step) for step in trace]
+    self_consistent_wrong_midpoint[0]["midpoint_airflow_m3_h"] = 3.5
+    self_consistent_wrong_midpoint[1]["low_airflow_m3_h"] = 3.5
+    self_consistent_wrong_midpoint[1]["midpoint_airflow_m3_h"] = 5.75
+    self_consistent_wrong_midpoint[1]["width_m3_h"] = 4.5
+    self_consistent_terminal = dict(solved_terminal_bracket)
+    self_consistent_terminal["low_airflow_m3_h"] = 3.5
+    midpoint_audit = _bisection_decision_trace_audit(
+        self_consistent_wrong_midpoint,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=self_consistent_terminal,
+    )
+    assert midpoint_audit is not None
+    assert midpoint_audit[
+        "all_state_transitions_replay_recorded_decisions"
+    ] is True
+    assert midpoint_audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert midpoint_audit["all_trace_geometry_consistent"] is True
+    assert midpoint_audit["all_midpoints_are_arithmetic_bracket_midpoints"] is False
+    assert midpoint_audit["all_recorded_midpoints_match_airflow_brackets"] is False
+    assert midpoint_audit[
+        "maximum_absolute_trace_midpoint_error_m3_h"
+    ] == pytest.approx(0.5, abs=1e-18)
+    assert self_consistent_wrong_midpoint[0][
+        "midpoint_is_arithmetic_bracket_midpoint"
+    ] is True
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

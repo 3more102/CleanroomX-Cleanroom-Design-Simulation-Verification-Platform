@@ -89,6 +89,8 @@ v0.65 preserves the actual bounded root-search geometry. When a bisection midpoi
 
 v0.67 audits the retained bisection geometry against implementation invariants using the unrounded live search state. It records whether the active interval still has a strict positive/negative residual sign change, whether the accepted airflow is the active interval midpoint, the number of completed binary contraction steps, the expected width fraction from that iteration count, the actual width fraction, and their absolute floating-point discrepancy. This is solver self-verification evidence only and does not add an engineering acceptance threshold.
 
+v0.68 extends the same auditability to bisection iteration-limit failures. When the operating-point iteration budget is exhausted, no operating point is accepted; instead, the result preserves the remaining strict signed-residual bracket after the final budgeted midpoint evaluation and audits its width against the completed binary contraction count. This remaining bracket is numerical search-state evidence only, not physical airflow uncertainty or an acceptance margin.
+
 ## CLI
 
 ```text

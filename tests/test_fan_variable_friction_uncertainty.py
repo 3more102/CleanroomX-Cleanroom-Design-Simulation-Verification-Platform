@@ -2539,6 +2539,18 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "bisection_trace_raw_state_consistent_corner_count"
     ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_residual_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_residual_replay_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    residual_replay_error = summary[
+        "maximum_bisection_trace_residual_replay_error_pa"
+    ]
+    assert residual_replay_error is not None
+    assert residual_replay_error["value"] <= 1e-9
+    assert residual_replay_error["sources"]
     midpoint_error = summary["maximum_bisection_trace_midpoint_error_m3_h"]
     assert midpoint_error is not None
     assert midpoint_error["value"] <= 1e-9
@@ -2596,6 +2608,10 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
             "all_recorded_midpoint_flags_match_numeric_geometry"
         ] is True
         assert trace_audit["all_trace_raw_state_consistent"] is True
+        assert trace_audit["residual_replay_available"] is True
+        assert trace_audit[
+            "all_trace_residuals_match_independent_replay"
+        ] is True
         assert trace_audit[
             "all_recorded_widths_match_airflow_brackets"
         ] is True
@@ -2653,6 +2669,8 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Recomputed trace midpoint violations: **[]**" in report
     assert "Trace midpoint-flag mismatches vs numeric geometry: **[]**" in report
     assert "Trace raw-state audit violation corners: **[]**" in report
+    assert "Trace independent residual-replay violation corners: **[]**" in report
+    assert "Maximum trace residual-replay error" in report
     assert "Maximum trace midpoint-centering error" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report

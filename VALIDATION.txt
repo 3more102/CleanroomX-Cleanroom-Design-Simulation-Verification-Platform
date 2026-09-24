@@ -1,0 +1,41 @@
+CLEANROOMX v0.100 RELEASE VALIDATION
+=====================================
+
+Release line: 0.100.0
+Canonical branch: codex/cleanroomx-v0100-final-consolidated
+
+REQUIRED BEFORE MERGE
+---------------------
+PASS required - v0.91 compatibility gate
+PASS required - v0.92 compatibility gate
+PASS required - v0.93 compatibility gate
+PASS required - v0.94 compatibility gate
+PASS required - v0.95 compatibility gate
+PASS required - focused application/project/GUI regressions
+PASS required - complete Python 3.11 test suite
+PASS required - complete Python 3.12 test suite
+PASS required - complete Python 3.13 test suite
+PASS required - representative CLI JSON/Markdown smoke checks
+PASS required - headless GUI registry readiness
+PASS required - source-tree real Tk/Xvfb GUI smoke
+PASS required - wheel build/install and packaged-demo validation
+PASS required - installed-wheel real Tk/Xvfb demo smoke
+
+CONSOLIDATED RELEASE CONTROLS
+-----------------------------
+- canonical input and external dependency SHA-256 execution provenance
+- strict run-bundle export
+- application registry parity and pre-window fail-fast validation
+- absolute/relative dossier path-context enforcement
+- file-reference rebasing across import and Save As relocation
+- cache invalidation when the project base directory changes
+- abandoned-worker exclusivity until backend exit
+- same-directory atomic project and export writes
+- fan plus backend system-curve plot evidence
+- self-contained packaged desktop demo
+
+ENGINEERING BOUNDARY
+--------------------
+No validated solver equations, numerical tolerances, uncertainty enumeration,
+root-selection/no-extrapolation behavior, or engineering acceptance criteria are
+changed by this release consolidation.

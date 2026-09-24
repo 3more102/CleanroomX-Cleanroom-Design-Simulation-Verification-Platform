@@ -75,6 +75,20 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         assert alternative_gap["sources"]
     else:
         assert alternative_gap is None
+    assert (
+        residual_summary["selected_airflow_with_below_alternative_corner_count"]
+        <= separation_count
+    )
+    assert (
+        residual_summary["selected_airflow_with_above_alternative_corner_count"]
+        <= separation_count
+    )
+    assert (
+        residual_summary[
+            "selected_airflow_with_bidirectional_alternative_corner_count"
+        ]
+        <= separation_count
+    )
     assert residual_summary["residual_increase_corner_count"] == 0
     assert bracket_summary["bracket_evidence_corner_count"] == analysis[
         "corner_count"
@@ -137,6 +151,10 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Segment evidence" in report
     assert "Min alternative candidate gap m³/h" in report
     assert "Residual topology" in report
+    assert "dirs below" in report
+    assert "overlap" in report
+    assert "above" in report
+    assert "both" in report
     assert "No-intersection boundary cases" in report
     assert "Result SHA-256" in report
     assert analysis["result_integrity"]["sha256"] in report

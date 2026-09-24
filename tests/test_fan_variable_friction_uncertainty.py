@@ -2626,6 +2626,18 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "terminal_network_state_replay_violation_details"
     ] == []
+    assert summary[
+        "terminal_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "terminal_network_state_projection_replay_consistent_corner_count"
+    ] == summary["bisection_trace_evidence_corner_count"]
+    assert summary[
+        "terminal_network_state_projection_replay_violation_count"
+    ] == 0
+    assert summary[
+        "terminal_network_state_projection_replay_violation_details"
+    ] == []
     system_pressure_error = summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"
     ]
@@ -3009,6 +3021,18 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary["terminal_network_state_replay_violation_count"] == 0
     assert summary[
         "terminal_network_state_replay_violation_details"
+    ] == []
+    assert summary[
+        "terminal_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "terminal_network_state_projection_replay_consistent_corner_count"
+    ] == summary["bisection_trace_evidence_corner_count"]
+    assert summary[
+        "terminal_network_state_projection_replay_violation_count"
+    ] == 0
+    assert summary[
+        "terminal_network_state_projection_replay_violation_details"
     ] == []
     assert summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"

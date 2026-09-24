@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.99 release integrity and completion — 2026-09-24
+
+- Continues directly from merged v0.99 registry-integrity commit `9563507252f204bd8d88fa53f67d4afe2999f040` on the verified integrated `main` lineage.
+- Retains duplicate application-key rejection, direct parser/runner contract enforcement, custom-adapter enforcement for `consistency` and `dossier`, and structured headless registry diagnostics.
+- Adds a regression that verifies backend binding-load failures report the affected workflow and role.
+- Synchronizes package, runtime, demonstration project, GUI capability tests, documentation, and CI version checks at v0.99.0.
+- Adds a focused v0.99 application/workflow/project/GUI lifecycle gate before the complete test suite while preserving all v0.91-v0.95 provenance/replay compatibility gates.
+- Retains the installed Tk/Xvfb desktop smoke and representative strict-JSON/Markdown CLI smoke checks.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

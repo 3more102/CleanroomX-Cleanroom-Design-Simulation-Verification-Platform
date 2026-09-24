@@ -448,6 +448,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("name", "Name"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
+            ("z_m", "Z (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
@@ -604,8 +605,17 @@ class SpatialDesignWorkspace(ttk.Frame):
                 f"{area:.2f} m² floor · {volume:.2f} m³ volume · {pressure_text}"
             )
         else:
+            room = next(
+                (
+                    candidate
+                    for candidate in self.layout["rooms"]
+                    if candidate["id"] == item.get("room_id")
+                ),
+                None,
+            )
+            room_name = room["name"] if room else "unassigned"
             self._selection_detail_var.set(
-                f"{item.get('type', 'device').title()} at "
+                f"{item.get('type', 'device').title()} · room {room_name} · "
                 f"({item.get('x_m', 0.0):g}, {item.get('y_m', 0.0):g}, {item.get('z_m', 0.0):g}) m"
             )
         for key, var in self._property_vars.items():
@@ -623,6 +633,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             text = self._property_vars[key].get().strip()
             if text:
                 item[key] = _finite_number(text, item.get(key, 0.0))
+        if self.selected and self.selected.kind == "device":
+            text = self._property_vars["z_m"].get().strip()
+            if text:
+                item["z_m"] = _finite_number(text, item.get("z_m", 0.0))
         if self.selected and self.selected.kind == "room":
             for key in ("length_m", "width_m", "height_m"):
                 text = self._property_vars[key].get().strip()

@@ -111,6 +111,8 @@ v0.77 anchors every retained bounded-bisection decision trace to the exact initi
 
 v0.78 independently audits the meaning of every retained decision. A midpoint inside the configured operating-pressure tolerance must record `T`; a positive midpoint residual outside tolerance must record `L`; and a negative midpoint residual outside tolerance must record `H`. The audit retains per-step recorded/expected decisions and exact violating iterations, so a self-consistent replay cannot hide an incorrectly labeled endpoint replacement. This remains numerical implementation provenance only and does not create physical uncertainty, stability, manufacturer-region, commissioning, certification, or equipment-acceptance evidence.
 
+v0.79 independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from each retained trace record's numeric fields, then checks the stored sign-change and midpoint flags against those recomputed facts. It also retains per-step raw-state evidence and the maximum absolute midpoint-centering error, so correct-looking stored booleans cannot hide corrupted numeric trace state. This remains numerical implementation provenance only; it does not add physical airflow uncertainty, interpolation-error, root-uniqueness/stability, stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
+
 ## CLI
 
 ```text

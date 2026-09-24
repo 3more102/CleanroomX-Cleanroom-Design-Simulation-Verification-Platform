@@ -252,6 +252,22 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
     ] <= 1e-9
+    assert trace_audit["residual_component_check_count"] == len(trace)
+    assert trace_audit[
+        "midpoint_residual_component_coverage_complete"
+    ] is True
+    assert trace_audit[
+        "all_midpoint_residuals_match_fan_system_components"
+    ] is True
+    assert trace_audit[
+        "midpoint_residual_component_mismatch_iterations"
+    ] == []
+    assert trace_audit[
+        "maximum_absolute_midpoint_residual_component_error_pa"
+    ] <= 2e-9
+    for step in trace:
+        assert "midpoint_fan_pressure_pa" in step
+        assert "midpoint_system_pressure_pa" in step
     assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
     assert trace_audit[
         "all_recorded_width_fractions_match_iteration_sequence"
@@ -445,6 +461,8 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
             "width_fraction_of_supplied_segment": 1.0,
             "low_fan_minus_system_pressure_pa": 4.0,
             "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_pressure_pa": 101.0,
+            "midpoint_system_pressure_pa": 100.0,
             "midpoint_fan_minus_system_pressure_pa": 1.0,
             "decision": "replace_low_endpoint",
             "strict_sign_change_before_evaluation": True,
@@ -459,6 +477,8 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
             "width_fraction_of_supplied_segment": 0.5,
             "low_fan_minus_system_pressure_pa": 1.0,
             "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_pressure_pa": 100.0,
+            "midpoint_system_pressure_pa": 100.0,
             "midpoint_fan_minus_system_pressure_pa": 0.0,
             "decision": "accept_pressure_tolerance",
             "strict_sign_change_before_evaluation": True,
@@ -500,6 +520,15 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
     assert clean["all_trace_raw_state_consistent"] is True
+    assert clean["residual_component_check_count"] == len(trace)
+    assert clean["midpoint_residual_component_coverage_complete"] is True
+    assert clean[
+        "all_midpoint_residuals_match_fan_system_components"
+    ] is True
+    assert clean["midpoint_residual_component_mismatch_iterations"] == []
+    assert clean[
+        "maximum_absolute_midpoint_residual_component_error_pa"
+    ] == pytest.approx(0.0, abs=1e-18)
     assert clean["trace_origin_to_terminal_replay_consistent"] is True
     assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
         0.0,
@@ -535,6 +564,33 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     ] is False
     assert flag_audit["all_trace_raw_state_consistent"] is False
     assert flag_audit["all_decisions_match_midpoint_residual_semantics"] is True
+
+    residual_corrupted = [dict(step) for step in trace]
+    residual_corrupted[0]["midpoint_fan_minus_system_pressure_pa"] = 2.0
+    residual_audit = _bisection_decision_trace_audit(
+        residual_corrupted,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=solved_terminal_bracket,
+    )
+    assert residual_audit is not None
+    assert residual_audit[
+        "midpoint_residual_component_coverage_complete"
+    ] is True
+    assert residual_audit[
+        "all_midpoint_residuals_match_fan_system_components"
+    ] is False
+    assert residual_audit[
+        "midpoint_residual_component_mismatch_iterations"
+    ] == [1]
+    assert residual_audit[
+        "maximum_absolute_midpoint_residual_component_error_pa"
+    ] == pytest.approx(1.0, abs=1e-18)
+    assert residual_audit[
+        "all_decisions_match_midpoint_residual_semantics"
+    ] is True
 
     midpoint_corrupted = [dict(step) for step in trace]
     midpoint_corrupted[0]["midpoint_airflow_m3_h"] = 4.25

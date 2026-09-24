@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99 release integrity and final synchronization — 2026-09-24
+
+- Continues directly from the integrated v0.98 `main` line and merges the CI-passing release-integrity delta `40fc1694800088fc99731915e72a0a39d8cfa34e` through merge commit `9563507252f204bd8d88fa53f67d4afe2999f040`.
+- Strengthens application-registry validation by rejecting duplicate analysis keys, enforcing parser/runner bindings for standard analyses, and enforcing the registered custom-adapter contract for `consistency` and `dossier`.
+- Returns structured registry-validation diagnostics through `application_info()` and `cleanroomx-gui --check`, while preserving the existing `bindings_valid` readiness flag.
+- Adds regression coverage for duplicate-key rejection, custom-adapter contract enforcement, and GUI check-mode registry diagnostics.
+- The exact runtime/test delta passed CI run `36044884630`: Python 3.11/3.12/3.13 compatibility gates, the complete test suite, representative CLI smoke checks, and the real Tk/Xvfb GUI smoke on Python 3.13.
+- Bumps package/runtime/demo metadata to v0.99.0 and synchronizes GUI tests, CI assertions/step labels, README status, and desktop-application documentation.
+- No solver equations, engineering acceptance criteria, uncertainty enumeration, root-selection policy, or validated backend workflow semantics are changed by this release.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

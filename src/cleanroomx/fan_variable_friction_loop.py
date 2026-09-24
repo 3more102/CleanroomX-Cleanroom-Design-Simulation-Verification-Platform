@@ -677,6 +677,53 @@ def _bisection_decision_trace_audit(
         decision: symbol for symbol, decision in legend.items()
     }
     iteration_sequence = [int(step["iteration"]) for step in trace]
+    geometry_checks = []
+    for step in trace:
+        iteration = int(step["iteration"])
+        low_airflow = float(step["low_airflow_m3_h"])
+        high_airflow = float(step["high_airflow_m3_h"])
+        recorded_width = float(step["width_m3_h"])
+        recorded_width_fraction = float(
+            step["width_fraction_of_supplied_segment"]
+        )
+        expected_width = high_airflow - low_airflow
+        expected_width_fraction = 0.5 ** (iteration - 1)
+        absolute_width_error = abs(recorded_width - expected_width)
+        absolute_width_fraction_error = abs(
+            recorded_width_fraction - expected_width_fraction
+        )
+        geometry_checks.append(
+            {
+                "iteration": iteration,
+                "recorded_width_m3_h": recorded_width,
+                "expected_width_from_endpoints_m3_h": expected_width,
+                "absolute_width_error_m3_h": absolute_width_error,
+                "recorded_width_fraction_of_supplied_segment": (
+                    recorded_width_fraction
+                ),
+                "expected_width_fraction_from_iteration": (
+                    expected_width_fraction
+                ),
+                "absolute_width_fraction_error": (
+                    absolute_width_fraction_error
+                ),
+                "recorded_width_matches_airflow_bracket": math.isclose(
+                    recorded_width,
+                    expected_width,
+                    rel_tol=0.0,
+                    abs_tol=2e-9,
+                ),
+                "recorded_width_fraction_matches_iteration_sequence": (
+                    math.isclose(
+                        recorded_width_fraction,
+                        expected_width_fraction,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                ),
+            }
+        )
+
     transition_checks = []
     for transition_index, (step, next_step) in enumerate(
         zip(trace, trace[1:]),
@@ -880,6 +927,41 @@ def _bisection_decision_trace_audit(
             step["midpoint_is_arithmetic_bracket_midpoint"]
             for step in trace
         ),
+        "geometry_check_count": len(geometry_checks),
+        "all_recorded_widths_match_airflow_brackets": all(
+            check["recorded_width_matches_airflow_bracket"]
+            for check in geometry_checks
+        ),
+        "all_recorded_width_fractions_match_iteration_sequence": all(
+            check["recorded_width_fraction_matches_iteration_sequence"]
+            for check in geometry_checks
+        ),
+        "all_trace_geometry_consistent": all(
+            check["recorded_width_matches_airflow_bracket"]
+            and check[
+                "recorded_width_fraction_matches_iteration_sequence"
+            ]
+            for check in geometry_checks
+        ),
+        "maximum_absolute_trace_width_error_m3_h": (
+            max(
+                (
+                    check["absolute_width_error_m3_h"]
+                    for check in geometry_checks
+                ),
+                default=0.0,
+            )
+        ),
+        "maximum_absolute_trace_width_fraction_error": (
+            max(
+                (
+                    check["absolute_width_fraction_error"]
+                    for check in geometry_checks
+                ),
+                default=0.0,
+            )
+        ),
+        "geometry_checks": geometry_checks,
         "termination_record_count": len(termination_indices),
         "termination_record_is_last": (
             termination_indices == [len(trace) - 1]
@@ -916,8 +998,10 @@ def _bisection_decision_trace_audit(
             "endpoint, H replaces the negative-residual high endpoint, and T "
             "accepts a midpoint within the configured operating-pressure "
             "tolerance. The replay audit verifies that each nonterminal L/H "
-            "decision produces the next recorded airflow/residual bracket and "
-            "that iteration numbering is contiguous. For an iteration-limit "
+            "decision produces the next recorded airflow/residual bracket, "
+            "that iteration numbering is contiguous, and that every recorded "
+            "bracket width equals its endpoint span with the binary width "
+            "fraction implied by its iteration. For an iteration-limit "
             "outcome, the final L/H decision is additionally replayed into "
             "the retained remaining bracket without accepting an operating "
             "point. This is numerical implementation provenance only; it is "

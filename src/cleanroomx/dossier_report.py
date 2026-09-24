@@ -927,6 +927,24 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_network_state_projection_replay_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_network_state_projection_replay_incomplete = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_incomplete_corner_indices",
+                        [],
+                    )
+                )
                 terminal_network_state_replay_count = search_summary.get(
                     "terminal_network_state_replay_consistent_corner_count",
                     0,
@@ -1088,6 +1106,12 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_network_state_replay_count}/{trace_count}; "
                     f"network-state-replay violations "
                     f"{trace_network_state_replay_violations}; "
+                    f"network-state-projection-replay "
+                    f"{trace_network_state_projection_replay_count}/{trace_count}; "
+                    f"network-state-projection-replay violations "
+                    f"{trace_network_state_projection_replay_violations}; "
+                    f"network-state-projection-replay incomplete "
+                    f"{trace_network_state_projection_replay_incomplete}; "
                     f"terminal-network-state-replay "
                     f"{terminal_network_state_replay_count}/{trace_count}; "
                     f"terminal-network-state-replay violations "

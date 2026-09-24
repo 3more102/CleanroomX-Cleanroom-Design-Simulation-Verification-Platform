@@ -113,6 +113,15 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "maximum_bisection_trace_midpoint_error_m3_h"
     ]["value"] <= 1e-9
     assert search_summary[
+        "bisection_trace_residual_replay_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "bisection_trace_residual_replay_consistent_corner_count"
+    ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary[
+        "maximum_bisection_trace_residual_replay_error_pa"
+    ]["value"] <= 1e-9
+    assert search_summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert search_summary[
@@ -238,6 +247,9 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "trace-geometry" in report
     assert "trace-raw-state" in report
     assert "raw-state violations 0" in report
+    assert "residual-replay" in report
+    assert "residual-replay violations 0" in report
+    assert "max residual-replay error" in report
     assert "max trace midpoint error" in report
     assert "max trace width error" in report
     assert "max trace normalized-width error" in report

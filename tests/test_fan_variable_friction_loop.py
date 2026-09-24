@@ -2142,7 +2142,7 @@ def test_full_bisection_projection_replay_orders_multiple_positions() -> None:
             "balance_residual_w"
         ] += 0.125
 
-    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+    _study, result, trace, audit = _trace_projection_replay_with_mutation(
         mutate
     )
 
@@ -2161,6 +2161,20 @@ def test_full_bisection_projection_replay_orders_multiple_positions() -> None:
         (1, "midpoint", "$.edges[0].airflow_m3_h"),
         (1, "high", "$.pressure_power.balance_residual_w"),
     ]
+
+    report_result = json.loads(json.dumps(result))
+    report_result["operating_point_search_evidence"]["bisection_trace"] = trace
+    report_result["operating_point_search_evidence"][
+        "bisection_trace_audit"
+    ] = audit
+    report = markdown_fan_variable_friction_loop_report(report_result)
+    assert "Full-trace network-state projection replay verdict" in report
+    assert "bisection_network_state_projection_replay_inconsistent" in report
+    assert "$.nodes[0].relative_pressure_pa" in report
+    assert "$.edges[0].airflow_m3_h" in report
+    assert "$.pressure_power.balance_residual_w" in report
+    assert "recorded_value" in report
+    assert "recomputed_value" in report
 
 
 def test_full_bisection_projection_replay_orders_multiple_iterations() -> None:

@@ -112,7 +112,9 @@ jobs:
           )
           search_evidence = loop_payload["operating_point_search_evidence"]
           assert (
-              search_evidence["network_state_replay_canonicalization"]
+              search_evidence["bisection_trace_audit"][
+                  "network_state_replay_canonicalization"
+              ]
               == expected_canonicalization
           )
           assert (

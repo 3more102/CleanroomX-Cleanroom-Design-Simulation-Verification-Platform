@@ -869,6 +869,60 @@ def markdown_dossier_report(result: dict) -> str:
                     if trace_pressure_component_replay_error is None
                     else trace_pressure_component_replay_error["value"]
                 )
+                supplied_point_network_state_replay_applicable_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_applicable_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_evidence_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_consistent_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_inconsistent_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_inconsistent_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_incomplete_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_incomplete_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_projection_mismatch_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_projection_mismatch_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_violation_details = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_violation_details",
+                        [],
+                    )
+                )
+                supplied_point_network_state_replay_coverage_gap_details = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_coverage_gap_details",
+                        [],
+                    )
+                )
+                supplied_point_network_state_projection_maximum_numeric_errors = (
+                    search_summary.get(
+                        "maximum_supplied_point_network_state_projection_numeric_errors",
+                        [],
+                    )
+                )
                 solved_search_evidence_count = search_summary.get(
                     "solved_search_evidence_corner_count",
                     0,
@@ -1135,6 +1189,24 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_pressure_component_replay_violations}; "
                     f"max pressure-component-replay error "
                     f"{max_trace_pressure_component_replay_error} Pa; "
+                    f"supplied-point-network-state-replay "
+                    f"{supplied_point_network_state_replay_consistent_count}/"
+                    f"{supplied_point_network_state_replay_applicable_count}; "
+                    f"supplied-point-network-state-replay coverage "
+                    f"{supplied_point_network_state_replay_evidence_count}/"
+                    f"{supplied_point_network_state_replay_applicable_count}; "
+                    f"supplied-point-network-state-replay inconsistent "
+                    f"{supplied_point_network_state_replay_inconsistent_count}; "
+                    f"supplied-point-network-state-replay incomplete "
+                    f"{supplied_point_network_state_replay_incomplete_count}; "
+                    f"supplied-point-network-state-projection mismatches "
+                    f"{supplied_point_network_state_projection_mismatch_count}; "
+                    f"supplied-point-network-state details "
+                    f"{supplied_point_network_state_replay_violation_details}; "
+                    f"supplied-point-network-state coverage-gaps "
+                    f"{supplied_point_network_state_replay_coverage_gap_details}; "
+                    f"supplied-point-network-state max-numeric-errors "
+                    f"{supplied_point_network_state_projection_maximum_numeric_errors}; "
                     f"selected-network-state-replay "
                     f"{selected_network_state_replay_count}/"
                     f"{solved_search_evidence_count}; "

@@ -446,6 +446,12 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
             "low_fan_minus_system_pressure_pa": 4.0,
             "high_fan_minus_system_pressure_pa": -4.0,
             "midpoint_fan_minus_system_pressure_pa": 1.0,
+            "low_fan_pressure_pa": 10.0,
+            "low_system_pressure_pa": 6.0,
+            "high_fan_pressure_pa": 2.0,
+            "high_system_pressure_pa": 6.0,
+            "midpoint_fan_pressure_pa": 7.0,
+            "midpoint_system_pressure_pa": 6.0,
             "decision": "replace_low_endpoint",
             "strict_sign_change_before_evaluation": True,
             "midpoint_is_arithmetic_bracket_midpoint": True,
@@ -460,6 +466,12 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
             "low_fan_minus_system_pressure_pa": 1.0,
             "high_fan_minus_system_pressure_pa": -4.0,
             "midpoint_fan_minus_system_pressure_pa": 0.0,
+            "low_fan_pressure_pa": 7.0,
+            "low_system_pressure_pa": 6.0,
+            "high_fan_pressure_pa": 2.0,
+            "high_system_pressure_pa": 6.0,
+            "midpoint_fan_pressure_pa": 6.0,
+            "midpoint_system_pressure_pa": 6.0,
             "decision": "accept_pressure_tolerance",
             "strict_sign_change_before_evaluation": True,
             "midpoint_is_arithmetic_bracket_midpoint": True,
@@ -500,6 +512,19 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
     assert clean["all_trace_raw_state_consistent"] is True
+    assert clean["residual_component_check_count"] == len(trace)
+    assert clean["residual_component_audit_complete"] is True
+    assert clean["all_trace_residuals_match_pressure_components"] is True
+    assert clean["residual_component_violation_iterations"] == []
+    assert clean[
+        "maximum_absolute_trace_residual_component_error_pa"
+    ] == pytest.approx(0.0, abs=1e-18)
+    assert clean[
+        "all_decisions_match_pressure_component_residual_semantics"
+    ] is True
+    assert clean[
+        "pressure_component_decision_semantic_violation_iterations"
+    ] == []
     assert clean["trace_origin_to_terminal_replay_consistent"] is True
     assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
         0.0,

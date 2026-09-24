@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.77 bisection trace origin-to-terminal replay — 2026-09-24
+
+- Anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points.
+- Reconstructs the complete L/H/T decision chain from that origin and independently verifies every recorded airflow/residual bracket state.
+- Verifies the reconstructed terminal bracket against the solved final bracket or, for iteration-limit outcomes, the retained remaining active bracket.
+- Aggregates exact nonlinear uncertainty-corner indices for origin-to-terminal replay violations and surfaces the evidence in standalone loop, uncertainty, and engineering-dossier Markdown.
+- Preserves v0.76 per-step width/normalized-width geometry audits and adds solved plus iteration-limit regression coverage without changing candidate priority, root-acceptance rules, iteration budgets, or no-extrapolation behavior.
+- Treats the replay strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, a stall/surge criterion, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.77.0.
+
 ## v0.76 bisection decision-trace geometry consistency — 2026-09-24
 
 - Audits every retained bounded-bisection trace record's `width_m3_h` against its recorded low/high airflow endpoints.

@@ -2585,6 +2585,60 @@ def _operating_point_search_resolution_summary(
         in iteration_limit_invariant_cases
         if not invariant["strict_sign_change_preserved"]
     ]
+    iteration_limit_trace_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence.get("bisection_trace_audit"),
+        )
+        for corner_index, corner, evidence in iteration_limit_cases
+        if evidence.get("bisection_trace_audit") is not None
+    ]
+    iteration_limit_trace_length_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit["trace_matches_operating_iterations"]
+    ]
+    iteration_limit_trace_sign_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit[
+            "all_steps_preserve_strict_sign_change_before_evaluation"
+        ]
+    ]
+    iteration_limit_trace_midpoint_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit["all_midpoints_are_arithmetic_bracket_midpoints"]
+    ]
+    iteration_limit_trace_iteration_sequence_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit["iterations_are_contiguous_from_one"]
+    ]
+    iteration_limit_trace_state_transition_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit["all_state_transitions_replay_recorded_decisions"]
+    ]
+    iteration_limit_trace_terminal_outcome_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit["terminal_outcome_consistent"]
+    ]
+    iteration_limit_trace_terminal_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in iteration_limit_trace_cases
+        if not audit["terminal_bracket_matches_replayed_last_decision"]
+    ]
 
     def _maximum_bracket_evidence(
         key: str,
@@ -2677,6 +2731,36 @@ def _operating_point_search_resolution_summary(
         )
         sources = []
         for corner_index, corner, evidence, audit in trace_cases:
+            if int(audit["step_count"]) != maximum:
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "bisection_trace_audit": audit,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": maximum,
+            "unit": "iterations",
+            "sources": sources,
+        }
+
+    def _maximum_iteration_limit_trace_step_count_evidence() -> dict | None:
+        if not iteration_limit_trace_cases:
+            return None
+        maximum = max(
+            int(audit["step_count"])
+            for _corner_index, _corner, _evidence, audit
+            in iteration_limit_trace_cases
+        )
+        sources = []
+        for corner_index, corner, evidence, audit in iteration_limit_trace_cases:
             if int(audit["step_count"]) != maximum:
                 continue
             source = _critical_case_summary(corner_index, corner)
@@ -2831,6 +2915,44 @@ def _operating_point_search_resolution_summary(
         ],
         "iteration_limit_invariant_evidence_corner_count": (
             len(iteration_limit_invariant_cases)
+        ),
+        "iteration_limit_bisection_trace_evidence_corner_count": (
+            len(iteration_limit_trace_cases)
+        ),
+        "iteration_limit_bisection_trace_complete_coverage": (
+            len(iteration_limit_trace_cases) == len(iteration_limit_cases)
+        ),
+        "iteration_limit_bisection_trace_length_violation_corner_indices": (
+            iteration_limit_trace_length_violation_corner_indices
+        ),
+        "iteration_limit_bisection_trace_sign_violation_corner_indices": (
+            iteration_limit_trace_sign_violation_corner_indices
+        ),
+        "iteration_limit_bisection_trace_midpoint_violation_corner_indices": (
+            iteration_limit_trace_midpoint_violation_corner_indices
+        ),
+        "iteration_limit_bisection_trace_iteration_sequence_violation_corner_indices": (
+            iteration_limit_trace_iteration_sequence_violation_corner_indices
+        ),
+        "iteration_limit_bisection_trace_state_transition_violation_corner_indices": (
+            iteration_limit_trace_state_transition_violation_corner_indices
+        ),
+        "iteration_limit_bisection_trace_terminal_outcome_consistent_corner_count": (
+            len(iteration_limit_trace_cases)
+            - len(iteration_limit_trace_terminal_outcome_violation_corner_indices)
+        ),
+        "iteration_limit_bisection_trace_terminal_outcome_violation_corner_indices": (
+            iteration_limit_trace_terminal_outcome_violation_corner_indices
+        ),
+        "iteration_limit_bisection_trace_terminal_replay_match_corner_count": (
+            len(iteration_limit_trace_cases)
+            - len(iteration_limit_trace_terminal_replay_violation_corner_indices)
+        ),
+        "iteration_limit_bisection_trace_terminal_replay_violation_corner_indices": (
+            iteration_limit_trace_terminal_replay_violation_corner_indices
+        ),
+        "maximum_iteration_limit_bisection_trace_step_count": (
+            _maximum_iteration_limit_trace_step_count_evidence()
         ),
         "iteration_limit_strict_sign_change_preserved_corner_count": (
             len(iteration_limit_invariant_cases)

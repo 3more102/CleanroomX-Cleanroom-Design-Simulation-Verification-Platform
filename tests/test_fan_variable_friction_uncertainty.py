@@ -2580,6 +2580,43 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary[
         "iteration_limit_strict_sign_change_preserved_corner_count"
     ] == len(limit_corners)
+    assert summary[
+        "iteration_limit_bisection_trace_evidence_corner_count"
+    ] == len(limit_corners)
+    assert summary["iteration_limit_bisection_trace_complete_coverage"] is True
+    assert summary[
+        "iteration_limit_bisection_trace_length_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_sign_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_midpoint_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_iteration_sequence_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_state_transition_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_terminal_outcome_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_terminal_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "iteration_limit_bisection_trace_terminal_outcome_consistent_corner_count"
+    ] == len(limit_corners)
+    assert summary[
+        "iteration_limit_bisection_trace_terminal_replay_match_corner_count"
+    ] == len(limit_corners)
+    max_limit_trace = summary[
+        "maximum_iteration_limit_bisection_trace_step_count"
+    ]
+    assert max_limit_trace is not None
+    assert max_limit_trace["value"] == 1
+    assert max_limit_trace["sources"]
     max_error = summary[
         "maximum_iteration_limit_absolute_width_fraction_consistency_error"
     ]
@@ -2596,6 +2633,21 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         invariant = remaining["invariant_audit"]
         assert invariant["strict_sign_change_preserved"] is True
         assert invariant["binary_contraction_step_count"] == 1
+        trace = evidence["bisection_trace"]
+        assert trace is not None
+        assert len(trace) == 1
+        trace_audit = evidence["bisection_trace_audit"]
+        assert trace_audit is not None
+        assert trace_audit["termination_reason"] == "bisection_iteration_limit"
+        assert trace_audit["trace_matches_operating_iterations"] is True
+        assert trace_audit["iterations_are_contiguous_from_one"] is True
+        assert trace_audit[
+            "all_state_transitions_replay_recorded_decisions"
+        ] is True
+        assert trace_audit[
+            "terminal_bracket_matches_replayed_last_decision"
+        ] is True
+        assert trace_audit["terminal_outcome_consistent"] is True
         assert invariant[
             "expected_width_fraction_of_supplied_segment"
         ] == pytest.approx(0.5, abs=1e-15)
@@ -2610,3 +2662,7 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         "Maximum iteration-limit remaining-bracket binary-width consistency error"
         in report
     )
+    assert "Iteration-limit decision-trace evidence" in report
+    assert "Iteration-limit terminal-outcome violations: **[]**" in report
+    assert "Iteration-limit terminal-bracket replay violations: **[]**" in report
+    assert "Maximum retained iteration-limit decision-trace steps" in report

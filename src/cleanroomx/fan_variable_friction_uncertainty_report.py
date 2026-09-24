@@ -816,6 +816,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
+                "- Trace midpoint residual recomputation violation corners: "
+                f"**{search_summary['bisection_trace_midpoint_residual_recompute_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -894,6 +896,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                         "- Nominal trace width fractions match binary iteration contraction: "
                         f"**{nominal_trace_audit['all_recorded_width_fractions_match_iteration_sequence']}**",
+                        "- Nominal trace midpoint residuals match independent fan/system re-solve: "
+                        f"**{nominal_trace_audit['all_midpoint_residuals_match_independent_recomputation']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
@@ -968,6 +972,21 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum absolute binary-width consistency error | "
                 f"{invariant_error['value']} | {invariant_error['unit']} | "
                 f"{' / '.join(invariant_sources)} |"
+            )
+        trace_residual_recompute_error = search_summary.get(
+            "maximum_bisection_trace_midpoint_residual_recompute_error_pa"
+        )
+        if trace_residual_recompute_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_residual_recompute_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace midpoint residual recomputation error | "
+                f"{trace_residual_recompute_error['value']} | "
+                f"{trace_residual_recompute_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(
             "maximum_bisection_trace_width_error_m3_h"

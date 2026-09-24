@@ -2245,6 +2245,65 @@ def test_full_bisection_projection_replay_marks_incomplete_coverage() -> None:
     ] is False
 
 
+
+def test_full_bisection_projection_replay_preserves_iteration_limit_semantics() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Full trace projection iteration-limit replay",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+        operating_pressure_tolerance_pa=1e-15,
+        max_operating_iterations=1,
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "non_converged"
+    assert result["fan_operating_point"] is None
+    evidence = result["operating_point_search_evidence"]
+    assert evidence is not None
+    audit = evidence["bisection_trace_audit"]
+    assert audit["network_state_projection_replay_complete_coverage"] is True
+    assert audit[
+        "all_trace_network_state_projections_match_independent_replay"
+    ] is True
+
+    trace = json.loads(json.dumps(evidence["bisection_trace"]))
+    trace[0]["midpoint_network_state_projection"]["edges"][0][
+        "airflow_m3_h"
+    ] += 1.0
+    segment_index = evidence["supplied_segment_index"]
+    corrupted_audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="bisection_iteration_limit",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        iteration_limit_terminal_bracket=evidence[
+            "iteration_limit_evidence"
+        ]["remaining_bisection_bracket"],
+    )
+    assert corrupted_audit is not None
+    assert corrupted_audit[
+        "network_state_projection_replay_violation_iteration_positions"
+    ] == [{"iteration": 1, "position": "midpoint"}]
+    assert corrupted_audit[
+        "network_state_projection_replay_mismatches"
+    ][0]["path"] == "$.edges[0].airflow_m3_h"
+    assert result["status"] == "non_converged"
+    assert result["fan_operating_point"] is None
+
+
 def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:
     study = FanVariableFrictionLoopStudy(
         name="Network-state replay corruption",

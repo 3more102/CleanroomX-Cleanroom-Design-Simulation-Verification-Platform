@@ -250,6 +250,31 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_trace_network_states_match_independent_replay']}**",
                     "- Network-state replay violation iterations: "
                     f"**{trace_audit['network_state_replay_violation_iterations']}**",
+                    "- Full-trace network-state projection replay applicable: "
+                    f"**{trace_audit['network_state_projection_replay_applicable']}**",
+                    "- Full-trace network-state projection replay available: "
+                    f"**{trace_audit['network_state_projection_replay_available']}**",
+                    "- Full-trace network-state projection replay coverage: "
+                    f"**{trace_audit['network_state_projection_replay_checked_state_position_count']}/"
+                    f"{trace_audit['network_state_projection_replay_expected_state_position_count']} state positions**",
+                    "- Full-trace network-state projection replay complete coverage: "
+                    f"**{trace_audit['network_state_projection_replay_complete_coverage']}**",
+                    "- Full-trace network-state projection replay verdict: "
+                    f"**{trace_audit['network_state_projection_replay_verdict']}**",
+                    "- Full-trace network-state projection replay violating iterations: "
+                    f"**{trace_audit['network_state_projection_replay_violation_iterations']}**",
+                    "- Full-trace network-state projection replay violating iteration/positions: "
+                    f"**{trace_audit['network_state_projection_replay_violation_iteration_positions']}**",
+                    "- Full-trace network-state projection replay coverage gaps: "
+                    f"**{trace_audit['network_state_projection_replay_coverage_gaps']}**",
+                    "- Full-trace network-state projection mismatch count: "
+                    f"**{trace_audit['network_state_projection_replay_mismatch_count']}**",
+                    "- Full-trace network-state projection mismatch paths: "
+                    f"**{trace_audit['network_state_projection_replay_mismatch_paths']}**",
+                    "- Full-trace network-state projection mismatch details: "
+                    f"**{trace_audit['network_state_projection_replay_mismatches']}**",
+                    "- Full-trace network-state projection maximum numerical replay errors by field: "
+                    f"**{trace_audit['network_state_projection_replay_maximum_numeric_errors']}**",
                     "- Terminal bisection-bracket pressure components match independent replay: "
                     f"**{trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
                     "- Terminal pressure-component replay violation count: "

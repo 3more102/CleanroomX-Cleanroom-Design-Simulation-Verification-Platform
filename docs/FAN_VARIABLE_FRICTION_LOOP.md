@@ -18,6 +18,8 @@ For each candidate total airflow, CleanroomX:
 
 The fan operating point is found only inside a supplied fan-curve segment. No fan-curve extrapolation is performed.
 
+v0.75 extends the same replay-audited trace to bounded-bisection searches that stop only because the configured operating-iteration budget is exhausted. No operating point is accepted and no terminal `T` record is fabricated. Instead, the final recorded `L` or `H` decision is replayed into the retained remaining signed-residual bracket, and both airflow and residual endpoints must match the retained terminal search state. This is numerical implementation/search-state provenance only; it is not physical airflow uncertainty, an interpolation-error bound, a continuous-root guarantee, stability/stall/surge evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance criterion.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

@@ -26,6 +26,8 @@ v0.83 extends that replay to the complete active bracket at every retained bisec
 
 v0.84 makes any pressure-component replay failure directly traceable. Each mismatch records its exact bisection iteration, low/midpoint/high bracket position, fan/loop-network/system component, recorded pressure, independently recomputed pressure, and absolute error. Tied maximum-error witnesses are preserved without changing the existing 1e-9 Pa implementation-replay tolerance or any engineering acceptance criterion.
 
+v0.85 closes the remaining solved-result provenance gap by independently re-solving the selected operating airflow itself after search completion. The replay verifies that the selected airflow is anchored to the retained search origin and that the final fan, loop-network, total-system, and residual pressures match a fresh model evaluation. This is implementation-provenance hardening only; it does not add physical uncertainty or equipment-acceptance criteria.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

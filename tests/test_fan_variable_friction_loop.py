@@ -2582,6 +2582,36 @@ def test_markdown_report_surfaces_solver_and_friction_evidence() -> None:
     assert "Electrical input" in report
 
 
+def test_markdown_report_accepts_pre_v095_trace_audit_without_projection_fields() -> None:
+    result = solve_fan_variable_friction_loop(
+        load_fan_variable_friction_loop_study(
+            "examples/fan_variable_friction_loop_demo.json"
+        )
+    )
+    legacy = json.loads(json.dumps(result))
+    audit = legacy["operating_point_search_evidence"]["bisection_trace_audit"]
+    for key in (
+        "network_state_projection_replay_available",
+        "network_state_projection_replay_evidence_complete",
+        "all_low_network_state_projections_match_independent_replay",
+        "all_midpoint_network_state_projections_match_independent_replay",
+        "all_high_network_state_projections_match_independent_replay",
+        "all_trace_network_state_projections_match_independent_replay",
+        "network_state_projection_replay_violation_count",
+        "network_state_projection_mismatch_count",
+        "network_state_projection_replay_violation_iterations",
+        "network_state_projection_replay_violation_positions",
+        "network_state_projection_replay_violations",
+        "network_state_projection_maximum_numeric_errors",
+    ):
+        audit.pop(key, None)
+
+    report = markdown_fan_variable_friction_loop_report(legacy)
+
+    assert "Fan / Variable-Friction Loop Report" in report
+    assert "Trace network-state projection replay available: **None**" in report
+
+
 def test_cli_json_example_succeeds(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         sys,

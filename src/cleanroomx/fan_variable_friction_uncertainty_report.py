@@ -157,6 +157,35 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"- `{scenario['name']}`: {point_text}"
             )
 
+    solver_result_integrity = result.get(
+        "solver_result_integrity_summary"
+    )
+    if solver_result_integrity is not None:
+        lines.extend(
+            [
+                "",
+                "## Solver-result integrity linkage",
+                "",
+                "- Solver-result integrity coverage: "
+                f"**{solver_result_integrity['evidence_result_count']}/"
+                f"{solver_result_integrity['expected_result_count']}**",
+                "- Solver-result integrity complete coverage: "
+                f"**{solver_result_integrity['complete_coverage']}**",
+                "- Solver-result integrity consistent results: "
+                f"**{solver_result_integrity['consistent_result_count']}**",
+                "- Solver-result integrity inconsistent results: "
+                f"**{solver_result_integrity['inconsistent_result_count']}**",
+                "- Solver-result integrity nominal consistent: "
+                f"**{solver_result_integrity['nominal_consistent']}**",
+                "- Solver-result integrity violating corner indices: "
+                f"**{solver_result_integrity['violating_corner_indices']}**",
+                "- Source solver-result SHA-256 records: "
+                f"**{solver_result_integrity['source_solver_result_sha256']}**",
+                "- Solver-result integrity violation details: "
+                f"**{solver_result_integrity['violation_details']}**",
+            ]
+        )
+
     lines.extend(["", "## Nominal operating point", ""])
     nominal = result["nominal_operating_point"]
     if nominal is None:

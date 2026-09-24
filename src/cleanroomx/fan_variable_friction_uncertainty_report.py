@@ -791,6 +791,15 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_corner_count']}**",
                 "- Supplied-point tolerance-contact corners: "
                 f"**{search_summary['supplied_point_contact_corner_count']}**",
+                "- Solved corners with final operating-point replay evidence: "
+                f"**{search_summary['final_operating_point_replay_evidence_corner_count']}/"
+                f"{search_summary['solved_corner_count']}**",
+                "- Final operating-point replay complete solved coverage: "
+                f"**{search_summary['final_operating_point_replay_complete_solved_coverage']}**",
+                "- Final operating-point replay violation corners: "
+                f"**{search_summary['final_operating_point_replay_violation_corner_indices']}**",
+                "- Final operating-point replay non-converged corners: "
+                f"**{search_summary['final_operating_point_replay_nonconverged_corner_indices']}**",
                 "- Bisection corners with invariant evidence: "
                 f"**{search_summary['bisection_invariant_evidence_corner_count']}/"
                 f"{search_summary['bisection_corner_count']}**",
@@ -865,6 +874,18 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             lines.append(
                 f"- Nominal search method: **{nominal_search['method']}**"
             )
+            nominal_final_replay = nominal_search.get(
+                "final_operating_point_state_replay"
+            )
+            if nominal_final_replay is not None:
+                lines.extend(
+                    [
+                        "- Nominal final operating-point replay converged: "
+                        f"**{nominal_final_replay['replay_converged']}**",
+                        "- Nominal final operating-point state matches independent replay: "
+                        f"**{nominal_final_replay['all_final_operating_point_state_matches_independent_replay']}**",
+                    ]
+                )
             nominal_bracket = nominal_search.get("final_bisection_bracket")
             if nominal_bracket is not None:
                 lines.extend(
@@ -933,6 +954,22 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "|---|---:|---|---|",
             ]
         )
+        final_replay_error = search_summary.get(
+            "maximum_final_operating_point_replay_error_pa"
+        )
+        if final_replay_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; method={source['search_method']}"
+                + f"; airflow={source['selected_airflow_m3_h']} m³/h"
+                for source in final_replay_error["sources"]
+            ]
+            lines.append(
+                "| Maximum final operating-point state replay error | "
+                f"{final_replay_error['value']} | "
+                f"{final_replay_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
         search_rows = (
             (
                 "maximum_final_bisection_bracket_width_m3_h",

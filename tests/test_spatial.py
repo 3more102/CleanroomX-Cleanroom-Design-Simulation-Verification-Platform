@@ -206,3 +206,48 @@ def test_spatial_workspace_reads_pressure_cascade_links_from_active_project_anal
     assert workspace._pressure_cascade_links() == [
         ("Process", "Preparation", 10.0)
     ]
+
+
+def test_spatial_scene_metrics_report_area_volume_and_pressure_range():
+    workspace = SpatialDesignWorkspace.__new__(SpatialDesignWorkspace)
+    workspace.layout = {
+        "rooms": [
+            {
+                "length_m": 4.0,
+                "width_m": 3.0,
+                "height_m": 2.5,
+                "pressure_pa": 15.0,
+            },
+            {
+                "length_m": 2.0,
+                "width_m": 5.0,
+                "height_m": 3.0,
+                "pressure_pa": 5.0,
+            },
+        ],
+        "devices": [{"id": "d1"}, {"id": "d2"}, {"id": "d3"}],
+    }
+
+    metrics = workspace._scene_metrics()
+
+    assert metrics["rooms"] == 2
+    assert metrics["devices"] == 3
+    assert metrics["area_m2"] == 22.0
+    assert metrics["volume_m3"] == 60.0
+    assert metrics["pressure_min_pa"] == 5.0
+    assert metrics["pressure_max_pa"] == 15.0
+    assert workspace._scene_summary() == (
+        "2 rooms · 3 devices · 22.0 m² · 60.0 m³ · pressure 5…15 Pa"
+    )
+
+
+def test_spatial_scene_summary_handles_missing_pressure():
+    workspace = SpatialDesignWorkspace.__new__(SpatialDesignWorkspace)
+    workspace.layout = {
+        "rooms": [{"length_m": 2.0, "width_m": 2.0, "height_m": 3.0}],
+        "devices": [],
+    }
+
+    assert workspace._scene_summary() == (
+        "1 rooms · 0 devices · 4.0 m² · 12.0 m³ · pressure —"
+    )

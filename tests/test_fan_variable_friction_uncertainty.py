@@ -2594,6 +2594,12 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         list,
     )
     assert summary[
+        "bisection_trace_network_state_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_network_state_replay_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
         "terminal_pressure_component_replay_violation_corner_indices"
     ] == []
     assert summary[
@@ -2717,6 +2723,13 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
             "maximum_absolute_trace_pressure_component_replay_error_pa"
         ] <= 1e-9
         assert trace_audit[
+            "network_state_replay_evidence_complete"
+        ] is True
+        assert trace_audit[
+            "all_trace_network_states_match_independent_replay"
+        ] is True
+        assert trace_audit["network_state_replay_violation_iterations"] == []
+        assert trace_audit[
             "terminal_pressure_component_replay_available"
         ] is True
         assert trace_audit[
@@ -2796,6 +2809,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         in report
     )
     assert "Maximum trace pressure-component replay error" in report
+    assert (
+        "Trace independent network-state replay violation corners: **[]**"
+        in report
+    )
+    assert "Trace network-state replay consistent corners" in report
     assert "Terminal pressure-component replay violation corners: **[]**" in report
     assert "Maximum terminal pressure-component replay error" in report
     assert "Terminal pressure-component replay violation records across corners: **0**" in report
@@ -2933,6 +2951,12 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         list,
     )
     assert summary[
+        "bisection_trace_network_state_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_network_state_replay_consistent_corner_count"
+    ] == len(limit_corners)
+    assert summary[
         "terminal_pressure_component_replay_violation_corner_indices"
     ] == []
     assert summary[
@@ -3040,6 +3064,13 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         assert trace_audit[
             "maximum_absolute_trace_pressure_component_replay_error_pa"
         ] <= 1e-9
+        assert trace_audit[
+            "network_state_replay_evidence_complete"
+        ] is True
+        assert trace_audit[
+            "all_trace_network_states_match_independent_replay"
+        ] is True
+        assert trace_audit["network_state_replay_violation_iterations"] == []
         assert trace_audit[
             "terminal_pressure_component_replay_available"
         ] is True

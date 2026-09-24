@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.80 bisection trace pressure-residual identity audit — 2026-09-24
+
+- Retains rounded midpoint fan pressure and system pressure alongside every bounded-bisection trace residual.
+- Independently recomputes each midpoint residual as fan pressure minus system pressure and audits the stored residual against that identity.
+- Audits each recorded L/H/T decision against the independently recomputed pressure-component residual, so a self-consistent but corrupted stored residual cannot hide an incorrect decision path.
+- Propagates pressure-residual identity errors and pressure-component decision-semantic violations through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Adds regressions for corrupted midpoint pressure components while preserving v0.79 raw-state checks, v0.78 recorded-residual decision semantics, v0.77 origin replay, and bounded no-extrapolation behavior.
+- This remains numerical implementation provenance only; it does not establish physical airflow uncertainty, interpolation error, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.

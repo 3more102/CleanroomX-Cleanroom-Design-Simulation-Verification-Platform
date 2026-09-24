@@ -1,4 +1,15 @@
 # Changelog
+## v0.68 iteration-limit bisection provenance — 2026-09-24
+
+- Preserves structured operating-point search evidence when bounded fan/system bisection exhausts `max_operating_iterations` before satisfying the configured pressure residual tolerance.
+- Retains the remaining strict signed-residual bracket after the final budgeted midpoint evaluation, including width, half-width, normalized supplied-segment width, and endpoint residuals.
+- Audits the remaining bracket against completed binary contraction steps and records the raw width-fraction consistency error without accepting or fabricating an operating point.
+- Propagates iteration-limit search evidence through nonlinear uncertainty corners with exact corner indices, sign-bracket violation accounting, and tied provenance for the maximum raw contraction-consistency error.
+- Surfaces the evidence in standalone fan-loop, nonlinear uncertainty, and engineering-dossier reports.
+- Adds direct solver and nonlinear uncertainty regression coverage.
+- Keeps the evidence strictly numerical/implementation diagnostic: it is not physical airflow uncertainty, interpolation error, a continuous worst-case guarantee, stability evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.68.0.
+
 ## v0.67 bisection implementation-invariant audit — 2026-09-24
 
 - Audits retained bounded-bisection search geometry directly from the unrounded live solver state without changing the operating-point solve.

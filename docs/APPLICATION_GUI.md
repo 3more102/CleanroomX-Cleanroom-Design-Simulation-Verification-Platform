@@ -1,6 +1,6 @@
 # CleanroomX Desktop Application
 
-CleanroomX v0.96 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
+CleanroomX v0.97 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
 
 ## Install and launch
 
@@ -38,7 +38,7 @@ xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, and invalid JSON. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, invalid JSON, and non-finite JSON constants. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ## Operator workflow
 
@@ -50,7 +50,7 @@ Project saves are validated before writing and use an atomic temporary-file repl
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export result JSON or report Markdown and save the project.
 
-The **Cancel** action abandons the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. The status line explicitly reports this behavior.
+The **Cancel** action abandons the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. The status line explicitly reports this behavior. While an analysis is running, project/analysis mutations and cross-analysis switching are blocked. When a project has unsaved metadata or editor changes, New/Open/Exit require an explicit save, discard, or cancel decision.
 
 ## Supported workflows
 
@@ -66,9 +66,9 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes application-catalog/backend reuse, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes application-catalog/backend reuse, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, strict project/editor JSON, multi-analysis editor-state preservation, unsaved-state detection, run-time mutation guards, unit/path flattening, headless `--check`, execution of every GUI-exposed application workflow against real examples, and execution of the active demonstration analysis.
 
-CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
+CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs a dedicated v0.97 application/workflow/lifecycle gate and the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
 
 ## Engineering boundary
 

@@ -54,6 +54,16 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     )
     assert search_summary["strict_sign_change_violation_corner_indices"] == []
     assert search_summary["selected_midpoint_violation_corner_indices"] == []
+    assert search_summary["solved_bisection_trace_evidence_corner_count"] == (
+        search_summary["bisection_corner_count"]
+    )
+    assert search_summary["bisection_trace_length_violation_corner_indices"] == []
+    assert search_summary["bisection_trace_sign_violation_corner_indices"] == []
+    assert search_summary["bisection_trace_midpoint_violation_corner_indices"] == []
+    assert search_summary["bisection_trace_outcome_violation_corner_indices"] == []
+    assert search_summary[
+        "maximum_bisection_trace_step_count"
+    ]["value"] >= 1
     assert search_summary[
         "maximum_final_bisection_half_width_m3_h"
     ]["value"] >= 0.0
@@ -155,7 +165,9 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Pressure→airflow evidence" in report
     assert "Max final bisection half-width m³/h" in report
     assert "Search evidence" in report
-    assert "Bisection invariant audit" in report
+    assert "Bisection invariant / trace audit" in report
+    assert "trace-outcome" in report
+    assert "trace length/geometry violations 0/0" in report
     assert "max width-fraction error" in report
     assert "Min segment-point clearance m³/h" in report
     assert "Segment evidence" in report

@@ -2,7 +2,7 @@
 
 ## Current schema
 
-CleanroomX v0.99.0 writes desktop projects using:
+CleanroomX v0.100.0 writes desktop projects using:
 
 - schema: `cleanroomx.project`
 - schema version: `1`
@@ -17,13 +17,24 @@ The loader currently migrates two legacy shapes into schema version 1:
 1. `cleanroomx.project` schema version 0 containing a single `analysis` object.
 2. A legacy single-analysis object with top-level `analysis_type` and `input` fields and no `schema` field.
 
-Both are converted in memory to the current project model with one analysis and an active-analysis id.
+Both are converted in memory to the current project model with a single analysis and an active-analysis id.
 
 ## Rejection rules
 
-The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `Infinity`, unexpected schemas, non-integer schema versions, unsupported future/older schema versions after known migration, unsupported analysis kinds, non-object analysis inputs, duplicate analysis ids, and invalid active-analysis references.
+The loader rejects:
 
-Unknown future project formats are rejected rather than silently reinterpreted.
+- malformed JSON;
+- non-finite JSON constants such as `NaN` and `Infinity`;
+- an unexpected project schema;
+- non-integer schema versions;
+- future schema versions newer than the running application supports;
+- unsupported older schema versions after the known migration step;
+- unsupported analysis kinds;
+- non-object analysis inputs;
+- duplicate analysis ids;
+- invalid active-analysis references.
+
+CleanroomX does not silently reinterpret unknown future formats.
 
 ## Save behavior after migration
 

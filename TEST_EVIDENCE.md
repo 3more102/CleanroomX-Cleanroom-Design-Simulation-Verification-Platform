@@ -1,40 +1,37 @@
-# CleanroomX v0.99 Test Evidence
+# CleanroomX v0.100 Test Evidence
 
-## Verified release baseline
+## Release candidate
 
-Date: 2026-09-24
+Release line: **v0.100.0**
 
-Release baseline commit on `main`:
+Canonical release branch: `codex/cleanroomx-v0100-final-consolidated`.
 
-`1f035d08f893573868610d35296e3947445318e6`
+The branch is built from the v0.100 execution-integrity candidate on top of integrated v0.99 main, then consolidates the remaining independently-developed desktop/release deltas without changing validated engineering solver semantics.
 
-GitHub Actions CI:
+## Required CI gates
 
-- Run #790
-- Run id: `36045911650`
-- Event: push to `main`
-- Conclusion: **success**
+The exact release head must pass:
 
-## Matrix evidence
+- v0.91 selected-projection compatibility regressions;
+- v0.92 full-bisection projection compatibility regressions;
+- v0.93 supplied-point replay compatibility regressions;
+- v0.94 canonical-provenance compatibility regressions;
+- v0.95 solver-result-integrity compatibility regressions;
+- focused application, project-document, and GUI release regressions;
+- the complete test suite on Python 3.11, 3.12, and 3.13;
+- representative CLI JSON and Markdown smoke checks;
+- headless desktop registry readiness;
+- real Tk/Xvfb desktop smoke;
+- wheel build/install validation and packaged-demo smoke on Python 3.13.
 
-Run #790 executed the full suite on all supported Python versions:
+## Consolidated v0.100 coverage
 
-- Python 3.11: **558 passed**
-- Python 3.12: **558 passed**
-- Python 3.13: **558 passed**
+The release candidate adds regression coverage for application-input/dependency SHA-256 provenance, registry parity and fail-fast startup, absolute/relative dossier path rules, portable file-reference rebasing on import and Save As, cache invalidation on base-directory changes, abandoned-worker exclusivity, atomic project/export writes, run-bundle export, fan/system plot evidence, and packaged-demo completeness.
 
-The workflow also completed the dedicated v0.91, v0.92, v0.93, v0.94, and v0.95 compatibility gates.
+## Verified predecessor
 
-## Desktop and CLI evidence
-
-On Python 3.13, run #790 also completed the installed `cleanroomx-gui --check` readiness path and the real Tk GUI smoke under Xvfb against `examples/gui_demo.cleanroomx.json`. Representative nonlinear loop, uncertainty, and dossier CLI JSON/Markdown smoke checks completed successfully.
-
-The release baseline is package/runtime/demo/CI synchronized at `0.99.0`. The application registry rejects duplicate workflow keys, enforces ordinary parser/runner contracts and the custom consistency/dossier adapter contract, verifies declared callable bindings, and exposes structured readiness metadata through the headless GUI check.
-
-## Release-document closure
-
-The release-document pull request adds architecture, migration, security, deployment, rollback, test-evidence, and validation records only. It does not change runtime source, solver equations, numerical tolerances, uncertainty semantics, no-extrapolation behavior, or engineering acceptance rules. The documentation PR and resulting main push are required to pass CI before closure.
+Integrated v0.99 main commit `1f035d08f893573868610d35296e3947445318e6` previously passed GitHub Actions run id `36045390557` with 558 tests on each of Python 3.11, 3.12, and 3.13, plus CLI and Tk/Xvfb GUI smoke coverage.
 
 ## Engineering boundary
 
-Passing automated tests establishes repository regression evidence for implemented software behavior. It is not evidence of ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance.
+Automated software validation does not establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty evidence, or regulatory compliance.

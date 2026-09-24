@@ -9,13 +9,13 @@
 
 ## Install
 
-Normal local installation from the repository:
+For a normal local installation from the repository:
 
 ```bash
 python -m pip install .
 ```
 
-Development and validation:
+For development and validation:
 
 ```bash
 python -m pip install -e .[dev]
@@ -24,7 +24,7 @@ python -m pytest -q
 
 ## Readiness checks
 
-Validate package version plus the complete desktop application registry without opening a window:
+Validate the installed application registry without opening a window:
 
 ```bash
 cleanroomx-gui --check
@@ -36,15 +36,17 @@ Launch the desktop application:
 cleanroomx-gui
 ```
 
-Open the bundled demonstration project:
+Open the self-contained demonstration bundled in the installed distribution:
 
 ```bash
-cleanroomx-gui examples/gui_demo.cleanroomx.json
+cleanroomx-gui --demo
 ```
+
+The wheel includes the demonstration project and all JSON dependencies required by its consistency and dossier analyses.
 
 ## Linux GUI smoke
 
-The CI release path validates the real Tk application under Xvfb on Python 3.13. On Debian/Ubuntu-style systems:
+The CI release path validates the real Tk application under Xvfb on Python 3.13. On Debian/Ubuntu-style systems the equivalent prerequisites are:
 
 ```bash
 sudo apt-get update
@@ -54,4 +56,4 @@ xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
 
 ## Production-use boundary
 
-Deployment does not convert CleanroomX screening/numerical outputs into cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Controlled organizations should apply their own document control, change control, verification, and approval procedures.
+CleanroomX is an engineering screening/numerical tool. Deployment does not convert its outputs into cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Controlled organizations should apply their own document control, change control, verification, and approval procedures around the application.

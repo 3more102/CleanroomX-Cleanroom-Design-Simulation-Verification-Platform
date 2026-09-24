@@ -1,16 +1,10 @@
 # CleanroomX Desktop Application
 
-CleanroomX v0.99.1 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
+CleanroomX v0.100 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
 
 ## Install and launch
 
-Install the package for normal use:
-
-```bash
-python -m pip install .
-```
-
-For development and tests:
+Install the package in editable development mode:
 
 ```bash
 python -m pip install -e .[dev]
@@ -22,10 +16,10 @@ Launch a new project:
 cleanroomx-gui
 ```
 
-Open the self-contained demonstration project shipped inside the installed package:
+Open the bundled demonstration project:
 
 ```bash
-cleanroomx-gui --demo
+cleanroomx-gui examples/gui_demo.cleanroomx.json
 ```
 
 Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
@@ -34,12 +28,12 @@ Check that the application layer, GUI imports, and every declared parser/runner/
 cleanroomx-gui --check
 ```
 
-The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate analysis keys, missing parser/runner bindings on ordinary analyses, accidental parser/runner bindings on custom `consistency`/`dossier` adapters, unresolved/non-callable targets, and returns auditable registry metadata alongside the package version and catalog size.
+The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate analysis keys, catalog/mapping drift, missing parser/runner bindings on ordinary analyses, accidental parser/runner bindings on custom `consistency`/`dossier` adapters, unresolved/non-callable targets, and returns auditable registry metadata alongside the package version and catalog size. Normal GUI startup performs the same registry validation before creating the Tk root.
 
 For CI or Linux automation with a virtual display:
 
 ```bash
-xvfb-run -a cleanroomx-gui --demo --smoke
+xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
 ```
 
 ## Project format
@@ -56,9 +50,9 @@ Project saves are validated before writing and use an atomic temporary-file repl
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export result JSON or report Markdown and save the project.
+7. Export result JSON, a complete run-bundle JSON (including diagnostics/provenance), or report Markdown and save the project.
 
-The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
+The **Abandon** action suppresses the eventual worker result/error without force-terminating the Python thread. CleanroomX remains busy until that worker exits, so a second backend analysis cannot overlap abandoned work. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
@@ -66,19 +60,23 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
 
-Consistency and dossier workflows resolve relative file references against the saved project directory. Save the GUI project before running those workflows when their inputs use relative paths. The installed `--demo` project ships its referenced consistency/dossier inputs beside the project file, so the demonstration remains self-contained after wheel installation.
+Consistency and dossier workflows resolve relative file references against the saved project directory. Relative references therefore require a saved project/base directory; dossiers containing only absolute references can run before the project is saved. Importing analysis JSON rebases its declared file references into the current project context, and **Save Project As** rewrites relative references so they continue to identify the same files after relocation. Cached results are cleared when the base directory changes so path-dependent outputs cannot survive a resolution-context change.
 
 ## Results and plots
 
-All backend outputs are normalized to strict JSON with non-finite values rejected. The result tab shows complete normalized JSON. The diagnostics tab extracts nested audit, integrity, trace, provenance, convergence, residual, tolerance, iteration, and coverage evidence. The report tab shows the backend Markdown reporter when one exists, otherwise a deterministic JSON-backed fallback report.
+All backend outputs are normalized to strict JSON with non-finite values rejected. Every successful application run also records canonical input SHA-256 provenance; file-backed consistency/dossier runs record dependency SHA-256 and byte-size evidence before and after execution. The result tab shows complete normalized JSON, Diagnostics exposes engineering plus application-execution provenance, and **Export Run Bundle JSON** preserves the complete result/report/diagnostics/plot bundle. The report tab shows the backend Markdown reporter when one exists, otherwise a deterministic JSON-backed fallback report.
 
-When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives, avoiding a GUI-only numerical dependency.
+When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives, avoiding a GUI-only numerical dependency. Backend-computed system-pressure evidence is rendered as a distinct system-curve series when available.
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus catalog/mapping parity and binding resolution, canonical execution-provenance hashing, dependency stability evidence, absolute/relative dossier path behavior, Save-As cache invalidation, abandoned-worker exclusivity, run-bundle export, strict result serialization, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, headless `--check`, and execution of the active demonstration analysis.
 
-CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
+Project saves and desktop JSON/Markdown exports use a same-directory temporary file followed by replacement; write failures are surfaced through the GUI instead of being silently ignored.
+
+The installed package includes a self-contained demonstration project and its referenced JSON dependencies. Launch it with `cleanroomx-gui --demo`.
+
+CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally builds and installs a wheel in a fresh virtual environment, validates the packaged demo dependencies, runs `cleanroomx-gui --check`, and launches both source-tree and installed real Tk GUI smoke checks under Xvfb.
 
 ## Engineering boundary
 

@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.99.1**, hardening the integrated v0.99 desktop application. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current release line is **CleanroomX v0.100.0**, built directly on the verified v0.99 `main` descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`. v0.100 keeps the validated solver/provenance backend intact while closing desktop execution-integrity gaps: input/dependency execution provenance, run-bundle export, catalog/mapping fail-fast validation, path-context-safe dossier execution, Save-As cache invalidation, and non-overlapping abandoned workers.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99.1 additionally prevents overlapping backend runs after UI abandonment, packages a self-contained demo in the wheel, validates clean-wheel installation on Python 3.11/3.12/3.13, and launches the installed wheel under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs focused application/GUI release regressions plus the complete suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.100 validates application-catalog identity/contracts, execution provenance, dossier path context, desktop worker exclusivity, run-bundle export, and the installed desktop entry point under Xvfb on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -26,7 +26,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
-| v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
+| v0.100 | application execution provenance, run-bundle export, path-context correctness, and worker exclusivity |
+
+### v0.100 execution integrity
+
+v0.100 records a canonical SHA-256 identity for each submitted analysis input. File-backed `consistency` and `dossier` workflows also record dependency SHA-256 and byte-size evidence before and after execution, surfaced in Diagnostics and preserved by **Export Run Bundle JSON**. Dossiers containing only absolute references can run before the GUI project is saved; relative references still require a saved project/base directory. Import and **Save Project As** preserve the referents of relative consistency/dossier files across directory-context changes, while cached results are cleared when the base directory changes. Project saves and desktop exports use same-directory atomic UTF-8 replacement, fan workflows plot backend system-curve evidence alongside supplied fan curves when available, and the GUI validates registry/catalog parity before creating the Tk root and keeps an abandoned analysis exclusive until its backend worker exits. The installed distribution also ships a self-contained demonstration available through `cleanroomx-gui --demo`, with wheel-level CI smoke coverage.
 
 ### v0.99 application registry integrity
 
@@ -42,13 +46,11 @@ After installation, launch the application with:
 cleanroomx-gui
 ```
 
-Open the self-contained demonstration shipped inside the installed package:
+Open the bundled end-to-end demonstration directly:
 
 ```bash
-cleanroomx-gui --demo
+cleanroomx-gui examples/gui_demo.cleanroomx.json
 ```
-
-From a repository checkout, `examples/gui_demo.cleanroomx.json` remains the editable source copy.
 
 For automated installation checks without a display:
 
@@ -280,14 +282,6 @@ v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersec
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The nonlinear fan/variable-friction workflow additionally reports fan air-power min/max across evaluated corners when the study is complete; those air-power values are not claimed as guaranteed continuous-interval extrema. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
 ## Install
-
-For normal use from a repository checkout:
-
-    python -m pip install .
-    cleanroomx-gui --check
-    cleanroomx-gui --demo
-
-For development and tests:
 
     python -m pip install -e .[dev]
 
@@ -676,7 +670,7 @@ The numeric limits in the examples are demonstration project inputs, **not quote
 
 ## Roadmap
 
-The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.99 workflows.
+The supported desktop GUI is implemented through v0.100. Remaining future extensions include broader provenance/dependency modeling across external performance datasets, optional web delivery, and CFD adapters; these are outside the current desktop release rather than blockers for the supported v0.100 workflows.
 
 ## Standards references
 

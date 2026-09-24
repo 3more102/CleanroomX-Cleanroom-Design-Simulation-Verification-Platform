@@ -1,4 +1,15 @@
 # Changelog
+## v0.69 bidirectional sampled residual sign-change topology audit — 2026-09-24
+
+- Retains strict negative-to-positive fan-minus-system residual sign-change segments across supplied fan-curve samples as explicit audit-only evidence.
+- Keeps the operating-point solver unchanged: tolerance-contact points and strict positive-to-negative sign-change segments remain the only discrete solver candidates.
+- Reports reverse sign-change segments per case, total bidirectional strict sign-change count, and uncertainty-corner reverse-crossing counts and exact corner indices.
+- Surfaces the same audit-only evidence in standalone nonlinear fan-loop, uncertainty, and engineering-dossier Markdown.
+- Adds regression coverage proving a reverse sampled crossing is visible in the audit while the solver candidate list remains empty for that feature.
+- Preserves v0.68 scale-aware alternative-candidate separation, v0.67 bisection implementation-invariant auditing, and all no-extrapolation/unresolved-case withholding rules.
+- Treats reverse sampled crossings as discrete numerical topology only; they do not establish an additional continuous root, dynamic stability, stall/surge behavior, manufacturer operating region, commissioning/certification result, or equipment-acceptance limit.
+- Bumped package/runtime metadata to v0.69.0.
+
 ## v0.68 scale-aware alternative crossing-candidate separation — 2026-09-24
 
 - Normalizes each v0.66 selected-to-alternative discrete candidate airflow gap by the exact supplied fan-curve airflow span used for that nonlinear solve.

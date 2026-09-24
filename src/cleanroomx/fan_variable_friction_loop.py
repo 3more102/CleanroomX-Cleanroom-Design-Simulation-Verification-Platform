@@ -681,6 +681,7 @@ def _bisection_decision_trace_audit(
     }
     iteration_sequence = [int(step["iteration"]) for step in trace]
     raw_state_checks = []
+    pressure_component_checks = []
     geometry_checks = []
     for step in trace:
         iteration = int(step["iteration"])
@@ -689,6 +690,17 @@ def _bisection_decision_trace_audit(
         midpoint_airflow = float(step["midpoint_airflow_m3_h"])
         low_residual = float(step["low_fan_minus_system_pressure_pa"])
         high_residual = float(step["high_fan_minus_system_pressure_pa"])
+        midpoint_residual = float(
+            step["midpoint_fan_minus_system_pressure_pa"]
+        )
+        low_fan_pressure = float(step["low_fan_pressure_pa"])
+        high_fan_pressure = float(step["high_fan_pressure_pa"])
+        midpoint_fan_pressure = float(step["midpoint_fan_pressure_pa"])
+        low_system_pressure = float(step["low_system_pressure_pa"])
+        high_system_pressure = float(step["high_system_pressure_pa"])
+        midpoint_system_pressure = float(
+            step["midpoint_system_pressure_pa"]
+        )
         recorded_sign_flag = bool(
             step["strict_sign_change_before_evaluation"]
         )
@@ -715,6 +727,72 @@ def _bisection_decision_trace_audit(
             expected_midpoint_airflow,
             rel_tol=0.0,
             abs_tol=1e-9,
+        )
+        pressure_positions = []
+        for (
+            position,
+            recorded_residual,
+            fan_pressure,
+            system_pressure,
+        ) in (
+            (
+                "low",
+                low_residual,
+                low_fan_pressure,
+                low_system_pressure,
+            ),
+            (
+                "high",
+                high_residual,
+                high_fan_pressure,
+                high_system_pressure,
+            ),
+            (
+                "midpoint",
+                midpoint_residual,
+                midpoint_fan_pressure,
+                midpoint_system_pressure,
+            ),
+        ):
+            recomputed_residual = fan_pressure - system_pressure
+            residual_error = abs(recorded_residual - recomputed_residual)
+            pressure_positions.append(
+                {
+                    "position": position,
+                    "fan_pressure_pa": fan_pressure,
+                    "system_pressure_pa": system_pressure,
+                    "recorded_fan_minus_system_pressure_pa": (
+                        recorded_residual
+                    ),
+                    "recomputed_fan_minus_system_pressure_pa": (
+                        recomputed_residual
+                    ),
+                    "absolute_residual_component_error_pa": residual_error,
+                    "recorded_residual_matches_pressure_components": (
+                        math.isclose(
+                            recorded_residual,
+                            recomputed_residual,
+                            rel_tol=0.0,
+                            abs_tol=2e-9,
+                        )
+                    ),
+                }
+            )
+        pressure_component_checks.append(
+            {
+                "iteration": iteration,
+                "all_recorded_residuals_match_pressure_components": all(
+                    item[
+                        "recorded_residual_matches_pressure_components"
+                    ]
+                    for item in pressure_positions
+                ),
+                "maximum_absolute_residual_component_error_pa": max(
+                    item["absolute_residual_component_error_pa"]
+                    for item in pressure_positions
+                ),
+                "positions": pressure_positions,
+            }
         )
         raw_state_checks.append(
             {
@@ -1155,6 +1233,19 @@ def _bisection_decision_trace_audit(
             iteration_sequence == list(range(1, len(trace) + 1))
         ),
         "raw_state_check_count": len(raw_state_checks),
+        "pressure_component_check_count": len(pressure_component_checks),
+        "all_trace_residuals_match_pressure_components": all(
+            check["all_recorded_residuals_match_pressure_components"]
+            for check in pressure_component_checks
+        ),
+        "maximum_absolute_trace_residual_component_error_pa": max(
+            (
+                check["maximum_absolute_residual_component_error_pa"]
+                for check in pressure_component_checks
+            ),
+            default=0.0,
+        ),
+        "pressure_component_checks": pressure_component_checks,
         "all_numeric_brackets_preserve_strict_sign_change": all(
             check["numeric_strict_sign_change_before_evaluation"]
             for check in raw_state_checks
@@ -1425,6 +1516,18 @@ def solve_fan_variable_friction_loop(
             high = right.airflow_m3_h
             low_residual = left_residual
             high_residual = right_residual
+            low_fan_pressure = float(
+                curve_checks[index]["fan_pressure_pa"]
+            )
+            high_fan_pressure = float(
+                curve_checks[index + 1]["fan_pressure_pa"]
+            )
+            low_system_pressure = float(
+                curve_checks[index]["system_pressure_pa"]
+            )
+            high_system_pressure = float(
+                curve_checks[index + 1]["system_pressure_pa"]
+            )
             supplied_segment_span = high - low
             initial_bisection_bracket = {
                 "low_airflow_m3_h": round(low, 9),
@@ -1491,6 +1594,30 @@ def solve_fan_variable_friction_loop(
                             ),
                             "midpoint_fan_minus_system_pressure_pa": round(
                                 residual,
+                                9,
+                            ),
+                            "low_fan_pressure_pa": round(
+                                low_fan_pressure,
+                                9,
+                            ),
+                            "high_fan_pressure_pa": round(
+                                high_fan_pressure,
+                                9,
+                            ),
+                            "midpoint_fan_pressure_pa": round(
+                                fan_pressure,
+                                9,
+                            ),
+                            "low_system_pressure_pa": round(
+                                low_system_pressure,
+                                9,
+                            ),
+                            "high_system_pressure_pa": round(
+                                high_system_pressure,
+                                9,
+                            ),
+                            "midpoint_system_pressure_pa": round(
+                                system_pressure,
                                 9,
                             ),
                             "decision": decision,
@@ -1577,9 +1704,13 @@ def solve_fan_variable_friction_loop(
                     if residual > 0.0:
                         low = airflow
                         low_residual = residual
+                        low_fan_pressure = fan_pressure
+                        low_system_pressure = system_pressure
                     else:
                         high = airflow
                         high_residual = residual
+                        high_fan_pressure = fan_pressure
+                        high_system_pressure = system_pressure
                 else:
                     termination_reason = "bisection_iteration_limit"
             except RuntimeError as exc:

@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.90 engineering core
+## v0.91 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -67,6 +67,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Terminal-bracket network-state fingerprint replay for v0.88, retaining and independently replaying canonical low/high internal network-state hashes on solved final brackets and post-decision iteration-limit remaining brackets, including endpoint-position violation provenance.
 - Selected operating network-state fingerprint replay for v0.89, retaining the canonical internal network-state SHA-256 for the accepted operating solution and comparing it with a fresh nonlinear re-solve, so selected-state internal corruption cannot hide behind unchanged airflow and scalar pressure/residual evidence.
 - Order-invariant network-state fingerprint canonicalization for v0.90, sorting named node, edge, and variable-friction closure collections before hashing so semantically identical solved states remain stable across harmless enumeration-order changes while numeric state changes remain detectable.
+- Supplied-point network-state fingerprint replay for v0.91, retaining the canonical v2 SHA-256 for every successfully evaluated supplied fan-curve point and independently re-solving each anchor state so solved, complete no-intersection, and partial pre-failure point coverage have explicit internal-state provenance.
 - Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
 - Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.

@@ -490,6 +490,14 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert "Terminal network-state replay violation count: **0**" in report
     assert "Terminal network-state replay violating bracket positions: **[]**" in report
     assert "Exact terminal network-state replay violations: **[]**" in report
+    assert "Terminal network-state projection replay available: **True**" in report
+    assert (
+        "Terminal low/high network-state projections match independent replay: "
+        "**True**"
+    ) in report
+    assert "Terminal network-state projection mismatch count: **0**" in report
+    assert "Terminal network-state projection mismatch positions: **[]**" in report
+    assert "Exact terminal network-state projection mismatches: **[]**" in report
     assert "Every recorded trace width matches its airflow endpoints: **True**" in report
     assert (
         "Every recorded trace width fraction matches binary iteration contraction: **True**"

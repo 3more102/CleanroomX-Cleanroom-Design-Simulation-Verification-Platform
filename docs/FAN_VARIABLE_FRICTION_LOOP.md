@@ -40,6 +40,8 @@ v0.90 hardens that fingerprint canonicalization against harmless collection-orde
 
 v0.91 retains that same order-invariant canonical projection for the terminal bracket itself, not only its digest. Solved final and post-decision iteration-limit low/high endpoint projections are independently reconstructed and compared field-by-field, with exact deterministic JSON-style mismatch paths for node, edge, pressure-power, or variable-friction closure differences. This makes terminal-state corruption directly localizable while preserving v0.90's immunity to harmless named-collection reordering. The projection remains implementation provenance only.
 
+v0.92 makes the shared canonical projection both signed-zero-stable and solver-provenance-complete. Floating `-0.0` is normalized to `0.0`, while the projection now includes network/status/reference-node identity, inner Newton iteration count, mass-balance tolerance, variable-friction convergence/configuration, and ordered outer-iteration history. Named node/edge/closure collections remain sorted by name, while chronological solver history remains order-sensitive by design. The same v3 projection drives SHA-256 replay and v0.91 terminal mismatch-path diagnostics.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.92 signed-zero-stable complete solver-provenance canonical replay — 2026-09-24
+
+- Normalizes floating-point signed zero so `-0.0` and `0.0` represent the same deterministic engineering state before canonical projection comparison or SHA-256 serialization.
+- Expands the canonical network-result projection beyond final node/edge values to include network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and chronological outer-iteration history.
+- Preserves name-based order invariance for node, edge, and variable-friction edge-closure collections while deliberately preserving outer-iteration history order.
+- Advances the canonicalization identifier to `network-result-projection-sort-named-collections-normalize-signed-zero-preserve-iteration-history-json-sort-keys-compact-utf8-v3`.
+- v0.91 terminal field-by-field projection replay automatically inherits the expanded v3 projection, so mismatch paths can now localize deterministic solver-provenance corruption as well as final solved-state corruption.
+- Adds regression coverage for signed-zero equivalence and hash sensitivity to Newton iteration metadata, variable-friction configuration, iteration history, and numeric edge-state changes.
+- Preserves solver equations, root-selection policy, numerical tolerances, no-extrapolation behavior, uncertainty semantics, and engineering acceptance boundaries.
+- Bumped package/runtime metadata to v0.92.0.
+
 ## v0.91 terminal network-state projection replay diagnostics — 2026-09-24
 
 - Retains canonical low/high terminal network-state projections alongside their SHA-256 fingerprints on solved final and post-decision iteration-limit brackets.

@@ -2586,6 +2586,18 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "selected_operating_network_state_replay_violation_corner_indices"
     ] == []
+    assert summary[
+        "selected_operating_network_state_projection_replay_evidence_corner_count"
+    ] == summary["solved_search_evidence_corner_count"]
+    assert summary[
+        "selected_operating_network_state_projection_replay_consistent_corner_count"
+    ] == summary["solved_search_evidence_corner_count"]
+    assert summary[
+        "selected_operating_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "selected_operating_network_state_projection_mismatch_count"
+    ] == 0
     assert summary["selected_operating_state_replay_violation_count"] == 0
     assert summary["selected_operating_state_replay_violation_details"] == []
     assert summary[
@@ -2890,6 +2902,18 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         in report
     )
     assert "Selected operating network-state replay consistent corners" in report
+    assert (
+        "Selected operating network-state projection replay violation corners: **[]**"
+        in report
+    )
+    assert (
+        "Selected operating network-state projection replay consistent corners"
+        in report
+    )
+    assert (
+        "Selected operating network-state projection mismatch records: **0**"
+        in report
+    )
     assert (
         "Trace independent network-state replay violation corners: **[]**"
         in report

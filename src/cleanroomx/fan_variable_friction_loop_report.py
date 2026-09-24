@@ -52,6 +52,12 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{selected_replay['selected_airflow_matches_search_origin']}**",
                     "- Selected fan/loop/system/residual state matches independent replay: "
                     f"**{selected_replay['all_pressure_components_match_independent_replay']}**",
+                    "- Selected internal network-state fingerprint matches independent replay: "
+                    f"**{selected_replay['network_state_matches_independent_replay']}**",
+                    "- Selected recorded network-state SHA-256: "
+                    f"**{selected_replay['recorded_network_state_sha256']}**",
+                    "- Selected recomputed network-state SHA-256: "
+                    f"**{selected_replay['recomputed_network_state_sha256']}**",
                     "- Complete selected operating-state replay consistent: "
                     f"**{selected_replay['all_selected_operating_state_matches_independent_replay']}**",
                     "- Selected-state replay violation count: "

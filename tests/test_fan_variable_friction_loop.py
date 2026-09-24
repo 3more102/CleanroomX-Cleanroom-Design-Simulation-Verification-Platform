@@ -12,7 +12,9 @@ from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
     _bisection_decision_trace_audit,
     _fan_curve_supplied_point_residual_audit,
+    _network_state_sha256,
     _selected_operating_state_replay_audit,
+    _solve_network_at_airflow,
     _with_selected_crossing_feature,
     solve_fan_variable_friction_loop,
 )
@@ -1479,6 +1481,13 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     assert replay[
         "all_selected_operating_state_matches_independent_replay"
     ] is True
+    assert replay["network_state_replay_available"] is True
+    assert replay["network_state_replay_algorithm"] == "sha256"
+    assert len(replay["recorded_network_state_sha256"]) == 64
+    assert replay["recorded_network_state_sha256"] == (
+        replay["recomputed_network_state_sha256"]
+    )
+    assert replay["network_state_matches_independent_replay"] is True
     assert replay["violation_count"] == 0
     assert replay["violations"] == []
     assert replay["maximum_absolute_pressure_replay_error_pa"] <= 1e-9
@@ -1487,9 +1496,14 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     pressure = result["system_pressure_check"]
     segment_index = evidence["supplied_segment_index"]
     delta_pa = 1.0
+    replayed_airflow = replay["selected_airflow_replay_input_m3_h"]
+    replayed_network, _ = _solve_network_at_airflow(
+        study,
+        replayed_airflow,
+    )
     corrupted = _selected_operating_state_replay_audit(
         study,
-        selected_airflow_m3_h=replay["recorded_selected_airflow_m3_h"],
+        selected_airflow_m3_h=replayed_airflow,
         recorded_fan_pressure_pa=pressure["fan_pressure_pa"] + delta_pa,
         recorded_loop_network_pressure_pa=(
             pressure["loop_network_pressure_pa"] + delta_pa
@@ -1498,6 +1512,9 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
             pressure["total_system_pressure_pa"] + delta_pa
         ),
         recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
+        recorded_network_state_sha256=_network_state_sha256(
+            replayed_network
+        ),
         segment_left=study.fan_curve.points[segment_index],
         segment_right=study.fan_curve.points[segment_index + 1],
         bisection_trace=evidence["bisection_trace"],
@@ -1519,6 +1536,56 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     assert corrupted["maximum_absolute_pressure_replay_error_pa"] == (
         pytest.approx(delta_pa, abs=1e-9)
     )
+
+
+def test_selected_operating_state_replay_detects_internal_network_state_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Selected network-state replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    pressure = result["system_pressure_check"]
+    replay = evidence["selected_operating_state_replay"]
+    segment_index = evidence["supplied_segment_index"]
+
+    corrupted = _selected_operating_state_replay_audit(
+        study,
+        selected_airflow_m3_h=replay["selected_airflow_replay_input_m3_h"],
+        recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
+        recorded_loop_network_pressure_pa=pressure[
+            "loop_network_pressure_pa"
+        ],
+        recorded_system_pressure_pa=pressure["total_system_pressure_pa"],
+        recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
+        recorded_network_state_sha256="0" * 64,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        bisection_trace=evidence["bisection_trace"],
+    )
+
+    assert corrupted[
+        "all_pressure_components_match_independent_replay"
+    ] is True
+    assert corrupted["network_state_matches_independent_replay"] is False
+    assert corrupted[
+        "all_selected_operating_state_matches_independent_replay"
+    ] is False
+    assert corrupted["violation_count"] == 1
+    assert corrupted["violations"][0]["component"] == "network_state_sha256"
+    assert corrupted["recorded_network_state_sha256"] == "0" * 64
+    assert len(corrupted["recomputed_network_state_sha256"]) == 64
 
 
 def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:

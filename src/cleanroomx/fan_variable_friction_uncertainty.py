@@ -2526,6 +2526,16 @@ def _operating_point_search_resolution_summary(
         if audit.get("selected_airflow_matches_search_origin", False)
         is not True
     ]
+    selected_operating_network_state_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in selected_operating_state_replay_cases
+        if audit.get(
+            "network_state_matches_independent_replay",
+            False,
+        )
+        is not True
+    ]
     selected_operating_state_replay_violation_details = []
     for (
         corner_index,
@@ -2552,6 +2562,18 @@ def _operating_point_search_resolution_summary(
                 "selection_source": audit.get("selection_source"),
                 "selected_airflow_matches_search_origin": audit.get(
                     "selected_airflow_matches_search_origin"
+                ),
+                "network_state_replay_available": audit.get(
+                    "network_state_replay_available"
+                ),
+                "network_state_matches_independent_replay": audit.get(
+                    "network_state_matches_independent_replay"
+                ),
+                "recorded_network_state_sha256": audit.get(
+                    "recorded_network_state_sha256"
+                ),
+                "recomputed_network_state_sha256": audit.get(
+                    "recomputed_network_state_sha256"
                 ),
                 "violation_count": int(audit.get("violation_count", 0)),
                 "violations": audit.get("violations", []),
@@ -3245,6 +3267,15 @@ def _operating_point_search_resolution_summary(
         ),
         "selected_operating_state_origin_violation_corner_indices": (
             selected_operating_state_origin_violation_corner_indices
+        ),
+        "selected_operating_network_state_replay_consistent_corner_count": (
+            len(selected_operating_state_replay_cases)
+            - len(
+                selected_operating_network_state_replay_violation_corner_indices
+            )
+        ),
+        "selected_operating_network_state_replay_violation_corner_indices": (
+            selected_operating_network_state_replay_violation_corner_indices
         ),
         "selected_operating_state_replay_violation_count": sum(
             int(audit.get("violation_count", 0))

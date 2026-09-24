@@ -2455,6 +2455,26 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary["bisection_trace_length_violation_corner_indices"] == []
     assert summary["bisection_trace_sign_violation_corner_indices"] == []
     assert summary["bisection_trace_midpoint_violation_corner_indices"] == []
+    assert summary["bisection_trace_width_violation_corner_indices"] == []
+    assert summary[
+        "bisection_trace_width_fraction_violation_corner_indices"
+    ] == []
+    assert summary["bisection_trace_geometry_violation_corner_indices"] == []
+    assert summary["bisection_trace_geometry_consistent_corner_count"] == (
+        summary["bisection_trace_evidence_corner_count"]
+    )
+    max_trace_width_error = summary[
+        "maximum_bisection_trace_width_error_m3_h"
+    ]
+    assert max_trace_width_error is not None
+    assert max_trace_width_error["value"] <= 2e-9
+    assert max_trace_width_error["sources"]
+    max_trace_width_fraction_error = summary[
+        "maximum_bisection_trace_width_fraction_error"
+    ]
+    assert max_trace_width_fraction_error is not None
+    assert max_trace_width_fraction_error["value"] <= 1e-12
+    assert max_trace_width_fraction_error["sources"]
     assert summary["bisection_trace_terminal_violation_corner_indices"] == []
     assert summary[
         "bisection_trace_iteration_sequence_violation_corner_indices"
@@ -2529,6 +2549,13 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         assert trace_audit[
             "all_midpoints_are_arithmetic_bracket_midpoints"
         ] is True
+        assert trace_audit[
+            "all_recorded_widths_match_airflow_brackets"
+        ] is True
+        assert trace_audit[
+            "all_recorded_width_fractions_match_iteration_sequence"
+        ] is True
+        assert trace_audit["all_trace_geometry_consistent"] is True
         assert trace_audit["termination_record_is_last"] is True
         assert trace_audit["terminal_outcome_consistent"] is True
         assert trace_audit["iteration_limit_terminal_replay"] is None
@@ -2559,6 +2586,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace-length violations" in report
     assert "Trace iteration-sequence violations" in report
     assert "Trace state-transition replay violations" in report
+    assert "Trace recorded-width violations: **[]**" in report
+    assert "Trace binary width-fraction violations: **[]**" in report
+    assert "Trace geometry violation corners: **[]**" in report
+    assert "Maximum trace recorded-width consistency error" in report
+    assert "Maximum trace binary width-fraction consistency error" in report
     assert "Maximum absolute binary-width consistency error" in report
     assert "Maximum retained bisection decision-trace steps" in report
 
@@ -2604,6 +2636,20 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     ] == len(limit_corners)
     assert summary["bisection_trace_complete_coverage"] is True
     assert summary["bisection_trace_length_violation_corner_indices"] == []
+    assert summary["bisection_trace_width_violation_corner_indices"] == []
+    assert summary[
+        "bisection_trace_width_fraction_violation_corner_indices"
+    ] == []
+    assert summary["bisection_trace_geometry_violation_corner_indices"] == []
+    assert summary["bisection_trace_geometry_consistent_corner_count"] == len(
+        limit_corners
+    )
+    assert summary[
+        "maximum_bisection_trace_width_error_m3_h"
+    ]["value"] <= 2e-9
+    assert summary[
+        "maximum_bisection_trace_width_fraction_error"
+    ]["value"] <= 1e-12
     assert summary[
         "bisection_trace_iteration_sequence_violation_corner_indices"
     ] == []
@@ -2647,6 +2693,11 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         assert trace_audit is not None
         assert len(trace) == evidence["operating_iterations"] == 1
         assert trace_audit["termination_record_count"] == 0
+        assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
+        assert trace_audit[
+            "all_recorded_width_fractions_match_iteration_sequence"
+        ] is True
+        assert trace_audit["all_trace_geometry_consistent"] is True
         assert trace_audit["terminal_outcome_consistent"] is True
         assert trace_audit["iterations_are_contiguous_from_one"] is True
         terminal_replay = trace_audit["iteration_limit_terminal_replay"]
@@ -2660,6 +2711,9 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert "Bisection iteration-limit corners with search evidence" in report
     assert "Iteration-limit corners with bisection decision traces" in report
     assert "Iteration-limit terminal-replay violations: **[]**" in report
+    assert "Trace recorded-width violations: **[]**" in report
+    assert "Trace binary width-fraction violations: **[]**" in report
+    assert "Trace geometry violation corners: **[]**" in report
     assert "Iteration-limit remaining-bracket invariant evidence" in report
     assert (
         "Maximum iteration-limit remaining-bracket binary-width consistency error"

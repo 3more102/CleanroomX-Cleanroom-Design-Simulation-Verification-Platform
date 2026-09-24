@@ -807,6 +807,24 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_residual_component_count = search_summary.get(
+                    "bisection_trace_residual_component_consistent_corner_count",
+                    0,
+                )
+                trace_residual_component_violations = len(
+                    search_summary.get(
+                        "bisection_trace_residual_component_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_residual_component_error = search_summary.get(
+                    "maximum_bisection_trace_residual_component_error_pa"
+                )
+                max_trace_residual_component_error = (
+                    "—"
+                    if trace_residual_component_error is None
+                    else trace_residual_component_error["value"]
+                )
                 trace_midpoint_error = search_summary.get(
                     "maximum_bisection_trace_midpoint_error_m3_h"
                 )
@@ -910,6 +928,10 @@ def markdown_dossier_report(result: dict) -> str:
                     f"trace-geometry {trace_geometry_count}/{trace_count}; "
                     f"trace-raw-state {trace_raw_state_count}/{trace_count}; "
                     f"raw-state violations {trace_raw_state_violations}; "
+                    f"trace-pressure-chain {trace_residual_component_count}/{trace_count}; "
+                    f"pressure-chain violations {trace_residual_component_violations}; "
+                    f"max trace residual-component error "
+                    f"{max_trace_residual_component_error} Pa; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "
                     f"max trace normalized-width error "

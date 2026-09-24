@@ -37,11 +37,13 @@ After installation, launch the application with:
 cleanroomx-gui
 ```
 
-Open the bundled end-to-end demonstration directly:
+Open the self-contained demonstration shipped inside the installed package:
 
 ```bash
-cleanroomx-gui examples/gui_demo.cleanroomx.json
+cleanroomx-gui --demo
 ```
+
+From a repository checkout, `examples/gui_demo.cleanroomx.json` remains available as the editable source copy.
 
 For automated installation checks without a display:
 
@@ -273,6 +275,14 @@ v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersec
 The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The nonlinear fan/variable-friction workflow additionally reports fan air-power min/max across evaluated corners when the study is complete; those air-power values are not claimed as guaranteed continuous-interval extrema. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
 
 ## Install
+
+For normal use from a repository checkout, install the package non-editably and validate the installed application:
+
+    python -m pip install .
+    cleanroomx-gui --check
+    cleanroomx-gui --demo
+
+For development and tests:
 
     python -m pip install -e .[dev]
 

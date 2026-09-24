@@ -791,6 +791,31 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_corner_count']}**",
                 "- Supplied-point tolerance-contact corners: "
                 f"**{search_summary['supplied_point_contact_corner_count']}**",
+                "- Supplied-point network-state replay coverage: "
+                f"**{search_summary['supplied_point_network_state_replay_evidence_corner_count']}/"
+                f"{search_summary['supplied_point_network_state_replay_applicable_corner_count']} corners**",
+                "- Supplied-point network-state replay complete coverage: "
+                f"**{search_summary['supplied_point_network_state_replay_complete_coverage']}**",
+                "- Supplied-point network-state replay consistent corners: "
+                f"**{search_summary['supplied_point_network_state_replay_consistent_corner_count']}**",
+                "- Supplied-point network-state replay inconsistent corners: "
+                f"**{search_summary['supplied_point_network_state_replay_inconsistent_corner_count']}**",
+                "- Supplied-point network-state replay incomplete corners: "
+                f"**{search_summary['supplied_point_network_state_replay_incomplete_corner_count']}**",
+                "- Supplied-point network-state hash violation corners: "
+                f"**{search_summary['supplied_point_network_state_hash_violation_corner_indices']}**",
+                "- Supplied-point network-state projection violation corners: "
+                f"**{search_summary['supplied_point_network_state_projection_violation_corner_indices']}**",
+                "- Supplied-point network-state replay incomplete corners: "
+                f"**{search_summary['supplied_point_network_state_replay_incomplete_corner_indices']}**",
+                "- Supplied-point network-state projection mismatch records: "
+                f"**{search_summary['supplied_point_network_state_projection_mismatch_count']}**",
+                "- Supplied-point network-state replay violation details: "
+                f"**{search_summary['supplied_point_network_state_replay_violation_details']}**",
+                "- Supplied-point network-state replay coverage-gap details: "
+                f"**{search_summary['supplied_point_network_state_replay_coverage_gap_details']}**",
+                "- Supplied-point network-state projection maximum numerical replay errors by field: "
+                f"**{search_summary['maximum_supplied_point_network_state_projection_numeric_errors']}**",
                 "- Solved corners with selected operating-state replay evidence: "
                 f"**{search_summary['selected_operating_state_replay_evidence_corner_count']}/"
                 f"{search_summary['solved_search_evidence_corner_count']}**",

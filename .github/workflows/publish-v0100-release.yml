@@ -53,17 +53,17 @@ jobs:
           fi
 
           cat > /tmp/release-notes.md <<'EOF'
-CleanroomX v0.100.0 is the validated consolidated desktop release.
+          CleanroomX v0.100.0 is the validated consolidated desktop release.
 
-Validated baseline:
-- Commit: `30c43983d87d6e6de2fe81c6f38610c238b1a5f4`
-- Main CI: run #830 — success
-- Python 3.11 / 3.12 / 3.13 full regression matrix: 576 passed on each interpreter
-- Installed wheel, CLI readiness, packaged demo, and Tk/Xvfb desktop smoke: passed
+          Validated baseline:
+          - Commit: `30c43983d87d6e6de2fe81c6f38610c238b1a5f4`
+          - Main CI: run #830 — success
+          - Python 3.11 / 3.12 / 3.13 full regression matrix: 576 passed on each interpreter
+          - Installed wheel, CLI readiness, packaged demo, and Tk/Xvfb desktop smoke: passed
 
-Release scope includes execution provenance, portable external-file path handling, atomic persistence/exports, abandoned-worker exclusivity, and backend-evidence fan/system plotting. Validated solver equations, numerical tolerances, uncertainty semantics, and engineering acceptance criteria were not intentionally changed.
+          Release scope includes execution provenance, portable external-file path handling, atomic persistence/exports, abandoned-worker exclusivity, and backend-evidence fan/system plotting. Validated solver equations, numerical tolerances, uncertainty semantics, and engineering acceptance criteria were not intentionally changed.
 
-See `TEST_EVIDENCE.md`, `VALIDATION.txt`, `DEPLOYMENT.md`, `MIGRATIONS.md`, `ROLLBACK.md`, and `SECURITY.md` for release evidence and operational boundaries.
-EOF
+          See `TEST_EVIDENCE.md`, `VALIDATION.txt`, `DEPLOYMENT.md`, `MIGRATIONS.md`, `ROLLBACK.md`, and `SECURITY.md` for release evidence and operational boundaries.
+          EOF
 
-          gh release create "${TAG}"             --verify-tag             --target "${TARGET_SHA}"             --title "CleanroomX v0.100.0"             --notes-file /tmp/release-notes.md
+          gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.100.0" --notes-file /tmp/release-notes.md

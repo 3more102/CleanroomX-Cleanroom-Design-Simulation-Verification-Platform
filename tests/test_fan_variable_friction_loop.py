@@ -252,6 +252,22 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
     ] <= 1e-9
+    assert trace_audit["midpoint_residual_recheck_available"] is True
+    assert trace_audit["midpoint_residual_recheck_count"] == len(trace)
+    assert trace_audit["all_midpoint_residual_rechecks_succeeded"] is True
+    assert trace_audit[
+        "all_recorded_midpoint_residuals_match_recomputed_model"
+    ] is True
+    assert trace_audit["midpoint_residual_recheck_violation_iterations"] == []
+    assert trace_audit[
+        "all_decisions_match_recomputed_midpoint_residual_semantics"
+    ] is True
+    assert trace_audit[
+        "recomputed_decision_semantic_violation_iterations"
+    ] == []
+    assert trace_audit[
+        "maximum_absolute_trace_midpoint_residual_error_pa"
+    ] <= 2e-9
     assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
     assert trace_audit[
         "all_recorded_width_fractions_match_iteration_sequence"
@@ -302,6 +318,15 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
         in report
     )
+    assert (
+        "Recorded midpoint residuals match fresh model re-evaluation: **True**"
+        in report
+    )
+    assert (
+        "Trace decisions match recomputed midpoint residual semantics: **True**"
+        in report
+    )
+    assert "Maximum absolute trace midpoint residual recheck error" in report
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
     assert "numerical search" in report
 
@@ -433,6 +458,70 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         in report
     )
 
+
+
+def test_bisection_midpoint_residual_recheck_detects_value_corruption() -> None:
+    trace = [
+        {
+            "iteration": 1,
+            "low_airflow_m3_h": 0.0,
+            "high_airflow_m3_h": 8.0,
+            "midpoint_airflow_m3_h": 4.0,
+            "width_m3_h": 8.0,
+            "width_fraction_of_supplied_segment": 1.0,
+            "low_fan_minus_system_pressure_pa": 4.0,
+            "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_minus_system_pressure_pa": 2.0,
+            "decision": "replace_low_endpoint",
+            "strict_sign_change_before_evaluation": True,
+            "midpoint_is_arithmetic_bracket_midpoint": True,
+        }
+    ]
+    initial_bracket = {
+        "low_airflow_m3_h": 0.0,
+        "high_airflow_m3_h": 8.0,
+        "low_fan_minus_system_pressure_pa": 4.0,
+        "high_fan_minus_system_pressure_pa": -4.0,
+    }
+    terminal_bracket = {
+        "low_airflow_m3_h": 4.0,
+        "high_airflow_m3_h": 8.0,
+        "low_fan_minus_system_pressure_pa": 2.0,
+        "high_fan_minus_system_pressure_pa": -4.0,
+    }
+
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=1,
+        termination_reason="bisection_iteration_limit",
+        operating_pressure_tolerance_pa=0.1,
+        midpoint_residual_evaluator=lambda _airflow: 1.0,
+        initial_bisection_bracket=initial_bracket,
+        iteration_limit_terminal_bracket=terminal_bracket,
+    )
+
+    assert audit is not None
+    assert audit["all_decisions_match_midpoint_residual_semantics"] is True
+    assert audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert audit["midpoint_residual_recheck_available"] is True
+    assert audit["all_midpoint_residual_rechecks_succeeded"] is True
+    assert audit[
+        "all_recorded_midpoint_residuals_match_recomputed_model"
+    ] is False
+    assert audit["midpoint_residual_recheck_violation_iterations"] == [1]
+    assert audit[
+        "maximum_absolute_trace_midpoint_residual_error_pa"
+    ] == pytest.approx(1.0, abs=1e-18)
+    assert audit[
+        "all_decisions_match_recomputed_midpoint_residual_semantics"
+    ] is True
+    recheck = audit["midpoint_residual_rechecks"][0]
+    assert recheck[
+        "recorded_midpoint_fan_minus_system_pressure_pa"
+    ] == pytest.approx(2.0)
+    assert recheck[
+        "recomputed_midpoint_fan_minus_system_pressure_pa"
+    ] == pytest.approx(1.0)
 
 def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     trace = [

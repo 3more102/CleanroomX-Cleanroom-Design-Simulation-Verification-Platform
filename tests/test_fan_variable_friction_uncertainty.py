@@ -2740,6 +2740,15 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         "bisection_trace_origin_replay_corner_count"
     ] == len(limit_corners)
     assert summary[
+        "bisection_trace_raw_state_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_raw_state_consistent_corner_count"
+    ] == len(limit_corners)
+    assert summary[
+        "maximum_bisection_trace_midpoint_error_m3_h"
+    ]["value"] <= 1e-9
+    assert summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert summary[
@@ -2781,6 +2790,19 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         assert trace_audit["terminal_outcome_consistent"] is True
         assert trace_audit["iterations_are_contiguous_from_one"] is True
         assert trace_audit[
+            "all_numeric_brackets_preserve_strict_sign_change"
+        ] is True
+        assert trace_audit[
+            "all_recorded_sign_flags_match_numeric_residuals"
+        ] is True
+        assert trace_audit[
+            "all_numeric_midpoints_are_arithmetic_bracket_midpoints"
+        ] is True
+        assert trace_audit[
+            "all_recorded_midpoint_flags_match_numeric_geometry"
+        ] is True
+        assert trace_audit["all_trace_raw_state_consistent"] is True
+        assert trace_audit[
             "all_decisions_match_midpoint_residual_semantics"
         ] is True
         assert trace_audit["decision_semantic_violation_iterations"] == []
@@ -2806,6 +2828,8 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert "Iteration-limit terminal-replay violations: **[]**" in report
     assert "Trace decision-semantic violations: **[]**" in report
     assert "Trace origin-to-terminal replay violations: **[]**" in report
+    assert "Trace raw-state audit violation corners: **[]**" in report
+    assert "Maximum trace midpoint-centering error" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report

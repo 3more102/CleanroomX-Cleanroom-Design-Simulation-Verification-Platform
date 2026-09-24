@@ -659,6 +659,7 @@ def _bisection_decision_trace_audit(
     operating_iterations: int,
     termination_reason: str,
     operating_pressure_tolerance_pa: float,
+    expected_fixed_pressure_pa: float | None = None,
     initial_bisection_bracket: dict | None = None,
     solved_terminal_bracket: dict | None = None,
     iteration_limit_terminal_bracket: dict | None = None,
@@ -681,6 +682,7 @@ def _bisection_decision_trace_audit(
     }
     iteration_sequence = [int(step["iteration"]) for step in trace]
     raw_state_checks = []
+    pressure_state_checks = []
     geometry_checks = []
     for step in trace:
         iteration = int(step["iteration"])
@@ -699,6 +701,99 @@ def _bisection_decision_trace_audit(
         recorded_width_fraction = float(
             step["width_fraction_of_supplied_segment"]
         )
+        pressure_fields = (
+            "midpoint_fan_pressure_pa",
+            "midpoint_loop_network_pressure_pa",
+            "midpoint_fixed_pressure_pa",
+            "midpoint_system_pressure_pa",
+            "midpoint_fan_minus_system_pressure_pa",
+        )
+        if all(field in step for field in pressure_fields):
+            recorded_fan_pressure = float(step["midpoint_fan_pressure_pa"])
+            recorded_loop_pressure = float(
+                step["midpoint_loop_network_pressure_pa"]
+            )
+            recorded_fixed_pressure = float(
+                step["midpoint_fixed_pressure_pa"]
+            )
+            recorded_system_pressure = float(
+                step["midpoint_system_pressure_pa"]
+            )
+            recorded_midpoint_residual = float(
+                step["midpoint_fan_minus_system_pressure_pa"]
+            )
+            expected_system_pressure = (
+                recorded_fixed_pressure + recorded_loop_pressure
+            )
+            expected_midpoint_residual = (
+                recorded_fan_pressure - recorded_system_pressure
+            )
+            system_pressure_balance_error = abs(
+                recorded_system_pressure - expected_system_pressure
+            )
+            residual_balance_error = abs(
+                recorded_midpoint_residual - expected_midpoint_residual
+            )
+            fixed_pressure_matches_expected = (
+                expected_fixed_pressure_pa is None
+                or math.isclose(
+                    recorded_fixed_pressure,
+                    float(expected_fixed_pressure_pa),
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+            )
+            pressure_state_checks.append(
+                {
+                    "iteration": iteration,
+                    "recorded_midpoint_fan_pressure_pa": (
+                        recorded_fan_pressure
+                    ),
+                    "recorded_midpoint_loop_network_pressure_pa": (
+                        recorded_loop_pressure
+                    ),
+                    "recorded_midpoint_fixed_pressure_pa": (
+                        recorded_fixed_pressure
+                    ),
+                    "recorded_midpoint_system_pressure_pa": (
+                        recorded_system_pressure
+                    ),
+                    "expected_midpoint_system_pressure_pa": (
+                        expected_system_pressure
+                    ),
+                    "absolute_system_pressure_balance_error_pa": (
+                        system_pressure_balance_error
+                    ),
+                    "recorded_midpoint_fan_minus_system_pressure_pa": (
+                        recorded_midpoint_residual
+                    ),
+                    "expected_midpoint_fan_minus_system_pressure_pa": (
+                        expected_midpoint_residual
+                    ),
+                    "absolute_residual_balance_error_pa": (
+                        residual_balance_error
+                    ),
+                    "recorded_fixed_pressure_matches_study": (
+                        fixed_pressure_matches_expected
+                    ),
+                    "recorded_system_pressure_matches_fixed_plus_loop": (
+                        math.isclose(
+                            recorded_system_pressure,
+                            expected_system_pressure,
+                            rel_tol=0.0,
+                            abs_tol=2e-9,
+                        )
+                    ),
+                    "recorded_residual_matches_fan_minus_system": (
+                        math.isclose(
+                            recorded_midpoint_residual,
+                            expected_midpoint_residual,
+                            rel_tol=0.0,
+                            abs_tol=2e-9,
+                        )
+                    ),
+                }
+            )
         expected_width = high_airflow - low_airflow
         expected_width_fraction = 0.5 ** (iteration - 1)
         absolute_width_error = abs(recorded_width - expected_width)
@@ -1186,6 +1281,57 @@ def _bisection_decision_trace_audit(
             default=0.0,
         ),
         "raw_state_checks": raw_state_checks,
+        "pressure_state_check_count": len(pressure_state_checks),
+        "pressure_state_evidence_complete": (
+            len(pressure_state_checks) == len(trace)
+        ),
+        "all_recorded_fixed_pressure_values_match_study": (
+            len(pressure_state_checks) == len(trace)
+            and all(
+                check["recorded_fixed_pressure_matches_study"]
+                for check in pressure_state_checks
+            )
+        ),
+        "all_recorded_system_pressures_match_fixed_plus_loop": (
+            len(pressure_state_checks) == len(trace)
+            and all(
+                check["recorded_system_pressure_matches_fixed_plus_loop"]
+                for check in pressure_state_checks
+            )
+        ),
+        "all_recorded_residuals_match_fan_minus_system": (
+            len(pressure_state_checks) == len(trace)
+            and all(
+                check["recorded_residual_matches_fan_minus_system"]
+                for check in pressure_state_checks
+            )
+        ),
+        "all_trace_pressure_state_consistent": (
+            len(pressure_state_checks) == len(trace)
+            and all(
+                check["recorded_fixed_pressure_matches_study"]
+                and check[
+                    "recorded_system_pressure_matches_fixed_plus_loop"
+                ]
+                and check["recorded_residual_matches_fan_minus_system"]
+                for check in pressure_state_checks
+            )
+        ),
+        "maximum_absolute_trace_system_pressure_balance_error_pa": max(
+            (
+                check["absolute_system_pressure_balance_error_pa"]
+                for check in pressure_state_checks
+            ),
+            default=0.0,
+        ),
+        "maximum_absolute_trace_residual_balance_error_pa": max(
+            (
+                check["absolute_residual_balance_error_pa"]
+                for check in pressure_state_checks
+            ),
+            default=0.0,
+        ),
+        "pressure_state_checks": pressure_state_checks,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -1287,8 +1433,11 @@ def _bisection_decision_trace_audit(
             "fraction implied by its iteration. The raw-state audit "
             "independently recomputes strict sign-change and arithmetic-"
             "midpoint facts from the recorded numeric state and checks the "
-            "stored flags against those recomputed facts. The decision-"
-            "semantics audit "
+            "stored flags against those recomputed facts. The pressure-state "
+            "audit independently checks each retained midpoint's fixed-plus-"
+            "loop system-pressure identity and fan-minus-system residual "
+            "identity, and anchors the retained fixed-pressure component to "
+            "the study input. The decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
@@ -1489,6 +1638,22 @@ def solve_fan_variable_friction_loop(
                                 high_residual,
                                 9,
                             ),
+                            "midpoint_fan_pressure_pa": round(
+                                fan_pressure,
+                                9,
+                            ),
+                            "midpoint_loop_network_pressure_pa": round(
+                                network_pressure,
+                                9,
+                            ),
+                            "midpoint_fixed_pressure_pa": round(
+                                study.fixed_pressure_pa,
+                                9,
+                            ),
+                            "midpoint_system_pressure_pa": round(
+                                system_pressure,
+                                9,
+                            ),
                             "midpoint_fan_minus_system_pressure_pa": round(
                                 residual,
                                 9,
@@ -1678,6 +1843,7 @@ def solve_fan_variable_friction_loop(
                         operating_iterations=operating_iterations,
                         termination_reason=termination_reason,
                         operating_pressure_tolerance_pa=tolerance,
+                        expected_fixed_pressure_pa=study.fixed_pressure_pa,
                         initial_bisection_bracket=initial_bisection_bracket,
                         iteration_limit_terminal_bracket=terminal_bracket,
                     ),
@@ -1833,6 +1999,7 @@ def solve_fan_variable_friction_loop(
             operating_iterations=operating_iterations,
             termination_reason=termination_reason,
             operating_pressure_tolerance_pa=tolerance,
+            expected_fixed_pressure_pa=study.fixed_pressure_pa,
             initial_bisection_bracket=initial_bisection_bracket,
             solved_terminal_bracket=final_bisection_bracket,
         ),

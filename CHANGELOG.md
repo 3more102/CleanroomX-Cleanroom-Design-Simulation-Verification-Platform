@@ -10,6 +10,7 @@
 - Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.
 - Hardens project persistence to strict JSON, preserves uncommitted editor state across analysis switching, prompts before destructive project replacement/exit, and blocks conflicting analysis mutation/input changes while a run is active.
 - Adds an application-level end-to-end regression matrix covering every workflow exposed by the desktop catalog.
+- Strengthens `cleanroomx-gui --check` so it validates every registered parser, runner, and reporter binding and reports registry-integrity counts before declaring the headless application check successful.
 - Preserves the v0.95 solver-result integrity linkage and the complete v0.91-v0.94 replay/provenance compatibility gates.
 - Bumps package/runtime/demo metadata to v0.96.0.
 - The GUI exposes engineering screening and numerical/provenance evidence; it does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.

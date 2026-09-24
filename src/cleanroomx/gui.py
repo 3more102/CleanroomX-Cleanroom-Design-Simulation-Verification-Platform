@@ -152,6 +152,8 @@ class CleanroomXApp:
         self.project_path: Path | None = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
+        self._editor_analysis_id: str | None = None
+        self._selection_guard = False
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -357,8 +359,16 @@ class CleanroomXApp:
         except KeyError:
             return None
 
-    def _commit_editor(self) -> AnalysisDocument:
-        analysis = self._current_analysis()
+    def _editor_analysis(self) -> AnalysisDocument | None:
+        if self._editor_analysis_id is None:
+            return None
+        try:
+            return self.project.analysis_by_id(self._editor_analysis_id)
+        except KeyError:
+            return None
+
+    def _commit_editor(self, analysis: AnalysisDocument | None = None) -> AnalysisDocument:
+        analysis = analysis or self._editor_analysis() or self._current_analysis()
         if analysis is None:
             raise ValueError("select or add an analysis first")
         try:
@@ -406,17 +416,40 @@ class CleanroomXApp:
             self.analysis_tree.focus(first)
             self._load_analysis_into_editor(self.project.analyses[0])
         else:
+            self._editor_analysis_id = None
             self.input_text.delete("1.0", "end")
             self.refresh_structure(silent=True)
 
     def _on_analysis_selected(self, event=None) -> None:
+        if self._selection_guard:
+            return
         analysis = self._current_analysis()
         if analysis is None:
             return
+        previous = self._editor_analysis()
+        if previous is not None and previous.id != analysis.id:
+            try:
+                self._commit_editor(previous)
+            except Exception as exc:
+                self._selection_guard = True
+                try:
+                    if self.analysis_tree.exists(previous.id):
+                        self.analysis_tree.selection_set(previous.id)
+                        self.analysis_tree.focus(previous.id)
+                        self.analysis_tree.see(previous.id)
+                finally:
+                    self._selection_guard = False
+                messagebox.showerror(
+                    "Cannot switch analysis",
+                    f"Fix the current analysis input before switching.\n\n{exc}",
+                    parent=self.root,
+                )
+                return
         self.project.active_analysis_id = analysis.id
         self._load_analysis_into_editor(analysis)
 
     def _load_analysis_into_editor(self, analysis: AnalysisDocument) -> None:
+        self._editor_analysis_id = analysis.id
         self.input_text.delete("1.0", "end")
         self.input_text.insert(
             "1.0",
@@ -467,6 +500,9 @@ class CleanroomXApp:
         self.status_var.set("New project")
 
     def open_project(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
         path = filedialog.askopenfilename(
             parent=self.root,
             title="Open CleanroomX project",

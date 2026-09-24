@@ -807,6 +807,34 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_residual_recheck_count = search_summary.get(
+                    "bisection_trace_midpoint_residual_recheck_consistent_corner_count",
+                    0,
+                )
+                trace_residual_recheck_violations = len(
+                    search_summary.get(
+                        "bisection_trace_midpoint_residual_recheck_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_recomputed_decision_count = search_summary.get(
+                    "bisection_trace_recomputed_decision_semantic_consistent_corner_count",
+                    0,
+                )
+                trace_recomputed_decision_violations = len(
+                    search_summary.get(
+                        "bisection_trace_recomputed_decision_semantic_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_midpoint_residual_error = search_summary.get(
+                    "maximum_bisection_trace_midpoint_residual_error_pa"
+                )
+                max_trace_midpoint_residual_error = (
+                    "—"
+                    if trace_midpoint_residual_error is None
+                    else trace_midpoint_residual_error["value"]
+                )
                 trace_midpoint_error = search_summary.get(
                     "maximum_bisection_trace_midpoint_error_m3_h"
                 )
@@ -910,6 +938,16 @@ def markdown_dossier_report(result: dict) -> str:
                     f"trace-geometry {trace_geometry_count}/{trace_count}; "
                     f"trace-raw-state {trace_raw_state_count}/{trace_count}; "
                     f"raw-state violations {trace_raw_state_violations}; "
+                    f"trace-residual-recheck {trace_residual_recheck_count}/"
+                    f"{trace_count}; "
+                    f"residual-recheck violations "
+                    f"{trace_residual_recheck_violations}; "
+                    f"trace-recomputed-decision "
+                    f"{trace_recomputed_decision_count}/{trace_count}; "
+                    f"recomputed-decision violations "
+                    f"{trace_recomputed_decision_violations}; "
+                    f"max trace residual recheck error "
+                    f"{max_trace_midpoint_residual_error} Pa; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "
                     f"max trace normalized-width error "

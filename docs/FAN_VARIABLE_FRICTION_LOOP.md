@@ -18,6 +18,8 @@ For each candidate total airflow, CleanroomX:
 
 The fan operating point is found only inside a supplied fan-curve segment. No fan-curve extrapolation is performed.
 
+For bounded-bisection traces, v0.81 independently replays the supplied-segment low/high/midpoint states, freshly re-solves the nonlinear loop, re-interpolates fan pressure, and verifies the retained fan-minus-system residuals against those fresh model evaluations. This is deterministic numerical provenance only, not a physical uncertainty, stability, or equipment-acceptance margin.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`
@@ -114,6 +116,8 @@ v0.78 independently audits the meaning of every retained decision. A midpoint in
 v0.79 independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from each retained trace record's numeric fields, then checks the stored sign-change and midpoint flags against those recomputed facts. It also retains per-step raw-state evidence and the maximum absolute midpoint-centering error, so correct-looking stored booleans cannot hide corrupted numeric trace state. This remains numerical implementation provenance only; it does not add physical airflow uncertainty, interpolation-error, root-uniqueness/stability, stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
 
 v0.80 additionally retains the midpoint fan pressure, variable-friction loop pressure, fixed-pressure component, total system pressure, and fan-minus-system residual for every bounded-bisection evaluation. The audit independently verifies `system = fixed + loop`, `residual = fan - system`, and that the retained fixed-pressure component matches the study input. Maximum absolute pressure-identity errors are reported alongside exact per-step checks. This remains numerical implementation provenance only; it is not physical uncertainty, an interpolation-error bound, a root-stability proof, or an equipment-acceptance criterion.
+
+v0.81 adds an independent fan/system residual replay above that retained-state audit. The replay reconstructs each active low/high/midpoint airflow from the selected supplied fan segment and the recorded L/H/T chain, re-runs the nonlinear variable-friction network solve at those airflows, recomputes interpolated fan pressure, and compares every retained low/high/midpoint residual against the fresh model evaluation. A self-consistent corruption of retained fan pressure and residual can therefore pass the v0.80 pressure identities yet still be detected by v0.81. The replay is numerical implementation provenance only and does not establish physical uncertainty, fan-model validity, root uniqueness/stability, stall/surge margin, or equipment acceptance.
 
 ## CLI
 

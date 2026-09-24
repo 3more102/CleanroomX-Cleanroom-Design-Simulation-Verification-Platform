@@ -818,6 +818,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
                 "- Trace pressure-state audit violation corners: "
                 f"**{search_summary['bisection_trace_pressure_state_violation_corner_indices']}**",
+                "- Trace independent residual-replay violation corners: "
+                f"**{search_summary['bisection_trace_residual_replay_violation_corner_indices']}**",
+                "- Maximum trace residual-replay error: "
+                f"**{search_summary['maximum_bisection_trace_residual_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_residual_replay_error_pa'] is not None else 'not available'} Pa**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -1016,6 +1020,21 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum trace fan-minus-system residual identity error | "
                 f"{trace_residual_error['value']} | "
                 f"{trace_residual_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_replay_error = search_summary.get(
+            "maximum_bisection_trace_residual_replay_error_pa"
+        )
+        if trace_replay_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_replay_error["sources"]
+            ]
+            lines.append(
+                "| Maximum independent trace residual-replay error | "
+                f"{trace_replay_error['value']} | "
+                f"{trace_replay_error['unit']} | "
                 f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(

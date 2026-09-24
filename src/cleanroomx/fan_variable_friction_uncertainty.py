@@ -2592,6 +2592,15 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit.get("all_trace_pressure_state_consistent", False)
     ]
+    trace_residual_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_trace_residuals_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2985,6 +2994,19 @@ def _operating_point_search_resolution_summary(
         "maximum_bisection_trace_residual_balance_error_pa": (
             _maximum_trace_geometry_metric_evidence(
                 "maximum_absolute_trace_residual_balance_error_pa",
+                "Pa",
+            )
+        ),
+        "bisection_trace_residual_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(trace_residual_replay_violation_corner_indices)
+        ),
+        "bisection_trace_residual_replay_violation_corner_indices": (
+            trace_residual_replay_violation_corner_indices
+        ),
+        "maximum_bisection_trace_residual_replay_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_residual_replay_error_pa",
                 "Pa",
             )
         ),

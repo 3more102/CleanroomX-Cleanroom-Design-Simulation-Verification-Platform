@@ -660,6 +660,9 @@ def _bisection_decision_trace_audit(
     termination_reason: str,
     operating_pressure_tolerance_pa: float,
     expected_fixed_pressure_pa: float | None = None,
+    study: FanVariableFrictionLoopStudy | None = None,
+    segment_left: FanCurvePoint | None = None,
+    segment_right: FanCurvePoint | None = None,
     initial_bisection_bracket: dict | None = None,
     solved_terminal_bracket: dict | None = None,
     iteration_limit_terminal_bracket: dict | None = None,
@@ -866,6 +869,144 @@ def _bisection_decision_trace_audit(
                 ),
             }
         )
+
+    residual_replay_checks = []
+    residual_replay_available = (
+        study is not None
+        and segment_left is not None
+        and segment_right is not None
+    )
+    residual_replay_absolute_tolerance_pa = 1e-9
+    if residual_replay_available:
+        assert study is not None
+        assert segment_left is not None
+        assert segment_right is not None
+        replay_low_airflow = float(segment_left.airflow_m3_h)
+        replay_high_airflow = float(segment_right.airflow_m3_h)
+        residual_cache: dict[float, float] = {}
+
+        def _independent_residual(airflow_m3_h: float) -> float:
+            airflow = float(airflow_m3_h)
+            if airflow not in residual_cache:
+                _network, network_pressure = _solve_network_at_airflow(
+                    study,
+                    airflow,
+                )
+                fan_pressure = _fan_pressure(
+                    segment_left,
+                    segment_right,
+                    airflow,
+                )
+                residual_cache[airflow] = fan_pressure - (
+                    study.fixed_pressure_pa + network_pressure
+                )
+            return residual_cache[airflow]
+
+        for step in trace:
+            replay_midpoint_airflow = 0.5 * (
+                replay_low_airflow + replay_high_airflow
+            )
+            recomputed_low_residual = _independent_residual(
+                replay_low_airflow
+            )
+            recomputed_high_residual = _independent_residual(
+                replay_high_airflow
+            )
+            recomputed_midpoint_residual = _independent_residual(
+                replay_midpoint_airflow
+            )
+            recorded_low_residual = float(
+                step["low_fan_minus_system_pressure_pa"]
+            )
+            recorded_high_residual = float(
+                step["high_fan_minus_system_pressure_pa"]
+            )
+            recorded_midpoint_residual = float(
+                step["midpoint_fan_minus_system_pressure_pa"]
+            )
+            low_error = abs(
+                recorded_low_residual - recomputed_low_residual
+            )
+            high_error = abs(
+                recorded_high_residual - recomputed_high_residual
+            )
+            midpoint_error = abs(
+                recorded_midpoint_residual - recomputed_midpoint_residual
+            )
+            low_matches = math.isclose(
+                recorded_low_residual,
+                recomputed_low_residual,
+                rel_tol=0.0,
+                abs_tol=residual_replay_absolute_tolerance_pa,
+            )
+            high_matches = math.isclose(
+                recorded_high_residual,
+                recomputed_high_residual,
+                rel_tol=0.0,
+                abs_tol=residual_replay_absolute_tolerance_pa,
+            )
+            midpoint_matches = math.isclose(
+                recorded_midpoint_residual,
+                recomputed_midpoint_residual,
+                rel_tol=0.0,
+                abs_tol=residual_replay_absolute_tolerance_pa,
+            )
+            residual_replay_checks.append(
+                {
+                    "iteration": int(step["iteration"]),
+                    "replayed_low_airflow_m3_h": round(
+                        replay_low_airflow,
+                        9,
+                    ),
+                    "replayed_high_airflow_m3_h": round(
+                        replay_high_airflow,
+                        9,
+                    ),
+                    "replayed_midpoint_airflow_m3_h": round(
+                        replay_midpoint_airflow,
+                        9,
+                    ),
+                    "recorded_low_fan_minus_system_pressure_pa": (
+                        recorded_low_residual
+                    ),
+                    "recomputed_low_fan_minus_system_pressure_pa": round(
+                        recomputed_low_residual,
+                        9,
+                    ),
+                    "absolute_low_residual_replay_error_pa": low_error,
+                    "recorded_high_fan_minus_system_pressure_pa": (
+                        recorded_high_residual
+                    ),
+                    "recomputed_high_fan_minus_system_pressure_pa": round(
+                        recomputed_high_residual,
+                        9,
+                    ),
+                    "absolute_high_residual_replay_error_pa": high_error,
+                    "recorded_midpoint_fan_minus_system_pressure_pa": (
+                        recorded_midpoint_residual
+                    ),
+                    "recomputed_midpoint_fan_minus_system_pressure_pa": round(
+                        recomputed_midpoint_residual,
+                        9,
+                    ),
+                    "absolute_midpoint_residual_replay_error_pa": (
+                        midpoint_error
+                    ),
+                    "low_residual_matches_independent_replay": low_matches,
+                    "high_residual_matches_independent_replay": high_matches,
+                    "midpoint_residual_matches_independent_replay": (
+                        midpoint_matches
+                    ),
+                    "all_residuals_match_independent_replay": (
+                        low_matches and high_matches and midpoint_matches
+                    ),
+                }
+            )
+            decision = step["decision"]
+            if decision == "replace_low_endpoint":
+                replay_low_airflow = replay_midpoint_airflow
+            elif decision == "replace_high_endpoint":
+                replay_high_airflow = replay_midpoint_airflow
 
     decision_semantic_checks = []
     tolerance = float(operating_pressure_tolerance_pa)
@@ -1332,6 +1473,58 @@ def _bisection_decision_trace_audit(
             default=0.0,
         ),
         "pressure_state_checks": pressure_state_checks,
+        "residual_replay_available": residual_replay_available,
+        "residual_replay_check_count": len(residual_replay_checks),
+        "residual_replay_absolute_tolerance_pa": (
+            residual_replay_absolute_tolerance_pa
+            if residual_replay_available
+            else None
+        ),
+        "all_recorded_low_residuals_match_independent_replay": (
+            all(
+                check["low_residual_matches_independent_replay"]
+                for check in residual_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_recorded_high_residuals_match_independent_replay": (
+            all(
+                check["high_residual_matches_independent_replay"]
+                for check in residual_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_recorded_midpoint_residuals_match_independent_replay": (
+            all(
+                check["midpoint_residual_matches_independent_replay"]
+                for check in residual_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_trace_residuals_match_independent_replay": (
+            all(
+                check["all_residuals_match_independent_replay"]
+                for check in residual_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "maximum_absolute_trace_residual_replay_error_pa": (
+            max(
+                max(
+                    check["absolute_low_residual_replay_error_pa"],
+                    check["absolute_high_residual_replay_error_pa"],
+                    check["absolute_midpoint_residual_replay_error_pa"],
+                )
+                for check in residual_replay_checks
+            )
+            if residual_replay_checks
+            else None
+        ),
+        "residual_replay_checks": residual_replay_checks,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -1437,7 +1630,11 @@ def _bisection_decision_trace_audit(
             "audit independently checks each retained midpoint's fixed-plus-"
             "loop system-pressure identity and fan-minus-system residual "
             "identity, and anchors the retained fixed-pressure component to "
-            "the study input. The decision-semantics audit "
+            "the study input. The independent residual-replay audit "
+            "reconstructs the active bisection states from the selected "
+            "supplied fan segment, freshly re-solves the nonlinear loop at "
+            "each low/high/midpoint airflow, and checks retained residuals "
+            "against that independent fan/system evaluation. The decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
@@ -1844,6 +2041,9 @@ def solve_fan_variable_friction_loop(
                         termination_reason=termination_reason,
                         operating_pressure_tolerance_pa=tolerance,
                         expected_fixed_pressure_pa=study.fixed_pressure_pa,
+                        study=study,
+                        segment_left=left,
+                        segment_right=right,
                         initial_bisection_bracket=initial_bisection_bracket,
                         iteration_limit_terminal_bracket=terminal_bracket,
                     ),
@@ -2000,6 +2200,9 @@ def solve_fan_variable_friction_loop(
             termination_reason=termination_reason,
             operating_pressure_tolerance_pa=tolerance,
             expected_fixed_pressure_pa=study.fixed_pressure_pa,
+            study=study,
+            segment_left=left,
+            segment_right=right,
             initial_bisection_bracket=initial_bisection_bracket,
             solved_terminal_bracket=final_bisection_bracket,
         ),

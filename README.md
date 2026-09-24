@@ -29,7 +29,7 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 
 ### v0.99 application registry integrity
 
-v0.99 strengthens the completed desktop release by validating the registry as a software contract rather than only checking importability. Duplicate analysis keys are rejected; every normal analysis must retain parser and runner bindings; `consistency` and `dossier` must remain explicit custom application adapters; every declared parser, runner, and reporter must resolve to a callable; and the validation returns counts plus adapter metadata. `cleanroomx-gui --check` exposes the same evidence so installation/readiness checks can verify the catalog they are about to operate.
+v0.99 strengthens the completed desktop release by validating the registry as a software contract rather than only checking importability. Duplicate analysis keys are rejected; the public `ANALYSIS_SPECS` mapping must remain in exact key/count parity with the immutable catalog; every normal analysis must retain parser and runner bindings; `consistency` and `dossier` must remain explicit custom application adapters; and every declared parser, runner, and reporter must resolve to a callable. The validation returns counts plus adapter metadata, `cleanroomx-gui --check` exposes the same evidence, and ordinary desktop startup executes the same registry validation before creating the Tk root.
 
 ### v0.98 desktop application
 

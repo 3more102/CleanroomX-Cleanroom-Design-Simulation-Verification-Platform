@@ -38,6 +38,8 @@ v0.89 applies the same canonical network-state identity to the accepted selected
 
 v0.90 retains the canonical low/high terminal network-state projections themselves in addition to the fingerprints. Each endpoint projection is independently reconstructed from a fresh nonlinear solve and compared field-by-field, with exact deterministic JSON-style mismatch paths for node, edge, pressure-power, or variable-friction closure differences. This makes terminal-state corruption directly localizable and also detects retained projection corruption when the stored hash is left unchanged. The projection is implementation provenance only and does not create a physical uncertainty or acceptance criterion.
 
+v0.91 applies the same field-level projection replay to the accepted selected operating solution. The selected replay retains the canonical network-state projection alongside its SHA-256, independently re-solves the exact retained selected airflow, and reports deterministic JSON-style mismatch paths when the projection differs. This catches and localizes selected-state projection corruption even when the retained selected airflow, scalar fan/loop/system/residual evidence, and stored SHA-256 remain unchanged. It is deterministic implementation provenance only.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

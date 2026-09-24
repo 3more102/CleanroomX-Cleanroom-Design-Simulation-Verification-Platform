@@ -816,10 +816,12 @@ class CleanroomXApp:
             self.structure_tree.delete(item)
         text = self.input_text.get("1.0", "end-1c").strip()
         if not text:
+            self._refresh_room_previews({})
             return
         try:
             payload = _strict_json_loads(text)
         except (json.JSONDecodeError, ValueError) as exc:
+            self._refresh_room_previews({})
             if not silent:
                 detail = (
                     f"Line {exc.lineno}, column {exc.colno}: {exc.msg}"
@@ -1385,7 +1387,7 @@ class CleanroomXApp:
             if index % 2:
                 line_options["dash"] = (6, 4)
             if len(coords) >= 4:
-                canvas.create_line(*coords, **line_options)
+                canvas.create_line(*coords, fill=_UI["accent"], **line_options)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
                 canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill=_UI["accent"], outline=_UI["accent"])

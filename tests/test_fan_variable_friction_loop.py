@@ -252,6 +252,15 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "maximum_absolute_trace_midpoint_error_m3_h"
     ] <= 1e-9
+    assert trace_audit["midpoint_residual_recompute_evidence_available"] is True
+    assert trace_audit["midpoint_residual_recompute_complete"] is True
+    assert trace_audit[
+        "all_midpoint_residuals_match_independent_recomputation"
+    ] is True
+    assert trace_audit["midpoint_residual_recompute_violation_iterations"] == []
+    assert trace_audit[
+        "maximum_absolute_midpoint_residual_recompute_error_pa"
+    ] <= 1e-6
     assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
     assert trace_audit[
         "all_recorded_width_fractions_match_iteration_sequence"
@@ -300,6 +309,11 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert "Bisection decision sequence (L/H/T)" in report
     assert (
         "Trace decisions match midpoint residual/tolerance semantics: **True**"
+        in report
+    )
+    assert "Independent trace midpoint residual recomputation complete: **True**" in report
+    assert (
+        "Every recorded trace midpoint residual matches independent fan/system re-solve: **True**"
         in report
     )
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
@@ -391,6 +405,15 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     ] is True
     assert trace_audit["all_decisions_match_midpoint_residual_semantics"] is True
     assert trace_audit["decision_semantic_violation_iterations"] == []
+    assert trace_audit["midpoint_residual_recompute_evidence_available"] is True
+    assert trace_audit["midpoint_residual_recompute_complete"] is True
+    assert trace_audit[
+        "all_midpoint_residuals_match_independent_recomputation"
+    ] is True
+    assert trace_audit["midpoint_residual_recompute_violation_iterations"] == []
+    assert trace_audit[
+        "maximum_absolute_midpoint_residual_recompute_error_pa"
+    ] <= 1e-6
     assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
     origin_replay = trace_audit["trace_origin_replay"]
     assert origin_replay is not None
@@ -500,6 +523,11 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "all_recorded_midpoint_flags_match_numeric_geometry"
     ] is True
     assert clean["all_trace_raw_state_consistent"] is True
+    assert clean["midpoint_residual_recompute_evidence_available"] is False
+    assert clean["midpoint_residual_recompute_complete"] is False
+    assert clean[
+        "all_midpoint_residuals_match_independent_recomputation"
+    ] is False
     assert clean["trace_origin_to_terminal_replay_consistent"] is True
     assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
         0.0,
@@ -585,6 +613,82 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "maximum_absolute_trace_width_fraction_error"
     ] == pytest.approx(0.25, abs=1e-18)
     assert audit["all_decisions_match_midpoint_residual_semantics"] is True
+
+    independent_residual_evidence = [
+        {
+            "iteration": 1,
+            "midpoint_airflow_m3_h": 4.0,
+            "recompute_succeeded": True,
+            "recomputed_fan_pressure_pa": 11.0,
+            "recomputed_system_pressure_pa": 10.0,
+            "recomputed_fan_minus_system_pressure_pa": 1.0,
+        },
+        {
+            "iteration": 2,
+            "midpoint_airflow_m3_h": 6.0,
+            "recompute_succeeded": True,
+            "recomputed_fan_pressure_pa": 10.0,
+            "recomputed_system_pressure_pa": 10.0,
+            "recomputed_fan_minus_system_pressure_pa": 0.0,
+        },
+    ]
+    model_checked = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        independent_midpoint_residual_evidence=independent_residual_evidence,
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=solved_terminal_bracket,
+    )
+    assert model_checked is not None
+    assert model_checked["midpoint_residual_recompute_complete"] is True
+    assert model_checked[
+        "all_midpoint_residuals_match_independent_recomputation"
+    ] is True
+    assert model_checked["midpoint_residual_recompute_violation_iterations"] == []
+    assert model_checked[
+        "maximum_absolute_midpoint_residual_recompute_error_pa"
+    ] == pytest.approx(0.0, abs=1e-18)
+
+    self_consistent_wrong_residual = [dict(step) for step in trace]
+    self_consistent_wrong_residual[0][
+        "midpoint_fan_minus_system_pressure_pa"
+    ] = 2.0
+    self_consistent_wrong_residual[1][
+        "low_fan_minus_system_pressure_pa"
+    ] = 2.0
+    self_consistent_residual_terminal = dict(solved_terminal_bracket)
+    self_consistent_residual_terminal[
+        "low_fan_minus_system_pressure_pa"
+    ] = 2.0
+    residual_audit = _bisection_decision_trace_audit(
+        self_consistent_wrong_residual,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        independent_midpoint_residual_evidence=independent_residual_evidence,
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=self_consistent_residual_terminal,
+    )
+    assert residual_audit is not None
+    assert residual_audit[
+        "all_state_transitions_replay_recorded_decisions"
+    ] is True
+    assert residual_audit[
+        "all_decisions_match_midpoint_residual_semantics"
+    ] is True
+    assert residual_audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert residual_audit["midpoint_residual_recompute_complete"] is True
+    assert residual_audit[
+        "all_midpoint_residuals_match_independent_recomputation"
+    ] is False
+    assert residual_audit[
+        "midpoint_residual_recompute_violation_iterations"
+    ] == [1]
+    assert residual_audit[
+        "maximum_absolute_midpoint_residual_recompute_error_pa"
+    ] == pytest.approx(1.0, abs=1e-18)
 
     wrong_decision = [dict(step) for step in trace]
     wrong_decision[0]["decision"] = "replace_high_endpoint"

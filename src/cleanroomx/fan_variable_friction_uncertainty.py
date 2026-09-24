@@ -2491,6 +2491,16 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["termination_record_is_last"]
     ]
+    trace_iteration_sequence_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["iterations_are_contiguous_from_one"]
+    ]
+    trace_state_transition_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["all_state_transitions_replay_recorded_decisions"]
+    ]
 
     iteration_limit_invariant_cases = [
         (
@@ -2729,6 +2739,20 @@ def _operating_point_search_resolution_summary(
         ),
         "bisection_trace_terminal_violation_corner_indices": (
             trace_termination_violation_corner_indices
+        ),
+        "bisection_trace_iteration_sequence_match_corner_count": (
+            len(trace_cases)
+            - len(trace_iteration_sequence_violation_corner_indices)
+        ),
+        "bisection_trace_iteration_sequence_violation_corner_indices": (
+            trace_iteration_sequence_violation_corner_indices
+        ),
+        "bisection_trace_state_transition_replay_corner_count": (
+            len(trace_cases)
+            - len(trace_state_transition_violation_corner_indices)
+        ),
+        "bisection_trace_state_transition_violation_corner_indices": (
+            trace_state_transition_violation_corner_indices
         ),
         "maximum_bisection_trace_step_count": (
             _maximum_trace_step_count_evidence()

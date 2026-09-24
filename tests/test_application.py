@@ -32,6 +32,44 @@ def test_application_catalog_exposes_major_existing_workflows():
     assert application_info()["analysis_count"] == len(keys)
 
 
+@pytest.mark.parametrize(
+    ("kind", "example_name"),
+    [
+        ("room_verification", "basic_room.json"),
+        ("project_verification", "facility_project.json"),
+        ("hvac", "duct_network_demo.json"),
+        ("recovery_test", "recovery_test_demo.json"),
+        ("room_uncertainty", "uncertainty_room_demo.json"),
+        ("qualification_uncertainty", "qualification_uncertainty_demo.json"),
+        ("parallel_flow", "parallel_flow_demo.json"),
+        ("loop_flow", "looped_network_demo.json"),
+        ("variable_friction_loop", "variable_friction_loop_demo.json"),
+        ("thermal_uncertainty", "thermal_uncertainty_demo.json"),
+        ("psychrometric_uncertainty", "psychrometric_uncertainty_demo.json"),
+        ("fan_operating_point", "fan_operating_point_demo.json"),
+        ("fan_system_uncertainty", "fan_uncertainty_demo.json"),
+        ("fan_speed", "fan_speed_sweep_demo.json"),
+        ("fan_duct_network", "fan_duct_network_demo.json"),
+        ("fan_parallel_network", "fan_parallel_network_demo.json"),
+        ("fan_loop_network", "fan_loop_network_demo.json"),
+        ("fan_loop_uncertainty", "fan_loop_uncertainty_demo.json"),
+        ("fan_loop_speed", "fan_loop_speed_demo.json"),
+        ("fan_variable_friction_loop", "fan_variable_friction_loop_demo.json"),
+        ("fan_variable_friction_speed", "fan_variable_friction_speed_demo.json"),
+        ("fan_variable_friction_uncertainty", "fan_variable_friction_uncertainty_demo.json"),
+        ("damper_study", "damper_study_demo.json"),
+    ],
+)
+def test_registered_backend_workflows_run_through_application_layer(kind, example_name):
+    run = run_analysis(kind, _example(example_name), base_dir=ROOT / "examples")
+    assert run.kind == kind
+    assert isinstance(run.result, dict)
+    assert run.result
+    assert isinstance(run.status, str) and run.status
+    assert isinstance(run.markdown, str) and run.markdown.strip()
+    json.dumps(run.to_dict(), allow_nan=False)
+
+
 def test_hvac_application_service_reuses_real_backend():
     run = run_analysis("hvac", _example("duct_network_demo.json"))
     assert run.kind == "hvac"

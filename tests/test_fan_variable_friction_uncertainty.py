@@ -2486,6 +2486,9 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_terminal_outcome_violation_corner_indices"
     ] == []
     assert summary[
+        "bisection_trace_origin_replay_violation_corner_indices"
+    ] == []
+    assert summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert summary["bisection_trace_length_match_corner_count"] == (
@@ -2508,6 +2511,9 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     ] == summary["bisection_corner_count"]
     assert summary[
         "bisection_trace_terminal_outcome_consistent_corner_count"
+    ] == summary["bisection_corner_count"]
+    assert summary[
+        "bisection_trace_origin_replay_corner_count"
     ] == summary["bisection_corner_count"]
     assert summary["iteration_limit_trace_terminal_replay_corner_count"] == 0
 
@@ -2563,6 +2569,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         assert trace_audit[
             "all_state_transitions_replay_recorded_decisions"
         ] is True
+        assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
+        origin_replay = trace_audit["trace_origin_replay"]
+        assert origin_replay is not None
+        assert origin_replay[
+            "initial_bracket_matches_first_trace_step"
+        ] is True
+        assert origin_replay["all_trace_steps_match_origin_replay"] is True
+        assert origin_replay["terminal_bracket_matches_origin_replay"] is True
+        assert evidence["initial_bisection_bracket"] is not None
         assert trace_audit["transition_record_count"] == len(trace) - 1
         assert trace_audit["decision_sequence"].endswith("T")
         trace_lengths.append(len(trace))
@@ -2586,6 +2601,7 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace-length violations" in report
     assert "Trace iteration-sequence violations" in report
     assert "Trace state-transition replay violations" in report
+    assert "Trace origin-to-terminal replay violations: **[]**" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report
@@ -2660,6 +2676,12 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         "bisection_trace_terminal_outcome_violation_corner_indices"
     ] == []
     assert summary[
+        "bisection_trace_origin_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_origin_replay_corner_count"
+    ] == len(limit_corners)
+    assert summary[
         "iteration_limit_trace_terminal_replay_violation_corner_indices"
     ] == []
     assert summary[
@@ -2700,6 +2722,15 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         assert trace_audit["all_trace_geometry_consistent"] is True
         assert trace_audit["terminal_outcome_consistent"] is True
         assert trace_audit["iterations_are_contiguous_from_one"] is True
+        assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
+        origin_replay = trace_audit["trace_origin_replay"]
+        assert origin_replay is not None
+        assert origin_replay[
+            "initial_bracket_matches_first_trace_step"
+        ] is True
+        assert origin_replay["all_trace_steps_match_origin_replay"] is True
+        assert origin_replay["terminal_bracket_matches_origin_replay"] is True
+        assert evidence["initial_bisection_bracket"] is not None
         terminal_replay = trace_audit["iteration_limit_terminal_replay"]
         assert terminal_replay is not None
         assert terminal_replay[
@@ -2711,6 +2742,7 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert "Bisection iteration-limit corners with search evidence" in report
     assert "Iteration-limit corners with bisection decision traces" in report
     assert "Iteration-limit terminal-replay violations: **[]**" in report
+    assert "Trace origin-to-terminal replay violations: **[]**" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report

@@ -2256,6 +2256,50 @@ def _selected_projection_replay_with_mutation(mutator):
     return result, audit
 
 
+def test_selected_projection_replay_localizes_solver_metadata_corruption() -> None:
+    _result, audit = _selected_projection_replay_with_mutation(
+        lambda projection: projection.__setitem__(
+            "iterations",
+            projection["iterations"] + 1,
+        )
+    )
+
+    assert audit["network_state_matches_independent_replay"] is True
+    assert audit[
+        "network_state_projection_matches_independent_replay"
+    ] is False
+    assert audit["network_state_projection_mismatch_paths"] == [
+        "$.iterations"
+    ]
+    mismatch = audit["network_state_projection_mismatches"][0]
+    assert mismatch["path"] == "$.iterations"
+    assert mismatch["mismatch_kind"] == "value_mismatch"
+    assert mismatch["recorded_type"] == "integer"
+    assert mismatch["recomputed_type"] == "integer"
+    assert mismatch["absolute_error"] == pytest.approx(1.0)
+
+
+def test_selected_projection_replay_localizes_solver_configuration_corruption() -> None:
+    _result, audit = _selected_projection_replay_with_mutation(
+        lambda projection: projection["variable_friction"].__setitem__(
+            "relaxation",
+            projection["variable_friction"]["relaxation"] + 0.1,
+        )
+    )
+
+    assert audit["network_state_matches_independent_replay"] is True
+    assert audit[
+        "network_state_projection_matches_independent_replay"
+    ] is False
+    assert audit["network_state_projection_mismatch_paths"] == [
+        "$.variable_friction.relaxation"
+    ]
+    mismatch = audit["network_state_projection_mismatches"][0]
+    assert mismatch["path"] == "$.variable_friction.relaxation"
+    assert mismatch["mismatch_kind"] == "value_mismatch"
+    assert mismatch["absolute_error"] == pytest.approx(0.1)
+
+
 def test_selected_projection_replay_localizes_edge_state_corruption() -> None:
     _result, audit = _selected_projection_replay_with_mutation(
         lambda projection: projection["edges"][0].__setitem__(

@@ -179,6 +179,9 @@ class CleanroomXApp:
         self.description_var = tk.StringVar(value=self.project.description)
         self.status_var = tk.StringVar(value="Ready")
         self.run_state_var = tk.StringVar(value="READY")
+        self.analysis_filter_var = tk.StringVar(value="")
+        self.analysis_count_var = tk.StringVar(value="0 analyses")
+        self.analysis_context_var = tk.StringVar(value="No active analysis")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
         self._build_menu()
@@ -187,6 +190,7 @@ class CleanroomXApp:
         self._capture_saved_state()
         self.name_var.trace_add("write", lambda *_: self._update_title())
         self.description_var.trace_add("write", lambda *_: self._update_title())
+        self.analysis_filter_var.trace_add("write", lambda *_: self._apply_analysis_filter())
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
@@ -391,6 +395,8 @@ class CleanroomXApp:
         self.root.bind("<Control-n>", lambda event: self.new_project())
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
+        self.root.bind("<Control-f>", lambda event: self._focus_analysis_filter())
+        self.root.bind("<Escape>", lambda event: self._clear_analysis_filter())
         self.root.bind("<F5>", lambda event: self.run_current())
 
     def _build_layout(self) -> None:
@@ -472,6 +478,23 @@ class CleanroomXApp:
         ttk.Button(sidebar_header, text="Remove", command=self.remove_analysis).pack(
             side="right", padx=3
         )
+
+        search_row = ttk.Frame(sidebar, style="Surface.TFrame")
+        search_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(search_row, text="Find", style="Muted.TLabel").pack(side="left", padx=(0, 5))
+        self.analysis_filter_entry = ttk.Entry(
+            search_row,
+            textvariable=self.analysis_filter_var,
+            width=22,
+        )
+        self.analysis_filter_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            search_row,
+            text="×",
+            width=3,
+            command=self._clear_analysis_filter,
+        ).pack(side="left", padx=(4, 0))
+
         self.analysis_tree = ttk.Treeview(
             sidebar, columns=("kind",), show="tree headings", selectmode="browse"
         )
@@ -484,9 +507,28 @@ class CleanroomXApp:
         self.analysis_tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_analysis_selected)
+        ttk.Label(
+            sidebar,
+            textvariable=self.analysis_count_var,
+            style="Muted.TLabel",
+            anchor="w",
+        ).pack(fill="x", pady=(5, 0))
 
         content = ttk.Frame(panes)
         panes.add(content, weight=4)
+        context_bar = ttk.Frame(content, style="Surface.TFrame", padding=(10, 7))
+        context_bar.pack(fill="x", pady=(0, 4))
+        ttk.Label(
+            context_bar,
+            textvariable=self.analysis_context_var,
+            style="Section.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            context_bar,
+            text="Ctrl+F search analyses · F5 run",
+            style="Muted.TLabel",
+        ).pack(side="right")
+
         self.notebook = ttk.Notebook(content, style="Workbench.TNotebook")
         self.notebook.pack(fill="both", expand=True)
 
@@ -750,10 +792,41 @@ class CleanroomXApp:
             return not self._has_unsaved_changes()
         return True
 
-    def _refresh_analysis_list(self, select_id: str | None = None) -> None:
+    def _analysis_matches_filter(self, analysis: AnalysisDocument) -> bool:
+        query = self.analysis_filter_var.get().strip().lower()
+        if not query:
+            return True
+        spec = ANALYSIS_SPECS[analysis.kind]
+        haystack = " ".join(
+            (
+                analysis.name,
+                analysis.kind,
+                spec.title,
+                spec.category,
+                spec.description,
+            )
+        ).lower()
+        return query in haystack
+
+    def _focus_analysis_filter(self) -> str:
+        if hasattr(self, "analysis_filter_entry"):
+            self.analysis_filter_entry.focus_set()
+            self.analysis_filter_entry.selection_range(0, "end")
+        return "break"
+
+    def _clear_analysis_filter(self) -> str:
+        if hasattr(self, "analysis_filter_var"):
+            self.analysis_filter_var.set("")
+        return "break"
+
+    def _populate_analysis_tree(self) -> list[str]:
         for item in self.analysis_tree.get_children():
             self.analysis_tree.delete(item)
+        visible_ids: list[str] = []
         for analysis in self.project.analyses:
+            if not self._analysis_matches_filter(analysis):
+                continue
+            visible_ids.append(analysis.id)
             self.analysis_tree.insert(
                 "",
                 "end",
@@ -761,20 +834,41 @@ class CleanroomXApp:
                 text=analysis.name,
                 values=(analysis.kind,),
             )
+        if hasattr(self, "analysis_count_var"):
+            total = len(self.project.analyses)
+            shown = len(visible_ids)
+            self.analysis_count_var.set(
+                f"{shown} of {total} analyses" if shown != total else f"{total} analyses"
+            )
+        return visible_ids
+
+    def _apply_analysis_filter(self) -> None:
+        if not hasattr(self, "analysis_tree"):
+            return
+        selected = self._editor_analysis_id or self.project.active_analysis_id
+        visible_ids = self._populate_analysis_tree()
+        if selected and selected in visible_ids:
+            self.analysis_tree.selection_set(selected)
+            self.analysis_tree.focus(selected)
+            self.analysis_tree.see(selected)
+
+    def _refresh_analysis_list(self, select_id: str | None = None) -> None:
+        visible_ids = self._populate_analysis_tree()
         target = select_id or self.project.active_analysis_id
-        if target and self.analysis_tree.exists(target):
+        if target and target in visible_ids:
             self.analysis_tree.selection_set(target)
             self.analysis_tree.focus(target)
             self.analysis_tree.see(target)
             self._load_analysis_into_editor(self.project.analysis_by_id(target))
-        elif self.project.analyses:
+        elif self.project.analyses and not self.analysis_filter_var.get().strip():
             first = self.project.analyses[0].id
             self.project.active_analysis_id = first
             self.analysis_tree.selection_set(first)
             self.analysis_tree.focus(first)
             self._load_analysis_into_editor(self.project.analyses[0])
-        else:
+        elif not self.project.analyses:
             self._editor_analysis_id = None
+            self.analysis_context_var.set("No active analysis")
             self.input_text.delete("1.0", "end")
             self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
@@ -831,7 +925,11 @@ class CleanroomXApp:
             json.dumps(analysis.input, indent=2, ensure_ascii=False, sort_keys=False),
         )
         self.input_text.edit_modified(False)
-        self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
+        spec = ANALYSIS_SPECS[analysis.kind]
+        self.analysis_context_var.set(
+            f"{analysis.name}   ·   {spec.category} / {spec.title}"
+        )
+        self.status_var.set(f"{analysis.name} — {spec.title}")
         self.refresh_structure(silent=True)
         self._restore_run_for(analysis.id)
         if hasattr(self, "spatial_workspace"):

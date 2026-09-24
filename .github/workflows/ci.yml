@@ -85,16 +85,36 @@ jobs:
           tests/test_gui.py
       - name: Run complete test suite
         run: python -m pytest -q
-      - name: Install virtual display for v0.98 GUI smoke
+      - name: Build wheel and verify installed application
+        run: |
+          rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env
+          python -m pip wheel . --no-deps --wheel-dir /tmp/cleanroomx-wheel
+          python -m venv /tmp/cleanroomx-wheel-env
+          /tmp/cleanroomx-wheel-env/bin/python -m pip install --no-index /tmp/cleanroomx-wheel/cleanroomx-*.whl
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
+          /tmp/cleanroomx-wheel-env/bin/python - <<'PY'
+          from pathlib import Path
+          import cleanroomx
+
+          demo_dir = Path(cleanroomx.__file__).resolve().parent / "demo"
+          for name in (
+              "gui_demo.cleanroomx.json",
+              "facility_project.json",
+              "consistency_hvac_demo.json",
+              "fan_variable_friction_uncertainty_demo.json",
+          ):
+              assert (demo_dir / name).is_file(), name
+          PY
+      - name: Install virtual display for v0.98.1 GUI smoke
         if: matrix.python-version == '3.13'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb tk
-      - name: Run v0.98.1 desktop GUI smoke
+      - name: Run v0.98.1 desktop GUI smoke from installed wheel
         if: matrix.python-version == '3.13'
         run: |
-          cleanroomx-gui --check
-          xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
+          xvfb-run -a /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --demo --smoke
       - name: Run representative v0.98.1 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased performance optimization — 2026-09-24
+
+- Reuses an already canonicalized network-state projection when computing its SHA-256 fingerprint, removing duplicate sorting/normalization work from supplied-point checks, bisection trace capture/replay, and selected-state replay without changing canonical bytes or audit semantics.
+- Pre-indexes solved edge airflow values once per uncertainty aggregation, reducing edge-range extraction from repeated per-edge scans to linear indexing across corners and edges.
+- Adds regression coverage proving the projection-hash fast path is identical to the existing canonical network-state fingerprint.
+- Does not change solver equations, tolerances, candidate selection, replay independence across audit layers, uncertainty semantics, or engineering acceptance behavior.
+
 ## v0.100.0 consolidated desktop release — 2026-09-24
 
 - Continues from current v0.99.1 `main`, including installed-wheel verification and the self-contained `cleanroomx-gui --demo` package resources.

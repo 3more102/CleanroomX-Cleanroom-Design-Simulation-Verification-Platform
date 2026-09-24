@@ -104,14 +104,19 @@ def _edge_airflow_corner_ranges(
     study: FanLoopNetworkUncertaintyStudy,
     solved_networks: list[dict],
 ) -> list[dict]:
+    edge_airflows_by_network = [
+        {
+            item["name"]: float(item["airflow_m3_h"])
+            for item in network["edges"]
+        }
+        for network in solved_networks
+    ]
     rows = []
     for edge in study.loop_network.edges:
-        values = []
-        for network in solved_networks:
-            match = next(
-                item for item in network["edges"] if item["name"] == edge.name
-            )
-            values.append(float(match["airflow_m3_h"]))
+        values = [
+            edge_airflows[edge.name]
+            for edge_airflows in edge_airflows_by_network
+        ]
         lower = min(values)
         upper = max(values)
         rows.append(

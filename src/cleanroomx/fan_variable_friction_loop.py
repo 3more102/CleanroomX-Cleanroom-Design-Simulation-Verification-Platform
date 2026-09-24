@@ -429,16 +429,22 @@ def _network_state_projection(network: dict) -> dict:
     }
     return _normalize_signed_zero(projection)
 
-def _network_state_sha256(network: dict) -> str:
-    canonical_state = _network_state_projection(network)
+
+def _network_state_projection_sha256(projection: dict) -> str:
     encoded = json.dumps(
-        canonical_state,
+        projection,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _network_state_sha256(network: dict) -> str:
+    return _network_state_projection_sha256(
+        _network_state_projection(network)
+    )
 
 
 def _network_state_projection_value_type(value) -> str:
@@ -702,9 +708,11 @@ def _fan_curve_supplied_point_network_state_replay_audit(
                 point.airflow_m3_h,
             )
             independent_replay_available = True
-            recomputed_sha256 = _network_state_sha256(replayed_network)
             recomputed_projection = _network_state_projection(
                 replayed_network
+            )
+            recomputed_sha256 = _network_state_projection_sha256(
+                recomputed_projection
             )
             if recorded_sha256 is not None:
                 hash_matches = (
@@ -960,6 +968,7 @@ def _point_check(
     total_pressure = study.fixed_pressure_pa + network_pressure
     residual = point.pressure_pa - total_pressure
     vf = network["variable_friction"]
+    network_state_projection = _network_state_projection(network)
     return (
         {
             "airflow_m3_h": round(point.airflow_m3_h, 6),
@@ -972,8 +981,10 @@ def _point_check(
             "max_relative_resistance_closure_error": vf[
                 "max_relative_resistance_closure_error"
             ],
-            "network_state_sha256": _network_state_sha256(network),
-            "network_state_projection": _network_state_projection(network),
+            "network_state_sha256": _network_state_projection_sha256(
+                network_state_projection
+            ),
+            "network_state_projection": network_state_projection,
         },
         network,
     )
@@ -1647,15 +1658,16 @@ def _bisection_decision_trace_audit(
                     airflow,
                 )
                 system_pressure = study.fixed_pressure_pa + network_pressure
+                network_state_projection = _network_state_projection(_network)
                 state_cache[airflow] = {
                     "fan_pressure_pa": fan_pressure,
                     "loop_network_pressure_pa": network_pressure,
                     "system_pressure_pa": system_pressure,
                     "residual_pa": fan_pressure - system_pressure,
-                    "network_state_sha256": _network_state_sha256(_network),
-                    "network_state_projection": _network_state_projection(
-                        _network
+                    "network_state_sha256": _network_state_projection_sha256(
+                        network_state_projection
                     ),
+                    "network_state_projection": network_state_projection,
                 }
             return state_cache[airflow]
 
@@ -3780,12 +3792,14 @@ def _selected_operating_state_replay_audit(
     )
     replayed_residual = replayed_fan_pressure - replayed_system_pressure
     recorded_network_state = str(recorded_network_state_sha256)
-    replayed_network_state = _network_state_sha256(_replayed_network)
-    network_state_matches_independent_replay = (
-        recorded_network_state == replayed_network_state
-    )
     recomputed_network_state_projection = _network_state_projection(
         _replayed_network
+    )
+    replayed_network_state = _network_state_projection_sha256(
+        recomputed_network_state_projection
+    )
+    network_state_matches_independent_replay = (
+        recorded_network_state == replayed_network_state
     )
     network_state_projection_replay_available = (
         recorded_network_state_projection is not None
@@ -4102,11 +4116,11 @@ def solve_fan_variable_friction_loop(
             high_network_state_projection = _network_state_projection(
                 point_networks[index + 1]
             )
-            low_network_state_sha256 = _network_state_sha256(
-                point_networks[index]
+            low_network_state_sha256 = _network_state_projection_sha256(
+                low_network_state_projection
             )
-            high_network_state_sha256 = _network_state_sha256(
-                point_networks[index + 1]
+            high_network_state_sha256 = _network_state_projection_sha256(
+                high_network_state_projection
             )
             supplied_segment_span = high - low
             initial_bisection_bracket = {
@@ -4138,8 +4152,10 @@ def solve_fan_variable_friction_loop(
                     midpoint_network_state_projection = (
                         _network_state_projection(network)
                     )
-                    midpoint_network_state_sha256 = _network_state_sha256(
-                        network
+                    midpoint_network_state_sha256 = (
+                        _network_state_projection_sha256(
+                            midpoint_network_state_projection
+                        )
                     )
                     final = (
                         airflow,
@@ -4633,6 +4649,12 @@ def solve_fan_variable_friction_loop(
         selected_airflow_m3_h=selected_airflow,
         selected_segment_index=selected_segment,
     )
+    selected_network_state_projection = _network_state_projection(
+        selected_network
+    )
+    selected_network_state_sha256 = _network_state_projection_sha256(
+        selected_network_state_projection
+    )
     selected_operating_state_replay = (
         _selected_operating_state_replay_audit(
             study,
@@ -4641,11 +4663,9 @@ def solve_fan_variable_friction_loop(
             recorded_loop_network_pressure_pa=selected_network_pressure,
             recorded_system_pressure_pa=system_pressure,
             recorded_residual_pa=residual,
-            recorded_network_state_sha256=_network_state_sha256(
-                selected_network
-            ),
-            recorded_network_state_projection=_network_state_projection(
-                selected_network
+            recorded_network_state_sha256=selected_network_state_sha256,
+            recorded_network_state_projection=(
+                selected_network_state_projection
             ),
             segment_left=left,
             segment_right=right,

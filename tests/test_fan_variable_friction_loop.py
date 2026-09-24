@@ -13,6 +13,8 @@ from cleanroomx.fan_variable_friction_loop import (
     _bisection_decision_trace_audit,
     _fan_curve_supplied_point_residual_audit,
     _fan_curve_supplied_point_network_state_replay_audit,
+    _network_state_projection,
+    _network_state_projection_sha256,
     _network_state_sha256,
     _solver_result_integrity_audit,
     _solver_result_sha256,
@@ -154,6 +156,8 @@ def test_network_state_fingerprint_is_order_invariant_for_named_collections() ->
     }
 
     baseline = _network_state_sha256(network)
+    projection = _network_state_projection(network)
+    assert _network_state_projection_sha256(projection) == baseline
 
     reordered = json.loads(json.dumps(network))
     reordered["nodes"].reverse()

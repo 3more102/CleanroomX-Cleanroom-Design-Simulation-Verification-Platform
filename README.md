@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.96 desktop application.
 
 ## Verified development status
 
-The current clean provenance/replay release line is `codex/cleanroomx-v095-solver-result-integrity-linkage-v094-line`, package/runtime version **0.95.0**. It is a direct descendant of integrated v0.94 commit `b2601a7dc8b583c9c84e6f00558c786a59cb355e`, preserving the verified v0.91 → v0.92 → v0.93 → v0.94 lineage. The default `main` branch remains older than this provenance line and must not be used as its implementation baseline until repository integration is completed.
+The current application release branch is `codex/cleanroomx-v096-application-gui`, package/runtime version **0.96.0**. It starts from integrated v0.95 commit `e62567d4e9c730ca1fb3439c38e340796208d4fe`, preserves the verified v0.91 → v0.92 → v0.93 → v0.94 → v0.95 provenance line, and adds the shared application layer, versioned project persistence, and desktop GUI without replacing the validated backend workflows. The default `main` branch remains older than this development line until repository integration is completed.
 
-The CI workflow runs a dedicated v0.95 solver-result-integrity gate, then the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection compatibility gates, followed by the complete test suite and representative nonlinear loop/uncertainty/dossier JSON and Markdown smoke checks on Python **3.11, 3.12, and 3.13**.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.96 additionally launches the installed desktop entry point under Xvfb on Python 3.13 and executes the demonstration project through the real GUI smoke path.
 
 ### Network-state replay provenance ladder
 
@@ -22,6 +22,31 @@ The CI workflow runs a dedicated v0.95 solver-result-integrity gate, then the v0
 | v0.93 | supplied fan-point canonical SHA-256 and field-level projection replay |
 | v0.94 | signed-zero-stable canonical network-result identity with named-collection order invariance and solver metadata/configuration/history provenance |
 | v0.95 | complete standalone solver-result identity/self-audit with uncertainty-corner and dossier linkage |
+| v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
+
+### v0.96 desktop application
+
+v0.96 adds a user-operable Tkinter desktop application over the existing validated CleanroomX backends. It provides project creation/open/save, stable `.cleanroomx.json` persistence with migration of supported legacy shapes, analysis creation/rename/removal, structured JSON input inspection with engineering-unit hints, file import/export, backend validation, non-blocking analysis execution, result/diagnostic/report views, fan-curve plotting where supported, and JSON/Markdown export.
+
+After installation, launch the application with:
+
+```bash
+cleanroomx-gui
+```
+
+Open the bundled end-to-end demonstration directly:
+
+```bash
+cleanroomx-gui examples/gui_demo.cleanroomx.json
+```
+
+For automated installation checks without a display:
+
+```bash
+cleanroomx-gui --check
+```
+
+The CI smoke path starts the real Tk application under a virtual display and runs the active demo analysis before exiting. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the project format, operator workflow, supported analysis catalog, validation/run/export behavior, and engineering boundaries.
 
 ### v0.95 solver-result integrity linkage
 

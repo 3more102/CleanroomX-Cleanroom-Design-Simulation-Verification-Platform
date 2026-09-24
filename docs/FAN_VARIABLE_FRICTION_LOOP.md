@@ -89,6 +89,23 @@ v0.65 preserves the actual bounded root-search geometry. When a bisection midpoi
 
 v0.67 audits the retained bisection geometry against implementation invariants using the unrounded live search state. It records whether the active interval still has a strict positive/negative residual sign change, whether the accepted airflow is the active interval midpoint, the number of completed binary contraction steps, the expected width fraction from that iteration count, the actual width fraction, and their absolute floating-point discrepancy. This is solver self-verification evidence only and does not add an engineering acceptance threshold.
 
+## Bounded-bisection iteration trace
+
+For bounded-bisection solutions, v0.68 retains every root-search step rather
+than only the terminal bracket. Each trace row includes the active low/high
+airflow bracket, its signed endpoint residuals, the evaluated midpoint airflow,
+midpoint fan/system pressure, midpoint residual, whether the midpoint satisfied
+the configured pressure tolerance, and the exact endpoint-update action.
+
+The accompanying trace audit checks contiguous iteration numbering, trace-step
+count versus recorded operating iterations, strict signed bracketing before
+each midpoint, midpoint centering, residual-consistent update actions,
+continuity between consecutive active brackets, and final tolerance
+termination. Direct supplied-point tolerance contacts do not fabricate a
+bisection trace. This is solver execution provenance only; it is not physical
+airflow uncertainty, interpolation-error, stability, or equipment-acceptance
+evidence.
+
 ## CLI
 
 ```text

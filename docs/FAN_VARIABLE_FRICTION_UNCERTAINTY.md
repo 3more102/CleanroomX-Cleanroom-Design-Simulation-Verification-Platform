@@ -77,6 +77,22 @@ engineering acceptance threshold, physical uncertainty, interpolation-error
 bound, dynamic-stability criterion, stall/surge margin, manufacturer operating
 region, or equipment-acceptance limit.
 
+## Bisection iteration-trace provenance
+
+v0.68 propagates the complete bounded-bisection iteration trace through the
+nominal solve and every solved uncertainty corner that uses bounded bisection.
+The aggregate result counts corners with trace evidence, corners whose trace
+passes every execution-consistency check, exact violating corner indices, and
+the maximum trace length with tied source-corner provenance.
+
+The per-corner trace audit checks contiguous iteration numbering, step-count
+agreement with the solver diagnostics, strict pre-step sign bracketing,
+midpoint centering, residual-consistent update actions, continuity between
+successive active brackets, and final pressure-tolerance termination. These
+checks audit solver execution only; they do not create a physical uncertainty
+interval, interpolation-error bound, stability margin, or equipment-acceptance
+criterion.
+
 ## Supplied-point residual-topology evidence
 
 v0.61 propagates the base nonlinear solver's discrete fan-minus-system residual audit into the nominal case and every evaluated uncertainty corner. Each audit records expected and evaluated supplied-point counts, complete or partial point coverage, supplied points that fall within the configured operating-pressure tolerance, strict positive-to-negative sign-change segments, every adjacent supplied-point residual transition, sampled non-increasing behavior within tolerance, and any positive residual increase.

@@ -2,6 +2,14 @@
 
 The CleanroomX engineering dossier combines existing analysis outputs into one auditable Markdown or JSON package. It is a reporting and traceability layer; it does not create new acceptance limits and it does not convert CleanroomX screening into certification.
 
+## v0.94 canonical solver provenance hardening
+
+For nonlinear fan/variable-friction analyses, the dossier keeps v0.94 canonical solver-result identity separate from source-file fingerprints and the v0.57 top-level nonlinear uncertainty result-integrity digest. The richer canonical replay covers solver/network identity, Newton iteration metadata, configured mass-balance tolerance, final node/edge/pressure-power evidence, variable-friction convergence/configuration, chronological outer-iteration history, and named closure evidence.
+
+Field-level corruption in those newly covered solver-provenance fields remains visible through the existing selected, terminal, full-trace, and supplied-point replay summaries with exact corner/iteration/position/point/path provenance as applicable. Markdown stays concise; complete mismatch records remain in machine-readable JSON.
+
+These digests are deterministic content identities only. They do not prove source authenticity or physical correctness and are not cleanroom/ISO certification, CFD validation, fan acceptance, manufacturer approval, commissioning/TAB evidence, global-root uniqueness, physical stability, stall/surge analysis, physical uncertainty quantification, or statistical confidence analysis.
+
 ## Manifest
 
 A dossier manifest can reference:

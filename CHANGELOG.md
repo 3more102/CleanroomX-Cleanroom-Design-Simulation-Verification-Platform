@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.86 independent internal network-state fingerprint replay — 2026-09-24
+
+- Retains a SHA-256 fingerprint for the canonical internal nonlinear network state at every low, midpoint, and high bounded-bisection position.
+- Canonical state covers solved node pressures/balances, edge flows/resistances and pressure-law residuals, pressure-power balance, and variable-friction closure evidence.
+- Freshly re-solves every reconstructed bisection state and compares the retained fingerprint with the independently recomputed fingerprint.
+- Detects internal network-state provenance corruption even when fan pressure, loop terminal pressure, total system pressure, residuals, bracket geometry, full-bracket scalar replay, and selected-state replay remain unchanged.
+- Propagates network-state replay coverage and exact violation-corner indices through standalone reports, nonlinear uncertainty summaries, engineering dossiers, and solved/iteration-limit regressions.
+- Preserves root selection, bisection decisions, fan interpolation, nonlinear solver tolerances, no-extrapolation behavior, and all existing engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.86.0.
+
 ## v0.85 selected operating-state independent replay — 2026-09-24
 
 - Adds a fresh nonlinear replay of every solved selected operating airflow after the bounded search completes, independently recomputing fan pressure, loop-network pressure, total system pressure, and fan-minus-system residual.

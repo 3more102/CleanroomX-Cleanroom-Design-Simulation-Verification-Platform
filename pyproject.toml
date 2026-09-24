@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cleanroomx"
-version = "0.85.0"
-description = "Cleanroom design screening, verification, auditable nonlinear fan/loop uncertainty with solver, result-integrity, power-coverage, boundary, intersection-bracket, crossing-conditioning, pressure-to-airflow numerical equivalence, bounded root-search geometry, iteration-limit bisection provenance, bounded-bisection decision-trace, local replay, per-step geometry-consistency, decision-semantics, origin-to-terminal replay, independent raw-state audit, per-step pressure-state identity, independent fan/system residual-replay, midpoint pressure-component replay, and full bracket pressure-component replay with exact violation/worst-witness provenance, selected operating-state independent replay, bisection-invariant, bidirectional residual-topology, segment-position, scale-aware selected-candidate separation, supplied-grid resolution, and supplied-point candidate index-separation audits, duct networks, and preliminary HVAC toolkit"
+version = "0.86.0"
+description = "Cleanroom design screening, verification, auditable nonlinear fan/loop uncertainty with solver, result-integrity, power-coverage, boundary, intersection-bracket, crossing-conditioning, pressure-to-airflow numerical equivalence, bounded root-search geometry, iteration-limit bisection provenance, bounded-bisection decision-trace, local replay, per-step geometry-consistency, decision-semantics, origin-to-terminal replay, independent raw-state audit, per-step pressure-state identity, independent fan/system residual-replay, midpoint pressure-component replay, and full bracket pressure-component replay with exact violation/worst-witness provenance, selected operating-state independent replay, independent internal network-state fingerprint replay, bisection-invariant, bidirectional residual-topology, segment-position, scale-aware selected-candidate separation, supplied-grid resolution, and supplied-point candidate index-separation audits, duct networks, and preliminary HVAC toolkit"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "CleanroomX contributors"}]

@@ -28,6 +28,8 @@ v0.84 makes any pressure-component replay failure directly traceable. Each misma
 
 v0.85 closes the remaining solved-result provenance gap by independently re-solving the selected operating airflow itself after search completion. The replay verifies that the selected airflow is anchored to the retained search origin and that the final fan, loop-network, total-system, and residual pressures match a fresh model evaluation. This is implementation-provenance hardening only; it does not add physical uncertainty or equipment-acceptance criteria.
 
+v0.86 independently replays the internal nonlinear network state behind every retained low, midpoint, and high bisection position. CleanroomX stores a SHA-256 fingerprint over a canonical projection of solved node pressures/balances, edge flows/resistances and pressure-law residuals, pressure-power balance, and variable-friction closure evidence, then freshly re-solves the reconstructed airflow and recomputes the fingerprint. This closes the provenance gap where scalar fan/loop/system pressure evidence can remain unchanged while the internal solved network state changes. The fingerprint is deterministic implementation evidence, not physical uncertainty, stability, commissioning, certification, or equipment-acceptance evidence.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

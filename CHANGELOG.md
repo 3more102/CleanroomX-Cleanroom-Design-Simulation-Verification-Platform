@@ -9,6 +9,7 @@
 - Adds an end-to-end demonstration project spanning facility verification, HVAC, fan operating point, nonlinear fan/variable-friction loop analysis, bounded uncertainty, consistency, and dossier workflows.
 - Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.
 - Hardens project persistence to strict JSON, preserves uncommitted editor state across analysis switching, prompts before destructive project replacement/exit, and blocks conflicting analysis mutation/input changes while a run is active.
+- Invalidates retained results when their owning analysis is removed so stale outputs cannot be exported after deletion.
 - Adds an application-level end-to-end regression matrix covering every workflow exposed by the desktop catalog.
 - Preserves the v0.95 solver-result integrity linkage and the complete v0.91-v0.94 replay/provenance compatibility gates.
 - Bumps package/runtime/demo metadata to v0.96.0.

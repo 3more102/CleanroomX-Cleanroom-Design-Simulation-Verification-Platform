@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.100 desktop plot and export hardening — 2026-09-24
+
+- Continues from the verified v0.99 application-registry-integrity release on `main` at `1f035d08f893573868610d35296e3947445318e6`; no older divergent version-named branch is used as the baseline.
+- Extends application plot models with backend-computed system-pressure samples that correspond exactly to the displayed supplied fan-curve airflow points, preserving the operating-point marker without reimplementing system-curve engineering calculations in the GUI.
+- Distinguishes fan and system series with labeled solid/dashed Tk-canvas rendering.
+- Routes input JSON, result JSON, and report Markdown exports through a guarded write path so filesystem failures are surfaced as GUI errors instead of uncaught exceptions.
+- Makes the bundled GUI smoke project open the fan operating-point workflow so real Xvfb execution covers project loading, backend execution, multi-series plot rendering, result rendering, and shutdown.
+- Bumps package/runtime/demo metadata and CI assertions to v0.100.0 and adds a dedicated desktop-hardening regression gate while retaining the complete application suite and all v0.91-v0.95 provenance compatibility gates.
+
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.

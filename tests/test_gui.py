@@ -7,7 +7,14 @@ import pytest
 
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
+from cleanroomx.gui import (
+    CleanroomXApp,
+    _strict_json_loads,
+    extract_room_geometries,
+    flatten_json,
+    main,
+    unit_hint,
+)
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
 
 
@@ -32,6 +39,42 @@ def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows
     assert ("$.room.enabled", "true", "") in rows
+
+
+def test_extract_room_geometries_finds_nominal_and_uncertainty_shapes():
+    payload = {
+        "rooms": [
+            {
+                "name": "ISO 7 Suite",
+                "length_m": 8.0,
+                "width_m": 5.0,
+                "height_m": 3.2,
+            },
+            {
+                "name": "Uncertain Room",
+                "length_m": {"value": 6.0, "plus_minus": 0.1},
+                "width_m": {"value": 4.0, "plus_minus": 0.1},
+                "height_m": {"value": 3.0, "plus_minus": 0.05},
+            },
+        ]
+    }
+
+    geometries = extract_room_geometries(payload)
+
+    assert [item["name"] for item in geometries] == ["ISO 7 Suite", "Uncertain Room"]
+    assert geometries[0]["length_m"] == 8.0
+    assert geometries[1]["width_m"] == 4.0
+    assert geometries[1]["path"] == "$.rooms[1]"
+
+
+def test_extract_room_geometries_ignores_invalid_dimensions():
+    assert extract_room_geometries(
+        {
+            "length_m": 5.0,
+            "width_m": 0.0,
+            "height_m": 3.0,
+        }
+    ) == []
 
 
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():

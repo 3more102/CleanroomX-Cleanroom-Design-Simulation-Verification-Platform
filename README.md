@@ -26,7 +26,7 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 
 ### v0.96 desktop application
 
-v0.96 adds a user-operable Tkinter desktop application over the existing validated CleanroomX backends. It provides project creation/open/save, stable `.cleanroomx.json` persistence with migration of supported legacy shapes, analysis creation/rename/removal, structured JSON input inspection with engineering-unit hints, file import/export, backend validation, non-blocking analysis execution, result/diagnostic/report views, fan-curve plotting where supported, and JSON/Markdown export.
+v0.96 adds a user-operable Tkinter desktop application over the existing validated CleanroomX backends. It provides project creation/open/save, stable strict-JSON `.cleanroomx.json` persistence with migration of supported legacy shapes, unsaved-change protection, analysis creation/rename/removal, structured JSON input inspection with engineering-unit hints, file import/export, backend validation, guarded non-blocking analysis execution, result/diagnostic/report views, fan-curve plotting where supported, and JSON/Markdown export. Application regressions execute every workflow exposed by the desktop catalog end-to-end through the shared application service.
 
 After installation, launch the application with:
 

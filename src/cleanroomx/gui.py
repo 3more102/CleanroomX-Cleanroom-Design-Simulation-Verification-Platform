@@ -179,6 +179,7 @@ class CleanroomXApp:
         self.status_var = tk.StringVar(value="Ready")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
+        self._configure_style()
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
@@ -188,6 +189,83 @@ class CleanroomXApp:
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
+
+    def _configure_style(self) -> None:
+        """Apply a restrained engineering-workstation theme without external dependencies."""
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+
+        palette = {
+            "bg": "#eef3f8",
+            "surface": "#ffffff",
+            "surface_alt": "#f7f9fc",
+            "border": "#cad4df",
+            "text": "#172033",
+            "muted": "#5f6f82",
+            "accent": "#1769aa",
+            "accent_hover": "#12578e",
+            "danger": "#b53a3a",
+        }
+        self._ui_palette = palette
+        self.root.configure(background=palette["bg"])
+
+        style.configure(".", font=("TkDefaultFont", 10))
+        style.configure("App.TFrame", background=palette["bg"])
+        style.configure("Surface.TFrame", background=palette["surface"])
+        style.configure("Header.TFrame", background="#162434")
+        style.configure(
+            "AppTitle.TLabel",
+            background="#162434",
+            foreground="#f7fbff",
+            font=("TkDefaultFont", 17, "bold"),
+        )
+        style.configure(
+            "AppSubtitle.TLabel",
+            background="#162434",
+            foreground="#b9c8d8",
+            font=("TkDefaultFont", 9),
+        )
+        style.configure(
+            "Section.TLabel",
+            foreground=palette["text"],
+            font=("TkDefaultFont", 11, "bold"),
+        )
+        style.configure("Muted.TLabel", foreground=palette["muted"])
+        style.configure(
+            "Primary.TButton",
+            background=palette["accent"],
+            foreground="#ffffff",
+            padding=(12, 7),
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", palette["accent_hover"]), ("disabled", "#9eb4c7")],
+            foreground=[("disabled", "#eef3f8")],
+        )
+        style.configure("Toolbar.TButton", padding=(8, 5))
+        style.configure("Danger.TButton", foreground=palette["danger"], padding=(8, 5))
+        style.configure("TNotebook", background=palette["bg"], borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(13, 7))
+        style.configure(
+            "Treeview",
+            rowheight=28,
+            background=palette["surface"],
+            fieldbackground=palette["surface"],
+            foreground=palette["text"],
+        )
+        style.configure(
+            "Treeview.Heading",
+            font=("TkDefaultFont", 9, "bold"),
+            padding=(6, 6),
+        )
+        style.configure(
+            "Status.TLabel",
+            background="#dfe7ef",
+            foreground="#304255",
+            padding=(9, 5),
+        )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -246,51 +324,115 @@ class CleanroomXApp:
         self.root.bind("<F5>", lambda event: self.run_current())
 
     def _build_layout(self) -> None:
-        metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
-        metadata.pack(fill="x")
-        ttk.Label(metadata, text="Project").grid(row=0, column=0, sticky="w")
-        ttk.Entry(metadata, textvariable=self.name_var, width=32).grid(
-            row=0, column=1, sticky="ew", padx=(6, 12)
+        palette = self._ui_palette
+
+        header = ttk.Frame(self.root, style="Header.TFrame", padding=(14, 10))
+        header.pack(fill="x")
+        brand = ttk.Frame(header, style="Header.TFrame")
+        brand.pack(side="left")
+        ttk.Label(brand, text="CleanroomX", style="AppTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            brand,
+            text="Cleanroom design • simulation • verification workstation",
+            style="AppSubtitle.TLabel",
+        ).pack(anchor="w", pady=(1, 0))
+        ttk.Label(
+            header,
+            text=f"v{__version__}",
+            style="AppSubtitle.TLabel",
+        ).pack(side="right", anchor="n", padx=(12, 0))
+
+        project_bar = ttk.Frame(self.root, style="Surface.TFrame", padding=(12, 10))
+        project_bar.pack(fill="x", padx=10, pady=(10, 6))
+        ttk.Label(project_bar, text="Project", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w"
         )
-        ttk.Label(metadata, text="Description").grid(row=0, column=2, sticky="w")
-        ttk.Entry(metadata, textvariable=self.description_var).grid(
-            row=0, column=3, sticky="ew", padx=(6, 12)
+        ttk.Entry(project_bar, textvariable=self.name_var, width=28).grid(
+            row=0, column=1, sticky="ew", padx=(8, 14)
         )
-        ttk.Button(metadata, text="Validate", command=self.validate_current).grid(
-            row=0, column=4, padx=3
+        ttk.Label(project_bar, text="Description", style="Muted.TLabel").grid(
+            row=0, column=2, sticky="w"
         )
-        self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
-        self.run_button.grid(row=0, column=5, padx=3)
+        ttk.Entry(project_bar, textvariable=self.description_var).grid(
+            row=0, column=3, sticky="ew", padx=(8, 14)
+        )
+        ttk.Button(
+            project_bar,
+            text="Validate",
+            command=self.validate_current,
+            style="Toolbar.TButton",
+        ).grid(row=0, column=4, padx=3)
+        self.run_button = ttk.Button(
+            project_bar,
+            text="▶ Run Analysis",
+            command=self.run_current,
+            style="Primary.TButton",
+        )
+        self.run_button.grid(row=0, column=5, padx=(4, 3))
         self.cancel_button = ttk.Button(
-            metadata, text="Abandon", command=self.cancel_run, state="disabled"
+            project_bar,
+            text="Abandon",
+            command=self.cancel_run,
+            state="disabled",
+            style="Danger.TButton",
         )
-        self.cancel_button.grid(row=0, column=6, padx=3)
-        metadata.columnconfigure(1, weight=1)
-        metadata.columnconfigure(3, weight=2)
+        self.cancel_button.grid(row=0, column=6, padx=(3, 0))
+        project_bar.columnconfigure(1, weight=1)
+        project_bar.columnconfigure(3, weight=2)
 
         panes = ttk.Panedwindow(self.root, orient="horizontal")
-        panes.pack(fill="both", expand=True, padx=8, pady=4)
+        panes.pack(fill="both", expand=True, padx=10, pady=(4, 6))
 
-        sidebar = ttk.Frame(panes, padding=4)
+        sidebar = ttk.Frame(panes, style="Surface.TFrame", padding=8)
         panes.add(sidebar, weight=1)
-        ttk.Label(sidebar, text="Analyses", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", pady=(0, 4)
-        )
+
+        side_header = ttk.Frame(sidebar, style="Surface.TFrame")
+        side_header.pack(fill="x", pady=(0, 7))
+        ttk.Label(side_header, text="Analyses", style="Section.TLabel").pack(side="left")
+        ttk.Button(
+            side_header,
+            text="+ Add",
+            command=self.add_analysis,
+            style="Toolbar.TButton",
+        ).pack(side="right")
+
+        tree_frame = ttk.Frame(sidebar, style="Surface.TFrame")
+        tree_frame.pack(fill="both", expand=True)
         self.analysis_tree = ttk.Treeview(
-            sidebar, columns=("kind",), show="tree headings", selectmode="browse"
+            tree_frame,
+            columns=("kind",),
+            show="tree headings",
+            selectmode="browse",
         )
         self.analysis_tree.heading("#0", text="Name")
         self.analysis_tree.heading("kind", text="Kind")
-        self.analysis_tree.column("#0", width=210)
-        self.analysis_tree.column("kind", width=155)
-        scroll = ttk.Scrollbar(sidebar, orient="vertical", command=self.analysis_tree.yview)
+        self.analysis_tree.column("#0", width=205, minwidth=140)
+        self.analysis_tree.column("kind", width=150, minwidth=105)
+        scroll = ttk.Scrollbar(
+            tree_frame, orient="vertical", command=self.analysis_tree.yview
+        )
         self.analysis_tree.configure(yscrollcommand=scroll.set)
         self.analysis_tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
         self.analysis_tree.bind("<<TreeviewSelect>>", self._on_analysis_selected)
 
-        content = ttk.Frame(panes)
-        panes.add(content, weight=4)
+        side_actions = ttk.Frame(sidebar, style="Surface.TFrame")
+        side_actions.pack(fill="x", pady=(7, 0))
+        ttk.Button(
+            side_actions,
+            text="Rename",
+            command=self.rename_analysis,
+            style="Toolbar.TButton",
+        ).pack(side="left")
+        ttk.Button(
+            side_actions,
+            text="Remove",
+            command=self.remove_analysis,
+            style="Danger.TButton",
+        ).pack(side="right")
+
+        content = ttk.Frame(panes, style="App.TFrame")
+        panes.add(content, weight=5)
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
 
@@ -302,10 +444,10 @@ class CleanroomXApp:
             on_sync_requested=self._sync_spatial_to_current_analysis,
             status_setter=self.status_var.set,
         )
-        self.notebook.add(self.spatial_workspace, text="Design 2D + 3D")
+        self.notebook.add(self.spatial_workspace, text="◫  Design 2D + 3D")
 
         input_tab = ttk.Frame(self.notebook)
-        self.notebook.add(input_tab, text="Input")
+        self.notebook.add(input_tab, text="⌘  Input")
         input_notebook = ttk.Notebook(input_tab)
         input_notebook.pack(fill="both", expand=True)
 
@@ -331,39 +473,69 @@ class CleanroomXApp:
 
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
-        self.input_text = tk.Text(json_tab, wrap="none", undo=True)
-        input_scroll_y = ttk.Scrollbar(json_tab, orient="vertical", command=self.input_text.yview)
-        input_scroll_x = ttk.Scrollbar(json_tab, orient="horizontal", command=self.input_text.xview)
+        self.input_text = tk.Text(
+            json_tab,
+            wrap="none",
+            undo=True,
+            font=("TkFixedFont", 10),
+            background="#fbfdff",
+            foreground=palette["text"],
+            insertbackground=palette["text"],
+            selectbackground="#cfe4ff",
+            relief="flat",
+            padx=9,
+            pady=9,
+        )
+        input_scroll_y = ttk.Scrollbar(
+            json_tab, orient="vertical", command=self.input_text.yview
+        )
+        input_scroll_x = ttk.Scrollbar(
+            json_tab, orient="horizontal", command=self.input_text.xview
+        )
         self.input_text.configure(
-            yscrollcommand=input_scroll_y.set, xscrollcommand=input_scroll_x.set
+            yscrollcommand=input_scroll_y.set,
+            xscrollcommand=input_scroll_x.set,
         )
         self.input_text.grid(row=0, column=0, sticky="nsew")
         input_scroll_y.grid(row=0, column=1, sticky="ns")
         input_scroll_x.grid(row=1, column=0, sticky="ew")
         json_tab.rowconfigure(0, weight=1)
         json_tab.columnconfigure(0, weight=1)
-        self.input_text.bind("<FocusOut>", lambda event: self.refresh_structure(silent=True))
+        self.input_text.bind(
+            "<FocusOut>",
+            lambda event: self.refresh_structure(silent=True),
+        )
         self.input_text.bind("<<Modified>>", self._on_input_modified)
         self.input_text.edit_modified(False)
 
-        self.result_text = self._add_text_tab("Results")
-        self.report_text = self._add_text_tab("Report")
-        self.diagnostics_text = self._add_text_tab("Diagnostics")
+        self.result_text = self._add_text_tab("✓  Results")
+        self.report_text = self._add_text_tab("▤  Report")
+        self.diagnostics_text = self._add_text_tab("⚙  Diagnostics")
 
         plot_tab = ttk.Frame(self.notebook)
-        self.notebook.add(plot_tab, text="Plot")
-        self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
+        self.notebook.add(plot_tab, text="⌁  Plot")
+        self.plot_canvas = tk.Canvas(
+            plot_tab,
+            highlightthickness=0,
+            background="#fbfdff",
+        )
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
-        status = ttk.Label(
-            self.root,
+        status_frame = ttk.Frame(self.root)
+        status_frame.pack(fill="x", side="bottom")
+        ttk.Label(
+            status_frame,
             textvariable=self.status_var,
             anchor="w",
-            relief="sunken",
-            padding=(6, 3),
-        )
-        status.pack(fill="x", side="bottom")
+            style="Status.TLabel",
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            status_frame,
+            text="F5 Run   •   Ctrl+S Save   •   Mouse wheel Zoom",
+            anchor="e",
+            style="Status.TLabel",
+        ).pack(side="right")
 
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)

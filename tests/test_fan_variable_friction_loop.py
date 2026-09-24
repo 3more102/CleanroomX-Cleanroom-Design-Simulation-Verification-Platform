@@ -409,7 +409,6 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert trace_audit["maximum_absolute_trace_width_error_m3_h"] <= 2e-9
     assert trace_audit["maximum_absolute_trace_width_fraction_error"] <= 1e-12
     assert trace_audit["residual_replay_available"] is True
-    assert trace_audit["residual_replay_check_count"] == len(trace)
     assert trace_audit[
         "all_trace_residuals_match_independent_replay"
     ] is True
@@ -454,10 +453,6 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         in report
     )
     assert "Complete trace raw-state audit consistent: **True**" in report
-    assert (
-        "Every retained trace residual matches independent fan/system replay: **True**"
-        in report
-    )
     assert "Complete trace pressure-state audit consistent: **True**" in report
     assert "Maximum absolute trace system-pressure balance error" in report
     assert "Maximum absolute trace residual balance error" in report

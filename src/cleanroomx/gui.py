@@ -407,6 +407,15 @@ class CleanroomXApp:
 
         actions = ttk.Frame(header, style="Header.TFrame")
         actions.pack(side="right")
+        ttk.Button(actions, text="New", width=6, command=self.new_project).pack(
+            side="left", padx=2
+        )
+        ttk.Button(actions, text="Open", width=6, command=self.open_project).pack(
+            side="left", padx=2
+        )
+        ttk.Button(actions, text="Save", width=6, command=self.save_project).pack(
+            side="left", padx=(2, 10)
+        )
         self.run_state_label = ttk.Label(
             actions,
             textvariable=self.run_state_var,

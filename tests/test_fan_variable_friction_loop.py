@@ -783,6 +783,14 @@ def test_independent_residual_replay_detects_self_consistent_pressure_corruption
     assert audit[
         "maximum_absolute_trace_residual_replay_error_pa"
     ] <= 1e-9
+    assert audit["pressure_component_replay_evidence_complete"] is True
+    assert audit["pressure_component_replay_check_count"] == len(trace)
+    assert audit[
+        "all_midpoint_pressure_components_match_independent_replay"
+    ] is True
+    assert audit[
+        "maximum_absolute_trace_pressure_component_replay_error_pa"
+    ] <= 1e-9
 
     corrupted = [dict(step) for step in trace]
     terminal = corrupted[-1]
@@ -858,6 +866,15 @@ def test_independent_residual_replay_detects_self_consistent_pressure_corruption
     assert limit_audit[
         "maximum_absolute_trace_residual_replay_error_pa"
     ] <= 1e-9
+    assert limit_audit[
+        "pressure_component_replay_evidence_complete"
+    ] is True
+    assert limit_audit[
+        "all_midpoint_pressure_components_match_independent_replay"
+    ] is True
+    assert limit_audit[
+        "maximum_absolute_trace_pressure_component_replay_error_pa"
+    ] <= 1e-9
 
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Independent fan/system residual replay available: **True**" in report
@@ -867,6 +884,86 @@ def test_independent_residual_replay_detects_self_consistent_pressure_corruption
         in report
     )
     assert "Maximum absolute trace residual-replay error" in report
+    assert (
+        "Every retained midpoint pressure component matches independent replay: "
+        "**True**"
+        in report
+    )
+    assert "Maximum absolute trace pressure-component replay error" in report
+
+
+def test_independent_pressure_component_replay_detects_common_mode_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Pressure component replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    assert trace
+
+    corrupted_step = trace[0]
+    common_mode_delta_pa = 1.0
+    corrupted_step["midpoint_fan_pressure_pa"] = (
+        float(corrupted_step["midpoint_fan_pressure_pa"])
+        + common_mode_delta_pa
+    )
+    corrupted_step["midpoint_loop_network_pressure_pa"] = (
+        float(corrupted_step["midpoint_loop_network_pressure_pa"])
+        + common_mode_delta_pa
+    )
+    corrupted_step["midpoint_system_pressure_pa"] = (
+        float(corrupted_step["midpoint_system_pressure_pa"])
+        + common_mode_delta_pa
+    )
+
+    segment_index = evidence["supplied_segment_index"]
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+    )
+    assert audit is not None
+    assert audit["all_trace_raw_state_consistent"] is True
+    assert audit["all_trace_pressure_state_consistent"] is True
+    assert audit["all_trace_residuals_match_independent_replay"] is True
+    assert audit["all_decisions_match_midpoint_residual_semantics"] is True
+    assert audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert audit["pressure_component_replay_evidence_complete"] is True
+    assert audit[
+        "all_midpoint_pressure_components_match_independent_replay"
+    ] is False
+    assert audit[
+        "maximum_absolute_trace_pressure_component_replay_error_pa"
+    ] == pytest.approx(common_mode_delta_pa, abs=1e-9)
+    component_check = audit["pressure_component_replay_checks"][0]
+    assert component_check[
+        "fan_pressure_matches_independent_replay"
+    ] is False
+    assert component_check[
+        "loop_pressure_matches_independent_replay"
+    ] is False
+    assert component_check[
+        "system_pressure_matches_independent_replay"
+    ] is False
 
 
 def test_independent_residual_replay_detects_self_consistent_corruption() -> None:

@@ -282,6 +282,20 @@ def test_remove_analysis_invalidates_matching_result(monkeypatch):
     assert app._runs_by_analysis == {}
 
 
+def test_gui_launch_validates_registry_before_creating_tk_root(monkeypatch):
+    root_created = []
+
+    def fail_registry_validation():
+        raise RuntimeError("broken registry")
+
+    monkeypatch.setattr(gui_module, "validate_application_registry", fail_registry_validation)
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root_created.append(True))
+
+    with pytest.raises(RuntimeError, match="broken registry"):
+        main([])
+    assert root_created == []
+
+
 def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
@@ -292,6 +306,33 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert payload["registry_validation"]["status"] == "ok"
     assert payload["registry_validation"]["analysis_count"] == payload["analysis_count"]
     assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
+
+
+def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.last_run = run_analysis(
+        "fan_operating_point",
+        json.loads(
+            (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    output = tmp_path / "run-bundle.json"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(output),
+    )
+
+    app.export_run_bundle_json()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["kind"] == "fan_operating_point"
+    provenance = payload["diagnostics"]["application_execution_provenance"]
+    assert provenance["analysis_kind"] == "fan_operating_point"
+    assert len(provenance["input_sha256"]) == 64
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():

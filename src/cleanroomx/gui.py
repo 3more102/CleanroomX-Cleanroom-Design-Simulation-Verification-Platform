@@ -19,6 +19,7 @@ from .application import (
     application_info,
     run_analysis,
     validate_analysis_input,
+    validate_application_registry,
 )
 from .project import (
     AnalysisDocument,
@@ -198,6 +199,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
         file_menu.add_separator()
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
+        file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
@@ -1001,6 +1003,25 @@ class CleanroomXApp:
                 encoding="utf-8",
             )
 
+    def export_run_bundle_json(self) -> None:
+        if self.last_run is None:
+            messagebox.showinfo("No result", "Run an analysis first.")
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root, defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if path:
+            Path(path).write_text(
+                json.dumps(
+                    self.last_run.to_dict(),
+                    indent=2,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ) + "\n",
+                encoding="utf-8",
+            )
+
     def export_report_markdown(self) -> None:
         if self.last_run is None:
             messagebox.showinfo("No report", "Run an analysis first.")
@@ -1073,6 +1094,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
+    validate_application_registry()
     root = tk.Tk()
     app = CleanroomXApp(root)
     if args.project:

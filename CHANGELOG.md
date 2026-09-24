@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.100.0 desktop execution integrity — 2026-09-24
+
+- Continues directly from integrated v0.99 `main` on the verified clean lineage; no divergent version branch is used as the implementation baseline.
+- Adds canonical SHA-256 application-input identity and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies.
+- Exposes application execution provenance in Diagnostics and adds complete strict-JSON run-bundle export.
+- Enforces parity between the immutable workflow catalog and public analysis mapping and validates the registry before creating a normal Tk window.
+- Allows unsaved dossier execution when all referenced files are absolute, while keeping relative references dependent on an explicit saved-project/base directory.
+- Clears cached results when **Save Project As** changes the project base directory.
+- Keeps **Abandon** exclusive until the backend worker exits, suppressing abandoned results/errors and preventing overlapping backend analyses.
+- Preserves all validated engineering solver equations, tolerances, uncertainty semantics, acceptance rules, and v0.91-v0.95 compatibility gates.
+
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.

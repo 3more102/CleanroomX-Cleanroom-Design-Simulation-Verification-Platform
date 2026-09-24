@@ -791,6 +791,23 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_corner_count']}**",
                 "- Supplied-point tolerance-contact corners: "
                 f"**{search_summary['supplied_point_contact_corner_count']}**",
+                "- Corners with supplied-point network-state replay evidence: "
+                f"**{search_summary['supplied_point_network_state_replay_evidence_corner_count']}/"
+                f"{search_summary['corner_count']}**",
+                "- Corners with complete supplied-point network-state replay coverage: "
+                f"**{search_summary['supplied_point_network_state_replay_complete_coverage_corner_count']}**",
+                "- Supplied-point network-state replay incomplete-coverage corners: "
+                f"**{search_summary['supplied_point_network_state_replay_incomplete_corner_indices']}**",
+                "- Supplied-point network-state replay consistent corners: "
+                f"**{search_summary['supplied_point_network_state_replay_consistent_corner_count']}**",
+                "- Supplied-point hash replay violation corners: "
+                f"**{search_summary['supplied_point_network_state_hash_replay_violation_corner_indices']}**",
+                "- Supplied-point projection replay violation corners: "
+                f"**{search_summary['supplied_point_network_state_projection_replay_violation_corner_indices']}**",
+                "- Supplied-point network-state replay violation corners: "
+                f"**{search_summary['supplied_point_network_state_replay_violation_corner_indices']}**",
+                "- Supplied-point network-state replay violation records across corners: "
+                f"**{search_summary['supplied_point_network_state_replay_violation_count']}**",
                 "- Solved corners with selected operating-state replay evidence: "
                 f"**{search_summary['selected_operating_state_replay_evidence_corner_count']}/"
                 f"{search_summary['solved_search_evidence_corner_count']}**",

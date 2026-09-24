@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.89 order-invariant network-state fingerprint canonicalization — 2026-09-24
+
+- Canonicalizes semantically unordered named network-state collections before SHA-256 hashing by sorting solved nodes, solved edges, and variable-friction edge-closure rows by name.
+- Prevents false fingerprint mismatches when equivalent solver output is enumerated in a different node/edge order while preserving sensitivity to every retained numeric and closure value.
+- Advances the replay canonicalization identifier to `network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2` for explicit provenance.
+- Adds regression coverage proving reordered named collections hash identically while a numeric edge-state mutation still changes the fingerprint.
+- Preserves v0.88 terminal-bracket replay, v0.87 full-trace network-state replay, pressure-component replay, decision-trace audits, root selection, iteration budgets, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.89.0.
+
 ## v0.88 terminal-bracket network-state fingerprint replay — 2026-09-24
 
 - Retains canonical SHA-256 internal network-state fingerprints on solved final and post-decision iteration-limit terminal bracket low/high endpoints.

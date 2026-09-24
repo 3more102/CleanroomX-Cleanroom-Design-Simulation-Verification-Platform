@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.84 final accepted operating-point state replay — 2026-09-24
+
+- Freshly re-evaluates every accepted solved operating point through fan interpolation and a complete nonlinear variable-friction network solve.
+- Compares retained fan pressure, loop-network pressure, total system pressure, and fan-minus-system residual against the independent final-state replay using the existing strict 1e-9 Pa implementation-audit tolerance.
+- Extends independent replay coverage to direct supplied-point tolerance contacts, which intentionally have no bisection trace and therefore are outside the v0.81-v0.83 trace replay audits.
+- Adds direct-point and bounded-bisection regressions plus a common-mode corruption case where the residual remains unchanged while absolute pressure components are shifted.
+- Aggregates solved-corner replay coverage, exact violation/non-convergence corner indices, tied worst replay-error witnesses, standalone report evidence, uncertainty reporting, and dossier propagation.
+- Preserves root selection, no-extrapolation behavior, solver tolerances, iteration budgets, and all engineering acceptance criteria; this remains deterministic numerical implementation provenance only.
+- Bumped package/runtime metadata to v0.84.0.
+
 ## v0.83 full-bracket pressure-component replay — 2026-09-24
 
 - Retains low and high endpoint fan pressure, nonlinear loop-network pressure, and total system pressure in every bounded-bisection trace step, complementing the v0.82 midpoint pressure state.

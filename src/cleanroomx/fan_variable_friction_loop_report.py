@@ -166,6 +166,28 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_trace_residuals_match_independent_replay']}**",
                     "- Maximum absolute trace residual-replay error: "
                     f"**{trace_audit['maximum_absolute_trace_residual_replay_error_pa']} Pa**",
+                    "- Independent midpoint pressure-state replay available: "
+                    f"**{trace_audit['pressure_state_replay_available']}**",
+                    "- Midpoint pressure-state replay checks: "
+                    f"**{trace_audit['pressure_state_replay_check_count']}**",
+                    "- Every retained midpoint fan pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_fan_pressures_match_independent_replay']}**",
+                    "- Every retained midpoint loop pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_loop_pressures_match_independent_replay']}**",
+                    "- Every retained midpoint fixed pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_fixed_pressures_match_independent_replay']}**",
+                    "- Every retained midpoint system pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_system_pressures_match_independent_replay']}**",
+                    "- Every retained midpoint residual matches full pressure-state replay: "
+                    f"**{trace_audit['all_recorded_midpoint_residuals_match_pressure_state_replay']}**",
+                    "- Every retained midpoint pressure state matches independent replay: "
+                    f"**{trace_audit['all_midpoint_pressure_states_match_independent_replay']}**",
+                    "- Maximum absolute midpoint fan-pressure replay error: "
+                    f"**{trace_audit['maximum_absolute_midpoint_fan_pressure_replay_error_pa']} Pa**",
+                    "- Maximum absolute midpoint loop-pressure replay error: "
+                    f"**{trace_audit['maximum_absolute_midpoint_loop_pressure_replay_error_pa']} Pa**",
+                    "- Maximum absolute midpoint system-pressure replay error: "
+                    f"**{trace_audit['maximum_absolute_midpoint_system_pressure_replay_error_pa']} Pa**",
                     "- Maximum absolute trace system-pressure balance error: "
                     f"**{trace_audit['maximum_absolute_trace_system_pressure_balance_error_pa']} Pa**",
                     "- Maximum absolute trace residual balance error: "

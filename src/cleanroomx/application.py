@@ -173,6 +173,32 @@ def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
     return getattr(module, function_name)
 
 
+def validate_application_registry() -> None:
+    """Resolve every declared backend binding used by the application catalog."""
+    for spec in _ANALYSES:
+        for role, target in (
+            ("parser", spec.parser),
+            ("runner", spec.runner),
+            ("reporter", spec.reporter),
+        ):
+            if target is None:
+                continue
+            try:
+                resolved = _load_callable(target)
+            except Exception as exc:
+                module_name, function_name = target
+                raise RuntimeError(
+                    f"{spec.key} {role} binding cannot be resolved: "
+                    f"{module_name}.{function_name}"
+                ) from exc
+            if not callable(resolved):
+                module_name, function_name = target
+                raise RuntimeError(
+                    f"{spec.key} {role} binding is not callable: "
+                    f"{module_name}.{function_name}"
+                )
+
+
 def _normalize_result(value: Any) -> dict:
     if isinstance(value, dict):
         result = value
@@ -504,9 +530,11 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
 
 
 def application_info() -> dict:
+    validate_application_registry()
     return {
         "name": "CleanroomX",
         "version": __version__,
         "analysis_count": len(_ANALYSES),
+        "bindings_valid": True,
         "analyses": analysis_catalog(),
     }

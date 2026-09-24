@@ -251,6 +251,10 @@ def test_stale_result_is_invalidated_when_matching_analysis_input_changes():
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.last_run = object()
     app.last_run_analysis_id = "analysis-a"
+    app._runs_by_analysis = {
+        "analysis-a": app.last_run,
+        "analysis-b": object(),
+    }
     app.result_text = object()
     app.report_text = object()
     app.diagnostics_text = object()
@@ -262,11 +266,14 @@ def test_stale_result_is_invalidated_when_matching_analysis_input_changes():
     app._invalidate_last_run_for("analysis-b")
     assert app.last_run is not None
     assert app.last_run_analysis_id == "analysis-a"
+    assert "analysis-a" in app._runs_by_analysis
+    assert "analysis-b" not in app._runs_by_analysis
     assert cleared == []
 
     app._invalidate_last_run_for("analysis-a")
     assert app.last_run is None
     assert app.last_run_analysis_id is None
+    assert app._runs_by_analysis == {}
     assert cleared[:-1] == [
         (app.result_text, ""),
         (app.report_text, ""),
@@ -304,3 +311,48 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
     assert captured["title"] == "Open failed"
     assert captured["message"] == "invalid project"
     assert captured["parent"] is app.root
+
+
+def test_per_analysis_run_cache_restores_without_forcing_result_tab():
+    run_a = object()
+    run_b = object()
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._runs_by_analysis = {"analysis-a": run_a, "analysis-b": run_b}
+    app.last_run = None
+    app.last_run_analysis_id = None
+
+    rendered = []
+    app._render_run = lambda run, select_results=True: rendered.append(
+        (run, select_results)
+    )
+
+    assert app._restore_run_for("analysis-a") is True
+    assert app.last_run is run_a
+    assert app.last_run_analysis_id == "analysis-a"
+    assert rendered == [(run_a, False)]
+
+    assert app._restore_run_for("analysis-b") is True
+    assert app.last_run is run_b
+    assert app.last_run_analysis_id == "analysis-b"
+    assert rendered[-1] == (run_b, False)
+
+
+def test_clear_run_cache_discards_all_session_results_and_rendered_output():
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._runs_by_analysis = {"analysis-a": object(), "analysis-b": object()}
+    app.last_run = object()
+    app.last_run_analysis_id = "analysis-a"
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+
+    cleared = []
+    app._set_text = lambda widget, value: cleared.append((widget, value))
+    app._draw_plot = lambda: cleared.append(("plot", None))
+
+    app._clear_run_cache()
+
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+    assert cleared[-1] == ("plot", None)

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.89 selected operating network-state fingerprint replay — 2026-09-24
+
+- Extends the v0.85 selected operating-state replay from scalar fan/loop/system/residual pressures to the canonical internal nonlinear network state.
+- Retains a SHA-256 fingerprint of the selected solved node, edge, pressure-power, and variable-friction closure state and independently recomputes it from a fresh solve at the retained selected airflow.
+- Detects selected operating-state internal corruption even when the retained selected airflow, search origin, and all scalar pressure/residual evidence remain unchanged.
+- Propagates selected network-state replay consistency and exact recorded/recomputed hashes through nonlinear uncertainty summaries, standalone reports, engineering dossiers, and regression coverage.
+- Preserves v0.88 terminal-bracket network-state replay, v0.87 full-trace network-state replay, root-selection/no-extrapolation behavior, numerical tolerances, iteration budgets, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.89.0.
+
 ## v0.88 terminal-bracket network-state fingerprint replay — 2026-09-24
 
 - Retains canonical SHA-256 internal network-state fingerprints on solved final and post-decision iteration-limit terminal bracket low/high endpoints.

@@ -20,6 +20,8 @@ The fan operating point is found only inside a supplied fan-curve segment. No fa
 
 For bounded-bisection traces, v0.81 independently replays the supplied-segment low/high/midpoint states, freshly re-solves the nonlinear loop, re-interpolates fan pressure, and verifies the retained fan-minus-system residuals against those fresh model evaluations. This is deterministic numerical provenance only, not a physical uncertainty, stability, or equipment-acceptance margin.
 
+CleanroomX v0.82 additionally compares each retained midpoint fan pressure, nonlinear loop pressure, fixed pressure, total system pressure, and fan-minus-system residual against that fresh model evaluation. This closes the coordinated-corruption case where fan and system pressure can move together while their residual remains unchanged and the retained v0.80 arithmetic identities still balance. The replay remains deterministic implementation provenance only; it is not a physical uncertainty, fan-model validation, stability proof, commissioning result, or equipment-acceptance criterion.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

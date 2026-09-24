@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -34,8 +35,66 @@ def test_application_catalog_exposes_major_existing_workflows():
 
 
 def test_application_registry_resolves_every_declared_backend_binding():
-    validate_application_registry()
-    assert application_info()["bindings_valid"] is True
+    validation = validate_application_registry()
+    info = application_info()
+    expected_target_count = sum(
+        target is not None
+        for spec in ANALYSIS_SPECS.values()
+        for target in (spec.parser, spec.runner, spec.reporter)
+    )
+    assert validation["status"] == "ok"
+    assert validation["analysis_count"] == len(ANALYSIS_SPECS)
+    assert validation["callable_target_count"] == expected_target_count
+    assert set(validation["custom_adapters"]) == {"consistency", "dossier"}
+    assert info["bindings_valid"] is True
+    assert info["registry_validation"] == validation
+
+
+def test_application_registry_rejects_duplicate_workflow_keys(monkeypatch):
+    import cleanroomx.application as application_module
+
+    monkeypatch.setattr(
+        application_module,
+        "_ANALYSES",
+        application_module._ANALYSES + (application_module._ANALYSES[0],),
+    )
+    with pytest.raises(RuntimeError, match="duplicate application analysis keys"):
+        application_module.validate_application_registry()
+
+
+def test_application_registry_rejects_invalid_custom_adapter_contract(monkeypatch):
+    import cleanroomx.application as application_module
+
+    malformed = replace(
+        ANALYSIS_SPECS["consistency"],
+        parser=("io", "room_from_dict"),
+    )
+    monkeypatch.setattr(
+        application_module,
+        "_ANALYSES",
+        tuple(
+            malformed if spec.key == "consistency" else spec
+            for spec in application_module._ANALYSES
+        ),
+    )
+    with pytest.raises(RuntimeError, match="must use its registered custom application adapter"):
+        application_module.validate_application_registry()
+
+
+def test_application_registry_reports_binding_context(monkeypatch):
+    import cleanroomx.application as application_module
+
+    original = application_module._load_callable
+    failed_target = ANALYSIS_SPECS["hvac"].runner
+
+    def fail_hvac_runner(target):
+        if target == failed_target:
+            raise ImportError("simulated missing backend")
+        return original(target)
+
+    monkeypatch.setattr(application_module, "_load_callable", fail_hvac_runner)
+    with pytest.raises(RuntimeError, match=r"hvac runner target failed to load"):
+        application_module.validate_application_registry()
 
 
 def test_hvac_application_service_reuses_real_backend():

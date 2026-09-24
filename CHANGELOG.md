@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.80 bisection trace pressure-state audit — 2026-09-24
+
+- Retains midpoint fan pressure, variable-friction loop pressure, fixed pressure, total system pressure, and fan-minus-system residual for every bounded-bisection trace evaluation.
+- Independently checks the retained pressure identities `system = fixed + loop` and `residual = fan - system`, and anchors each retained fixed-pressure component to the study input.
+- Aggregates exact nonlinear uncertainty-corner indices for pressure-state audit failures plus tied maximum system-pressure and residual identity errors.
+- Surfaces the new evidence in standalone fan/variable-friction loop reports, nonlinear uncertainty reports, and engineering dossiers.
+- Adds direct corruption regressions that distinguish total-system pressure inconsistency from fixed-pressure provenance corruption, while preserving v0.79 raw-state, v0.78 decision-semantics, v0.77 origin replay, and iteration-limit behavior.
+- Does not change candidate priority, root selection, root-acceptance tolerance, iteration budgets, fan-curve no-extrapolation behavior, or any engineering acceptance criterion.
+- Treats pressure-state checks strictly as numerical implementation provenance; they are not physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability evidence, stall/surge evidence, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.

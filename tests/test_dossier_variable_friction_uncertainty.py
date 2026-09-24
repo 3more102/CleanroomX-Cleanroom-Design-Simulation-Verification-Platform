@@ -140,6 +140,24 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "maximum_bisection_trace_pressure_component_replay_error_pa"
     ]["value"] <= 1e-9
     assert search_summary[
+        "final_operating_point_replay_complete_solved_coverage"
+    ] is True
+    assert search_summary[
+        "final_operating_point_replay_evidence_corner_count"
+    ] == search_summary["solved_corner_count"]
+    assert search_summary[
+        "final_operating_point_replay_consistent_corner_count"
+    ] == search_summary["solved_corner_count"]
+    assert search_summary[
+        "final_operating_point_replay_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "final_operating_point_replay_nonconverged_corner_indices"
+    ] == []
+    assert search_summary[
+        "maximum_final_operating_point_replay_error_pa"
+    ]["value"] <= 1e-9
+    assert search_summary[
         "maximum_bisection_trace_midpoint_error_m3_h"
     ]["value"] <= 1e-9
     assert search_summary[
@@ -273,6 +291,10 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "residual-replay" in report
     assert "residual-replay violations 0" in report
     assert "max residual-replay error" in report
+    assert "final-point-replay" in report
+    assert "final-point-replay violations 0" in report
+    assert "final-point-replay nonconverged 0" in report
+    assert "max final-point-replay error" in report
     assert "max trace system-pressure identity error" in report
     assert "max trace residual identity error" in report
     assert "max trace midpoint error" in report

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.80 independent bisection midpoint-residual recomputation — 2026-09-24
+
+- Re-evaluates fan interpolation and the complete variable-friction loop network at every retained bounded-bisection midpoint instead of trusting the stored midpoint fan-minus-system residual.
+- Compares each recorded midpoint residual with the independently recomputed model result using a dedicated audit tolerance, retaining per-step fan pressure, system pressure, absolute residual mismatch, and recomputation status.
+- Propagates exact residual-recomputation violation corner indices, consistent-corner counts, and maximum mismatch evidence through nonlinear uncertainty, standalone Markdown, and engineering dossiers.
+- Adds regression coverage for self-consistent residual corruption that still passes decision semantics and origin/state replay but is detected by the independent model re-solve.
+- Preserves v0.79 raw-state auditing, v0.78 decision semantics, v0.77 origin-to-terminal replay, candidate selection, iteration budgets, and no-extrapolation behavior.
+- Treats the audit strictly as numerical implementation provenance; it does not establish physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from every retained bounded-bisection trace record instead of trusting stored audit booleans.

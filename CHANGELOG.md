@@ -5,7 +5,8 @@
 - Adds a shared application-service registry over the existing validated CleanroomX backend parsers, solvers, reporters, consistency checks, and engineering dossier workflow.
 - Adds a stable versioned `cleanroomx.project` document with strict JSON serialization, atomic save/open, active-analysis tracking, unique analysis identifiers, and supported legacy single-analysis migration.
 - Adds a real Tkinter desktop application for project and analysis management, structured JSON editing/inspection, validation, background execution, results, diagnostics, Markdown reports, fan-curve plotting, and JSON/Markdown export.
-- Adds the installed `cleanroomx-gui` console entry point plus `--check` headless capability validation and `--smoke` real-window smoke execution.
+- Adds the installed `cleanroomx-gui` console entry point plus `--check` headless capability validation and `--smoke` real-window smoke execution; the headless check resolves every declared parser/runner/reporter binding so catalog wiring failures cannot hide behind unexercised GUI entries.
+- Hardens structured-input engineering-unit hints so specific density/viscosity suffixes take precedence over generic area/volume suffixes.
 - Adds an end-to-end demonstration project spanning facility verification, HVAC, fan operating point, nonlinear fan/variable-friction loop analysis, bounded uncertainty, consistency, and dossier workflows.
 - Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.
 - Preserves the v0.95 solver-result integrity linkage and the complete v0.91-v0.94 replay/provenance compatibility gates.

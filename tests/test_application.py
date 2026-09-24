@@ -11,6 +11,7 @@ from cleanroomx.application import (
     application_info,
     run_analysis,
     validate_analysis_input,
+    validate_application_registry,
 )
 
 
@@ -30,6 +31,11 @@ def test_application_catalog_exposes_major_existing_workflows():
     } <= keys
     assert len(keys) == len(ANALYSIS_SPECS)
     assert application_info()["analysis_count"] == len(keys)
+
+
+def test_application_registry_resolves_every_declared_backend_binding():
+    validate_application_registry()
+    assert application_info()["bindings_valid"] is True
 
 
 def test_hvac_application_service_reuses_real_backend():

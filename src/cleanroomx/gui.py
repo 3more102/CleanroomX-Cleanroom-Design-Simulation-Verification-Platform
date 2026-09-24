@@ -30,8 +30,10 @@ from .project import (
 
 
 _UNIT_SUFFIXES = (
+    ("_kg_m3", "kg/m³"),
     ("_m3_h", "m³/h"),
     ("_m3_s", "m³/s"),
+    ("_m2_s", "m²/s"),
     ("_m2", "m²"),
     ("_m3", "m³"),
     ("_pa", "Pa"),
@@ -41,8 +43,6 @@ _UNIT_SUFFIXES = (
     ("_percent", "%"),
     ("_minutes", "min"),
     ("_um", "µm"),
-    ("_kg_m3", "kg/m³"),
-    ("_m2_s", "m²/s"),
     ("_m", "m"),
 )
 

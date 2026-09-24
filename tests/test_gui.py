@@ -17,6 +17,8 @@ def test_unit_hint_recognizes_engineering_units():
     assert unit_hint("$.fan_curve.points[0].airflow_m3_h") == "m³/h"
     assert unit_hint("$.pressure_pa") == "Pa"
     assert unit_hint("$.temperature_c") == "°C"
+    assert unit_hint("$.air_density_kg_m3") == "kg/m³"
+    assert unit_hint("$.kinematic_viscosity_m2_s") == "m²/s"
     assert unit_hint("$.value") == ""
 
 
@@ -155,6 +157,7 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert payload["name"] == "CleanroomX"
     assert payload["version"] == "0.96.0"
     assert payload["analysis_count"] >= 20
+    assert payload["bindings_valid"] is True
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():

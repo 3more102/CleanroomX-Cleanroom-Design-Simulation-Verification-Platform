@@ -285,15 +285,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_anchor: tuple[float, float] | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
+        self._orbit_anchor: tuple[int, int] | None = None
+        self._orbit_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
         self._snap_to_grid = tk.BooleanVar(value=True)
+        self._show_room_labels = tk.BooleanVar(value=True)
         self._show_device_labels = tk.BooleanVar(value=True)
+        self._show_pressure_overlay = tk.BooleanVar(value=True)
+        self._show_cascade_links = tk.BooleanVar(value=True)
         self._view_mode = tk.StringVar(value="split")
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []
         self._history_current: dict | None = None
         self._grid_var = tk.StringVar(value="0.5 m")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
+        self._scene_stats_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
         self._selection_detail_var = tk.StringVar(value="Select a room or device to edit its properties.")
         self._property_vars: dict[str, tk.StringVar] = {}
@@ -385,12 +391,45 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         grid_box.pack(side="left", padx=(0, 6))
         grid_box.bind("<<ComboboxSelected>>", self._set_grid_from_control)
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Label(toolbar, text="LAYERS", style="Muted.TLabel").pack(side="left", padx=(0, 3))
+        ttk.Checkbutton(
+            toolbar,
+            text="Pressure",
+            variable=self._show_pressure_overlay,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            toolbar,
+            text="Cascade",
+            variable=self._show_cascade_links,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            toolbar,
+            text="Room labels",
+            variable=self._show_room_labels,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
         ttk.Checkbutton(
             toolbar,
             text="Device labels",
             variable=self._show_device_labels,
             command=self.redraw,
-        ).pack(side="left", padx=4)
+        ).pack(side="left", padx=2)
+
+        stats_bar = ttk.Frame(self, style="Surface.TFrame", padding=(10, 3, 10, 5))
+        stats_bar.pack(fill="x", padx=6)
+        ttk.Label(
+            stats_bar,
+            textvariable=self._scene_stats_var,
+            style="Muted.TLabel",
+        ).pack(side="left")
+        ttk.Label(
+            stats_bar,
+            text="Shortcuts: Ctrl+0 fit · Ctrl+D duplicate · Del delete · Shift+drag 3D orbit",
+            style="Muted.TLabel",
+        ).pack(side="right")
 
         body = self.body_panes = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
@@ -437,7 +476,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         ttk.Label(
             header3,
-            text="Click object to select · Wheel to zoom",
+            text="Click select · Shift+drag orbit · Right/middle drag pan · Wheel zoom",
             style="Muted.TLabel",
         ).pack(side="left", padx=8)
         ttk.Button(header3, text="ISO", width=4, command=lambda: self.set_3d_preset(35, 28)).pack(
@@ -515,6 +554,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
+        self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
@@ -602,6 +643,49 @@ class SpatialDesignWorkspace(ttk.Frame):
             delta = None if delta_raw is None else _finite_number(delta_raw, 0.0)
             links.append((higher, lower, delta))
         return links
+
+    def _scene_metrics(self) -> dict[str, float | int | None]:
+        rooms = self.layout.get("rooms", [])
+        devices = self.layout.get("devices", [])
+        total_area = sum(
+            _positive(room.get("length_m"), 0.0) * _positive(room.get("width_m"), 0.0)
+            for room in rooms
+        )
+        total_volume = sum(
+            _positive(room.get("length_m"), 0.0)
+            * _positive(room.get("width_m"), 0.0)
+            * _positive(room.get("height_m"), 0.0)
+            for room in rooms
+        )
+        pressures = [
+            _finite_number(room.get("pressure_pa"), 0.0)
+            for room in rooms
+            if room.get("pressure_pa") is not None
+        ]
+        return {
+            "rooms": len(rooms),
+            "devices": len(devices),
+            "area_m2": total_area,
+            "volume_m3": total_volume,
+            "pressure_min_pa": min(pressures) if pressures else None,
+            "pressure_max_pa": max(pressures) if pressures else None,
+        }
+
+    def _scene_summary(self) -> str:
+        metrics = self._scene_metrics()
+        pressure_min = metrics["pressure_min_pa"]
+        pressure_max = metrics["pressure_max_pa"]
+        if pressure_min is None or pressure_max is None:
+            pressure_text = "pressure —"
+        elif pressure_min == pressure_max:
+            pressure_text = f"pressure {pressure_min:g} Pa"
+        else:
+            pressure_text = f"pressure {pressure_min:g}…{pressure_max:g} Pa"
+        return (
+            f"{metrics['rooms']} rooms · {metrics['devices']} devices · "
+            f"{metrics['area_m2']:.1f} m² · {metrics['volume_m3']:.1f} m³ · "
+            f"{pressure_text}"
+        )
 
     def _set_grid_from_control(self, event=None) -> None:
         text = self._grid_var.get().strip().lower().replace("m", "").strip()
@@ -865,6 +949,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
+        if hasattr(self, "_scene_stats_var"):
+            self._scene_stats_var.set(self._scene_summary())
         self._draw_2d()
         self._draw_3d()
 
@@ -924,24 +1010,36 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
             outline = "#38bdf8" if selected else "#607a96"
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = (
+                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                if self._show_pressure_overlay.get()
+                else "#dfe7ef"
+            )
             canvas.create_rectangle(
                 x0, y0, x1, y1,
                 fill=fill, outline=outline, width=3 if selected else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
-            pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
-            canvas.create_text(
-                (x0 + x1) / 2,
-                (y0 + y1) / 2,
-                text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
-                justify="center",
-                fill="#0b1726",
-                font=("TkDefaultFont", 9, "bold" if selected else "normal"),
-                tags=(f"room:{room['id']}", "room"),
-            )
+            if self._show_room_labels.get():
+                pressure_text = (
+                    ""
+                    if room.get("pressure_pa") is None
+                    else f"\n{room['pressure_pa']:g} Pa"
+                )
+                canvas.create_text(
+                    (x0 + x1) / 2,
+                    (y0 + y1) / 2,
+                    text=(
+                        f"{room['name']}\n"
+                        f"{room['length_m']:g} × {room['width_m']:g} m{pressure_text}"
+                    ),
+                    justify="center",
+                    fill="#0b1726",
+                    font=("TkDefaultFont", 9, "bold" if selected else "normal"),
+                    tags=(f"room:{room['id']}", "room"),
+                )
 
-        if pmin is not None and pmax is not None:
+        if self._show_pressure_overlay.get() and pmin is not None and pmax is not None:
             legend_width = 132
             legend_height = 10
             legend_x = max(12, w - legend_width - 24)
@@ -990,7 +1088,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
 
         cascade_links = self._pressure_cascade_links()
-        if cascade_links:
+        if self._show_cascade_links.get() and cascade_links:
             rooms_by_name = {room["name"]: room for room in self.layout["rooms"]}
             for higher_name, lower_name, min_delta_pa in cascade_links:
                 higher = rooms_by_name.get(higher_name)
@@ -1120,19 +1218,20 @@ class SpatialDesignWorkspace(ttk.Frame):
         pmax = max(pressures) if pressures else None
 
         # Ground grid improves depth perception and makes the 3D view read like a CAD viewport.
-        grid_step = max(1.0, self.layout.get("grid_m", 0.5))
-        gx = math.floor(min_x / grid_step) * grid_step
-        while gx <= max_x + 1e-9:
-            p0 = self._project_3d(gx - cx, min_y - cy, 0.0)
-            p1 = self._project_3d(gx - cx, max_y - cy, 0.0)
-            canvas.create_line(*p0, *p1, fill="#1c3043", tags=("floor-grid",))
-            gx += grid_step
-        gy = math.floor(min_y / grid_step) * grid_step
-        while gy <= max_y + 1e-9:
-            p0 = self._project_3d(min_x - cx, gy - cy, 0.0)
-            p1 = self._project_3d(max_x - cx, gy - cy, 0.0)
-            canvas.create_line(*p0, *p1, fill="#1c3043", tags=("floor-grid",))
-            gy += grid_step
+        if self._show_grid.get():
+            grid_step = max(1.0, self.layout.get("grid_m", 0.5))
+            gx = math.floor(min_x / grid_step) * grid_step
+            while gx <= max_x + 1e-9:
+                p0 = self._project_3d(gx - cx, min_y - cy, 0.0)
+                p1 = self._project_3d(gx - cx, max_y - cy, 0.0)
+                canvas.create_line(*p0, *p1, fill="#1c3043", tags=("floor-grid",))
+                gx += grid_step
+            gy = math.floor(min_y / grid_step) * grid_step
+            while gy <= max_y + 1e-9:
+                p0 = self._project_3d(min_x - cx, gy - cy, 0.0)
+                p1 = self._project_3d(max_x - cx, gy - cy, 0.0)
+                canvas.create_line(*p0, *p1, fill="#1c3043", tags=("floor-grid",))
+                gy += grid_step
         canvas.create_text(
             10,
             10,
@@ -1173,7 +1272,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x1, y1, z),
                 self._project_3d(x0, y1, z),
             ]
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = (
+                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                if self._show_pressure_overlay.get()
+                else "#8aa0b6"
+            )
             selected = self.selected == _Hit("room", room["id"])
             outline = "#7dd3fc" if selected else "#c8d5e3"
             tag = f"room:{room['id']}"
@@ -1186,16 +1289,17 @@ class SpatialDesignWorkspace(ttk.Frame):
                 *sum((base[2], base[3], top[3], top[2]), ()),
                 fill="#53687c", outline=outline, tags=(tag, "room3d")
             )
-            label = room["name"]
-            if room.get("pressure_pa") is not None:
-                label += f"  ·  {room['pressure_pa']:g} Pa"
-            canvas.create_text(
-                *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=label,
-                fill="#f0f6fc",
-                font=("TkDefaultFont", 9, "bold" if selected else "normal"),
-                tags=(tag, "room3d"),
-            )
+            if self._show_room_labels.get():
+                label = room["name"]
+                if room.get("pressure_pa") is not None:
+                    label += f"  ·  {room['pressure_pa']:g} Pa"
+                canvas.create_text(
+                    *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
+                    text=label,
+                    fill="#f0f6fc",
+                    font=("TkDefaultFont", 9, "bold" if selected else "normal"),
+                    tags=(tag, "room3d"),
+                )
 
         for device in self.layout["devices"]:
             x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
@@ -1328,6 +1432,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
         self._draw_3d()
+
+    def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        self.canvas_3d.focus_set()
+        self._orbit_anchor = (event.x, event.y)
+        self._orbit_origin = (
+            self.layout["view"]["azimuth_deg"],
+            self.layout["view"]["elevation_deg"],
+        )
+        return "break"
+
+    def _on_orbit_3d_drag(self, event: tk.Event) -> str:
+        if self._orbit_anchor is None or self._orbit_origin is None:
+            return "break"
+        dx = event.x - self._orbit_anchor[0]
+        dy = event.y - self._orbit_anchor[1]
+        self.layout["view"]["azimuth_deg"] = (self._orbit_origin[0] + dx * 0.45) % 360
+        self.layout["view"]["elevation_deg"] = max(
+            5.0,
+            min(75.0, self._orbit_origin[1] - dy * 0.30),
+        )
+        self._draw_3d()
+        return "break"
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

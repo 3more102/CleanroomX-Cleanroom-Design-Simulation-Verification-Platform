@@ -91,6 +91,10 @@ v0.67 audits the retained bisection geometry against implementation invariants u
 
 v0.68 extends v0.66 alternative-candidate separation with a dimensionless scale-aware value. Each selected-to-alternative discrete point/interval airflow gap is divided by the exact supplied fan-curve airflow span for that solve, and the nearest alternative retains both absolute and normalized separation. This remains sampled-data numerical topology evidence only; it is not a continuous root-separation guarantee, physical robustness margin, stability/stall/surge criterion, manufacturer operating region, commissioning/certification result, or equipment-acceptance limit.
 
+v0.69 extends the supplied-point audit with strict negative-to-positive residual sign-change segments as bidirectional sampled topology evidence. Reverse sampled crossings are audit-only: they do not enter the solver candidate list, do not change the selected operating-point algorithm, and do not prove an additional continuous root or physical stability behavior.
+
+v0.70 retains every midpoint evaluation performed by a successful bounded-bisection solve. Each trace record contains the active low/high airflow bracket, midpoint, bracket width and normalized width, signed endpoint and midpoint residuals, and the exact decision to replace the low endpoint, replace the high endpoint, or accept the midpoint within the configured pressure tolerance. A compact L/H/T sequence plus trace audit checks step-count/iteration agreement, strict sign bracketing before every evaluation, arithmetic midpoint geometry, and terminal acceptance placement. Direct supplied-point tolerance contacts keep the trace unset. This is numerical implementation provenance only; it does not represent physical airflow uncertainty, interpolation error, dynamic stability, or equipment acceptance.
+
 ## CLI
 
 ```text

@@ -5,7 +5,8 @@
 - Retains the canonical selected operating network-state projection alongside the existing selected-state SHA-256 fingerprint.
 - Independently re-solves the exact retained selected airflow and compares node, edge, pressure-power, and variable-friction closure projection fields with the fresh solved state.
 - Localizes selected projection corruption to deterministic JSON-style field paths such as `$.nodes[0].relative_pressure_pa`, including cases where the retained selected-state SHA-256 itself remains unchanged.
-- Propagates projection replay availability, consistency, mismatch counts, exact paths, violating uncertainty-corner indices, and report evidence while preserving the existing pressure and fingerprint replay diagnostics.
+- Propagates projection replay applicability/coverage, consistency, mismatch counts, exact paths, recorded/recomputed values, type evidence, numerical absolute errors when meaningful, tied per-field worst-error witnesses, violating uncertainty-corner indices, standalone-report evidence, and engineering-dossier evidence while preserving the existing pressure and fingerprint replay diagnostics.
+- Projection replay is numerical/provenance verification only; it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness, stall/surge analysis, or physical uncertainty quantification.
 - Preserves v0.90 terminal projection replay, v0.89 selected fingerprint replay, root selection, no-extrapolation behavior, solver tolerances, iteration budgets, and engineering acceptance semantics.
 - Bumped package/runtime metadata to v0.91.0.
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.72 bounded-bisection decision-trace provenance — 2026-09-24
+
+- Retains every midpoint evaluation used by a successful bounded fan/system bisection solve without changing the solve.
+- Records the active low/high airflow bracket, midpoint, bracket width and supplied-segment fraction, signed endpoint/midpoint residuals, and the exact replace-low / replace-high / accept decision.
+- Adds compact L/H/T decision sequences and audits trace length against operating iterations, strict sign bracketing before every evaluation, arithmetic midpoint geometry, and terminal tolerance-decision placement.
+- Keeps direct supplied-point tolerance contacts trace-free rather than fabricating bisection history.
+- Propagates trace coverage, exact violation corner indices, maximum retained trace length, and tied source-corner provenance through nonlinear uncertainty and engineering-dossier reporting.
+- Preserves v0.71 supplied-grid resolution normalization and v0.70 iteration-limit bisection provenance.
+- Adds solver, uncertainty, and dossier regression coverage across the supported Python matrix.
+- Treats the trace as deterministic numerical implementation provenance only; it is not physical uncertainty, an interpolation-error bound, a continuous-root guarantee, stability/stall/surge evidence, or an equipment-acceptance criterion.
+- Bumped package/runtime metadata to v0.72.0.
+
 ## v0.71 supplied-grid resolution normalization — 2026-09-24
 
 - Records minimum and maximum adjacent supplied fan-curve airflow spacing plus the max/min spacing ratio inside the nonlinear residual-topology audit.

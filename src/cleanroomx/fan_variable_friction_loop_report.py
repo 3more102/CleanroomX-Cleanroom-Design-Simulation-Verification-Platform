@@ -82,6 +82,50 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 )
         lines.extend(["", search["scope_note"]])
 
+    terminal = result.get("terminal_bisection_failure_evidence")
+    if terminal is not None:
+        bracket = terminal["terminal_bisection_bracket"]
+        invariant = bracket["invariant_audit"]
+        lines.extend(
+            [
+                "",
+                "## Terminal bisection iteration-limit evidence",
+                "",
+                "- Supplied interpolation segment: "
+                f"**{terminal['supplied_segment_low_airflow_m3_h']}–"
+                f"{terminal['supplied_segment_high_airflow_m3_h']} m³/h**",
+                "- Operating iterations exhausted: "
+                f"**{terminal['operating_iterations']}**",
+                "- Last evaluated airflow / endpoint: "
+                f"**{terminal['last_evaluated_airflow_m3_h']} m³/h / "
+                f"{terminal['last_evaluated_endpoint']}**",
+                "- Last fan-system pressure residual: "
+                f"**{terminal['last_fan_minus_system_pressure_pa']} Pa**",
+                "- Terminal signed bracket: "
+                f"**{bracket['low_airflow_m3_h']}–"
+                f"{bracket['high_airflow_m3_h']} m³/h**",
+                "- Terminal bracket width / half-width: "
+                f"**{bracket['width_m3_h']} / "
+                f"{bracket['half_width_m3_h']} m³/h**",
+                "- Terminal bracket residuals: "
+                f"**{bracket['low_fan_minus_system_pressure_pa']} Pa / "
+                f"{bracket['high_fan_minus_system_pressure_pa']} Pa**",
+                "- Strict sign-change bracket preserved: "
+                f"**{invariant['strict_sign_change_preserved']}**",
+                "- Last evaluated airflow became terminal bracket endpoint: "
+                f"**{invariant['last_evaluated_airflow_is_terminal_bracket_endpoint']}**",
+                "- Binary contraction steps completed: "
+                f"**{invariant['binary_contraction_step_count']}**",
+                "- Expected / actual terminal width fraction: "
+                f"**{invariant['expected_width_fraction_of_supplied_segment']} / "
+                f"{invariant['actual_width_fraction_of_supplied_segment']}**",
+                "- Absolute binary-width consistency error: "
+                f"**{invariant['absolute_width_fraction_consistency_error']}**",
+                "",
+                terminal["scope_note"],
+            ]
+        )
+
     point = result["fan_operating_point"]
     if point is None:
         lines.extend(["", "## Operating point", "", result["message"]])

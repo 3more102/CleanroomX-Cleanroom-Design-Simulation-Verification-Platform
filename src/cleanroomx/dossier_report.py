@@ -755,6 +755,10 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_origin_replay_corner_count",
                     0,
                 )
+                trace_decision_predicate_count = search_summary.get(
+                    "bisection_trace_decision_predicate_match_corner_count",
+                    0,
+                )
                 limit_terminal_replay_count = search_summary.get(
                     "iteration_limit_trace_terminal_replay_corner_count",
                     0,
@@ -839,6 +843,12 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_decision_predicate_violations = len(
+                    search_summary.get(
+                        "bisection_trace_decision_predicate_violation_corner_indices",
+                        [],
+                    )
+                )
                 limit_terminal_replay_violations = len(
                     search_summary.get(
                         "iteration_limit_trace_terminal_replay_violation_corner_indices",
@@ -869,11 +879,12 @@ def markdown_dossier_report(result: dict) -> str:
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
                     f"trace {trace_count}/{trace_expected_count}; "
-                    f"trace violations L/S/M/T/I/R/A/O/F "
+                    f"trace violations L/S/M/T/I/R/A/P/O/F "
                     f"{trace_length_violations}/{trace_sign_violations}/"
                     f"{trace_midpoint_violations}/{trace_terminal_violations}/"
                     f"{trace_iteration_violations}/{trace_replay_violations}/"
                     f"{trace_origin_replay_violations}/"
+                    f"{trace_decision_predicate_violations}/"
                     f"{trace_outcome_violations}/"
                     f"{limit_terminal_replay_violations}; "
                     f"trace geometry violations W/N "
@@ -883,6 +894,7 @@ def markdown_dossier_report(result: dict) -> str:
                     f"max trace normalized-width error "
                     f"{max_trace_width_fraction_error}; "
                     f"trace-origin {trace_origin_replay_count}/{trace_count}; "
+                    f"trace-predicate {trace_decision_predicate_count}/{trace_count}; "
                     f"trace-outcome {trace_outcome_count}/{trace_count}; "
                     f"limit-final-replay {limit_terminal_replay_count}/"
                     f"{limit_count}; "

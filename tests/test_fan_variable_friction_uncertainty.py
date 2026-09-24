@@ -2563,6 +2563,24 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "maximum_bisection_trace_pressure_component_replay_error_pa"
     ]["value"] <= 1e-9
+    assert summary[
+        "final_operating_point_replay_complete_solved_coverage"
+    ] is True
+    assert summary[
+        "final_operating_point_replay_evidence_corner_count"
+    ] == summary["solved_corner_count"]
+    assert summary[
+        "final_operating_point_replay_consistent_corner_count"
+    ] == summary["solved_corner_count"]
+    assert summary[
+        "final_operating_point_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "final_operating_point_replay_nonconverged_corner_indices"
+    ] == []
+    assert summary[
+        "maximum_final_operating_point_replay_error_pa"
+    ]["value"] <= 1e-9
     system_pressure_error = summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"
     ]

@@ -2359,16 +2359,27 @@ def _operating_point_search_resolution_summary(
         for corner_index, corner in enumerate(corners)
         if corner.get("operating_point_search_evidence") is not None
     ]
-    bisection_cases = [
+    solved_cases = [
         (corner_index, corner, evidence)
         for corner_index, corner, evidence in cases
+        if corner["status"] == "solved"
+    ]
+    bisection_cases = [
+        (corner_index, corner, evidence)
+        for corner_index, corner, evidence in solved_cases
         if evidence["method"] == "bounded_bisection"
         and evidence.get("final_bisection_bracket") is not None
     ]
     supplied_point_cases = [
         (corner_index, corner, evidence)
-        for corner_index, corner, evidence in cases
+        for corner_index, corner, evidence in solved_cases
         if evidence["method"] == "supplied_point_tolerance_contact"
+    ]
+    iteration_limit_cases = [
+        (corner_index, corner, evidence)
+        for corner_index, corner, evidence in cases
+        if evidence["method"] == "bounded_bisection"
+        and evidence.get("iteration_limit_evidence") is not None
     ]
 
     invariant_cases = [
@@ -2391,6 +2402,27 @@ def _operating_point_search_resolution_summary(
         corner_index
         for corner_index, _corner, _evidence, invariant in invariant_cases
         if not invariant["selected_airflow_is_bracket_midpoint"]
+    ]
+    iteration_limit_invariant_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence["iteration_limit_evidence"][
+                "remaining_bisection_bracket"
+            ].get("invariant_audit"),
+        )
+        for corner_index, corner, evidence in iteration_limit_cases
+        if evidence["iteration_limit_evidence"][
+            "remaining_bisection_bracket"
+        ].get("invariant_audit")
+        is not None
+    ]
+    iteration_limit_sign_change_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, invariant
+        in iteration_limit_invariant_cases
+        if not invariant["strict_sign_change_preserved"]
     ]
 
     def _maximum_bracket_evidence(
@@ -2475,10 +2507,58 @@ def _operating_point_search_resolution_summary(
             "sources": sources,
         }
 
+    def _maximum_iteration_limit_invariant_error_evidence() -> dict | None:
+        if not iteration_limit_invariant_cases:
+            return None
+        maximum = max(
+            float(invariant["absolute_width_fraction_consistency_error"])
+            for _corner_index, _corner, _evidence, invariant
+            in iteration_limit_invariant_cases
+        )
+        sources = []
+        for (
+            corner_index,
+            corner,
+            evidence,
+            invariant,
+        ) in iteration_limit_invariant_cases:
+            error = float(
+                invariant["absolute_width_fraction_consistency_error"]
+            )
+            if not math.isclose(
+                error,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            remaining = evidence["iteration_limit_evidence"][
+                "remaining_bisection_bracket"
+            ]
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "remaining_bisection_bracket": remaining,
+                    "invariant_audit": invariant,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": "1",
+            "sources": sources,
+        }
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
         "search_evidence_corner_count": len(cases),
+        "solved_search_evidence_corner_count": len(solved_cases),
         "bisection_corner_count": len(bisection_cases),
         "bisection_corner_indices": [
             corner_index
@@ -2507,8 +2587,28 @@ def _operating_point_search_resolution_summary(
         "maximum_absolute_width_fraction_consistency_error": (
             _maximum_invariant_error_evidence()
         ),
+        "iteration_limit_search_evidence_corner_count": (
+            len(iteration_limit_cases)
+        ),
+        "iteration_limit_corner_indices": [
+            corner_index
+            for corner_index, _corner, _evidence in iteration_limit_cases
+        ],
+        "iteration_limit_invariant_evidence_corner_count": (
+            len(iteration_limit_invariant_cases)
+        ),
+        "iteration_limit_strict_sign_change_preserved_corner_count": (
+            len(iteration_limit_invariant_cases)
+            - len(iteration_limit_sign_change_violation_corner_indices)
+        ),
+        "iteration_limit_strict_sign_change_violation_corner_indices": (
+            iteration_limit_sign_change_violation_corner_indices
+        ),
+        "maximum_iteration_limit_absolute_width_fraction_consistency_error": (
+            _maximum_iteration_limit_invariant_error_evidence()
+        ),
         "complete_solved_corner_evidence": (
-            len(cases) == solved_corner_count
+            len(solved_cases) == solved_corner_count
         ),
         "complete_study_coverage": (
             nominal_status == "solved"
@@ -2539,7 +2639,10 @@ def _operating_point_search_resolution_summary(
             "audits implementation invariants using the unrounded live "
             "bisection state: strict residual-sign bracketing, selected "
             "midpoint centering, and the absolute discrepancy between actual "
-            "and iteration-implied binary width contraction."
+            "and iteration-implied binary width contraction. Iteration-limit "
+            "cases preserve the remaining signed bracket and completed-step "
+            "contraction audit without accepting or fabricating an operating "
+            "point."
         ),
     }
 

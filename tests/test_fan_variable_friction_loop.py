@@ -1748,12 +1748,27 @@ def test_selected_operating_state_projection_replay_localizes_corruption() -> No
         "all_selected_operating_state_matches_independent_replay"
     ] is False
     assert corrupted["violation_count"] == 1
-    assert corrupted["violations"] == [
-        {
-            "component": "network_state_projection",
-            "mismatch_paths": ["$.nodes[0].relative_pressure_pa"],
-        }
+    projection_violation = corrupted["violations"][0]
+    assert projection_violation["component"] == "network_state_projection"
+    assert projection_violation["mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
     ]
+    mismatches = projection_violation["mismatches"]
+    assert len(mismatches) == 1
+    assert mismatches[0]["path"] == "$.nodes[0].relative_pressure_pa"
+    assert mismatches[0]["mismatch_kind"] == "value_mismatch"
+    assert mismatches[0]["absolute_error"] == pytest.approx(1.0)
+    assert mismatches[0]["numeric_error_field"] == "relative_pressure_pa"
+    maximum_errors = projection_violation["maximum_numeric_errors"]
+    assert len(maximum_errors) == 1
+    assert maximum_errors[0]["field"] == "relative_pressure_pa"
+    assert maximum_errors[0]["maximum_absolute_error"] == pytest.approx(1.0)
+    assert corrupted[
+        "network_state_projection_mismatches"
+    ] == mismatches
+    assert corrupted[
+        "network_state_projection_maximum_numeric_errors"
+    ] == maximum_errors
 
 
 def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:

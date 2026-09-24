@@ -2582,6 +2582,13 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         assert trace_audit["decision_sequence"].endswith("T")
         trace_lengths.append(len(trace))
 
+    maximum_midpoint_error = summary[
+        "maximum_bisection_trace_midpoint_error_m3_h"
+    ]
+    assert maximum_midpoint_error is not None
+    assert maximum_midpoint_error["value"] == pytest.approx(0.0, abs=1e-18)
+    assert maximum_midpoint_error["sources"]
+
     maximum_error = summary[
         "maximum_absolute_width_fraction_consistency_error"
     ]
@@ -2602,9 +2609,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace iteration-sequence violations" in report
     assert "Trace state-transition replay violations" in report
     assert "Trace origin-to-terminal replay violations: **[]**" in report
+    assert "Trace midpoint-geometry violations: **[]**" in report
     assert "Trace recorded-width violations: **[]**" in report
     assert "Trace binary width-fraction violations: **[]**" in report
     assert "Trace geometry violation corners: **[]**" in report
+    assert "Maximum trace midpoint consistency error" in report
     assert "Maximum trace recorded-width consistency error" in report
     assert "Maximum trace binary width-fraction consistency error" in report
     assert "Maximum absolute binary-width consistency error" in report

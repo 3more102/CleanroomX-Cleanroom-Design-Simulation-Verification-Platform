@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.94 signed-zero-stable complete solver-provenance canonical replay — 2026-09-24
+
+- Normalizes floating-point signed zero so `-0.0` and `0.0` represent the same deterministic canonical engineering state before projection comparison or SHA-256 serialization.
+- Expands the shared canonical network-result projection to network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and chronological outer-iteration history.
+- Makes semantically named node, edge, and variable-friction closure collections order-invariant while deliberately preserving iteration-history order.
+- Uses one canonicalization identifier across supplied-point, full per-bisection, terminal, and selected network-state replay: `network-result-projection-sort-named-collections-normalize-signed-zero-preserve-iteration-history-json-sort-keys-compact-utf8-v3`.
+- Existing field-level replay automatically localizes solver-provenance corruption such as `$.iterations` and `$.variable_friction.relaxation` while SHA-256 replay remains a separate identity check.
+- Adds regression coverage for named-collection reorder invariance, signed-zero equivalence, ordered-history sensitivity, solver metadata/configuration sensitivity, and exact field-level corruption localization.
+- Preserves fan candidate discovery, interpolation/no-extrapolation, root selection, bisection decisions, numerical tolerances, nonlinear iteration budgets, power calculations, uncertainty semantics, and engineering acceptance.
+- Bumped package/runtime metadata to v0.94.0.
+
 ## v0.93 supplied fan-point network-state fingerprint and projection replay — 2026-09-24
 
 - Retains the canonical internal network-state SHA-256 and full canonical projection for every successfully evaluated supplied fan-curve point before operating-point candidate selection.

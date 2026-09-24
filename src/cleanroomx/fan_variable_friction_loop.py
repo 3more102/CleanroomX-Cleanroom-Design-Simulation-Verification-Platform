@@ -681,6 +681,8 @@ def _bisection_decision_trace_audit(
     }
     iteration_sequence = [int(step["iteration"]) for step in trace]
     raw_state_checks = []
+    residual_component_checks = []
+    residual_component_missing_iterations = []
     geometry_checks = []
     for step in trace:
         iteration = int(step["iteration"])
@@ -689,6 +691,9 @@ def _bisection_decision_trace_audit(
         midpoint_airflow = float(step["midpoint_airflow_m3_h"])
         low_residual = float(step["low_fan_minus_system_pressure_pa"])
         high_residual = float(step["high_fan_minus_system_pressure_pa"])
+        midpoint_residual = float(
+            step["midpoint_fan_minus_system_pressure_pa"]
+        )
         recorded_sign_flag = bool(
             step["strict_sign_change_before_evaluation"]
         )
@@ -716,6 +721,52 @@ def _bisection_decision_trace_audit(
             rel_tol=0.0,
             abs_tol=1e-9,
         )
+        component_fields_present = (
+            "midpoint_fan_pressure_pa" in step
+            and "midpoint_system_pressure_pa" in step
+        )
+        if component_fields_present:
+            midpoint_fan_pressure = float(step["midpoint_fan_pressure_pa"])
+            midpoint_system_pressure = float(
+                step["midpoint_system_pressure_pa"]
+            )
+            expected_midpoint_residual = (
+                midpoint_fan_pressure - midpoint_system_pressure
+            )
+            absolute_midpoint_residual_component_error = abs(
+                midpoint_residual - expected_midpoint_residual
+            )
+            residual_component_checks.append(
+                {
+                    "iteration": iteration,
+                    "recorded_midpoint_fan_pressure_pa": (
+                        midpoint_fan_pressure
+                    ),
+                    "recorded_midpoint_system_pressure_pa": (
+                        midpoint_system_pressure
+                    ),
+                    "recorded_midpoint_fan_minus_system_pressure_pa": (
+                        midpoint_residual
+                    ),
+                    "expected_midpoint_fan_minus_system_pressure_pa": (
+                        expected_midpoint_residual
+                    ),
+                    "absolute_midpoint_residual_component_error_pa": (
+                        absolute_midpoint_residual_component_error
+                    ),
+                    "midpoint_residual_matches_fan_system_components": (
+                        math.isclose(
+                            midpoint_residual,
+                            expected_midpoint_residual,
+                            rel_tol=0.0,
+                            abs_tol=2e-9,
+                        )
+                    ),
+                }
+            )
+        else:
+            residual_component_missing_iterations.append(iteration)
+
         raw_state_checks.append(
             {
                 "iteration": iteration,
@@ -1186,6 +1237,39 @@ def _bisection_decision_trace_audit(
             default=0.0,
         ),
         "raw_state_checks": raw_state_checks,
+        "residual_component_check_count": len(residual_component_checks),
+        "midpoint_residual_component_coverage_complete": (
+            len(residual_component_checks) == len(trace)
+        ),
+        "midpoint_residual_component_missing_iterations": (
+            residual_component_missing_iterations
+        ),
+        "all_midpoint_residuals_match_fan_system_components": (
+            len(residual_component_checks) == len(trace)
+            and all(
+                check[
+                    "midpoint_residual_matches_fan_system_components"
+                ]
+                for check in residual_component_checks
+            )
+        ),
+        "midpoint_residual_component_mismatch_iterations": [
+            check["iteration"]
+            for check in residual_component_checks
+            if not check[
+                "midpoint_residual_matches_fan_system_components"
+            ]
+        ],
+        "maximum_absolute_midpoint_residual_component_error_pa": max(
+            (
+                check[
+                    "absolute_midpoint_residual_component_error_pa"
+                ]
+                for check in residual_component_checks
+            ),
+            default=0.0,
+        ),
+        "residual_component_checks": residual_component_checks,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -1287,8 +1371,12 @@ def _bisection_decision_trace_audit(
             "fraction implied by its iteration. The raw-state audit "
             "independently recomputes strict sign-change and arithmetic-"
             "midpoint facts from the recorded numeric state and checks the "
-            "stored flags against those recomputed facts. The decision-"
-            "semantics audit "
+            "stored flags against those recomputed facts. The residual-"
+            "arithmetic audit independently subtracts each retained midpoint "
+            "system pressure from its retained midpoint fan pressure and "
+            "checks that result against the retained fan-minus-system "
+            "residual, with explicit coverage and mismatch iterations. The "
+            "decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
@@ -1487,6 +1575,14 @@ def solve_fan_variable_friction_loop(
                             ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
+                                9,
+                            ),
+                            "midpoint_fan_pressure_pa": round(
+                                fan_pressure,
+                                9,
+                            ),
+                            "midpoint_system_pressure_pa": round(
+                                system_pressure,
                                 9,
                             ),
                             "midpoint_fan_minus_system_pressure_pa": round(

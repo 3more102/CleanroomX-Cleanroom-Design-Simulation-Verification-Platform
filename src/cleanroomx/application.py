@@ -354,6 +354,8 @@ _DOSSIER_LIST_PATH_KEYS = (
 def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
     if not isinstance(payload.get("name"), str) or not payload["name"].strip():
         raise ValueError("dossier name must be a non-empty string")
+
+    source_count = 0
     for key in _DOSSIER_SINGLE_PATH_KEYS:
         value = payload.get(key)
         if value is None:
@@ -363,6 +365,8 @@ def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
         path = _resolve_relative(base_dir, value)
         if not path.is_file():
             raise ValueError(f"{key} does not exist: {path}")
+        source_count += 1
+
     for key in _DOSSIER_LIST_PATH_KEYS:
         values = payload.get(key, [])
         if not isinstance(values, list):
@@ -373,7 +377,51 @@ def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
             path = _resolve_relative(base_dir, value)
             if not path.is_file():
                 raise ValueError(f"{key} reference does not exist: {path}")
+            source_count += 1
 
+    if source_count == 0:
+        raise ValueError("dossier must reference at least one analysis input file")
+
+    consistency_checks = payload.get("consistency_checks", {})
+    if not isinstance(consistency_checks, dict):
+        raise ValueError("consistency_checks must be an object when provided")
+
+    verification_hvac = consistency_checks.get("verification_hvac_airflow")
+    if verification_hvac is not None:
+        if not isinstance(verification_hvac, dict):
+            raise ValueError(
+                "verification_hvac_airflow consistency configuration must be an object"
+            )
+        allowed = {"room_airflow_abs_tolerance_m3_h", "require_same_room_set"}
+        unknown = set(verification_hvac) - allowed
+        if unknown:
+            raise ValueError(
+                "unsupported verification_hvac_airflow option(s): "
+                + ", ".join(sorted(unknown))
+            )
+        if payload.get("verification_project") is None or payload.get("hvac_project") is None:
+            raise ValueError(
+                "verification_hvac_airflow consistency requires both "
+                "verification_project and hvac_project"
+            )
+
+    hvac_fan = consistency_checks.get("hvac_fan_operating_airflow")
+    if hvac_fan is not None:
+        if not isinstance(hvac_fan, dict):
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency configuration must be an object"
+            )
+        allowed = {"airflow_abs_tolerance_m3_h"}
+        unknown = set(hvac_fan) - allowed
+        if unknown:
+            raise ValueError(
+                "unsupported hvac_fan_operating_airflow option(s): "
+                + ", ".join(sorted(unknown))
+            )
+        if payload.get("hvac_project") is None:
+            raise ValueError(
+                "hvac_fan_operating_airflow consistency requires hvac_project"
+            )
 
 def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
     if kind not in ANALYSIS_SPECS:

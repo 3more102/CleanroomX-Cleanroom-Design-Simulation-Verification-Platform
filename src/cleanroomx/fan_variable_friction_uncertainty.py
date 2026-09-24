@@ -2780,6 +2780,183 @@ def _operating_point_search_resolution_summary(
         )
         is not True
     ]
+
+    trace_projection_applicable_corner_indices = sorted(
+        {
+            corner_index
+            for corner_index, _corner, _evidence
+            in bisection_cases + iteration_limit_cases
+        }
+    )
+    trace_projection_evidence_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "network_state_projection_replay_available",
+            False,
+        )
+        is True
+    ]
+    trace_projection_complete_coverage_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "network_state_projection_replay_complete_coverage",
+            False,
+        )
+        is True
+    ]
+    trace_network_state_projection_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if int(
+            audit.get(
+                "network_state_projection_replay_mismatch_count",
+                0,
+            )
+            or 0
+        )
+        > 0
+    ]
+    trace_projection_trace_case_indices = {
+        corner_index
+        for corner_index, _corner, _evidence, _audit in trace_cases
+    }
+    trace_network_state_projection_replay_coverage_gap_corner_indices = sorted(
+        (
+            set(trace_projection_applicable_corner_indices)
+            - trace_projection_trace_case_indices
+        )
+        | {
+            corner_index
+            for corner_index, _corner, _evidence, audit in trace_cases
+            if audit.get(
+                "network_state_projection_replay_applicable",
+                False,
+            )
+            is True
+            and audit.get(
+                "network_state_projection_replay_complete_coverage",
+                False,
+            )
+            is not True
+        }
+    )
+    trace_network_state_projection_replay_consistent_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "network_state_projection_replay_complete_coverage",
+            False,
+        )
+        is True
+        and int(
+            audit.get(
+                "network_state_projection_replay_mismatch_count",
+                0,
+            )
+            or 0
+        )
+        == 0
+    ]
+    trace_network_state_projection_replay_violation_details = []
+    trace_network_state_projection_replay_coverage_gap_details = []
+    for corner_index, corner, evidence, audit in trace_cases:
+        mismatches = audit.get(
+            "network_state_projection_replay_mismatches",
+            [],
+        )
+        if mismatches:
+            detail = _critical_case_summary(corner_index, corner)
+            detail.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence[
+                        "operating_iterations"
+                    ],
+                    "verdict": audit.get(
+                        "network_state_projection_replay_verdict"
+                    ),
+                    "violation_iterations": audit.get(
+                        "network_state_projection_replay_violation_iterations",
+                        [],
+                    ),
+                    "violation_iteration_positions": audit.get(
+                        "network_state_projection_replay_violation_iteration_positions",
+                        [],
+                    ),
+                    "mismatch_count": len(mismatches),
+                    "mismatch_paths": audit.get(
+                        "network_state_projection_replay_mismatch_paths",
+                        [],
+                    ),
+                    "mismatches": mismatches,
+                    "maximum_numeric_errors": audit.get(
+                        "network_state_projection_replay_maximum_numeric_errors",
+                        [],
+                    ),
+                }
+            )
+            trace_network_state_projection_replay_violation_details.append(
+                detail
+            )
+        coverage_gaps = audit.get(
+            "network_state_projection_replay_coverage_gaps",
+            [],
+        )
+        if coverage_gaps:
+            detail = _critical_case_summary(corner_index, corner)
+            detail.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence[
+                        "operating_iterations"
+                    ],
+                    "expected_state_position_count": audit.get(
+                        "network_state_projection_replay_expected_state_position_count"
+                    ),
+                    "checked_state_position_count": audit.get(
+                        "network_state_projection_replay_checked_state_position_count"
+                    ),
+                    "coverage_gaps": coverage_gaps,
+                }
+            )
+            trace_network_state_projection_replay_coverage_gap_details.append(
+                detail
+            )
+    missing_projection_audit_corner_indices = sorted(
+        set(trace_projection_applicable_corner_indices)
+        - trace_projection_trace_case_indices
+    )
+    for corner_index in missing_projection_audit_corner_indices:
+        corner = corners[corner_index]
+        detail = _critical_case_summary(corner_index, corner)
+        detail.update(
+            {
+                "search_method": (
+                    corner["operating_point_search_evidence"]["method"]
+                    if corner.get("operating_point_search_evidence")
+                    is not None
+                    else None
+                ),
+                "coverage_gaps": [
+                    {
+                        "iteration": None,
+                        "position": "entire_trace_audit",
+                    }
+                ],
+            }
+        )
+        trace_network_state_projection_replay_coverage_gap_details.append(
+            detail
+        )
+
     trace_pressure_component_replay_violation_details = []
     for corner_index, corner, evidence, audit in trace_cases:
         violations = audit.get("pressure_component_replay_violations", [])
@@ -3019,6 +3196,66 @@ def _operating_point_search_resolution_summary(
                         "path": mismatch["path"],
                         "recorded_value": mismatch.get("recorded_value"),
                         "recomputed_value": mismatch.get("recomputed_value"),
+                        "absolute_error": float(absolute_error),
+                    }
+                )
+                grouped.setdefault(str(field), []).append(witness)
+
+        maxima = []
+        for field in sorted(grouped):
+            witnesses = grouped[field]
+            maximum = max(
+                float(witness["absolute_error"])
+                for witness in witnesses
+            )
+            maxima.append(
+                {
+                    "field": field,
+                    "comparison_basis": "same_canonical_leaf_field",
+                    "maximum_absolute_error": maximum,
+                    "witnesses": [
+                        witness
+                        for witness in witnesses
+                        if float(witness["absolute_error"]) == maximum
+                    ],
+                }
+            )
+        return maxima
+
+    def _maximum_bisection_trace_network_state_projection_numeric_errors(
+    ) -> list[dict]:
+        grouped: dict[str, list[dict]] = {}
+        for (
+            corner_index,
+            corner,
+            evidence,
+            audit,
+        ) in trace_cases:
+            for mismatch in audit.get(
+                "network_state_projection_replay_mismatches",
+                [],
+            ):
+                field = mismatch.get("numeric_error_field")
+                absolute_error = mismatch.get("absolute_error")
+                if field is None or absolute_error is None:
+                    continue
+                witness = _critical_case_summary(corner_index, corner)
+                witness.update(
+                    {
+                        "search_method": evidence["method"],
+                        "supplied_segment_index": evidence[
+                            "supplied_segment_index"
+                        ],
+                        "operating_iterations": evidence[
+                            "operating_iterations"
+                        ],
+                        "iteration": mismatch["iteration"],
+                        "position": mismatch["position"],
+                        "path": mismatch["path"],
+                        "recorded_value": mismatch.get("recorded_value"),
+                        "recomputed_value": mismatch.get(
+                            "recomputed_value"
+                        ),
                         "absolute_error": float(absolute_error),
                     }
                 )
@@ -3654,6 +3891,60 @@ def _operating_point_search_resolution_summary(
         ),
         "bisection_trace_network_state_replay_violation_corner_indices": (
             trace_network_state_replay_violation_corner_indices
+        ),
+        "bisection_trace_network_state_projection_replay_applicable": (
+            bool(trace_projection_applicable_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_applicable_corner_count": (
+            len(trace_projection_applicable_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_evidence_corner_count": (
+            len(trace_projection_evidence_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_complete_coverage_corner_count": (
+            len(trace_projection_complete_coverage_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_complete_coverage": (
+            len(trace_projection_complete_coverage_corner_indices)
+            == len(trace_projection_applicable_corner_indices)
+            and len(trace_cases)
+            == len(trace_projection_applicable_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_consistent_corner_count": (
+            len(trace_network_state_projection_replay_consistent_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_inconsistent_corner_count": (
+            len(trace_network_state_projection_replay_violation_corner_indices)
+        ),
+        "bisection_trace_network_state_projection_replay_incomplete_coverage_corner_count": (
+            len(
+                trace_network_state_projection_replay_coverage_gap_corner_indices
+            )
+        ),
+        "bisection_trace_network_state_projection_replay_violation_corner_indices": (
+            trace_network_state_projection_replay_violation_corner_indices
+        ),
+        "bisection_trace_network_state_projection_replay_coverage_gap_corner_indices": (
+            trace_network_state_projection_replay_coverage_gap_corner_indices
+        ),
+        "bisection_trace_network_state_projection_replay_mismatch_count": sum(
+            int(
+                audit.get(
+                    "network_state_projection_replay_mismatch_count",
+                    0,
+                )
+                or 0
+            )
+            for _corner_index, _corner, _evidence, audit in trace_cases
+        ),
+        "bisection_trace_network_state_projection_replay_violation_details": (
+            trace_network_state_projection_replay_violation_details
+        ),
+        "bisection_trace_network_state_projection_replay_coverage_gap_details": (
+            trace_network_state_projection_replay_coverage_gap_details
+        ),
+        "maximum_bisection_trace_network_state_projection_numeric_errors": (
+            _maximum_bisection_trace_network_state_projection_numeric_errors()
         ),
         "terminal_pressure_component_replay_consistent_corner_count": (
             len(trace_cases)

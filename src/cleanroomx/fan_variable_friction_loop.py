@@ -209,6 +209,54 @@ def _solve_network_at_airflow(
     return solved, max(network_pressure, 0.0)
 
 
+def _recompute_bisection_midpoint_residual_evidence(
+    study: FanVariableFrictionLoopStudy,
+    left: FanCurvePoint,
+    right: FanCurvePoint,
+    trace: list[dict] | None,
+) -> list[dict] | None:
+    if trace is None:
+        return None
+
+    evidence = []
+    for step in trace:
+        airflow = float(step["midpoint_airflow_m3_h"])
+        iteration = int(step["iteration"])
+        try:
+            fan_pressure = _fan_pressure(left, right, airflow)
+            _network, network_pressure = _solve_network_at_airflow(
+                study,
+                airflow,
+            )
+        except RuntimeError as exc:
+            evidence.append(
+                {
+                    "iteration": iteration,
+                    "midpoint_airflow_m3_h": airflow,
+                    "recompute_succeeded": False,
+                    "error": str(exc),
+                }
+            )
+            continue
+
+        system_pressure = study.fixed_pressure_pa + network_pressure
+        residual = fan_pressure - system_pressure
+        evidence.append(
+            {
+                "iteration": iteration,
+                "midpoint_airflow_m3_h": airflow,
+                "recompute_succeeded": True,
+                "recomputed_fan_pressure_pa": round(fan_pressure, 9),
+                "recomputed_system_pressure_pa": round(system_pressure, 9),
+                "recomputed_fan_minus_system_pressure_pa": round(
+                    residual,
+                    9,
+                ),
+            }
+        )
+    return evidence
+
+
 def _point_check(
     study: FanVariableFrictionLoopStudy,
     point: FanCurvePoint,
@@ -659,6 +707,7 @@ def _bisection_decision_trace_audit(
     operating_iterations: int,
     termination_reason: str,
     operating_pressure_tolerance_pa: float,
+    independent_midpoint_residual_evidence: list[dict] | None = None,
     initial_bisection_bracket: dict | None = None,
     solved_terminal_bracket: dict | None = None,
     iteration_limit_terminal_bracket: dict | None = None,
@@ -771,6 +820,130 @@ def _bisection_decision_trace_audit(
                 ),
             }
         )
+
+    midpoint_residual_recompute_abs_tolerance_pa = 1e-6
+    midpoint_residual_recompute_checks = []
+    if independent_midpoint_residual_evidence is not None:
+        for index, step in enumerate(trace):
+            recomputed = (
+                independent_midpoint_residual_evidence[index]
+                if index < len(independent_midpoint_residual_evidence)
+                else None
+            )
+            recorded_iteration = int(step["iteration"])
+            recorded_airflow = float(step["midpoint_airflow_m3_h"])
+            recorded_residual = float(
+                step["midpoint_fan_minus_system_pressure_pa"]
+            )
+            recompute_succeeded = bool(
+                recomputed is not None
+                and recomputed.get("recompute_succeeded", False)
+            )
+            iteration_matches = bool(
+                recomputed is not None
+                and int(recomputed.get("iteration", -1))
+                == recorded_iteration
+            )
+            airflow_matches = bool(
+                recomputed is not None
+                and math.isclose(
+                    float(
+                        recomputed.get(
+                            "midpoint_airflow_m3_h",
+                            math.nan,
+                        )
+                    ),
+                    recorded_airflow,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                )
+            )
+            recomputed_residual = (
+                float(
+                    recomputed[
+                        "recomputed_fan_minus_system_pressure_pa"
+                    ]
+                )
+                if recompute_succeeded
+                else None
+            )
+            absolute_residual_error = (
+                abs(recorded_residual - recomputed_residual)
+                if recomputed_residual is not None
+                else None
+            )
+            residual_matches = bool(
+                recompute_succeeded
+                and iteration_matches
+                and airflow_matches
+                and absolute_residual_error is not None
+                and absolute_residual_error
+                <= midpoint_residual_recompute_abs_tolerance_pa
+            )
+            midpoint_residual_recompute_checks.append(
+                {
+                    "iteration": recorded_iteration,
+                    "recorded_midpoint_airflow_m3_h": recorded_airflow,
+                    "recorded_midpoint_fan_minus_system_pressure_pa": (
+                        recorded_residual
+                    ),
+                    "recompute_succeeded": recompute_succeeded,
+                    "recomputed_iteration_matches_trace": (
+                        iteration_matches
+                    ),
+                    "recomputed_airflow_matches_trace_midpoint": (
+                        airflow_matches
+                    ),
+                    "recomputed_fan_pressure_pa": (
+                        None
+                        if not recompute_succeeded
+                        else float(
+                            recomputed["recomputed_fan_pressure_pa"]
+                        )
+                    ),
+                    "recomputed_system_pressure_pa": (
+                        None
+                        if not recompute_succeeded
+                        else float(
+                            recomputed["recomputed_system_pressure_pa"]
+                        )
+                    ),
+                    "recomputed_fan_minus_system_pressure_pa": (
+                        recomputed_residual
+                    ),
+                    "absolute_midpoint_residual_recompute_error_pa": (
+                        absolute_residual_error
+                    ),
+                    "midpoint_residual_recompute_abs_tolerance_pa": (
+                        midpoint_residual_recompute_abs_tolerance_pa
+                    ),
+                    "recorded_midpoint_residual_matches_independent_recomputation": (
+                        residual_matches
+                    ),
+                    "recompute_error": (
+                        None
+                        if recomputed is None
+                        else recomputed.get("error")
+                    ),
+                }
+            )
+
+    midpoint_residual_recompute_complete = bool(
+        independent_midpoint_residual_evidence is not None
+        and len(independent_midpoint_residual_evidence) == len(trace)
+        and len(midpoint_residual_recompute_checks) == len(trace)
+        and all(
+            check["recompute_succeeded"]
+            and check["recomputed_iteration_matches_trace"]
+            and check["recomputed_airflow_matches_trace_midpoint"]
+            for check in midpoint_residual_recompute_checks
+        )
+    )
+    midpoint_residual_recompute_errors = [
+        float(check["absolute_midpoint_residual_recompute_error_pa"])
+        for check in midpoint_residual_recompute_checks
+        if check["absolute_midpoint_residual_recompute_error_pa"] is not None
+    ]
 
     decision_semantic_checks = []
     tolerance = float(operating_pressure_tolerance_pa)
@@ -1229,6 +1402,42 @@ def _bisection_decision_trace_audit(
             )
         ),
         "geometry_checks": geometry_checks,
+        "midpoint_residual_recompute_evidence_available": (
+            independent_midpoint_residual_evidence is not None
+        ),
+        "midpoint_residual_recompute_check_count": len(
+            midpoint_residual_recompute_checks
+        ),
+        "midpoint_residual_recompute_complete": (
+            midpoint_residual_recompute_complete
+        ),
+        "all_midpoint_residuals_match_independent_recomputation": (
+            midpoint_residual_recompute_complete
+            and all(
+                check[
+                    "recorded_midpoint_residual_matches_independent_recomputation"
+                ]
+                for check in midpoint_residual_recompute_checks
+            )
+        ),
+        "midpoint_residual_recompute_violation_iterations": [
+            check["iteration"]
+            for check in midpoint_residual_recompute_checks
+            if not check[
+                "recorded_midpoint_residual_matches_independent_recomputation"
+            ]
+        ],
+        "maximum_absolute_midpoint_residual_recompute_error_pa": (
+            max(midpoint_residual_recompute_errors)
+            if midpoint_residual_recompute_errors
+            else None
+        ),
+        "midpoint_residual_recompute_abs_tolerance_pa": (
+            midpoint_residual_recompute_abs_tolerance_pa
+        ),
+        "midpoint_residual_recompute_checks": (
+            midpoint_residual_recompute_checks
+        ),
         "decision_semantic_check_count": len(decision_semantic_checks),
         "all_decisions_match_midpoint_residual_semantics": all(
             check["decision_matches_midpoint_residual_semantics"]
@@ -1287,8 +1496,11 @@ def _bisection_decision_trace_audit(
             "fraction implied by its iteration. The raw-state audit "
             "independently recomputes strict sign-change and arithmetic-"
             "midpoint facts from the recorded numeric state and checks the "
-            "stored flags against those recomputed facts. The decision-"
-            "semantics audit "
+            "stored flags against those recomputed facts. The independent "
+            "model-residual audit re-runs fan interpolation and the complete "
+            "variable-friction network at every retained midpoint, then "
+            "checks the recorded fan-minus-system residual against that "
+            "fresh numerical result. The decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
@@ -1678,6 +1890,14 @@ def solve_fan_variable_friction_loop(
                         operating_iterations=operating_iterations,
                         termination_reason=termination_reason,
                         operating_pressure_tolerance_pa=tolerance,
+                        independent_midpoint_residual_evidence=(
+                            _recompute_bisection_midpoint_residual_evidence(
+                                study,
+                                left,
+                                right,
+                                bisection_trace,
+                            )
+                        ),
                         initial_bisection_bracket=initial_bisection_bracket,
                         iteration_limit_terminal_bracket=terminal_bracket,
                     ),
@@ -1833,6 +2053,14 @@ def solve_fan_variable_friction_loop(
             operating_iterations=operating_iterations,
             termination_reason=termination_reason,
             operating_pressure_tolerance_pa=tolerance,
+            independent_midpoint_residual_evidence=(
+                _recompute_bisection_midpoint_residual_evidence(
+                    study,
+                    left,
+                    right,
+                    bisection_trace,
+                )
+            ),
             initial_bisection_bracket=initial_bisection_bracket,
             solved_terminal_bracket=final_bisection_bracket,
         ),

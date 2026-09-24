@@ -44,6 +44,8 @@ v0.92 makes the shared canonical projection both signed-zero-stable and solver-p
 
 v0.93 extends the same v3 hash and field-by-field canonical projection replay to every successfully evaluated supplied fan-curve point before root selection. Each supplied-point check retains both representations; a fresh nonlinear solve at that exact airflow verifies the SHA-256 and projection independently and reports deterministic mismatch paths when the projection differs. This covers solved cases, complete `no_intersection_in_supplied_range` cases, and the successfully evaluated prefix before a network-solver failure. The audit is deterministic implementation provenance only.
 
+v0.94 applies full canonical projection replay to the accepted selected operating solution itself. The selected-state audit retains the v3 projection alongside its SHA-256, independently re-solves the exact selected airflow, and emits structured mismatch records with exact paths, mismatch kinds, recorded/recomputed presence and types, values, finite numeric absolute errors, and per-field maximum-error witnesses. The same structured records enrich terminal projection diagnostics while the existing mismatch-path fields remain available. These checks are deterministic implementation provenance only; they do not establish physical uncertainty, dynamic stability, manufacturer operating limits, commissioning/certification evidence, or equipment acceptance.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`
@@ -103,6 +105,7 @@ A solved result includes:
 - edge Reynolds/friction evidence;
 - supplied fan-point system checks;
 - a supplied-point network-state replay audit retaining the v3 canonical SHA-256 and projection for each successfully evaluated fan point, independently re-solving those exact airflows, localizing projection differences to deterministic field paths, and distinguishing complete from partial point coverage;
+- a selected operating network-state projection replay audit for solved cases, retaining the accepted v3 projection and independently re-solving the exact selected airflow with structured mismatch records and numeric-error witnesses in addition to the existing selected-state SHA-256 and scalar replay checks;
 - operating-point termination reason;
 - a supplied-point fan-minus-system residual-topology audit with expected/evaluated point counts, complete/partial point coverage, tolerance contacts, solver-eligible strict positive-to-negative sign-change segments, audit-only strict negative-to-positive reverse sign-change segments, adjacent residual transitions, sampled monotonic non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features;
 - for solved cases, selected-candidate provenance containing the documented selection policy, selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate.

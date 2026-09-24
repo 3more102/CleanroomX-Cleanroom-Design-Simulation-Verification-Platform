@@ -2492,6 +2492,32 @@ def _operating_point_search_resolution_summary(
         for corner_index, corner, evidence in solved_cases
         if evidence["method"] == "supplied_point_tolerance_contact"
     ]
+    final_operating_point_replay_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence.get("final_operating_point_state_replay"),
+        )
+        for corner_index, corner, evidence in solved_cases
+        if evidence.get("final_operating_point_state_replay") is not None
+    ]
+    final_operating_point_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, replay
+        in final_operating_point_replay_cases
+        if replay.get(
+            "all_final_operating_point_state_matches_independent_replay",
+            False,
+        )
+        is not True
+    ]
+    final_operating_point_replay_nonconverged_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, replay
+        in final_operating_point_replay_cases
+        if replay.get("replay_converged") is not True
+    ]
     iteration_limit_cases = [
         (corner_index, corner, evidence)
         for corner_index, corner, evidence in cases
@@ -2738,6 +2764,56 @@ def _operating_point_search_resolution_summary(
             "sources": sources,
         }
 
+    def _maximum_final_operating_point_replay_error_evidence() -> dict | None:
+        available = [
+            case
+            for case in final_operating_point_replay_cases
+            if case[3].get("replay_converged") is True
+        ]
+        if not available:
+            return None
+        maximum = max(
+            float(
+                replay[
+                    "maximum_absolute_pressure_state_replay_error_pa"
+                ]
+            )
+            for _corner_index, _corner, _evidence, replay in available
+        )
+        sources = []
+        for corner_index, corner, evidence, replay in available:
+            value = float(
+                replay[
+                    "maximum_absolute_pressure_state_replay_error_pa"
+                ]
+            )
+            if not math.isclose(
+                value,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "selected_airflow_m3_h": replay[
+                        "selected_airflow_m3_h"
+                    ],
+                    "final_operating_point_state_replay": replay,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": "Pa",
+            "sources": sources,
+        }
+
     def _maximum_invariant_error_evidence() -> dict | None:
         if not invariant_cases:
             return None
@@ -2906,6 +2982,25 @@ def _operating_point_search_resolution_summary(
             corner_index
             for corner_index, _corner, _evidence in supplied_point_cases
         ],
+        "final_operating_point_replay_evidence_corner_count": (
+            len(final_operating_point_replay_cases)
+        ),
+        "final_operating_point_replay_complete_solved_coverage": (
+            len(final_operating_point_replay_cases) == solved_corner_count
+        ),
+        "final_operating_point_replay_consistent_corner_count": (
+            len(final_operating_point_replay_cases)
+            - len(final_operating_point_replay_violation_corner_indices)
+        ),
+        "final_operating_point_replay_violation_corner_indices": (
+            final_operating_point_replay_violation_corner_indices
+        ),
+        "final_operating_point_replay_nonconverged_corner_indices": (
+            final_operating_point_replay_nonconverged_corner_indices
+        ),
+        "maximum_final_operating_point_replay_error_pa": (
+            _maximum_final_operating_point_replay_error_evidence()
+        ),
         "bisection_invariant_evidence_corner_count": len(invariant_cases),
         "strict_sign_change_preserved_corner_count": (
             len(invariant_cases)

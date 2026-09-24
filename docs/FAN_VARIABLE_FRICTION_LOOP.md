@@ -113,6 +113,8 @@ v0.78 independently audits the meaning of every retained decision. A midpoint in
 
 v0.79 independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from each retained trace record's numeric fields, then checks the stored sign-change and midpoint flags against those recomputed facts. It also retains per-step raw-state evidence and the maximum absolute midpoint-centering error, so correct-looking stored booleans cannot hide corrupted numeric trace state. This remains numerical implementation provenance only; it does not add physical airflow uncertainty, interpolation-error, root-uniqueness/stability, stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
 
+v0.80 retains the midpoint fan pressure and system pressure used for each bisection evaluation, independently recomputes their difference, and checks that the stored fan-minus-system residual matches that pressure identity. A second semantic check derives the expected L/H/T decision from the recomputed pressure-component residual rather than trusting the stored residual. Exact violation iterations and uncertainty-corner provenance remain numerical implementation evidence only; they do not establish physical uncertainty, root stability, manufacturer operating limits, commissioning/certification evidence, or equipment acceptance.
+
 ## CLI
 
 ```text

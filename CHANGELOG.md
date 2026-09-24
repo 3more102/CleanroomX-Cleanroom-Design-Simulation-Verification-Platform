@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.97 complete desktop application release — 2026-09-24
+
+- Finalizes the complete v0.96 desktop application on the newest clean descendant of integrated v0.95.
+- Makes `cleanroomx-gui --check` validate every registered parser/runner/reporter binding, duplicate workflow keys, and the custom consistency/dossier adapter contract before reporting healthy capability metadata.
+- Retains end-to-end application execution coverage for every GUI-exposed workflow using real repository examples.
+- Retains strict JSON project/editor handling, unsaved-change protection, multi-analysis editor-state preservation, guarded background execution, and stale-result invalidation.
+- Adds a dedicated v0.97 application/workflow/lifecycle CI gate before the complete suite while preserving all v0.91-v0.95 compatibility gates, CLI smoke checks, and the real Tk/Xvfb desktop smoke.
+- Synchronizes package, runtime, demo-project, GUI capability tests, documentation, and CI version checks at `0.97.0`.
+- Does not alter validated engineering calculation semantics or claim ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
+
 ## v0.96 desktop application and project workflow — 2026-09-24
 
 - Adds a shared application-service registry over the existing validated CleanroomX backend parsers, solvers, reporters, consistency checks, and engineering dossier workflow.

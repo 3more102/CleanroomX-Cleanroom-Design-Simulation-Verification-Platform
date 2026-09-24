@@ -1048,6 +1048,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{alternative_gap['value']} {alternative_gap['unit']}** "
                 f"({' / '.join(source_texts)})"
             )
+        normalized_alternative_gap = residual_summary.get(
+            "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
+        )
+        if normalized_alternative_gap is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; supplied-span={source['supplied_fan_curve_airflow_span_m3_h']} m³/h"
+                for source in normalized_alternative_gap["sources"]
+            ]
+            lines.append(
+                "- Minimum selected-to-alternative candidate gap / supplied fan-curve span: "
+                f"**{normalized_alternative_gap['value']}** "
+                f"({' / '.join(source_texts)})"
+            )
         if residual_summary["residual_increase_corner_indices"]:
             lines.append(
                 "- Residual-increase corner indices: "

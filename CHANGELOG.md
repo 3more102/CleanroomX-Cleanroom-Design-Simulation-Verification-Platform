@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.93 supplied-point network-state fingerprint and projection replay — 2026-09-24
+
+- Retains the v0.92 signed-zero-stable canonical network-result SHA-256 and full canonical projection for every successfully evaluated supplied fan-curve point before operating-point candidate selection.
+- Independently re-solves each evaluated supplied-point airflow and compares both the retained hash and field-by-field canonical projection with the fresh nonlinear network result.
+- Localizes supplied-point projection corruption to deterministic JSON-style mismatch paths while preserving separate hash-mismatch evidence.
+- Extends internal solver-provenance replay to complete no-intersection cases and explicitly preserves partial supplied-point coverage when the network solver fails before all fan points are evaluated.
+- Aggregates complete/incomplete coverage, consistent corners, hash violations, projection violations, and combined violations across nonlinear uncertainty studies and surfaces the evidence in standalone reports and engineering dossiers.
+- Adds solved, hash-corruption, projection-corruption, no-intersection, partial non-convergence, and uncertainty aggregation regression coverage.
+- Preserves v0.92 canonical solver-provenance semantics, v0.91 terminal projection replay, root selection, solver tolerances, no-extrapolation behavior, and engineering acceptance boundaries.
+- Bumped package/runtime metadata to v0.93.0.
+
 ## v0.92 signed-zero-stable complete solver-provenance canonical replay — 2026-09-24
 
 - Normalizes floating-point signed zero so `-0.0` and `0.0` represent the same deterministic engineering state before canonical projection comparison or SHA-256 serialization.

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.74 iteration-limit decision-trace and replay audit — 2026-09-24
+
+- Extends the v0.72/v0.73 bounded-bisection decision trace and state-replay audit to searches that exhaust the configured operating-point iteration budget before satisfying the pressure-residual tolerance.
+- Retains every completed L/H midpoint evaluation for iteration-limit cases while keeping the result explicitly `non_converged`, leaving `fan_operating_point` unset, and never fabricating a tolerance-acceptance `T` decision.
+- Makes terminal trace validation outcome-aware: pressure-residual solves require one final `T`, while iteration-limit traces require a non-empty L/H-only sequence with no tolerance acceptance.
+- Preserves the v0.73 contiguous-iteration and airflow/residual state-transition replay checks for both solved and iteration-limit traces.
+- Aggregates solved and iteration-limit trace coverage separately across nonlinear uncertainty corners, adds exact terminal-outcome violation provenance, and retains exact sequence/replay violation indices plus tied maximum-trace-length witnesses.
+- Surfaces the expanded audit in standalone fan-loop, nonlinear uncertainty, and engineering-dossier Markdown.
+- Adds deterministic solver, uncertainty, and dossier regression coverage without changing operating-point selection, no-extrapolation behavior, or unresolved-case withholding.
+- Treats decision traces and replay evidence strictly as numerical implementation provenance; they are not physical airflow uncertainty, interpolation error, continuous-root/stability evidence, manufacturer operating limits, commissioning/certification evidence, or equipment-acceptance criteria.
+- Bumped package/runtime metadata to v0.74.0.
+
 ## v0.73 bisection decision-trace replay audit — 2026-09-24
 
 - Replays every nonterminal successful bounded-bisection L/H decision into the next retained trace record and verifies both airflow-bracket and signed-residual-bracket state transitions.

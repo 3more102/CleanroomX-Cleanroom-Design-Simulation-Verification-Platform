@@ -2499,6 +2499,66 @@ def _operating_point_search_resolution_summary(
         and evidence.get("iteration_limit_evidence") is not None
     ]
 
+    selected_operating_state_replay_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence.get("selected_operating_state_replay"),
+        )
+        for corner_index, corner, evidence in solved_cases
+        if evidence.get("selected_operating_state_replay") is not None
+    ]
+    selected_operating_state_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in selected_operating_state_replay_cases
+        if audit.get(
+            "all_selected_operating_state_matches_independent_replay",
+            False,
+        )
+        is not True
+    ]
+    selected_operating_state_origin_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in selected_operating_state_replay_cases
+        if audit.get("selected_airflow_matches_search_origin", False)
+        is not True
+    ]
+    selected_operating_state_replay_violation_details = []
+    for (
+        corner_index,
+        corner,
+        evidence,
+        audit,
+    ) in selected_operating_state_replay_cases:
+        if (
+            audit.get(
+                "all_selected_operating_state_matches_independent_replay",
+                False,
+            )
+            is True
+        ):
+            continue
+        detail = _critical_case_summary(corner_index, corner)
+        detail.update(
+            {
+                "search_method": evidence["method"],
+                "supplied_segment_index": evidence[
+                    "supplied_segment_index"
+                ],
+                "operating_iterations": evidence["operating_iterations"],
+                "selection_source": audit.get("selection_source"),
+                "selected_airflow_matches_search_origin": audit.get(
+                    "selected_airflow_matches_search_origin"
+                ),
+                "violation_count": int(audit.get("violation_count", 0)),
+                "violations": audit.get("violations", []),
+            }
+        )
+        selected_operating_state_replay_violation_details.append(detail)
+
     invariant_cases = [
         (
             corner_index,
@@ -2709,6 +2769,54 @@ def _operating_point_search_resolution_summary(
         in iteration_limit_invariant_cases
         if not invariant["strict_sign_change_preserved"]
     ]
+
+    def _maximum_selected_operating_state_replay_error_evidence(
+    ) -> dict | None:
+        if not selected_operating_state_replay_cases:
+            return None
+        maximum = max(
+            float(audit["maximum_absolute_pressure_replay_error_pa"])
+            for _corner_index, _corner, _evidence, audit
+            in selected_operating_state_replay_cases
+        )
+        sources = []
+        for (
+            corner_index,
+            corner,
+            evidence,
+            audit,
+        ) in selected_operating_state_replay_cases:
+            value = float(
+                audit["maximum_absolute_pressure_replay_error_pa"]
+            )
+            if not math.isclose(
+                value,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "selection_source": audit["selection_source"],
+                    "maximum_pressure_replay_error_witnesses": audit.get(
+                        "maximum_pressure_replay_error_witnesses",
+                        [],
+                    ),
+                }
+            )
+            sources.append(source)
+        return {
+            "value": round(maximum, 18),
+            "unit": "Pa",
+            "sources": sources,
+        }
 
     def _maximum_bracket_evidence(
         key: str,
@@ -2974,6 +3082,33 @@ def _operating_point_search_resolution_summary(
             corner_index
             for corner_index, _corner, _evidence in supplied_point_cases
         ],
+        "selected_operating_state_replay_evidence_corner_count": len(
+            selected_operating_state_replay_cases
+        ),
+        "selected_operating_state_replay_complete_coverage": (
+            len(selected_operating_state_replay_cases) == len(solved_cases)
+        ),
+        "selected_operating_state_replay_consistent_corner_count": (
+            len(selected_operating_state_replay_cases)
+            - len(selected_operating_state_replay_violation_corner_indices)
+        ),
+        "selected_operating_state_replay_violation_corner_indices": (
+            selected_operating_state_replay_violation_corner_indices
+        ),
+        "selected_operating_state_origin_violation_corner_indices": (
+            selected_operating_state_origin_violation_corner_indices
+        ),
+        "selected_operating_state_replay_violation_count": sum(
+            int(audit.get("violation_count", 0))
+            for _corner_index, _corner, _evidence, audit
+            in selected_operating_state_replay_cases
+        ),
+        "selected_operating_state_replay_violation_details": (
+            selected_operating_state_replay_violation_details
+        ),
+        "maximum_selected_operating_state_pressure_replay_error_pa": (
+            _maximum_selected_operating_state_replay_error_evidence()
+        ),
         "bisection_invariant_evidence_corner_count": len(invariant_cases),
         "strict_sign_change_preserved_corner_count": (
             len(invariant_cases)
@@ -3265,7 +3400,9 @@ def _operating_point_search_resolution_summary(
             "against its airflow endpoints and its normalized width against "
             "the binary contraction implied by the iteration number. v0.84 "
             "propagates exact pressure-component replay violation records and "
-            "tied maximum-error witnesses across evaluated uncertainty corners."
+            "tied maximum-error witnesses across evaluated uncertainty corners. "
+            "v0.85 independently replays every solved corner's selected "
+            "operating state and verifies its retained selection origin."
         ),
     }
 

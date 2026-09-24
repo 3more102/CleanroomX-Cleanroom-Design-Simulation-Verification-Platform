@@ -531,7 +531,7 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Min alternative candidate gap / min supplied spacing | Residual topology | Provenance complete |",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant / trace audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Min alternative candidate gap / min supplied spacing | Residual topology | Provenance complete |",
                 "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
             ]
         )
@@ -724,6 +724,38 @@ def markdown_dossier_report(result: dict) -> str:
                     "selected_midpoint_centered_corner_count",
                     0,
                 )
+                trace_count = search_summary.get(
+                    "bisection_trace_evidence_corner_count",
+                    0,
+                )
+                bisection_count = search_summary.get(
+                    "bisection_corner_count",
+                    0,
+                )
+                trace_length_violations = len(
+                    search_summary.get(
+                        "bisection_trace_length_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_sign_violations = len(
+                    search_summary.get(
+                        "bisection_trace_sign_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_midpoint_violations = len(
+                    search_summary.get(
+                        "bisection_trace_midpoint_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_terminal_violations = len(
+                    search_summary.get(
+                        "bisection_trace_terminal_violation_corner_indices",
+                        [],
+                    )
+                )
                 invariant_error = search_summary.get(
                     "maximum_absolute_width_fraction_consistency_error"
                 )
@@ -755,6 +787,10 @@ def markdown_dossier_report(result: dict) -> str:
                 search_invariants = (
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
+                    f"trace {trace_count}/{bisection_count}; "
+                    f"trace violations L/S/M/T "
+                    f"{trace_length_violations}/{trace_sign_violations}/"
+                    f"{trace_midpoint_violations}/{trace_terminal_violations}; "
                     f"max width-fraction error {max_error}; "
                     f"iteration-limit {limit_count}; "
                     f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "

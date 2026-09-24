@@ -1,4 +1,16 @@
 # Changelog
+## v0.69 bounded bisection decision-trace provenance — 2026-09-24
+
+- Retains every bounded-bisection midpoint evaluation that leads to a solved nonlinear fan/system operating point without changing the solve.
+- Each trace step records the active low/high airflow bracket, midpoint, bracket width and supplied-segment fraction, signed low/high/midpoint residuals, and the exact replace-low / replace-high / accept decision.
+- Adds a compact L/H/T decision sequence plus trace audits for step-count/iteration agreement, per-step strict residual-sign bracketing, arithmetic midpoint geometry, and terminal acceptance placement.
+- Keeps direct supplied-point tolerance contacts trace-free rather than fabricating bisection history.
+- Aggregates trace evidence coverage, exact violation corner indices, and maximum retained trace length with tied source-corner provenance.
+- Surfaces trace evidence in standalone fan-loop, nonlinear uncertainty, and engineering-dossier reports while preserving v0.68 scale-aware alternative-candidate separation and v0.67 terminal bisection-invariant evidence.
+- Adds solver, uncertainty, and dossier regression coverage.
+- Treats the trace as numerical implementation provenance only; no physical uncertainty, interpolation-error bound, stability margin, or equipment-acceptance criterion is introduced.
+- Bumped package/runtime metadata to v0.69.0.
+
 ## v0.68 scale-aware alternative crossing-candidate separation — 2026-09-24
 
 - Normalizes each v0.66 selected-to-alternative discrete candidate airflow gap by the exact supplied fan-curve airflow span used for that nonlinear solve.

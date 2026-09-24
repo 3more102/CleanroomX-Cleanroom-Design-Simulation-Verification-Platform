@@ -1,0 +1,428 @@
+{
+  "schema": "cleanroomx.project",
+  "schema_version": 1,
+  "application_version": "0.95.0",
+  "project": {
+    "name": "CleanroomX GUI Demonstration",
+    "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
+    "metadata": {
+      "purpose": "GUI and application-service demonstration"
+    }
+  },
+  "analyses": [
+    {
+      "id": "verification",
+      "name": "Facility verification",
+      "kind": "project_verification",
+      "input": {
+        "name": "Pilot cleanroom suite",
+        "rooms": [
+          {
+            "name": "Process",
+            "length_m": 6,
+            "width_m": 5,
+            "height_m": 3,
+            "supply_airflow_m3_h": 2700,
+            "min_ach": 25,
+            "observed_pressure_pa": 30,
+            "particle_requirements": [
+              {
+                "size_um": 0.5,
+                "max_concentration_per_m3": 400000,
+                "observed_concentration_per_m3": 120000
+              }
+            ]
+          },
+          {
+            "name": "Preparation",
+            "length_m": 5,
+            "width_m": 4,
+            "height_m": 3,
+            "supply_airflow_m3_h": 1200,
+            "min_ach": 20,
+            "observed_pressure_pa": 16
+          },
+          {
+            "name": "Ante",
+            "length_m": 4,
+            "width_m": 3,
+            "height_m": 3,
+            "supply_airflow_m3_h": 720,
+            "min_ach": 20,
+            "observed_pressure_pa": 8
+          }
+        ],
+        "pressure_cascade": [
+          {
+            "higher_pressure_room": "Process",
+            "lower_pressure_room": "Preparation",
+            "min_delta_pa": 10
+          },
+          {
+            "higher_pressure_room": "Preparation",
+            "lower_pressure_room": "Ante",
+            "min_delta_pa": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "hvac",
+      "name": "HVAC and duct screening",
+      "kind": "hvac",
+      "input": {
+        "name": "Duct Critical Path Demo",
+        "fan_system": {
+          "name": "Supply AHU",
+          "duct_pressure_drop_pa": 0,
+          "coil_pressure_drop_pa": 180,
+          "other_pressure_drop_pa": 90,
+          "fan_efficiency": 0.68,
+          "motor_efficiency": 0.92
+        },
+        "duct_network": {
+          "paths": [
+            {
+              "name": "Process Bay Path",
+              "sections": [
+                {
+                  "name": "Main rectangular trunk",
+                  "length_m": 18,
+                  "airflow_m3_h": 5400,
+                  "friction_factor": 0.02,
+                  "air_density_kg_m3": 1.2,
+                  "local_loss_coefficient": 1.8,
+                  "width_m": 0.8,
+                  "height_m": 0.45
+                },
+                {
+                  "name": "Process branch",
+                  "length_m": 12,
+                  "airflow_m3_h": 3600,
+                  "friction_factor": 0.021,
+                  "air_density_kg_m3": 1.2,
+                  "local_loss_coefficient": 2.4,
+                  "diameter_m": 0.5
+                }
+              ]
+            },
+            {
+              "name": "Gowning Path",
+              "sections": [
+                {
+                  "name": "Gowning branch",
+                  "length_m": 10,
+                  "airflow_m3_h": 900,
+                  "friction_factor": 0.021,
+                  "air_density_kg_m3": 1.2,
+                  "local_loss_coefficient": 2,
+                  "width_m": 0.4,
+                  "height_m": 0.25
+                }
+              ]
+            }
+          ]
+        },
+        "rooms": [
+          {
+            "name": "Process Bay",
+            "cleanroom_airflow_m3_h": 3600,
+            "thermal_design": {
+              "room_air": {
+                "dry_bulb_c": 22,
+                "relative_humidity_percent": 45
+              },
+              "loads": {
+                "equipment_w": 4000
+              },
+              "supply_air_temp_c": 16
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "fan-point",
+      "name": "Fan/system operating point",
+      "kind": "fan_operating_point",
+      "input": {
+        "name": "Supply fan operating-point demo",
+        "fan_curve": {
+          "name": "Example manufacturer fan curve",
+          "points": [
+            {
+              "airflow_m3_h": 0,
+              "pressure_pa": 600
+            },
+            {
+              "airflow_m3_h": 3000,
+              "pressure_pa": 500
+            },
+            {
+              "airflow_m3_h": 6000,
+              "pressure_pa": 300
+            },
+            {
+              "airflow_m3_h": 8000,
+              "pressure_pa": 100
+            }
+          ]
+        },
+        "system_curve": {
+          "name": "Example duct system",
+          "fixed_pressure_pa": 80,
+          "resistance_pa_per_m3_s_squared": 100
+        }
+      }
+    },
+    {
+      "id": "nonlinear-loop",
+      "name": "Fan variable-friction loop",
+      "kind": "fan_variable_friction_loop",
+      "input": {
+        "name": "Fan-driven variable-friction two-path loop",
+        "fan_discharge_node": "Supply",
+        "fan_suction_node": "Return",
+        "fixed_pressure_pa": 20,
+        "fan_curve": {
+          "name": "Variable-friction demo fan",
+          "points": [
+            {
+              "airflow_m3_h": 0,
+              "pressure_pa": 800
+            },
+            {
+              "airflow_m3_h": 5400,
+              "pressure_pa": 350
+            },
+            {
+              "airflow_m3_h": 9000,
+              "pressure_pa": 0
+            }
+          ]
+        },
+        "loop_network": {
+          "name": "Variable-friction two-path loop",
+          "reference_node": "Supply",
+          "node_injections_m3_h": {
+            "Supply": 5400,
+            "Mid": 0,
+            "Return": -5400
+          },
+          "edges": [
+            {
+              "name": "Direct",
+              "start_node": "Supply",
+              "end_node": "Return",
+              "duct_geometry": {
+                "length_m": 18,
+                "air_density_kg_m3": 1.2,
+                "local_loss_coefficient": 1.3,
+                "diameter_m": 0.45,
+                "absolute_roughness_m": 0.00015,
+                "kinematic_viscosity_m2_s": 0.000015,
+                "reference_airflow_m3_h": 2700
+              }
+            },
+            {
+              "name": "Upper 1",
+              "start_node": "Supply",
+              "end_node": "Mid",
+              "duct_geometry": {
+                "length_m": 10,
+                "air_density_kg_m3": 1.2,
+                "local_loss_coefficient": 0.6,
+                "diameter_m": 0.35,
+                "absolute_roughness_m": 0.00015,
+                "kinematic_viscosity_m2_s": 0.000015,
+                "reference_airflow_m3_h": 2700
+              }
+            },
+            {
+              "name": "Upper 2",
+              "start_node": "Mid",
+              "end_node": "Return",
+              "duct_geometry": {
+                "length_m": 10,
+                "air_density_kg_m3": 1.2,
+                "local_loss_coefficient": 0.6,
+                "diameter_m": 0.35,
+                "absolute_roughness_m": 0.00015,
+                "kinematic_viscosity_m2_s": 0.000015,
+                "reference_airflow_m3_h": 2700
+              }
+            }
+          ]
+        },
+        "solver": {
+          "resistance_relative_tolerance": 0.000001,
+          "relaxation": 0.7,
+          "near_zero_airflow_m3_h": 0.000001,
+          "max_outer_iterations": 50,
+          "mass_balance_tolerance_m3_h": 0.000001,
+          "max_newton_iterations": 100,
+          "operating_pressure_tolerance_pa": 0.000001,
+          "max_operating_iterations": 80
+        },
+        "power_efficiencies": {
+          "fan_efficiency": 0.72,
+          "motor_efficiency": 0.93,
+          "vfd_efficiency": 0.97
+        }
+      }
+    },
+    {
+      "id": "nonlinear-uncertainty",
+      "name": "Nonlinear bounded uncertainty",
+      "kind": "fan_variable_friction_uncertainty",
+      "input": {
+        "name": "Variable-friction fan-loop bounded uncertainty",
+        "fan_discharge_node": "Supply",
+        "fan_suction_node": "Return",
+        "fixed_pressure_pa": {
+          "value": 20,
+          "uncertainty_abs": 5,
+          "provenance": {
+            "source_type": "design_basis",
+            "source_name": "Demo fixed-pressure allowance",
+            "uncertainty_basis": "Illustrative absolute engineering bound"
+          }
+        },
+        "fan_curve": {
+          "name": "Variable-friction demo fan",
+          "provenance": {
+            "source_type": "manufacturer_data",
+            "source_name": "Illustrative supplied fan curve",
+            "reference": "Demo only"
+          },
+          "points": [
+            {
+              "airflow_m3_h": 0,
+              "pressure_pa": 800
+            },
+            {
+              "airflow_m3_h": 5400,
+              "pressure_pa": 350
+            },
+            {
+              "airflow_m3_h": 9000,
+              "pressure_pa": 0
+            }
+          ]
+        },
+        "loop_network": {
+          "name": "Variable-friction two-path loop",
+          "reference_node": "Supply",
+          "node_injections_m3_h": {
+            "Supply": 5400,
+            "Mid": 0,
+            "Return": -5400
+          },
+          "edges": [
+            {
+              "name": "Direct",
+              "start_node": "Supply",
+              "end_node": "Return",
+              "duct_geometry": {
+                "length_m": 18,
+                "air_density_kg_m3": 1.2,
+                "local_loss_coefficient": 1.3,
+                "diameter_m": 0.45,
+                "absolute_roughness_m": 0.00015,
+                "kinematic_viscosity_m2_s": 0.000015,
+                "reference_airflow_m3_h": 2700
+              }
+            },
+            {
+              "name": "Upper 1",
+              "start_node": "Supply",
+              "end_node": "Mid",
+              "duct_geometry": {
+                "length_m": 10,
+                "air_density_kg_m3": 1.2,
+                "local_loss_coefficient": 0.6,
+                "diameter_m": 0.35,
+                "absolute_roughness_m": 0.00015,
+                "kinematic_viscosity_m2_s": 0.000015,
+                "reference_airflow_m3_h": 2700
+              }
+            },
+            {
+              "name": "Upper 2",
+              "start_node": "Mid",
+              "end_node": "Return",
+              "duct_geometry": {
+                "length_m": 10,
+                "air_density_kg_m3": 1.2,
+                "local_loss_coefficient": 0.6,
+                "diameter_m": 0.35,
+                "absolute_roughness_m": 0.00015,
+                "kinematic_viscosity_m2_s": 0.000015,
+                "reference_airflow_m3_h": 2700
+              }
+            }
+          ]
+        },
+        "edge_local_loss_uncertainty": {
+          "Direct": {
+            "uncertainty_abs": 0.2,
+            "provenance": {
+              "source_type": "design_basis",
+              "source_name": "Direct-path fitting allowance",
+              "uncertainty_basis": "Illustrative absolute K bound"
+            }
+          },
+          "Upper 1": {
+            "uncertainty_abs": 0.1,
+            "provenance": {
+              "source_type": "design_basis",
+              "source_name": "Upper-path fitting allowance",
+              "uncertainty_basis": "Illustrative absolute K bound"
+            }
+          }
+        },
+        "max_corner_cases": 32,
+        "solver": {
+          "resistance_relative_tolerance": 0.000001,
+          "relaxation": 0.7,
+          "near_zero_airflow_m3_h": 0.000001,
+          "max_outer_iterations": 50,
+          "mass_balance_tolerance_m3_h": 0.000001,
+          "max_newton_iterations": 100,
+          "operating_pressure_tolerance_pa": 0.000001,
+          "max_operating_iterations": 80
+        },
+        "power_efficiencies": {
+          "fan_efficiency": 0.72,
+          "motor_efficiency": 0.93,
+          "vfd_efficiency": 0.97
+        }
+      }
+    },
+    {
+      "id": "consistency",
+      "name": "Verification/HVAC consistency",
+      "kind": "consistency",
+      "input": {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+        "room_airflow_abs_tolerance_m3_h": 0,
+        "require_same_room_set": true
+      }
+    },
+    {
+      "id": "dossier",
+      "name": "Engineering dossier",
+      "kind": "dossier",
+      "input": {
+        "name": "Nonlinear Fan-Loop Uncertainty Engineering Dossier",
+        "project_reference": "CRX-V038",
+        "revision": "A",
+        "fan_variable_friction_uncertainty_analyses": [
+          "fan_variable_friction_uncertainty_demo.json"
+        ]
+      }
+    }
+  ],
+  "active_analysis_id": "hvac"
+}

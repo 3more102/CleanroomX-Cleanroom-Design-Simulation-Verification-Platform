@@ -552,6 +552,116 @@ def _nonconverged_result(
     }
 
 
+def _bisection_iteration_trace_audit(
+    trace: list[dict],
+    *,
+    operating_iterations: int,
+) -> dict:
+    step_count = len(trace)
+    expected_iterations = list(range(1, step_count + 1))
+    observed_iterations = [int(step["iteration"]) for step in trace]
+    iteration_numbers_contiguous = observed_iterations == expected_iterations
+    trace_step_count_matches_operating_iterations = (
+        step_count == operating_iterations
+    )
+    all_steps_strict_sign_change_before_midpoint = all(
+        bool(step["strict_sign_change_before_step"]) for step in trace
+    )
+    all_steps_midpoint_centered = all(
+        bool(step["midpoint_is_bracket_midpoint"]) for step in trace
+    )
+
+    action_consistent = True
+    transition_consistent = True
+    terminal_step_accepts_pressure_tolerance = False
+    for index, step in enumerate(trace):
+        within_tolerance = bool(step["midpoint_within_pressure_tolerance"])
+        residual_sign = step["midpoint_residual_sign"]
+        action = step["action"]
+        if within_tolerance:
+            expected_action = "accept_midpoint_pressure_tolerance"
+        elif residual_sign == "positive":
+            expected_action = "replace_low_endpoint_with_midpoint"
+        elif residual_sign == "negative":
+            expected_action = "replace_high_endpoint_with_midpoint"
+        else:
+            expected_action = None
+        if action != expected_action:
+            action_consistent = False
+
+        if index == step_count - 1:
+            terminal_step_accepts_pressure_tolerance = (
+                within_tolerance
+                and action == "accept_midpoint_pressure_tolerance"
+            )
+            continue
+
+        if action == "replace_low_endpoint_with_midpoint":
+            expected_low = float(step["midpoint_airflow_m3_h"])
+            expected_high = float(step["bracket_high_airflow_m3_h"])
+        elif action == "replace_high_endpoint_with_midpoint":
+            expected_low = float(step["bracket_low_airflow_m3_h"])
+            expected_high = float(step["midpoint_airflow_m3_h"])
+        else:
+            transition_consistent = False
+            continue
+
+        next_step = trace[index + 1]
+        if not (
+            math.isclose(
+                float(next_step["bracket_low_airflow_m3_h"]),
+                expected_low,
+                rel_tol=0.0,
+                abs_tol=2e-12,
+            )
+            and math.isclose(
+                float(next_step["bracket_high_airflow_m3_h"]),
+                expected_high,
+                rel_tol=0.0,
+                abs_tol=2e-12,
+            )
+        ):
+            transition_consistent = False
+
+    complete = (
+        step_count > 0
+        and iteration_numbers_contiguous
+        and trace_step_count_matches_operating_iterations
+        and all_steps_strict_sign_change_before_midpoint
+        and all_steps_midpoint_centered
+        and action_consistent
+        and transition_consistent
+        and terminal_step_accepts_pressure_tolerance
+    )
+    return {
+        "trace_step_count": step_count,
+        "iteration_numbers_contiguous": iteration_numbers_contiguous,
+        "trace_step_count_matches_operating_iterations": (
+            trace_step_count_matches_operating_iterations
+        ),
+        "all_steps_strict_sign_change_before_midpoint": (
+            all_steps_strict_sign_change_before_midpoint
+        ),
+        "all_steps_midpoint_centered": all_steps_midpoint_centered,
+        "all_step_actions_consistent_with_live_residual": action_consistent,
+        "bracket_transition_consistent": transition_consistent,
+        "terminal_step_accepts_pressure_tolerance": (
+            terminal_step_accepts_pressure_tolerance
+        ),
+        "complete": complete,
+        "scope_note": (
+            "The trace audit verifies the recorded bounded-bisection execution "
+            "sequence only: contiguous iteration numbering, one recorded step "
+            "per operating iteration, strict signed bracketing before every "
+            "midpoint, midpoint centering, residual-consistent update actions, "
+            "continuity between successive active brackets, and pressure-"
+            "tolerance termination at the final midpoint. It is implementation "
+            "provenance, not physical uncertainty, interpolation-error, "
+            "stability, or equipment-acceptance evidence."
+        ),
+    }
+
+
 def _scope_note() -> str:
     return (
         "This workflow couples the supplied fan curve directly to the "
@@ -599,6 +709,7 @@ def solve_fan_variable_friction_loop(
     selected_segment = 0
     selected_supplied_point_index: int | None = None
     final_bisection_bracket: dict | None = None
+    bisection_iteration_trace: list[dict] | None = None
     operating_iterations = 0
     termination_reason = "no_intersection_in_supplied_range"
 
@@ -631,6 +742,7 @@ def solve_fan_variable_friction_loop(
             low_residual = left_residual
             high_residual = right_residual
             supplied_segment_span = high - low
+            bisection_iteration_trace = []
             final: tuple[float, float, dict, float, float] | None = None
 
             try:
@@ -652,6 +764,51 @@ def solve_fan_variable_friction_loop(
                         residual,
                     )
                     operating_iterations = iteration
+                    assert bisection_iteration_trace is not None
+                    midpoint = 0.5 * (low + high)
+                    if abs(residual) <= tolerance:
+                        trace_action = "accept_midpoint_pressure_tolerance"
+                    elif residual > 0.0:
+                        trace_action = "replace_low_endpoint_with_midpoint"
+                    else:
+                        trace_action = "replace_high_endpoint_with_midpoint"
+                    bisection_iteration_trace.append(
+                        {
+                            "iteration": iteration,
+                            "bracket_low_airflow_m3_h": round(low, 12),
+                            "bracket_high_airflow_m3_h": round(high, 12),
+                            "bracket_width_m3_h": round(high - low, 12),
+                            "low_fan_minus_system_pressure_pa": round(
+                                low_residual, 12
+                            ),
+                            "high_fan_minus_system_pressure_pa": round(
+                                high_residual, 12
+                            ),
+                            "midpoint_airflow_m3_h": round(airflow, 12),
+                            "midpoint_fan_pressure_pa": round(fan_pressure, 12),
+                            "midpoint_system_pressure_pa": round(
+                                system_pressure, 12
+                            ),
+                            "midpoint_fan_minus_system_pressure_pa": round(
+                                residual, 12
+                            ),
+                            "midpoint_residual_sign": (
+                                "zero"
+                                if residual == 0.0
+                                else ("positive" if residual > 0.0 else "negative")
+                            ),
+                            "midpoint_within_pressure_tolerance": (
+                                abs(residual) <= tolerance
+                            ),
+                            "strict_sign_change_before_step": (
+                                low_residual > 0.0 and high_residual < 0.0
+                            ),
+                            "midpoint_is_bracket_midpoint": math.isclose(
+                                airflow, midpoint, rel_tol=0.0, abs_tol=1e-12
+                            ),
+                            "action": trace_action,
+                        }
+                    )
                     if abs(residual) <= tolerance:
                         bracket_width = high - low
                         width_fraction = (
@@ -874,6 +1031,15 @@ def solve_fan_variable_friction_loop(
         "selected_supplied_point_index": selected_supplied_point_index,
         "operating_iterations": operating_iterations,
         "final_bisection_bracket": final_bisection_bracket,
+        "bisection_iteration_trace": bisection_iteration_trace,
+        "bisection_iteration_trace_audit": (
+            None
+            if bisection_iteration_trace is None
+            else _bisection_iteration_trace_audit(
+                bisection_iteration_trace,
+                operating_iterations=operating_iterations,
+            )
+        ),
         "scope_note": (
             "The final bisection bracket is the active signed-residual search "
             "interval immediately before a pressure-tolerance midpoint "
@@ -881,7 +1047,9 @@ def solve_fan_variable_friction_loop(
             "geometry evidence only; they are not physical airflow "
             "uncertainty, interpolation error, continuous worst-case bounds, "
             "or equipment-acceptance limits. Supplied-point tolerance-contact "
-            "solutions do not fabricate a bisection bracket."
+            "solutions do not fabricate a bisection bracket. Bounded-bisection "
+            "solutions retain the complete midpoint/update iteration trace plus "
+            "a deterministic execution-consistency audit."
         ),
     }
 

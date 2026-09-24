@@ -80,6 +80,44 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                         f"**{invariant['absolute_width_fraction_consistency_error']}**",
                     ]
                 )
+        trace = search.get("bisection_iteration_trace")
+        trace_audit = search.get("bisection_iteration_trace_audit")
+        if trace is None:
+            lines.append("- Bisection iteration trace: **not applicable**")
+        else:
+            lines.extend(
+                [
+                    "- Bisection iteration trace steps: "
+                    f"**{len(trace)}**",
+                    "",
+                    "| Iteration | Bracket low m³/h | Midpoint m³/h | Bracket high m³/h | Midpoint residual Pa | Within pressure tolerance | Action |",
+                    "|---:|---:|---:|---:|---:|---|---|",
+                ]
+            )
+            for step in trace:
+                lines.append(
+                    f"| {step['iteration']} | "
+                    f"{step['bracket_low_airflow_m3_h']} | "
+                    f"{step['midpoint_airflow_m3_h']} | "
+                    f"{step['bracket_high_airflow_m3_h']} | "
+                    f"{step['midpoint_fan_minus_system_pressure_pa']} | "
+                    f"{step['midpoint_within_pressure_tolerance']} | "
+                    f"{step['action']} |"
+                )
+            if trace_audit is not None:
+                lines.extend(
+                    [
+                        "",
+                        "- Bisection trace audit complete: "
+                        f"**{trace_audit['complete']}**",
+                        "- Trace bracket transitions consistent: "
+                        f"**{trace_audit['bracket_transition_consistent']}**",
+                        "- Trace actions consistent with live residuals: "
+                        f"**{trace_audit['all_step_actions_consistent_with_live_residual']}**",
+                        "- Terminal trace step accepts pressure tolerance: "
+                        f"**{trace_audit['terminal_step_accepts_pressure_tolerance']}**",
+                    ]
+                )
         lines.extend(["", search["scope_note"]])
 
     point = result["fan_operating_point"]

@@ -794,17 +794,24 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "- Bisection corners with invariant evidence: "
                 f"**{search_summary['bisection_invariant_evidence_corner_count']}/"
                 f"{search_summary['bisection_corner_count']}**",
-                "- Bisection corners with decision-trace evidence: "
-                f"**{search_summary['bisection_trace_evidence_corner_count']}/"
+                "- Corners with retained bisection decision traces: "
+                f"**{search_summary['bisection_trace_evidence_corner_count']}**",
+                "- Solved bisection corners with decision traces: "
+                f"**{search_summary['solved_bisection_trace_evidence_corner_count']}/"
                 f"{search_summary['bisection_corner_count']}**",
+                "- Iteration-limit corners with decision traces: "
+                f"**{search_summary['iteration_limit_bisection_trace_evidence_corner_count']}/"
+                f"{search_summary['iteration_limit_search_evidence_corner_count']}**",
                 "- Trace-length violations: "
                 f"**{search_summary['bisection_trace_length_violation_corner_indices']}**",
                 "- Trace sign-bracket violations: "
                 f"**{search_summary['bisection_trace_sign_violation_corner_indices']}**",
                 "- Trace midpoint-geometry violations: "
                 f"**{search_summary['bisection_trace_midpoint_violation_corner_indices']}**",
-                "- Trace terminal-position violations: "
+                "- Trace terminal-position violations (solved only): "
                 f"**{search_summary['bisection_trace_terminal_violation_corner_indices']}**",
+                "- Trace terminal-outcome violations: "
+                f"**{search_summary['bisection_trace_outcome_violation_corner_indices']}**",
                 "- Trace iteration-sequence violations: "
                 f"**{search_summary['bisection_trace_iteration_sequence_violation_corner_indices']}**",
                 "- Trace state-transition replay violations: "
@@ -861,8 +868,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['step_count']}**",
                         "- Nominal bisection decision sequence (L/H/T): "
                         f"**{nominal_trace_audit['decision_sequence']}**",
+                        "- Nominal trace termination reason: "
+                        f"**{nominal_trace_audit['termination_reason']}**",
+                        "- Nominal trace terminal outcome consistent: "
+                        f"**{nominal_trace_audit['terminal_outcome_consistent']}**",
                         "- Nominal trace invariants all satisfied: "
-                        f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['termination_record_is_last'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                        f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['terminal_outcome_consistent'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
@@ -946,6 +957,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 trace_sources.append(
                     _fmt_extreme_source(source)
                     + f"; decision-sequence={audit['decision_sequence']}"
+                    + f"; outcome={audit['termination_reason']}"
                     + f"; iterations={source['operating_iterations']}"
                 )
             lines.append(

@@ -76,6 +76,12 @@ jobs:
           tests/test_fan_variable_friction_uncertainty.py::test_selected_projection_replay_corruption_aggregates_exact_corner_evidence
           tests/test_fan_variable_friction_uncertainty.py::test_selected_projection_replay_missing_check_is_incomplete_coverage
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_selected_projection_corruption_evidence
+      - name: Run v0.100 application and desktop release regressions
+        run: >-
+          python -m pytest -q
+          tests/test_application.py
+          tests/test_project_document.py
+          tests/test_gui.py
       - name: Run complete test suite
         run: python -m pytest -q
       - name: Build wheel and verify installed application
@@ -98,17 +104,17 @@ jobs:
           ):
               assert (demo_dir / name).is_file(), name
           PY
-      - name: Install virtual display for v0.99.1 GUI smoke
+      - name: Install virtual display for v0.100 GUI smoke
         if: matrix.python-version == '3.13'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb tk
-      - name: Run v0.99.1 desktop GUI smoke from installed wheel
+      - name: Run v0.100 desktop GUI smoke from installed wheel
         if: matrix.python-version == '3.13'
         run: |
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
           xvfb-run -a /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --demo --smoke
-      - name: Run representative v0.99 CLI smoke checks
+      - name: Run representative v0.100 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format markdown --output /tmp/cleanroomx-loop.md
@@ -126,7 +132,7 @@ jobs:
           metadata = tomllib.loads(
               Path("pyproject.toml").read_text(encoding="utf-8")
           )
-          assert metadata["project"]["version"] == "0.99.1"
+          assert metadata["project"]["version"] == "0.100.0"
           assert cleanroomx.__version__ == metadata["project"]["version"]
 
           for path in (

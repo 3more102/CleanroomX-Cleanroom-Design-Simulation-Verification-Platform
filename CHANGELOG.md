@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.99 path-context provenance hardening — 2026-09-24
+
+- Continues directly from the integrated v0.98 desktop release on the verified clean v0.91 ancestry.
+- Allows engineering dossiers with only absolute file references to run before a GUI project is first saved; relative references still require an explicit project/base directory and are rejected during validation.
+- Clears all in-memory analysis results when **Save Project As** changes the project directory, preventing cached outputs from surviving a change in the base path used to resolve relative file references.
+- Adds regression coverage for both unsaved absolute-reference dossier execution and Save As result-cache invalidation.
+- Bumps package/runtime/demo metadata to v0.99.0 while preserving the complete v0.91-v0.95 numerical/provenance compatibility gates and v0.96-v0.98 application behavior.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

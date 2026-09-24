@@ -850,20 +850,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def fit_views(self) -> None:
-        canvas.create_text(
-            10,
-            10,
-            anchor="nw",
-            text=(
-                f"Az {self.layout['view']['azimuth_deg']:.0f}°  ·  "
-                f"El {self.layout['view']['elevation_deg']:.0f}°  ·  "
-                f"Zoom {self.layout['view']['zoom_3d']:.2f}×"
-            ),
-            fill="#8fa4bc",
-            font=("TkDefaultFont", 9),
-            tags=("hud3d",),
-        )
-
         min_x, min_y, max_x, max_y = self._bounds()
         width_m = max(1.0, max_x - min_x)
         height_m = max(1.0, max_y - min_y)
@@ -1154,7 +1140,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             text=(
                 f"Az {self.layout['view']['azimuth_deg']:.0f}°  ·  "
                 f"El {self.layout['view']['elevation_deg']:.0f}°  ·  "
-                f"Zoom {self.layout['view']['zoom_3d']:.2f}×"
+                f"Zoom {self.layout['view']['zoom_3d']:.2f}×  ·  "
+                f"{len(self.layout['rooms'])} rooms  ·  "
+                f"{len(self.layout['devices'])} devices"
             ),
             fill="#90a9c1",
             font=("TkDefaultFont", 9),

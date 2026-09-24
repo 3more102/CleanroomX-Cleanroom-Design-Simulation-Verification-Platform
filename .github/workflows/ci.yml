@@ -90,6 +90,7 @@ jobs:
           tests/test_gui.py::test_import_input_json_preserves_source_file_reference_context
           tests/test_gui.py::test_export_writer_uses_atomic_write_and_reports_failure
           tests/test_project_document.py::test_atomic_write_text_replaces_content_without_leaving_temp_file
+          tests/test_project_document.py::test_atomic_write_text_cleans_temp_file_when_replace_fails
           tests/test_gui.py::test_gui_check_mode_needs_no_display
       - name: Run complete test suite
         run: python -m pytest -q

@@ -138,7 +138,7 @@ def test_network_state_fingerprint_is_order_invariant_for_named_collections() ->
                 {
                     "outer_iteration": 2,
                     "max_relative_resistance_change": 1e-8,
-                    "max_abs_mass_balance_residual_m3_h": 1e-11,
+                    "max_abs_mass_balance_residual_m3_h": 0.0,
                     "near_zero_frozen_edge_count": 0,
                 },
             ],

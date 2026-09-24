@@ -1172,6 +1172,13 @@ def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
         "all_final_operating_point_state_matches_independent_replay"
     ] is True
     assert replay["maximum_absolute_pressure_state_replay_error_pa"] <= 1e-9
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Final operating-point independent replay available: **True**" in report
+    assert "Final operating-point replay converged: **True**" in report
+    assert (
+        "Final operating-point state matches independent replay: **True**"
+        in report
+    )
 
 
 def test_final_operating_point_state_replay_covers_bisection_solution() -> None:

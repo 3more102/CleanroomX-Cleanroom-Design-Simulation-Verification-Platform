@@ -549,6 +549,7 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
         assert "Nearest alternative candidate interval gap" in report
         assert "gap / supplied fan-curve span" in report
         assert "gap / minimum supplied-point spacing" in report
+        assert "supplied-point index-interval gap" in report
     assert "not a count or proof of continuous physical intersections" in report
 
 def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candidates() -> None:
@@ -625,6 +626,25 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
     assert selected[
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
     ] == pytest.approx(1500.0 / supplied_span)
+    assert selected["selected_candidate_feature"][
+        "supplied_point_index_interval_low"
+    ] == 0
+    assert selected["selected_candidate_feature"][
+        "supplied_point_index_interval_high"
+    ] == 1
+    assert alternatives[0]["supplied_point_index_interval_low"] == 2
+    assert alternatives[0]["supplied_point_index_interval_high"] == 3
+    assert alternatives[0][
+        "selected_feature_to_candidate_feature_index_interval_gap"
+    ] == 1
+    assert selected[
+        "nearest_alternative_candidate_feature_index_interval_gap"
+    ] == 1
+    assert len(
+        selected[
+            "nearest_alternative_candidate_features_by_index_interval_gap"
+        ]
+    ) == 1
     assert selected[
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing"
     ] == pytest.approx(1500.0 / minimum_spacing)

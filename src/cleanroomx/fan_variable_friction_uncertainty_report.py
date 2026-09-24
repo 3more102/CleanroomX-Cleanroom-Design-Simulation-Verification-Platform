@@ -826,6 +826,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_pressure_component_replay_violation_corner_indices']}**",
                 "- Maximum trace pressure-component replay error: "
                 f"**{search_summary['maximum_bisection_trace_pressure_component_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_pressure_component_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Terminal pressure-component replay violation corners: "
+                f"**{search_summary['terminal_pressure_component_replay_violation_corner_indices']}**",
+                "- Maximum terminal pressure-component replay error: "
+                f"**{search_summary['maximum_terminal_pressure_component_replay_error_pa']['value'] if search_summary['maximum_terminal_pressure_component_replay_error_pa'] is not None else 'not available'} Pa**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -910,6 +914,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_midpoint_pressure_components_match_independent_replay']}**",
                         "- Nominal full-bracket pressure-component replay consistent: "
                         f"**{nominal_trace_audit['all_trace_pressure_components_match_independent_replay']}**",
+                        "- Nominal terminal pressure-component replay consistent: "
+                        f"**{nominal_trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")

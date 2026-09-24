@@ -130,8 +130,10 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['trace_matches_operating_iterations']}**",
                     "- Every trace step preserves strict sign change: "
                     f"**{trace_audit['all_steps_preserve_strict_sign_change_before_evaluation']}**",
-                    "- Every trace midpoint is the arithmetic bracket midpoint: "
+                    "- Every recorded trace midpoint independently matches its airflow bracket: "
                     f"**{trace_audit['all_midpoints_are_arithmetic_bracket_midpoints']}**",
+                    "- Maximum absolute trace midpoint consistency error: "
+                    f"**{trace_audit['maximum_absolute_trace_midpoint_error_m3_h']} m³/h**",
                     "- Every recorded trace width matches its airflow endpoints: "
                     f"**{trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                     "- Every recorded trace width fraction matches binary iteration contraction: "

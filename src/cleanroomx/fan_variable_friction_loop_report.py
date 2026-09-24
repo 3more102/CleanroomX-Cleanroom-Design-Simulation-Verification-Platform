@@ -148,6 +148,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_state_transitions_replay_recorded_decisions']}**",
                     "- Trace origin-to-terminal replay anchored to supplied segment: "
                     f"**{trace_audit['trace_origin_to_terminal_replay_consistent']}**",
+                    "- Trace decisions match midpoint residual/tolerance predicate: "
+                    f"**{trace_audit['all_decisions_match_midpoint_residual_predicate']}**",
                     "- Trace endpoint replacements (low/high): "
                     f"**{trace_audit['replace_low_endpoint_count']}/"
                     f"{trace_audit['replace_high_endpoint_count']}**",

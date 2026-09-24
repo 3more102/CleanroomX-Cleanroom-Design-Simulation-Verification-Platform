@@ -2546,6 +2546,22 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_pressure_state_consistent_corner_count"
     ] == summary["bisection_corner_count"]
     assert summary[
+        "supplied_point_network_state_replay_evidence_corner_count"
+    ] == summary["corner_count"]
+    assert summary[
+        "supplied_point_network_state_replay_complete_coverage_corner_count"
+    ] == summary["corner_count"]
+    assert summary[
+        "supplied_point_network_state_replay_incomplete_corner_indices"
+    ] == []
+    assert summary[
+        "supplied_point_network_state_replay_consistent_corner_count"
+    ] == summary["corner_count"]
+    assert summary[
+        "supplied_point_network_state_replay_violation_corner_indices"
+    ] == []
+    assert summary["supplied_point_network_state_replay_violation_count"] == 0
+    assert summary[
         "selected_operating_state_replay_evidence_corner_count"
     ] == summary["solved_search_evidence_corner_count"]
     assert summary["selected_operating_state_replay_complete_coverage"] is True
@@ -2838,6 +2854,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         in report
     )
     assert "Maximum trace pressure-component replay error" in report
+    assert (
+        "Supplied-point network-state replay violation corners: **[]**"
+        in report
+    )
+    assert "Supplied-point network-state replay consistent corners" in report
+    assert (
+        "Supplied-point network-state replay incomplete-coverage corners: **[]**"
+        in report
+    )
     assert (
         "Selected operating network-state replay violation corners: **[]**"
         in report

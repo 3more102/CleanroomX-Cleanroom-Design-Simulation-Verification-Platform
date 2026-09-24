@@ -32,6 +32,8 @@ Paths are resolved relative to the manifest file. Existing manifests that omit o
 
 For complete fan/variable-friction-loop uncertainty analyses, v0.49 dossier Markdown includes both the operating-airflow evaluated-corner envelope and the fan air-power evaluated-corner envelope. Indeterminate analyses show no complete air-power envelope.
 
+For v0.91 nonlinear fan/variable-friction-loop uncertainty analyses, the dossier preserves selected operating-state SHA-256 identity/replay, terminal projection replay, selected network-state projection replay applicability and coverage, exact violating corner indices, deterministic mismatch paths, recorded/recomputed/type evidence, numerical mismatch errors when meaningful, and tied per-field worst-error witnesses. A selected-projection corruption remains visible through dossier JSON and Markdown instead of being collapsed into the ordinary engineering result. This evidence is numerical/provenance verification only; it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness, stall/surge analysis, or physical uncertainty quantification.
+
 Example:
 
 ```json

@@ -34,6 +34,8 @@ v0.87 independently replays the internal nonlinear network state behind every re
 
 v0.88 extends the same canonical network-state identity to the terminal bisection bracket. Both solved final brackets and post-decision iteration-limit remaining brackets retain low/high SHA-256 fingerprints, and the audit independently re-solves those endpoint airflows before comparing the internal network state. This specifically covers an endpoint created by the final budgeted L/H update, which can exist after the last retained trace row. The evidence remains deterministic implementation provenance only.
 
+v0.89 applies the same canonical network-state identity to the accepted selected operating solution itself. The selected-state replay now retains the selected network SHA-256 and independently re-solves the selected airflow before comparing the canonical node/edge/pressure-power/variable-friction state. This closes the remaining selected-state provenance gap where final scalar fan, loop-network, total-system, and residual pressures could still agree while the internal selected network state differs. The fingerprint remains deterministic implementation provenance only.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

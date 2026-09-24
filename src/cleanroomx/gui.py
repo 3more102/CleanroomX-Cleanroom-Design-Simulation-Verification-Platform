@@ -488,6 +488,19 @@ class CleanroomXApp:
         if analysis is None:
             return
         previous = self._editor_analysis()
+        if self._running and previous is not None and previous.id != analysis.id:
+            self._selection_guard = True
+            try:
+                if self.analysis_tree.exists(previous.id):
+                    self.analysis_tree.selection_set(previous.id)
+                    self.analysis_tree.focus(previous.id)
+                    self.analysis_tree.see(previous.id)
+            finally:
+                self._selection_guard = False
+            self.status_var.set(
+                f"Running {previous.name} — abandon the current run before switching analyses."
+            )
+            return
         if previous is not None and previous.id != analysis.id:
             try:
                 self._commit_editor(previous)
@@ -808,6 +821,7 @@ class CleanroomXApp:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
+        self.input_text.configure(state="disabled" if running else "normal")
 
     def _poll_worker(self) -> None:
         try:

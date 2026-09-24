@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.93 selected operating network-state projection replay — 2026-09-24
+
+- Retains the v0.92 canonical selected operating network-result projection alongside its SHA-256 fingerprint and independently re-solves the exact selected airflow for field-by-field replay.
+- Localizes selected-state corruption to deterministic JSON-style paths while preserving the separate selected SHA-256 and scalar fan/loop/system/residual replay checks.
+- Upgrades projection mismatch evidence to structured records carrying mismatch kind, recorded/recomputed presence and types, values, numeric absolute error where applicable, and field-local maximum-error witnesses.
+- Applies the richer mismatch records to terminal projection replay as well as the new selected-state projection replay without changing the v0.92 signed-zero-stable, solver-provenance-complete canonical projection.
+- Propagates selected projection replay coverage, consistency, mismatch counts, exact paths, violation details, and numeric-error maxima across nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Adds regressions for selected-projection corruption with an unchanged SHA-256 plus uncertainty/dossier propagation and richer terminal mismatch evidence.
+- Preserves root selection, nonlinear solver equations/tolerances, iteration budgets, no-extrapolation behavior, uncertainty semantics, and engineering acceptance boundaries.
+- Bumped package/runtime metadata to v0.93.0.
+
 ## v0.92 signed-zero-stable complete solver-provenance canonical replay — 2026-09-24
 
 - Normalizes floating-point signed zero so `-0.0` and `0.0` represent the same deterministic engineering state before canonical projection comparison or SHA-256 serialization.

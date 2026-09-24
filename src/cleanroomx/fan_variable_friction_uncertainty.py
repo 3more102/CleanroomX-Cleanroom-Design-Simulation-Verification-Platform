@@ -2742,11 +2742,11 @@ def _operating_point_search_resolution_summary(
     ]
     terminal_network_state_replay_violation_details = []
     for corner_index, corner, evidence, audit in trace_cases:
-        violation_positions = audit.get(
-            "terminal_network_state_replay_violation_positions",
+        violations = audit.get(
+            "terminal_network_state_replay_violations",
             [],
         )
-        if not violation_positions:
+        if not violations:
             continue
         detail = _critical_case_summary(corner_index, corner)
         terminal_replay = audit.get("terminal_network_state_replay")
@@ -2760,7 +2760,11 @@ def _operating_point_search_resolution_summary(
                     if terminal_replay is not None
                     else None
                 ),
-                "violation_positions": violation_positions,
+                "violation_count": len(violations),
+                "violation_positions": [
+                    violation["position"] for violation in violations
+                ],
+                "violations": violations,
             }
         )
         terminal_network_state_replay_violation_details.append(detail)
@@ -3433,6 +3437,16 @@ def _operating_point_search_resolution_summary(
         ),
         "terminal_network_state_replay_violation_corner_indices": (
             terminal_network_state_replay_violation_corner_indices
+        ),
+        "terminal_network_state_replay_violation_count": sum(
+            int(
+                audit.get(
+                    "terminal_network_state_replay_violation_count",
+                    0,
+                )
+                or 0
+            )
+            for _corner_index, _corner, _evidence, audit in trace_cases
         ),
         "terminal_network_state_replay_violation_details": (
             terminal_network_state_replay_violation_details

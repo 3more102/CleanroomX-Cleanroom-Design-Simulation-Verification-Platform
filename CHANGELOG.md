@@ -6,6 +6,7 @@
 - Strengthens application-registry validation by rejecting duplicate analysis keys, enforcing parser/runner bindings for standard analyses, and enforcing the registered custom-adapter contract for `consistency` and `dossier`.
 - Returns structured registry-validation diagnostics through `application_info()` and `cleanroomx-gui --check`, while preserving the existing `bindings_valid` readiness flag.
 - Adds regression coverage for duplicate-key rejection, custom-adapter contract enforcement, and GUI check-mode registry diagnostics.
+- Hardens **Abandon** so its result/error is discarded while the desktop remains busy until that worker exits, preventing overlapping backend analyses.
 - The exact runtime/test delta passed CI run `36044884630`: Python 3.11/3.12/3.13 compatibility gates, the complete test suite, representative CLI smoke checks, and the real Tk/Xvfb GUI smoke on Python 3.13.
 - Bumps package/runtime/demo metadata to v0.99.0 and synchronizes GUI tests, CI assertions/step labels, README status, and desktop-application documentation.
 - No solver equations, engineering acceptance criteria, uncertainty enumeration, root-selection policy, or validated backend workflow semantics are changed by this release.

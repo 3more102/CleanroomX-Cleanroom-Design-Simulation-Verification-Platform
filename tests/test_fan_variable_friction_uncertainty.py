@@ -2747,6 +2747,11 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Trace pressure-state audit violation corners: **[]**" in report
     assert "Trace independent residual-replay violation corners: **[]**" in report
     assert "Maximum trace residual-replay error" in report
+    assert "Solved corners with final operating-point replay evidence" in report
+    assert "Final operating-point replay complete solved coverage: **True**" in report
+    assert "Final operating-point replay violation corners: **[]**" in report
+    assert "Final operating-point replay non-converged corners: **[]**" in report
+    assert "Maximum final operating-point state replay error" in report
     assert (
         "Trace independent pressure-component replay violation corners: **[]**"
         in report

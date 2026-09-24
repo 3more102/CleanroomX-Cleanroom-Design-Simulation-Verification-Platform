@@ -259,6 +259,10 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         "all_state_transitions_replay_recorded_decisions"
     ] is True
     assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert trace_audit[
+        "all_decisions_match_midpoint_residual_predicate"
+    ] is True
+    assert trace_audit["decision_predicate_check_count"] == len(trace)
     origin_replay = trace_audit["trace_origin_replay"]
     assert origin_replay is not None
     assert origin_replay["initial_bracket_matches_first_trace_step"] is True
@@ -280,6 +284,10 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert "Bisection decision-trace steps" in report
     assert "Bisection decision sequence (L/H/T)" in report
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
+    assert (
+        "Trace decisions match midpoint residual/tolerance predicate: **True**"
+        in report
+    )
     assert "numerical search" in report
 
 
@@ -367,6 +375,10 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "all_state_transitions_replay_recorded_decisions"
     ] is True
     assert trace_audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert trace_audit[
+        "all_decisions_match_midpoint_residual_predicate"
+    ] is True
+    assert trace_audit["decision_predicate_check_count"] == len(trace)
     origin_replay = trace_audit["trace_origin_replay"]
     assert origin_replay is not None
     assert origin_replay["initial_bracket_matches_first_trace_step"] is True
@@ -394,6 +406,10 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert "Bisection decision-trace steps" in report
     assert "Trace terminal solver outcome consistent: **True**" in report
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
+    assert (
+        "Trace decisions match midpoint residual/tolerance predicate: **True**"
+        in report
+    )
     assert (
         "Iteration-limit remaining bracket replays final L/H decision: **True**"
         in report
@@ -453,6 +469,7 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         trace,
         operating_iterations=2,
         termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
         initial_bisection_bracket=initial_bracket,
         solved_terminal_bracket=solved_terminal_bracket,
     )
@@ -460,6 +477,7 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     assert clean["all_trace_geometry_consistent"] is True
     assert clean["all_state_transitions_replay_recorded_decisions"] is True
     assert clean["trace_origin_to_terminal_replay_consistent"] is True
+    assert clean["all_decisions_match_midpoint_residual_predicate"] is True
     assert clean["maximum_absolute_trace_width_error_m3_h"] == pytest.approx(
         0.0,
         abs=1e-18,
@@ -475,11 +493,13 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         corrupted,
         operating_iterations=2,
         termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
         initial_bisection_bracket=initial_bracket,
         solved_terminal_bracket=solved_terminal_bracket,
     )
     assert audit is not None
     assert audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert audit["all_decisions_match_midpoint_residual_predicate"] is True
     assert audit["all_recorded_widths_match_airflow_brackets"] is False
     assert audit[
         "all_recorded_width_fractions_match_iteration_sequence"
@@ -499,6 +519,7 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         trace,
         operating_iterations=2,
         termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
         initial_bisection_bracket=wrong_origin,
         solved_terminal_bracket=solved_terminal_bracket,
     )
@@ -514,6 +535,60 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
         "terminal_bracket_matches_origin_replay"
     ] is True
     assert origin_audit["trace_origin_to_terminal_replay_consistent"] is False
+    assert origin_audit[
+        "all_decisions_match_midpoint_residual_predicate"
+    ] is True
+
+
+def test_bisection_decision_predicate_audit_detects_false_tolerance_acceptance() -> None:
+    trace = [
+        {
+            "iteration": 1,
+            "low_airflow_m3_h": 0.0,
+            "high_airflow_m3_h": 8.0,
+            "midpoint_airflow_m3_h": 4.0,
+            "width_m3_h": 8.0,
+            "width_fraction_of_supplied_segment": 1.0,
+            "low_fan_minus_system_pressure_pa": 4.0,
+            "high_fan_minus_system_pressure_pa": -4.0,
+            "midpoint_fan_minus_system_pressure_pa": 1.0,
+            "decision": "accept_pressure_tolerance",
+            "strict_sign_change_before_evaluation": True,
+            "midpoint_is_arithmetic_bracket_midpoint": True,
+        }
+    ]
+    bracket = {
+        "low_airflow_m3_h": 0.0,
+        "high_airflow_m3_h": 8.0,
+        "low_fan_minus_system_pressure_pa": 4.0,
+        "high_fan_minus_system_pressure_pa": -4.0,
+    }
+
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=1,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        initial_bisection_bracket=bracket,
+        solved_terminal_bracket=bracket,
+    )
+
+    assert audit is not None
+    assert audit["terminal_outcome_consistent"] is True
+    assert audit["trace_origin_to_terminal_replay_consistent"] is True
+    assert audit[
+        "all_state_transitions_replay_recorded_decisions"
+    ] is True
+    assert audit[
+        "all_decisions_match_midpoint_residual_predicate"
+    ] is False
+    check = audit["decision_predicate_checks"][0]
+    assert check["midpoint_pressure_tolerance_satisfied"] is False
+    assert check["expected_decision_from_midpoint_residual"] == (
+        "replace_low_endpoint"
+    )
+    assert check["recorded_decision"] == "accept_pressure_tolerance"
+    assert check["decision_matches_midpoint_residual_predicate"] is False
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

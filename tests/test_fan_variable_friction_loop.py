@@ -1087,7 +1087,10 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     assert audit["pressure_component_replay_violation_positions"] == []
     assert audit["pressure_component_replay_violation_components"] == []
     assert audit["pressure_component_replay_violations"] == []
-    assert audit["maximum_trace_pressure_component_replay_error_witnesses"]
+    assert isinstance(
+        audit["maximum_trace_pressure_component_replay_error_witnesses"],
+        list,
+    )
 
     corrupted = [dict(step) for step in trace]
     delta_pa = 1.0

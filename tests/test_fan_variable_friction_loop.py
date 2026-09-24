@@ -236,6 +236,8 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     ] is True
     assert trace_audit["termination_record_count"] == 1
     assert trace_audit["termination_record_is_last"] is True
+    assert trace_audit["termination_reason"] == "pressure_residual"
+    assert trace_audit["terminal_outcome_consistent"] is True
     assert trace_audit["iterations_are_contiguous_from_one"] is True
     assert trace_audit["transition_record_count"] == len(trace) - 1
     assert trace_audit[
@@ -322,11 +324,35 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "absolute_width_fraction_consistency_error"
     ] == pytest.approx(0.0, abs=1e-18)
 
+    trace = evidence["bisection_trace"]
+    trace_audit = evidence["bisection_trace_audit"]
+    assert trace is not None
+    assert trace_audit is not None
+    assert len(trace) == diagnostics["operating_iterations"] == 1
+    assert trace[0]["decision"] in {
+        "replace_low_endpoint",
+        "replace_high_endpoint",
+    }
+    assert trace_audit["trace_matches_operating_iterations"] is True
+    assert trace_audit["termination_record_count"] == 0
+    assert trace_audit["termination_record_is_last"] is False
+    assert trace_audit["termination_reason"] == "bisection_iteration_limit"
+    assert trace_audit["terminal_outcome_consistent"] is True
+    assert trace_audit["iterations_are_contiguous_from_one"] is True
+    assert trace_audit["transition_record_count"] == 0
+    assert trace_audit[
+        "all_state_transitions_replay_recorded_decisions"
+    ] is True
+    assert "T" not in trace_audit["decision_sequence"]
+
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Accepted operating point: **none (iteration limit)**" in report
     assert "Remaining active bisection bracket" in report
     assert "Remaining bracket strict sign change preserved" in report
     assert "Remaining-bracket binary-width consistency error" in report
+    assert "Bisection decision-trace steps" in report
+    assert "Trace termination reason: **bisection_iteration_limit**" in report
+    assert "Trace terminal outcome consistent: **True**" in report
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

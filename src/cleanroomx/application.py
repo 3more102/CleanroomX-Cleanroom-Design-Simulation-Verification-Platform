@@ -481,14 +481,18 @@ def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
 
 def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
     from .dossier import build_dossier
-    if base_dir is None:
-        raise ValueError(
-            "dossier execution requires a saved project/base directory so relative references remain reproducible"
-        )
-    base_dir.mkdir(parents=True, exist_ok=True)
+
+    # Validation already rejects relative references when no base directory is
+    # available. Absolute references are location-independent, so an unsaved
+    # desktop project can still execute them using a temporary manifest.
+    temp_dir = None
+    if base_dir is not None:
+        base_dir.mkdir(parents=True, exist_ok=True)
+        temp_dir = base_dir
+
     handle = tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", suffix=".json",
-        prefix=".cleanroomx-dossier-", dir=base_dir, delete=False,
+        prefix=".cleanroomx-dossier-", dir=temp_dir, delete=False,
     )
     temp_path = Path(handle.name)
     try:

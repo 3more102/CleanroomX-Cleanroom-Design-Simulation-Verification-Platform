@@ -93,6 +93,8 @@ v0.68 extends v0.66 alternative-candidate separation with a dimensionless scale-
 
 v0.69 completes the sampled sign-topology record by retaining strict negative-to-positive supplied-point residual crossings separately from the solver-eligible positive-to-negative crossing segments. The report exposes each reverse segment and the total bidirectional strict sign-change count, while the solver candidate list and selection policy remain unchanged. Reverse segments are audit-only sampled-data evidence and do not establish an additional continuous root or any physical acceptance/stability conclusion.
 
+v0.70 extends root-search auditability to bounded-bisection iteration-limit failures. When the configured operating-point iteration budget is exhausted before the pressure tolerance is satisfied, no operating point is accepted. Instead, CleanroomX retains the remaining strict signed-residual bracket after the final budgeted midpoint evaluation, its width and half-width, endpoint residuals, normalized supplied-segment width, completed binary contraction count, and width-consistency audit. This is numerical solver/search-state evidence only, not physical airflow uncertainty, interpolation error, a continuous worst-case bound, stability evidence, or an equipment-acceptance margin.
+
 ## CLI
 
 ```text

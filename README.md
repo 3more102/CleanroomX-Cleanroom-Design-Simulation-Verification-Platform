@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.71 engineering core
+## v0.72 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -42,6 +42,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Bounded operating-point root-search geometry for nonlinear fan/variable-friction solves, distinguishing direct supplied-point tolerance contacts from true bisection and retaining the final signed-residual bracket width, half-width, normalized span, iteration, and uncertainty-corner provenance without treating search width as physical airflow uncertainty or acceptance margin.
 - Bisection implementation-invariant auditing for retained root-search geometry, checking the live strict residual-sign bracket, selected-midpoint centering, and iteration-implied binary width contraction with raw consistency-error provenance across uncertainty corners.
 - Iteration-limit bisection provenance for v0.70, retaining the unresolved search's last evaluated midpoint and remaining active signed-residual bracket with contraction/invariant evidence while explicitly accepting no operating point.
+- Bounded-bisection decision-trace provenance for v0.72, retaining every successful midpoint evaluation as an L/H/T endpoint-replacement/tolerance-acceptance sequence, auditing per-step sign bracketing and midpoint geometry, and propagating exact trace coverage/violation provenance across uncertainty corners and dossier output.
 - Fan-curve interpolation segment-position evidence for solved nonlinear uncertainty corners, reporting local supplied-point clearances, normalized position inside the active piecewise-linear segment, and tied source-corner provenance without treating point spacing as interpolation error or an equipment margin.
 - Supplied-point fan-minus-system residual-topology auditing for the nonlinear solver and every uncertainty corner, exposing complete/partial point coverage, tolerance contacts, strict sign-change segments, sampled residual monotonicity, residual-increase transitions, and multiple discrete candidate-crossing features without treating them as proof of continuous intersection uniqueness.
 - Explicit selected-crossing-candidate provenance for solved nonlinear cases: discrete candidates are stored in the solver's actual priority order and results retain the selected feature, zero-based priority rank, additional-candidate count, and whether the selected sampled feature was unique.

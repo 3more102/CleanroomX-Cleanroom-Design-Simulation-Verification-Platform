@@ -90,7 +90,15 @@ def test_fan_operating_point_application_service_produces_real_plot_model():
     assert run.status == "solved"
     assert run.result["operating_point"] is not None
     assert run.plot is not None
+    assert [series["name"] for series in run.plot["series"]] == [
+        "Fan curve",
+        "System curve",
+    ]
     assert run.plot["series"][0]["x"]
+    assert run.plot["series"][1]["x"] == run.plot["series"][0]["x"]
+    assert run.plot["series"][1]["y"] == [
+        point["system_pressure_pa"] for point in run.result["curve_point_checks"]
+    ]
     assert run.plot["markers"][0]["name"] == "Operating point"
 
 

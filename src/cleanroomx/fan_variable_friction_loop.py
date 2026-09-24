@@ -872,6 +872,7 @@ def _bisection_decision_trace_audit(
 
     residual_replay_checks = []
     pressure_component_replay_checks = []
+    terminal_pressure_component_replay = None
     residual_replay_available = (
         study is not None
         and segment_left is not None
@@ -1308,6 +1309,201 @@ def _bisection_decision_trace_audit(
         and maximum_pressure_component_replay_error > 0.0
         else []
     )
+
+    terminal_bracket_for_pressure_component_replay = (
+        iteration_limit_terminal_bracket
+        if termination_reason == "bisection_iteration_limit"
+        else solved_terminal_bracket
+    )
+    terminal_pressure_component_fields = tuple(
+        f"{position}_{component}_pressure_pa"
+        for position in ("low", "high")
+        for component in ("fan", "loop_network", "system")
+    )
+    if (
+        residual_replay_available
+        and terminal_bracket_for_pressure_component_replay is not None
+        and all(
+            field in terminal_bracket_for_pressure_component_replay
+            for field in terminal_pressure_component_fields
+        )
+    ):
+        terminal_position_states = {
+            "low": (replay_low_airflow, _independent_state(replay_low_airflow)),
+            "high": (
+                replay_high_airflow,
+                _independent_state(replay_high_airflow),
+            ),
+        }
+        terminal_position_checks = {}
+        for position, (
+            replayed_airflow,
+            recomputed_state,
+        ) in terminal_position_states.items():
+            recorded_fan_pressure = float(
+                terminal_bracket_for_pressure_component_replay[
+                    f"{position}_fan_pressure_pa"
+                ]
+            )
+            recorded_loop_pressure = float(
+                terminal_bracket_for_pressure_component_replay[
+                    f"{position}_loop_network_pressure_pa"
+                ]
+            )
+            recorded_system_pressure = float(
+                terminal_bracket_for_pressure_component_replay[
+                    f"{position}_system_pressure_pa"
+                ]
+            )
+            recomputed_fan_pressure = recomputed_state["fan_pressure_pa"]
+            recomputed_loop_pressure = recomputed_state[
+                "loop_network_pressure_pa"
+            ]
+            recomputed_system_pressure = recomputed_state[
+                "system_pressure_pa"
+            ]
+            fan_error = abs(recorded_fan_pressure - recomputed_fan_pressure)
+            loop_error = abs(
+                recorded_loop_pressure - recomputed_loop_pressure
+            )
+            system_error = abs(
+                recorded_system_pressure - recomputed_system_pressure
+            )
+            fan_matches = math.isclose(
+                recorded_fan_pressure,
+                recomputed_fan_pressure,
+                rel_tol=0.0,
+                abs_tol=pressure_component_replay_absolute_tolerance_pa,
+            )
+            loop_matches = math.isclose(
+                recorded_loop_pressure,
+                recomputed_loop_pressure,
+                rel_tol=0.0,
+                abs_tol=pressure_component_replay_absolute_tolerance_pa,
+            )
+            system_matches = math.isclose(
+                recorded_system_pressure,
+                recomputed_system_pressure,
+                rel_tol=0.0,
+                abs_tol=pressure_component_replay_absolute_tolerance_pa,
+            )
+            terminal_position_checks[position] = {
+                "replayed_airflow_m3_h": round(replayed_airflow, 9),
+                "recorded_fan_pressure_pa": recorded_fan_pressure,
+                "recomputed_fan_pressure_pa": round(recomputed_fan_pressure, 9),
+                "absolute_fan_pressure_replay_error_pa": fan_error,
+                "recorded_loop_network_pressure_pa": recorded_loop_pressure,
+                "recomputed_loop_network_pressure_pa": round(
+                    recomputed_loop_pressure,
+                    9,
+                ),
+                "absolute_loop_pressure_replay_error_pa": loop_error,
+                "recorded_system_pressure_pa": recorded_system_pressure,
+                "recomputed_system_pressure_pa": round(
+                    recomputed_system_pressure,
+                    9,
+                ),
+                "absolute_system_pressure_replay_error_pa": system_error,
+                "fan_pressure_matches_independent_replay": fan_matches,
+                "loop_pressure_matches_independent_replay": loop_matches,
+                "system_pressure_matches_independent_replay": system_matches,
+                "all_pressure_components_match_independent_replay": (
+                    fan_matches and loop_matches and system_matches
+                ),
+            }
+
+        terminal_pressure_component_replay_candidates = []
+        terminal_pressure_component_replay_violations = []
+        for position in ("low", "high"):
+            position_check = terminal_position_checks[position]
+            for (
+                component,
+                recorded_key,
+                recomputed_key,
+                error_key,
+                matches_key,
+            ) in component_specs:
+                witness = {
+                    "iteration": int(operating_iterations),
+                    "position": position,
+                    "component": component,
+                    "recorded_pressure_pa": position_check[recorded_key],
+                    "recomputed_pressure_pa": position_check[recomputed_key],
+                    "absolute_error_pa": position_check[error_key],
+                }
+                terminal_pressure_component_replay_candidates.append(witness)
+                if not position_check[matches_key]:
+                    terminal_pressure_component_replay_violations.append(
+                        witness
+                    )
+        maximum_terminal_pressure_component_replay_error = max(
+            (
+                witness["absolute_error_pa"]
+                for witness in terminal_pressure_component_replay_candidates
+            ),
+            default=0.0,
+        )
+        maximum_terminal_pressure_component_replay_error_witnesses = (
+            [
+                witness
+                for witness in terminal_pressure_component_replay_candidates
+                if math.isclose(
+                    witness["absolute_error_pa"],
+                    maximum_terminal_pressure_component_replay_error,
+                    rel_tol=0.0,
+                    abs_tol=1e-15,
+                )
+            ]
+            if maximum_terminal_pressure_component_replay_error > 0.0
+            else []
+        )
+        terminal_pressure_component_replay = {
+            "terminal_kind": (
+                "iteration_limit_remaining_bracket"
+                if termination_reason == "bisection_iteration_limit"
+                else "solved_final_bracket"
+            ),
+            "termination_reason": termination_reason,
+            "iteration": int(operating_iterations),
+            "low": terminal_position_checks["low"],
+            "high": terminal_position_checks["high"],
+            "all_terminal_pressure_components_match_independent_replay": (
+                all(
+                    check[
+                        "all_pressure_components_match_independent_replay"
+                    ]
+                    for check in terminal_position_checks.values()
+                )
+            ),
+            "pressure_component_replay_violation_count": len(
+                terminal_pressure_component_replay_violations
+            ),
+            "pressure_component_replay_violation_positions": [
+                position
+                for position in ("low", "high")
+                if any(
+                    witness["position"] == position
+                    for witness in terminal_pressure_component_replay_violations
+                )
+            ],
+            "pressure_component_replay_violation_components": [
+                component
+                for component in ("fan", "loop_network", "system")
+                if any(
+                    witness["component"] == component
+                    for witness in terminal_pressure_component_replay_violations
+                )
+            ],
+            "pressure_component_replay_violations": (
+                terminal_pressure_component_replay_violations
+            ),
+            "maximum_absolute_terminal_pressure_component_replay_error_pa": (
+                maximum_terminal_pressure_component_replay_error
+            ),
+            "maximum_terminal_pressure_component_replay_error_witnesses": (
+                maximum_terminal_pressure_component_replay_error_witnesses
+            ),
+        }
 
     decision_semantic_checks = []
     tolerance = float(operating_pressure_tolerance_pa)
@@ -1946,6 +2142,45 @@ def _bisection_decision_trace_audit(
         "pressure_component_replay_checks": (
             pressure_component_replay_checks
         ),
+        "terminal_pressure_component_replay_available": (
+            terminal_pressure_component_replay is not None
+        ),
+        "all_terminal_pressure_components_match_independent_replay": (
+            terminal_pressure_component_replay[
+                "all_terminal_pressure_components_match_independent_replay"
+            ]
+            if terminal_pressure_component_replay is not None
+            else None
+        ),
+        "terminal_pressure_component_replay_violation_count": (
+            terminal_pressure_component_replay[
+                "pressure_component_replay_violation_count"
+            ]
+            if terminal_pressure_component_replay is not None
+            else None
+        ),
+        "terminal_pressure_component_replay_violations": (
+            terminal_pressure_component_replay[
+                "pressure_component_replay_violations"
+            ]
+            if terminal_pressure_component_replay is not None
+            else []
+        ),
+        "maximum_absolute_terminal_pressure_component_replay_error_pa": (
+            terminal_pressure_component_replay[
+                "maximum_absolute_terminal_pressure_component_replay_error_pa"
+            ]
+            if terminal_pressure_component_replay is not None
+            else None
+        ),
+        "maximum_terminal_pressure_component_replay_error_witnesses": (
+            terminal_pressure_component_replay[
+                "maximum_terminal_pressure_component_replay_error_witnesses"
+            ]
+            if terminal_pressure_component_replay is not None
+            else []
+        ),
+        "terminal_pressure_component_replay": terminal_pressure_component_replay,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -2505,8 +2740,26 @@ def solve_fan_variable_friction_loop(
                                 low_residual,
                                 9,
                             ),
+                            "low_fan_pressure_pa": round(low_fan_pressure, 9),
+                            "low_loop_network_pressure_pa": round(
+                                low_network_pressure,
+                                9,
+                            ),
+                            "low_system_pressure_pa": round(
+                                low_system_pressure,
+                                9,
+                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
+                                9,
+                            ),
+                            "high_fan_pressure_pa": round(high_fan_pressure, 9),
+                            "high_loop_network_pressure_pa": round(
+                                high_network_pressure,
+                                9,
+                            ),
+                            "high_system_pressure_pa": round(
+                                high_system_pressure,
                                 9,
                             ),
                             "selected_midpoint_airflow_m3_h": round(
@@ -2612,10 +2865,22 @@ def solve_fan_variable_friction_loop(
                         low_residual,
                         9,
                     ),
+                    "low_fan_pressure_pa": round(low_fan_pressure, 9),
+                    "low_loop_network_pressure_pa": round(
+                        low_network_pressure,
+                        9,
+                    ),
+                    "low_system_pressure_pa": round(low_system_pressure, 9),
                     "high_fan_minus_system_pressure_pa": round(
                         high_residual,
                         9,
                     ),
+                    "high_fan_pressure_pa": round(high_fan_pressure, 9),
+                    "high_loop_network_pressure_pa": round(
+                        high_network_pressure,
+                        9,
+                    ),
+                    "high_system_pressure_pa": round(high_system_pressure, 9),
                     "width_fraction_of_supplied_segment": round(
                         terminal_width_fraction,
                         12,

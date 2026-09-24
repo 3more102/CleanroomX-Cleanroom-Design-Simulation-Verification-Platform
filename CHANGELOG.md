@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.78 independent bisection trace raw-state audit — 2026-09-24
+
+- Independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from every retained bounded-bisection trace record instead of trusting the stored audit booleans.
+- Verifies the recorded sign-change and midpoint flags against those recomputed numeric facts and retains per-step raw-state audit evidence.
+- Retains the maximum absolute midpoint-centering error and propagates exact raw-state violation corner indices through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Adds deliberate regressions for corrupted stored flags and corrupted midpoint coordinates while preserving v0.77 origin-to-terminal replay, v0.76 trace geometry checks, candidate selection, iteration budgets, and no-extrapolation behavior.
+- Treats these checks strictly as numerical implementation provenance; they do not establish physical airflow uncertainty, interpolation error, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.78.0.
+
 ## v0.77 bisection trace origin-to-terminal replay — 2026-09-24
 
 - Anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points.

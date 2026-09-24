@@ -27,6 +27,7 @@ jobs:
           tests/test_fan_variable_friction_loop.py::test_supplied_point_projection_replay_retains_all_tied_mismatches
           tests/test_fan_variable_friction_loop.py::test_supplied_point_network_state_replay_reports_partial_coverage
           tests/test_fan_variable_friction_loop.py::test_supplied_point_network_state_replay_covers_no_intersection
+          tests/test_fan_variable_friction_loop.py::test_supplied_point_replay_preserves_partial_prefix_on_curve_failure
           tests/test_fan_variable_friction_uncertainty.py::test_supplied_point_projection_corruption_aggregates_exact_corner_evidence
           tests/test_fan_variable_friction_uncertainty.py::test_supplied_point_replay_missing_point_is_incomplete_coverage
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_supplied_point_projection_corruption

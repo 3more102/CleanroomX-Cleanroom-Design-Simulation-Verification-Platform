@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100.0 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.99.1**, hardening the integrated v0.99 desktop application. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current release line is **CleanroomX v0.100.0**, continuing the integrated v0.99.1 desktop application without replacing validated backend workflows. v0.100 adds application-input identity, external-dependency before/after fingerprints, path-context-preserving import/Save As behavior, atomic GUI exports, run-bundle provenance export, and stricter registry/startup integrity on top of the installable self-contained desktop release.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99.1 additionally prevents overlapping backend runs after UI abandonment, packages a self-contained demo in the wheel, validates clean-wheel installation on Python 3.11/3.12/3.13, and launches the installed wheel under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.100 retains clean-wheel installation and the packaged `--demo` smoke on Python 3.13 while adding focused application/project/GUI integrity regressions.
 
 ### Network-state replay provenance ladder
 
@@ -27,6 +27,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
 | v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
+| v0.100 | application execution provenance, path-context integrity, atomic exports, and pre-display registry validation |
+
+### v0.100 desktop execution integrity
+
+v0.100 fingerprints each submitted application input with canonical SHA-256 and records before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. The evidence is attached to diagnostics and preserved by **Export Run Bundle JSON**. Save As and input import preserve relative-file referents across directory changes; changing project path context clears cached runs. Project and GUI export writes use same-directory atomic replacement. Unsaved dossiers may run only with absolute references, and registry parity is validated before a normal Tk window is created.
 
 ### v0.99 application registry integrity
 

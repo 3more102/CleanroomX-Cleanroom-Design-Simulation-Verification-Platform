@@ -1066,25 +1066,32 @@ class SpatialDesignWorkspace(ttk.Frame):
                 )
 
         if self._show_devices.get():
-                x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
-            tag = f"device:{device['id']}"
-            selected = self.selected == _Hit("device", device["id"])
-            radius = 6 if selected else 4
-            fill = DEVICE_COLORS.get(device["type"], "#fbbf24")
-            canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill=fill, outline="#ffffff" if selected else "#dbeafe",
-                width=2, tags=(tag, "device3d"),
-            )
-            if selected or self._show_labels.get():
-                canvas.create_text(
-                    x,
-                    y - 14,
-                    text=device.get("name", device["type"]),
-                    fill="#f8fafc",
-                    font=("TkDefaultFont", 8, "bold" if selected else "normal"),
+            for device in self.layout["devices"]:
+                x, y = self._project_3d(
+                    device["x_m"] - cx,
+                    device["y_m"] - cy,
+                    device["z_m"],
+                )
+                tag = f"device:{device['id']}"
+                selected = self.selected == _Hit("device", device["id"])
+                radius = 6 if selected else 4
+                fill = DEVICE_COLORS.get(device["type"], "#fbbf24")
+                canvas.create_oval(
+                    x - radius, y - radius, x + radius, y + radius,
+                    fill=fill,
+                    outline="#ffffff" if selected else "#dbeafe",
+                    width=2,
                     tags=(tag, "device3d"),
                 )
+                if selected or self._show_labels.get():
+                    canvas.create_text(
+                        x,
+                        y - 14,
+                        text=device.get("name", device["type"]),
+                        fill="#f8fafc",
+                        font=("TkDefaultFont", 8, "bold" if selected else "normal"),
+                        tags=(tag, "device3d"),
+                    )
 
         canvas.create_text(*axis_x, text="  X", anchor="w", fill="#fb7185", font=("TkDefaultFont", 8, "bold"))
         canvas.create_text(*axis_y, text="  Y", anchor="w", fill="#4ade80", font=("TkDefaultFont", 8, "bold"))

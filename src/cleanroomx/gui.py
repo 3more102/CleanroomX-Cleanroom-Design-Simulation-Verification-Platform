@@ -19,6 +19,7 @@ from .application import (
     application_info,
     run_analysis,
     validate_analysis_input,
+    validate_application_registry,
 )
 from .project import (
     AnalysisDocument,
@@ -1066,6 +1067,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
+    validate_application_registry()
     root = tk.Tk()
     app = CleanroomXApp(root)
     if args.project:

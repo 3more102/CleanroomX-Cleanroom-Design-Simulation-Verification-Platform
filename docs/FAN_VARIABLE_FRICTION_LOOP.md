@@ -38,6 +38,8 @@ v0.89 applies the same canonical network-state identity to the accepted selected
 
 v0.90 hardens that fingerprint canonicalization against harmless collection-order changes. Solved node rows, solved edge rows, and variable-friction edge-closure rows are sorted by their unique names before compact JSON serialization and SHA-256 hashing. Trace, terminal-bracket, and selected operating-state replay therefore compare semantic solved-state content rather than incidental enumeration order while retaining sensitivity to the same numeric state.
 
+v0.91 normalizes IEEE-754 signed zero throughout that canonical projection before serialization. A retained `-0.0` and `0.0` therefore identify the same solved engineering state, while all nonzero node, edge, residual, pressure-power, and variable-friction closure values remain hash-sensitive. Replay evidence reports the centralized v3 signed-zero-normalized canonicalization identifier.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.98.1 application registry integrity hardening — 2026-09-24
+
+- Ports the strongest verified application-registry integrity checks forward onto the integrated v0.98 `main` lineage.
+- Rejects duplicate application workflow keys instead of allowing dictionary construction to hide collisions.
+- Requires every direct workflow to declare both parser and runner bindings while enforcing the dedicated custom-adapter contract for `consistency` and `dossier`.
+- Resolves every declared parser, runner, and reporter callable with workflow/role context in failures and reports registry validation counts through the headless capability check.
+- Adds regressions for duplicate keys, malformed custom adapters, binding-load failures, complete workflow execution, project persistence, and GUI lifecycle behavior.
+- Adds a focused v0.98.1 application/GUI CI gate before the complete suite while preserving all v0.91-v0.95 provenance/replay gates, CLI smoke checks, and the real Tk/Xvfb desktop smoke.
+- Synchronizes package/runtime/demo/CI metadata at v0.98.1.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `1fe0474addc9c1bd3086cdf50207520fcadb95cf` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

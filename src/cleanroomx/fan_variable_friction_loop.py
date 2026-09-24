@@ -536,6 +536,7 @@ def _nonconverged_result(
         ),
         "fan_operating_point": None,
         "operating_point_search_evidence": None,
+        "terminal_bisection_failure_evidence": None,
         "operating_network_solution": None,
         "system_pressure_check": None,
         "power_evidence": None,
@@ -599,6 +600,7 @@ def solve_fan_variable_friction_loop(
     selected_segment = 0
     selected_supplied_point_index: int | None = None
     final_bisection_bracket: dict | None = None
+    terminal_bisection_failure_evidence: dict | None = None
     operating_iterations = 0
     termination_reason = "no_intersection_in_supplied_range"
 
@@ -731,6 +733,104 @@ def solve_fan_variable_friction_loop(
                         high_residual = residual
                 else:
                     termination_reason = "bisection_iteration_limit"
+                    assert final is not None
+                    last_airflow = float(final[0])
+                    last_residual = float(final[4])
+                    terminal_width = high - low
+                    terminal_width_fraction = (
+                        terminal_width / supplied_segment_span
+                    )
+                    expected_terminal_width_fraction = 0.5 ** iteration
+                    last_endpoint = (
+                        "low" if last_residual > 0.0 else "high"
+                    )
+                    terminal_endpoint_airflow = (
+                        low if last_endpoint == "low" else high
+                    )
+                    terminal_bisection_failure_evidence = {
+                        "method": "bounded_bisection_iteration_limit",
+                        "supplied_segment_index": index,
+                        "supplied_segment_low_airflow_m3_h": round(
+                            left.airflow_m3_h,
+                            6,
+                        ),
+                        "supplied_segment_high_airflow_m3_h": round(
+                            right.airflow_m3_h,
+                            6,
+                        ),
+                        "operating_iterations": iteration,
+                        "last_evaluated_airflow_m3_h": round(
+                            last_airflow,
+                            9,
+                        ),
+                        "last_fan_minus_system_pressure_pa": round(
+                            last_residual,
+                            9,
+                        ),
+                        "last_evaluated_endpoint": last_endpoint,
+                        "terminal_bisection_bracket": {
+                            "low_airflow_m3_h": round(low, 9),
+                            "high_airflow_m3_h": round(high, 9),
+                            "width_m3_h": round(terminal_width, 9),
+                            "half_width_m3_h": round(
+                                0.5 * terminal_width,
+                                9,
+                            ),
+                            "low_fan_minus_system_pressure_pa": round(
+                                low_residual,
+                                9,
+                            ),
+                            "high_fan_minus_system_pressure_pa": round(
+                                high_residual,
+                                9,
+                            ),
+                            "width_fraction_of_supplied_segment": round(
+                                terminal_width_fraction,
+                                12,
+                            ),
+                            "iteration": iteration,
+                            "invariant_audit": {
+                                "strict_sign_change_preserved": (
+                                    low_residual > 0.0
+                                    and high_residual < 0.0
+                                ),
+                                "last_evaluated_airflow_is_terminal_bracket_endpoint": (
+                                    math.isclose(
+                                        last_airflow,
+                                        terminal_endpoint_airflow,
+                                        rel_tol=0.0,
+                                        abs_tol=1e-12,
+                                    )
+                                ),
+                                "binary_contraction_step_count": iteration,
+                                "expected_width_fraction_of_supplied_segment": round(
+                                    expected_terminal_width_fraction,
+                                    15,
+                                ),
+                                "actual_width_fraction_of_supplied_segment": round(
+                                    terminal_width_fraction,
+                                    15,
+                                ),
+                                "absolute_width_fraction_consistency_error": round(
+                                    abs(
+                                        terminal_width_fraction
+                                        - expected_terminal_width_fraction
+                                    ),
+                                    18,
+                                ),
+                            },
+                        },
+                        "scope_note": (
+                            "This is the terminal signed-residual bisection "
+                            "state after the final allowed contraction when "
+                            "the configured operating-iteration budget is "
+                            "exhausted before pressure-residual convergence. "
+                            "It is numerical failure-state provenance only, "
+                            "not physical airflow uncertainty, interpolation "
+                            "error, a continuous worst-case bound, or an "
+                            "equipment-acceptance limit."
+                        ),
+                    }
             except RuntimeError as exc:
                 return _nonconverged_result(
                     study,
@@ -772,6 +872,9 @@ def solve_fan_variable_friction_loop(
                         "bracket_low_airflow_m3_h": round(low, 9),
                         "bracket_high_airflow_m3_h": round(high, 9),
                     },
+                    "terminal_bisection_failure_evidence": (
+                        terminal_bisection_failure_evidence
+                    ),
                 }
             break
 
@@ -811,6 +914,7 @@ def solve_fan_variable_friction_loop(
             "status": "no_intersection_in_supplied_range",
             "fan_operating_point": None,
             "operating_point_search_evidence": None,
+            "terminal_bisection_failure_evidence": None,
             "operating_network_solution": None,
             "system_pressure_check": None,
             "power_evidence": None,
@@ -904,6 +1008,7 @@ def solve_fan_variable_friction_loop(
         "status": "solved",
         "fan_curve_supplied_point_residual_audit": selected_residual_audit,
         "operating_point_search_evidence": operating_point_search_evidence,
+        "terminal_bisection_failure_evidence": None,
         "fan_operating_point": {
             "airflow_m3_h": round(selected_airflow, 6),
             "airflow_m3_s": round(airflow_m3_s, 9),

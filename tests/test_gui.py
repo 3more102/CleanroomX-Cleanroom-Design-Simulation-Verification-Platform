@@ -68,6 +68,57 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.description == "Preserve editor state"
 
 
+def test_abandon_waits_for_worker_exit_before_reenabling_ui():
+    import queue
+
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 7
+    app._queue = queue.Queue()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+
+    app.cancel_run()
+
+    assert app._running is True
+    assert app._abandon_requested is True
+    assert app._run_generation == 7
+    assert app.cancel_button.state == "disabled"
+    assert "waiting" in app.status_var.value.lower()
+
+    app._queue.put(("success", 7, "analysis-a", object()))
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._abandon_requested is False
+    assert app.run_button.state == "normal"
+    assert app.cancel_button.state == "disabled"
+    assert app.input_text.state == "normal"
+    assert "worker finished" in app.status_var.value.lower()
+    assert app.root.delay == 100
+
+
 def test_running_analysis_prevents_switching_to_another_analysis():
     class Tree:
         def __init__(self):
@@ -235,7 +286,7 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.98.0"
+    assert payload["version"] == "0.99.0"
     assert payload["analysis_count"] >= 20
     assert payload["bindings_valid"] is True
     assert payload["registry_validation"]["status"] == "ok"

@@ -77,6 +77,29 @@ engineering acceptance threshold, physical uncertainty, interpolation-error
 bound, dynamic-stability criterion, stall/surge margin, manufacturer operating
 region, or equipment-acceptance limit.
 
+## Bisection decision-trace evidence
+
+v0.70 retains the complete successful bounded-bisection midpoint history for
+each bisection-solved corner. Every step records the live low/high airflow
+bracket, midpoint, bracket width and supplied-segment fraction, signed
+fan-minus-system residuals at both endpoints and the midpoint, and the exact
+decision to replace the positive-residual low endpoint, replace the
+negative-residual high endpoint, or accept the midpoint within the configured
+operating-pressure tolerance.
+
+The trace audit verifies that retained step count matches the reported
+operating-iteration count, every pre-evaluation bracket preserves the strict
+residual sign change, every evaluated airflow is the arithmetic bracket
+midpoint, and the single tolerance-accept record is terminal. The uncertainty
+aggregate reports trace-evidence coverage, exact corner indices for each
+violation class, and tied source-corner provenance for the longest retained
+trace. Direct supplied-point contacts remain trace-free.
+
+The trace is deterministic numerical implementation provenance only. It is not
+physical uncertainty, an interpolation-error bound, a statistical interval, a
+continuous-root uniqueness proof, a dynamic-stability or stall/surge margin,
+or an equipment, commissioning, or certification acceptance criterion.
+
 ## Supplied-point residual-topology evidence
 
 v0.61 propagates the base nonlinear solver's discrete fan-minus-system residual audit into the nominal case and every evaluated uncertainty corner. Each audit records expected and evaluated supplied-point counts, complete or partial point coverage, supplied points that fall within the configured operating-pressure tolerance, strict positive-to-negative sign-change segments, every adjacent supplied-point residual transition, sampled non-increasing behavior within tolerance, and any positive residual increase.
@@ -84,6 +107,8 @@ v0.61 propagates the base nonlinear solver's discrete fan-minus-system residual 
 The aggregate uncertainty result reports how many corners have complete supplied-point coverage and sampled non-increasing residuals, exact corner indices with residual increases, exact corner indices with more than one discrete candidate crossing feature, and tied source-corner provenance for the largest positive residual increase when one exists. A candidate feature is either a supplied point within the configured root tolerance or a strict sign-change segment. v0.63 also retains the solver-priority-ordered candidate list and selected discrete feature for every solved corner, then aggregates selected-candidate coverage, first-priority selection coverage, and exact solved-corner indices where additional discrete candidates were present. This is deliberately a discrete sampled-data audit: it does not count or prove continuous physical intersections, guarantee uniqueness between supplied points, establish dynamic stability, identify stall/surge boundaries, or create a manufacturer or equipment-acceptance criterion.
 
 v0.68 adds a scale-aware form of the v0.66 alternative-candidate separation. For each solved case with an additional discrete candidate, CleanroomX divides the absolute selected-airflow-to-candidate-interval gap by the exact supplied fan-curve airflow span used for that case. The aggregate preserves the minimum normalized separation and every tied source corner, alongside the existing absolute m³/h gap. No additional root is solved or inferred. The normalized value is a sampled-data numerical topology diagnostic, not a continuous root-separation guarantee, physical uncertainty, robustness/stability margin, stall/surge criterion, manufacturer operating region, commissioning/certification criterion, or equipment-acceptance limit.
+
+v0.69 also retains strict negative-to-positive supplied-point residual sign-change segments as bidirectional sampled topology evidence. Those reverse crossings remain audit-only and are aggregated separately; they do not enter the solver candidate set, change operating-point selection, or prove another continuous physical intersection.
 
 ## Interpolation-segment position evidence
 

@@ -2246,15 +2246,37 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert summary[
         "alternative_candidate_separation_evidence_corner_count"
     ] == len(separation_gaps)
+    normalized_separation_gaps = [
+        corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+        )
+        for corner in result["corners"]
+        if corner["status"] == "solved"
+        and corner["fan_curve_supplied_point_residual_audit"] is not None
+        and corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+        )
+        is not None
+    ]
+    assert len(normalized_separation_gaps) == len(separation_gaps)
     minimum_gap = summary[
         "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
+    ]
+    minimum_gap_fraction = summary[
+        "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
     ]
     if separation_gaps:
         assert minimum_gap is not None
         assert minimum_gap["value"] == pytest.approx(min(separation_gaps))
         assert minimum_gap["sources"]
+        assert minimum_gap_fraction is not None
+        assert minimum_gap_fraction["value"] == pytest.approx(
+            min(normalized_separation_gaps)
+        )
+        assert minimum_gap_fraction["sources"]
     else:
         assert minimum_gap is None
+        assert minimum_gap_fraction is None
     assert summary["residual_increase_corner_count"] == 0
     assert summary["residual_increase_corner_indices"] == []
     assert summary["maximum_positive_residual_increase_pa"] is None
@@ -2272,6 +2294,8 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "Corners monotonic non-increasing within tolerance" in report
     assert "Solved corners with selected-candidate provenance" in report
     assert "alternative-candidate separation evidence" in report
+    if separation_gaps:
+        assert "gap / supplied fan-curve span" in report
     assert "do not prove continuous uniqueness" in report
 
 

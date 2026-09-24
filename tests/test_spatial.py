@@ -251,3 +251,29 @@ def test_spatial_scene_summary_handles_missing_pressure():
     assert workspace._scene_summary() == (
         "1 rooms · 0 devices · 4.0 m² · 12.0 m³ · pressure —"
     )
+
+
+def test_room_assignment_options_disambiguate_duplicate_room_names():
+    workspace = SpatialDesignWorkspace.__new__(SpatialDesignWorkspace)
+    workspace.layout = {
+        "rooms": [
+            {"id": "room-process-a1b2c3", "name": "Process"},
+            {"id": "room-process-d4e5f6", "name": "Process"},
+            {"id": "room-airlock", "name": "Airlock"},
+        ],
+        "devices": [],
+    }
+
+    options = workspace._room_assignment_options()
+
+    assert options == [
+        ("Unassigned", None),
+        ("Process · a1b2c3", "room-process-a1b2c3"),
+        ("Process · d4e5f6", "room-process-d4e5f6"),
+        ("Airlock", "room-airlock"),
+    ]
+    assert workspace._room_assignment_display("room-process-d4e5f6") == (
+        "Process · d4e5f6"
+    )
+    assert workspace._room_id_from_assignment("Airlock") == "room-airlock"
+    assert workspace._room_id_from_assignment("Unassigned") is None

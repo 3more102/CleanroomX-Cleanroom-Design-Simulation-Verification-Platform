@@ -2536,6 +2536,21 @@ def _operating_point_search_resolution_summary(
         )
         is not True
     ]
+    selected_operating_network_state_projection_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit
+        in selected_operating_state_replay_cases
+        if audit.get(
+            "network_state_projection_replay_available",
+            False,
+        )
+        is True
+        and audit.get(
+            "network_state_projection_matches_independent_replay",
+            False,
+        )
+        is not True
+    ]
     selected_operating_state_replay_violation_details = []
     for (
         corner_index,
@@ -2574,6 +2589,19 @@ def _operating_point_search_resolution_summary(
                 ),
                 "recomputed_network_state_sha256": audit.get(
                     "recomputed_network_state_sha256"
+                ),
+                "network_state_projection_replay_available": audit.get(
+                    "network_state_projection_replay_available"
+                ),
+                "network_state_projection_matches_independent_replay": audit.get(
+                    "network_state_projection_matches_independent_replay"
+                ),
+                "network_state_projection_mismatch_count": audit.get(
+                    "network_state_projection_mismatch_count"
+                ),
+                "network_state_projection_mismatch_paths": audit.get(
+                    "network_state_projection_mismatch_paths",
+                    [],
                 ),
                 "violation_count": int(audit.get("violation_count", 0)),
                 "violations": audit.get("violations", []),
@@ -3316,6 +3344,31 @@ def _operating_point_search_resolution_summary(
         ),
         "selected_operating_network_state_replay_violation_corner_indices": (
             selected_operating_network_state_replay_violation_corner_indices
+        ),
+        "selected_operating_network_state_projection_replay_evidence_corner_count": sum(
+            audit.get("network_state_projection_replay_available", False)
+            is True
+            for _corner_index, _corner, _evidence, audit
+            in selected_operating_state_replay_cases
+        ),
+        "selected_operating_network_state_projection_replay_consistent_corner_count": (
+            sum(
+                audit.get(
+                    "network_state_projection_matches_independent_replay",
+                    False,
+                )
+                is True
+                for _corner_index, _corner, _evidence, audit
+                in selected_operating_state_replay_cases
+            )
+        ),
+        "selected_operating_network_state_projection_replay_violation_corner_indices": (
+            selected_operating_network_state_projection_replay_violation_corner_indices
+        ),
+        "selected_operating_network_state_projection_mismatch_count": sum(
+            int(audit.get("network_state_projection_mismatch_count") or 0)
+            for _corner_index, _corner, _evidence, audit
+            in selected_operating_state_replay_cases
         ),
         "selected_operating_state_replay_violation_count": sum(
             int(audit.get("violation_count", 0))

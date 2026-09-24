@@ -7,7 +7,14 @@ import pytest
 
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
+from cleanroomx.gui import (
+    CleanroomXApp,
+    _strict_json_loads,
+    extract_room_visuals,
+    flatten_json,
+    main,
+    unit_hint,
+)
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
 
 
@@ -32,6 +39,52 @@ def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows
     assert ("$.room.enabled", "true", "") in rows
+
+
+def test_extract_room_visuals_preserves_real_dimensions_and_engineering_metadata():
+    rooms = extract_room_visuals(
+        {
+            "name": "Demo",
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "supply_airflow_m3_h": 2700.0,
+                    "observed_pressure_pa": 30.0,
+                }
+            ],
+        }
+    )
+
+    assert rooms == [
+        {
+            "name": "Process",
+            "length_m": 6.0,
+            "width_m": 5.0,
+            "height_m": 3.0,
+            "dimensions_real": True,
+            "height_real": True,
+            "airflow_m3_h": 2700.0,
+            "pressure_pa": 30.0,
+        }
+    ]
+
+
+def test_extract_room_visuals_marks_display_defaults_when_geometry_is_missing():
+    rooms = extract_room_visuals(
+        {"rooms": [{"name": "Gowning", "cleanroom_airflow_m3_h": 900.0}]}
+    )
+
+    assert len(rooms) == 1
+    assert rooms[0]["name"] == "Gowning"
+    assert rooms[0]["dimensions_real"] is False
+    assert rooms[0]["height_real"] is False
+    assert rooms[0]["length_m"] == 4.0
+    assert rooms[0]["width_m"] == 4.0
+    assert rooms[0]["height_m"] == 3.0
+    assert rooms[0]["airflow_m3_h"] == 900.0
 
 
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():

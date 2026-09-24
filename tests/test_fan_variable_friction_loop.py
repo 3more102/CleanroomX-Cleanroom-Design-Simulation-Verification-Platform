@@ -14,6 +14,7 @@ from cleanroomx.fan_variable_friction_loop import (
     _fan_curve_supplied_point_residual_audit,
     _network_state_sha256,
     _selected_operating_state_replay_audit,
+    _solve_network_at_airflow,
     _with_selected_crossing_feature,
     solve_fan_variable_friction_loop,
 )
@@ -1495,9 +1496,14 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     pressure = result["system_pressure_check"]
     segment_index = evidence["supplied_segment_index"]
     delta_pa = 1.0
+    replayed_airflow = replay["recorded_selected_airflow_m3_h"]
+    replayed_network, _ = _solve_network_at_airflow(
+        study,
+        replayed_airflow,
+    )
     corrupted = _selected_operating_state_replay_audit(
         study,
-        selected_airflow_m3_h=replay["recorded_selected_airflow_m3_h"],
+        selected_airflow_m3_h=replayed_airflow,
         recorded_fan_pressure_pa=pressure["fan_pressure_pa"] + delta_pa,
         recorded_loop_network_pressure_pa=(
             pressure["loop_network_pressure_pa"] + delta_pa
@@ -1507,7 +1513,7 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
         ),
         recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
         recorded_network_state_sha256=_network_state_sha256(
-            result["operating_network_solution"]
+            replayed_network
         ),
         segment_left=study.fan_curve.points[segment_index],
         segment_right=study.fan_curve.points[segment_index + 1],

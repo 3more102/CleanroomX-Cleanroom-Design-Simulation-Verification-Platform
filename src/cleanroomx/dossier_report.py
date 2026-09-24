@@ -764,6 +764,18 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_iteration_violations = len(
+                    search_summary.get(
+                        "bisection_trace_iteration_sequence_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_state_transition_violation_corner_indices",
+                        [],
+                    )
+                )
                 limit_count = search_summary.get(
                     "iteration_limit_search_evidence_corner_count",
                     0,
@@ -788,9 +800,10 @@ def markdown_dossier_report(result: dict) -> str:
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
                     f"trace {trace_count}/{bisection_count}; "
-                    f"trace violations L/S/M/T "
+                    f"trace violations L/S/M/T/I/R "
                     f"{trace_length_violations}/{trace_sign_violations}/"
-                    f"{trace_midpoint_violations}/{trace_terminal_violations}; "
+                    f"{trace_midpoint_violations}/{trace_terminal_violations}/"
+                    f"{trace_iteration_violations}/{trace_replay_violations}; "
                     f"max width-fraction error {max_error}; "
                     f"iteration-limit {limit_count}; "
                     f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "

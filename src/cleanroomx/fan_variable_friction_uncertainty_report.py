@@ -816,6 +816,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
+                "- Trace pressure-component residual violations: "
+                f"**{search_summary['bisection_trace_pressure_component_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -968,6 +970,36 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum absolute binary-width consistency error | "
                 f"{invariant_error['value']} | {invariant_error['unit']} | "
                 f"{' / '.join(invariant_sources)} |"
+            )
+        trace_midpoint_error = search_summary.get(
+            "maximum_bisection_trace_midpoint_error_m3_h"
+        )
+        if trace_midpoint_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_midpoint_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace midpoint-centering error | "
+                f"{trace_midpoint_error['value']} | "
+                f"{trace_midpoint_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_residual_component_error = search_summary.get(
+            "maximum_bisection_trace_residual_component_error_pa"
+        )
+        if trace_residual_component_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_residual_component_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace residual pressure-component error | "
+                f"{trace_residual_component_error['value']} | "
+                f"{trace_residual_component_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(
             "maximum_bisection_trace_width_error_m3_h"

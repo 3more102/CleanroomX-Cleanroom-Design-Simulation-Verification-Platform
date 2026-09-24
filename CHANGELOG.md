@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.99 release-integrity hardening — 2026-09-24
+
+- Continues directly from the integrated v0.98 `main` lineage at `d4fb2667afcff353d11cc50598366e6a9e24d08e`; the older divergent `codex/cleanroomx-v099-release-integrity` candidate was not used as the baseline.
+- Hardens the application registry beyond import resolution: duplicate workflow keys, catalog/mapping drift, missing parser/runner targets on standard workflows, and invalid consistency/dossier custom-adapter bindings now fail validation.
+- Returns structured registry-validation evidence through `application_info()` and `cleanroomx-gui --check`, including workflow, callable-target, custom-adapter, and fallback-reporter counts.
+- Runs the same registry validation before ordinary Tk startup so a broken catalog fails before the GUI root is created.
+- Adds negative regression coverage for duplicate keys, custom-adapter contract violations, missing standard bindings, and pre-display GUI fail-fast behavior.
+- Bumps package/runtime/demo metadata and CI assertions to v0.99.0 while preserving the full v0.91-v0.95 solver/provenance gates, complete application suite, CLI smoke checks, and real Xvfb GUI smoke.
+- No engineering solver equations, tolerances, uncertainty methods, acceptance semantics, or numerical/provenance algorithms are changed.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

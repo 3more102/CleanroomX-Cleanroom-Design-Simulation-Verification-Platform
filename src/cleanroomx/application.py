@@ -173,9 +173,39 @@ def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
     return getattr(module, function_name)
 
 
-def validate_application_registry() -> None:
-    """Resolve every parser, runner, and reporter binding declared by the app."""
+_CUSTOM_APPLICATION_ADAPTERS = frozenset({"consistency", "dossier"})
+
+
+def validate_application_registry() -> dict:
+    """Validate catalog uniqueness, adapter contracts, and every declared binding."""
+    keys = [spec.key for spec in _ANALYSES]
+    duplicate_keys = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicate_keys:
+        raise RuntimeError(
+            "duplicate application analysis keys: " + ", ".join(duplicate_keys)
+        )
+
+    mapping_keys = set(ANALYSIS_SPECS)
+    catalog_keys = set(keys)
+    if mapping_keys != catalog_keys or len(ANALYSIS_SPECS) != len(_ANALYSES):
+        raise RuntimeError("application analysis mapping is inconsistent with the catalog")
+
+    callable_target_count = 0
+    fallback_reporter_count = 0
     for spec in _ANALYSES:
+        if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
+            if spec.parser is not None or spec.runner is not None:
+                raise RuntimeError(
+                    f"{spec.key} must use its registered custom application adapter"
+                )
+        elif spec.parser is None or spec.runner is None:
+            raise RuntimeError(
+                f"{spec.key} must define both parser and runner targets"
+            )
+
+        if spec.reporter is None:
+            fallback_reporter_count += 1
+
         for role, target in (
             ("parser", spec.parser),
             ("runner", spec.runner),
@@ -183,20 +213,29 @@ def validate_application_registry() -> None:
         ):
             if target is None:
                 continue
+            module_name, function_name = target
             try:
                 resolved = _load_callable(target)
             except Exception as exc:
-                module_name, function_name = target
                 raise RuntimeError(
                     f"{spec.key} {role} binding cannot be resolved: "
                     f"{module_name}.{function_name}"
                 ) from exc
             if not callable(resolved):
-                module_name, function_name = target
                 raise RuntimeError(
                     f"{spec.key} {role} binding is not callable: "
                     f"{module_name}.{function_name}"
                 )
+            callable_target_count += 1
+
+    return {
+        "status": "ok",
+        "analysis_count": len(_ANALYSES),
+        "callable_target_count": callable_target_count,
+        "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
+        "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),
+        "fallback_reporter_count": fallback_reporter_count,
+    }
 
 
 def _normalize_result(value: Any) -> dict:
@@ -530,11 +569,12 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
 
 
 def application_info() -> dict:
-    validate_application_registry()
+    registry_validation = validate_application_registry()
     return {
         "name": "CleanroomX",
         "version": __version__,
         "analysis_count": len(_ANALYSES),
-        "bindings_valid": True,
+        "bindings_valid": registry_validation["status"] == "ok",
+        "registry_validation": registry_validation,
         "analyses": analysis_catalog(),
     }

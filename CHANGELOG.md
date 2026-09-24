@@ -1,4 +1,15 @@
 # Changelog
+
+## v0.71 supplied-grid resolution normalization — 2026-09-24
+
+- Records minimum and maximum adjacent supplied fan-curve airflow spacing plus the max/min spacing ratio inside the nonlinear residual-topology audit.
+- Normalizes each selected-to-alternative discrete candidate interval gap by the minimum adjacent supplied-point spacing, alongside the existing full-curve-span normalization.
+- Aggregates the minimum sampling-resolution-normalized separation across uncertainty corners with exact tied source-corner provenance and the corresponding supplied-point spacing.
+- Surfaces the new evidence in standalone nonlinear fan-loop and uncertainty Markdown.
+- Adds direct solver and uncertainty regression coverage while preserving all existing no-extrapolation and unresolved-case withholding rules.
+- Treats supplied-grid normalization strictly as sampled-data numerical topology evidence; it is not an interpolation-error estimate, continuous root-separation guarantee, physical robustness/stability margin, stall/surge criterion, manufacturer operating region, commissioning/certification result, or equipment-acceptance limit.
+- Bumped package/runtime metadata to v0.71.0.
+
 ## v0.70 iteration-limit bisection provenance — 2026-09-24
 
 - Preserves bounded-bisection search provenance when the configured operating-point iteration budget is exhausted before the pressure residual reaches tolerance.

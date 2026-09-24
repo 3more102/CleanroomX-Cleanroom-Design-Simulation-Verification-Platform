@@ -1113,6 +1113,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{normalized_alternative_gap['value']}** "
                 f"({' / '.join(source_texts)})"
             )
+        spacing_normalized_alternative_gap = residual_summary.get(
+            "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_minimum_supplied_point_spacing"
+        )
+        if spacing_normalized_alternative_gap is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; min-supplied-spacing={source['minimum_supplied_point_airflow_spacing_m3_h']} m³/h"
+                for source in spacing_normalized_alternative_gap["sources"]
+            ]
+            lines.append(
+                "- Minimum selected-to-alternative candidate gap / minimum supplied-point spacing: "
+                f"**{spacing_normalized_alternative_gap['value']}** "
+                f"({' / '.join(source_texts)})"
+            )
         if residual_summary["residual_increase_corner_indices"]:
             lines.append(
                 "- Residual-increase corner indices: "

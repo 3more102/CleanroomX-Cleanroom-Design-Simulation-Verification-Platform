@@ -340,6 +340,17 @@ def _fan_curve_supplied_point_residual_audit(
     for priority_rank, feature in enumerate(candidate_features):
         feature["solver_priority_rank"] = priority_rank
 
+    supplied_airflow_spacings_m3_h = [
+        float(right.airflow_m3_h) - float(left.airflow_m3_h)
+        for left, right in zip(study.fan_curve.points, study.fan_curve.points[1:])
+    ]
+    minimum_supplied_point_airflow_spacing_m3_h = min(
+        supplied_airflow_spacings_m3_h
+    )
+    maximum_supplied_point_airflow_spacing_m3_h = max(
+        supplied_airflow_spacings_m3_h
+    )
+
     return {
         "expected_supplied_point_count": expected_count,
         "evaluated_supplied_point_count": observed_count,
@@ -349,6 +360,17 @@ def _fan_curve_supplied_point_residual_audit(
             study.fan_curve.points[-1].airflow_m3_h
             - study.fan_curve.points[0].airflow_m3_h,
             9,
+        ),
+        "minimum_supplied_point_airflow_spacing_m3_h": round(
+            minimum_supplied_point_airflow_spacing_m3_h, 9
+        ),
+        "maximum_supplied_point_airflow_spacing_m3_h": round(
+            maximum_supplied_point_airflow_spacing_m3_h, 9
+        ),
+        "supplied_point_airflow_spacing_ratio_max_to_min": round(
+            maximum_supplied_point_airflow_spacing_m3_h
+            / minimum_supplied_point_airflow_spacing_m3_h,
+            12,
         ),
         "tolerance_contact_point_count": len(tolerance_contacts),
         "tolerance_contact_points": tolerance_contacts,
@@ -373,6 +395,7 @@ def _fan_curve_supplied_point_residual_audit(
         "alternative_candidate_features": None,
         "nearest_alternative_candidate_airflow_interval_gap_m3_h": None,
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span": None,
+        "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing": None,
         "nearest_alternative_candidate_features": None,
         "selected_airflow_overlaps_alternative_candidate_interval": None,
         "selection_policy": (
@@ -402,8 +425,9 @@ def _fan_curve_supplied_point_residual_audit(
             "candidate provenance is added only for solved results. For solved "
             "cases with additional candidates, airflow separation is measured "
             "only to each alternative discrete point or sign-change interval "
-            "and normalized only by the supplied fan-curve airflow span; no "
-            "alternate continuous root location is inferred. Candidate "
+            "and normalized by both the supplied fan-curve airflow span and "
+            "the minimum adjacent supplied-point airflow spacing; no alternate "
+            "continuous root location is inferred. Candidate "
             "crossing features are not a count or proof of continuous physical "
             "intersections, and sampled monotonicity is not a dynamic stability, stall/surge, "
             "manufacturer-region, or equipment-acceptance criterion."
@@ -450,6 +474,7 @@ def _with_selected_crossing_feature(
     alternative_features = None
     nearest_alternative_gap = None
     nearest_alternative_gap_fraction = None
+    nearest_alternative_gap_fraction_of_minimum_spacing = None
     nearest_alternative_features = None
     selected_overlaps_alternative_interval = None
     if selected_copy is not None:
@@ -457,6 +482,9 @@ def _with_selected_crossing_feature(
         airflow = float(selected_airflow_m3_h)
         supplied_curve_span = float(
             audit["supplied_fan_curve_airflow_span_m3_h"]
+        )
+        minimum_supplied_point_spacing = float(
+            audit["minimum_supplied_point_airflow_spacing_m3_h"]
         )
         for feature in candidates:
             if feature["solver_priority_rank"] == selected_rank:
@@ -484,6 +512,10 @@ def _with_selected_crossing_feature(
                     ),
                     "selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span": round(
                         gap / supplied_curve_span,
+                        12,
+                    ),
+                    "selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing": round(
+                        gap / minimum_supplied_point_spacing,
                         12,
                     ),
                 }
@@ -523,6 +555,10 @@ def _with_selected_crossing_feature(
                 nearest_alternative_gap / supplied_curve_span,
                 12,
             )
+            nearest_alternative_gap_fraction_of_minimum_spacing = round(
+                nearest_alternative_gap / minimum_supplied_point_spacing,
+                12,
+            )
             nearest_alternative_gap = round(nearest_alternative_gap, 9)
         else:
             nearest_alternative_features = []
@@ -546,6 +582,9 @@ def _with_selected_crossing_feature(
             ),
             "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span": (
                 nearest_alternative_gap_fraction
+            ),
+            "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing": (
+                nearest_alternative_gap_fraction_of_minimum_spacing
             ),
             "nearest_alternative_candidate_features": (
                 nearest_alternative_features

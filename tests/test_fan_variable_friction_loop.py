@@ -467,6 +467,11 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
         expected_contacts + expected_brackets
     )
     assert audit["candidate_crossing_feature_count"] >= 1
+    assert audit["minimum_supplied_point_airflow_spacing_m3_h"] > 0.0
+    assert audit["maximum_supplied_point_airflow_spacing_m3_h"] >= audit[
+        "minimum_supplied_point_airflow_spacing_m3_h"
+    ]
+    assert audit["supplied_point_airflow_spacing_ratio_max_to_min"] >= 1.0
     candidates = audit["candidate_crossing_features_in_solver_priority_order"]
     selected = audit["selected_candidate_feature"]
     assert selected is not None
@@ -492,6 +497,7 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
     if audit["additional_candidate_feature_count"]:
         assert "Nearest alternative candidate interval gap" in report
         assert "gap / supplied fan-curve span" in report
+        assert "gap / minimum supplied-point spacing" in report
     assert "not a count or proof of continuous physical intersections" in report
 
 def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candidates() -> None:
@@ -553,16 +559,24 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
         "selected_airflow_to_feature_interval_gap_m3_h"
     ] == pytest.approx(1500.0)
     supplied_span = selected["supplied_fan_curve_airflow_span_m3_h"]
+    minimum_spacing = selected["minimum_supplied_point_airflow_spacing_m3_h"]
     assert supplied_span > 0.0
+    assert minimum_spacing > 0.0
     assert alternatives[0][
         "selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span"
     ] == pytest.approx(1500.0 / supplied_span)
+    assert alternatives[0][
+        "selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing"
+    ] == pytest.approx(1500.0 / minimum_spacing)
     assert selected[
         "nearest_alternative_candidate_airflow_interval_gap_m3_h"
     ] == pytest.approx(1500.0)
     assert selected[
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
     ] == pytest.approx(1500.0 / supplied_span)
+    assert selected[
+        "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing"
+    ] == pytest.approx(1500.0 / minimum_spacing)
     assert len(selected["nearest_alternative_candidate_features"]) == 1
     assert (
         selected["selected_airflow_overlaps_alternative_candidate_interval"]

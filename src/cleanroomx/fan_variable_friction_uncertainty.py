@@ -1798,6 +1798,7 @@ def _fan_curve_supplied_point_residual_summary(
 
     minimum_alternative_candidate_gap = None
     minimum_alternative_candidate_gap_fraction = None
+    minimum_alternative_candidate_gap_fraction_of_minimum_spacing = None
     if alternative_separation_cases:
         minimum_gap = min(
             float(
@@ -1890,6 +1891,56 @@ def _fan_curve_supplied_point_residual_summary(
             "sources": normalized_sources,
         }
 
+        minimum_gap_fraction_of_minimum_spacing = min(
+            float(
+                audit[
+                    "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing"
+                ]
+            )
+            for _corner_index, _corner, audit in alternative_separation_cases
+        )
+        spacing_normalized_sources = []
+        for corner_index, corner, audit in alternative_separation_cases:
+            observed_fraction = float(
+                audit[
+                    "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing"
+                ]
+            )
+            if not math.isclose(
+                observed_fraction,
+                minimum_gap_fraction_of_minimum_spacing,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "candidate_crossing_feature_count": audit[
+                        "candidate_crossing_feature_count"
+                    ],
+                    "minimum_supplied_point_airflow_spacing_m3_h": audit[
+                        "minimum_supplied_point_airflow_spacing_m3_h"
+                    ],
+                    "maximum_supplied_point_airflow_spacing_m3_h": audit[
+                        "maximum_supplied_point_airflow_spacing_m3_h"
+                    ],
+                    "selected_candidate_feature": audit.get(
+                        "selected_candidate_feature"
+                    ),
+                    "nearest_alternative_candidate_features": audit.get(
+                        "nearest_alternative_candidate_features"
+                    )
+                    or [],
+                }
+            )
+            spacing_normalized_sources.append(source)
+        minimum_alternative_candidate_gap_fraction_of_minimum_spacing = {
+            "value": round(minimum_gap_fraction_of_minimum_spacing, 12),
+            "unit": "1",
+            "sources": spacing_normalized_sources,
+        }
+
     return {
         "corner_count": len(corners),
         "audit_evidence_corner_count": len(cases),
@@ -1922,6 +1973,9 @@ def _fan_curve_supplied_point_residual_summary(
         "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span": (
             minimum_alternative_candidate_gap_fraction
         ),
+        "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_minimum_supplied_point_spacing": (
+            minimum_alternative_candidate_gap_fraction_of_minimum_spacing
+        ),
         "monotonic_non_increasing_corner_count": monotonic_count,
         "residual_increase_corner_count": len(residual_increase_indices),
         "residual_increase_corner_indices": residual_increase_indices,
@@ -1950,8 +2004,9 @@ def _fan_curve_supplied_point_residual_summary(
             "discrete candidates were present. When alternatives exist, the "
             "aggregate can retain the smallest airflow gap from the selected "
             "solution to an alternative discrete point or sign-change interval "
-            "in absolute airflow and as a fraction of that corner's supplied "
-            "fan-curve airflow span; this does not infer a second continuous "
+            "in absolute airflow, as a fraction of that corner's supplied "
+            "fan-curve airflow span, and in units of that corner's minimum "
+            "adjacent supplied-point airflow spacing; this does not infer a second continuous "
             "root. Reverse negative-to-positive strict sign-change segments are "
             "retained separately as audit-only sampled topology and are never "
             "promoted into solver candidates. Sampled monotonicity and candidate "

@@ -242,6 +242,12 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 f"**{audit['all_strict_sign_change_segment_count']}**",
                 "- Candidate crossing features: "
                 f"**{audit['candidate_crossing_feature_count']}**",
+                "- Minimum adjacent supplied-point airflow spacing: "
+                f"**{audit['minimum_supplied_point_airflow_spacing_m3_h']} m³/h**",
+                "- Maximum adjacent supplied-point airflow spacing: "
+                f"**{audit['maximum_supplied_point_airflow_spacing_m3_h']} m³/h**",
+                "- Supplied-point spacing max/min ratio: "
+                f"**{audit['supplied_point_airflow_spacing_ratio_max_to_min']}**",
                 "- Selection policy: "
                 f"**{audit['selection_policy']}**",
                 "- Residual-increase transitions: "
@@ -294,6 +300,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                         f"**{alternative_gap} m³/h**",
                         "- Nearest alternative candidate gap / supplied fan-curve span: "
                         f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span']}**",
+                        "- Nearest alternative candidate gap / minimum supplied-point spacing: "
+                        f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing']}**",
                         "- Selected airflow overlaps an alternative candidate interval: "
                         f"**{audit['selected_airflow_overlaps_alternative_candidate_interval']}**",
                     ]
@@ -303,8 +311,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     lines.extend(
                         [
                             "",
-                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span |",
-                            "|---:|---|---|---:|---:|",
+                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span | Gap / min supplied spacing |",
+                            "|---:|---|---|---:|---:|---:|",
                         ]
                     )
                     for feature in alternatives:
@@ -327,7 +335,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                             f"{feature['airflow_interval_low_m3_h']}–"
                             f"{feature['airflow_interval_high_m3_h']} | "
                             f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} | "
-                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span']} |"
+                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span']} | "
+                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing']} |"
                         )
         reverse_segments = audit.get("reverse_strict_sign_change_segments") or []
         if reverse_segments:

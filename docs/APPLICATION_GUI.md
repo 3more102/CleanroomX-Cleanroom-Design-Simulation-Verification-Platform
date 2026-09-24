@@ -28,7 +28,7 @@ Check that the application layer, GUI imports, and every declared parser/runner/
 cleanroomx-gui --check
 ```
 
-The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate analysis keys, missing parser/runner bindings on ordinary analyses, accidental parser/runner bindings on custom `consistency`/`dossier` adapters, unresolved/non-callable targets, and returns auditable registry metadata alongside the package version and catalog size.
+The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate analysis keys, catalog/public-mapping drift, missing parser/runner bindings on ordinary analyses, accidental parser/runner bindings on custom `consistency`/`dossier` adapters, and unresolved/non-callable targets, and returns auditable registry metadata alongside the package version and catalog size. Ordinary desktop startup runs the same registry validation before creating the Tk root.
 
 For CI or Linux automation with a virtual display:
 

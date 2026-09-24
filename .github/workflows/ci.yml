@@ -27,6 +27,44 @@ jobs:
           tests/test_fan_variable_friction_loop.py::test_selected_projection_replay_retains_all_mismatches_in_deterministic_order
           tests/test_fan_variable_friction_loop.py::test_selected_projection_replay_records_type_mismatch_evidence
           tests/test_fan_variable_friction_uncertainty.py::test_selected_projection_replay_corruption_aggregates_exact_corner_evidence
+          tests/test_fan_variable_friction_uncertainty.py::test_selected_projection_replay_missing_check_is_incomplete_coverage
           tests/test_dossier_variable_friction_uncertainty.py::test_dossier_preserves_selected_projection_corruption_evidence
       - name: Run complete test suite
         run: python -m pytest -q
+      - name: Run representative v0.91 CLI smoke checks
+        run: |
+          python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json
+          python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format markdown --output /tmp/cleanroomx-loop.md
+          python -m cleanroomx.fan_variable_friction_uncertainty_cli examples/fan_variable_friction_uncertainty_demo.json --format json --output /tmp/cleanroomx-uncertainty.json
+          python -m cleanroomx.fan_variable_friction_uncertainty_cli examples/fan_variable_friction_uncertainty_demo.json --format markdown --output /tmp/cleanroomx-uncertainty.md
+          python -m cleanroomx.dossier_cli examples/dossier_variable_friction_uncertainty_demo.json --format json --output /tmp/cleanroomx-dossier.json
+          python -m cleanroomx.dossier_cli examples/dossier_variable_friction_uncertainty_demo.json --format markdown --output /tmp/cleanroomx-dossier.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for path in (
+              "/tmp/cleanroomx-loop.json",
+              "/tmp/cleanroomx-uncertainty.json",
+              "/tmp/cleanroomx-dossier.json",
+          ):
+              json.loads(Path(path).read_text(encoding="utf-8"))
+
+          loop_report = Path("/tmp/cleanroomx-loop.md").read_text(encoding="utf-8")
+          uncertainty_report = Path(
+              "/tmp/cleanroomx-uncertainty.md"
+          ).read_text(encoding="utf-8")
+          dossier_report = Path(
+              "/tmp/cleanroomx-dossier.md"
+          ).read_text(encoding="utf-8")
+
+          assert "Selected network-state projection replay verdict" in loop_report
+          assert (
+              "Selected operating network-state projection replay coverage"
+              in uncertainty_report
+          )
+          assert (
+              "selected-network-state-projection-replay coverage"
+              in dossier_report
+          )
+          PY

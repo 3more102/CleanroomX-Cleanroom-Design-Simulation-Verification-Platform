@@ -6,6 +6,7 @@
 - Adds a stable versioned `cleanroomx.project` document with strict JSON serialization, atomic save/open, active-analysis tracking, unique analysis identifiers, and supported legacy single-analysis migration.
 - Adds a real Tkinter desktop application for project and analysis management, structured JSON editing/inspection, validation, background execution, results, diagnostics, Markdown reports, fan-curve plotting, and JSON/Markdown export.
 - Adds the installed `cleanroomx-gui` console entry point plus `--check` headless capability validation and `--smoke` real-window smoke execution.
+- `cleanroomx-gui --check` validates every registered backend parser/runner/reporter binding plus custom application-adapter contracts before reporting a healthy desktop capability set.
 - Adds an end-to-end demonstration project spanning facility verification, HVAC, fan operating point, nonlinear fan/variable-friction loop analysis, bounded uncertainty, consistency, and dossier workflows.
 - Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.
 - Hardens project persistence to strict JSON, preserves uncommitted editor state across analysis switching, prompts before destructive project replacement/exit, and blocks conflicting analysis mutation/input changes while a run is active.

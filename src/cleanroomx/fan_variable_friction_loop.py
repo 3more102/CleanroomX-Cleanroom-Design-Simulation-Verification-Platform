@@ -2813,6 +2813,7 @@ def _selected_operating_state_replay_audit(
             airflow_tolerance_m3_h
         ),
         "selection_source": selection_source,
+        "selected_airflow_replay_input_m3_h": float(selected_airflow_m3_h),
         "recorded_selected_airflow_m3_h": round(
             selected_airflow_m3_h,
             9,

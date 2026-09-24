@@ -54,6 +54,13 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     )
     assert search_summary["strict_sign_change_violation_corner_indices"] == []
     assert search_summary["selected_midpoint_violation_corner_indices"] == []
+    assert search_summary["bisection_iteration_trace_evidence_corner_count"] == (
+        search_summary["bisection_corner_count"]
+    )
+    assert search_summary["bisection_iteration_trace_complete_corner_count"] == (
+        search_summary["bisection_corner_count"]
+    )
+    assert search_summary["bisection_iteration_trace_violation_corner_indices"] == []
     assert search_summary[
         "maximum_final_bisection_half_width_m3_h"
     ]["value"] >= 0.0
@@ -140,6 +147,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Search evidence" in report
     assert "Bisection invariant audit" in report
     assert "max width-fraction error" in report
+    assert "trace violations []" in report
     assert "Min segment-point clearance m³/h" in report
     assert "Segment evidence" in report
     assert "Min alternative candidate gap m³/h" in report

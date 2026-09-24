@@ -2368,8 +2368,16 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary["selected_midpoint_centered_corner_count"] == (
         summary["bisection_corner_count"]
     )
+    assert summary["bisection_iteration_trace_evidence_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+    assert summary["bisection_iteration_trace_complete_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+    assert summary["bisection_iteration_trace_violation_corner_indices"] == []
 
     errors = []
+    trace_lengths = []
     for corner in bisection_corners:
         evidence = corner["operating_point_search_evidence"]
         bracket = evidence["final_bisection_bracket"]
@@ -2393,6 +2401,21 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         errors.append(
             invariant["absolute_width_fraction_consistency_error"]
         )
+        trace = evidence["bisection_iteration_trace"]
+        trace_audit = evidence["bisection_iteration_trace_audit"]
+        assert trace is not None
+        assert trace_audit is not None
+        assert len(trace) == evidence["operating_iterations"]
+        assert trace_audit["complete"] is True
+        assert trace[-1]["action"] == "accept_midpoint_pressure_tolerance"
+        trace_lengths.append(len(trace))
+
+    maximum_trace = summary[
+        "maximum_bisection_iteration_trace_step_count"
+    ]
+    assert maximum_trace is not None
+    assert maximum_trace["value"] == max(trace_lengths)
+    assert maximum_trace["sources"]
 
     maximum_error = summary[
         "maximum_absolute_width_fraction_consistency_error"
@@ -2405,3 +2428,6 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert "Bisection corners with invariant evidence" in report
     assert "Strict sign-bracket violations" in report
     assert "Maximum absolute binary-width consistency error" in report
+    assert "Bisection corners with iteration-trace evidence" in report
+    assert "Bisection iteration traces passing all trace checks" in report
+    assert "Bisection iteration trace steps" in report

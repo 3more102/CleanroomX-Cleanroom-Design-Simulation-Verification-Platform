@@ -207,11 +207,32 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         abs=1e-12,
     )
 
+    trace = search["bisection_iteration_trace"]
+    trace_audit = search["bisection_iteration_trace_audit"]
+    assert trace is not None
+    assert trace_audit is not None
+    assert len(trace) == search["operating_iterations"]
+    assert trace[0]["iteration"] == 1
+    assert trace[-1]["iteration"] == search["operating_iterations"]
+    assert trace[-1]["action"] == "accept_midpoint_pressure_tolerance"
+    assert trace[-1]["midpoint_within_pressure_tolerance"] is True
+    assert trace_audit["complete"] is True
+    assert trace_audit["iteration_numbers_contiguous"] is True
+    assert trace_audit["trace_step_count_matches_operating_iterations"] is True
+    assert trace_audit["bracket_transition_consistent"] is True
+    assert trace_audit["all_step_actions_consistent_with_live_residual"] is True
+    for step in trace:
+        assert step["strict_sign_change_before_step"] is True
+        assert step["midpoint_is_bracket_midpoint"] is True
+
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Operating-point search evidence" in report
     assert "Final bisection bracket width" in report
     assert "Strict sign-change bracket preserved" in report
     assert "Absolute binary-width consistency error" in report
+    assert "Bisection iteration trace steps" in report
+    assert "Bisection trace audit complete" in report
+    assert "accept_midpoint_pressure_tolerance" in report
     assert "numerical search-geometry evidence only" in report
 
 

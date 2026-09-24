@@ -2499,6 +2499,184 @@ def _operating_point_search_resolution_summary(
         and evidence.get("iteration_limit_evidence") is not None
     ]
 
+    supplied_point_network_state_replay_cases = [
+        (
+            corner_index,
+            corner,
+            corner.get(
+                "fan_curve_supplied_point_network_state_replay"
+            ),
+        )
+        for corner_index, corner in enumerate(corners)
+        if corner.get(
+            "fan_curve_supplied_point_network_state_replay"
+        )
+        is not None
+    ]
+    supplied_point_network_state_replay_evidence_corner_indices = [
+        corner_index
+        for corner_index, _corner, replay
+        in supplied_point_network_state_replay_cases
+        if replay.get("available", False) is True
+    ]
+    supplied_point_network_state_replay_complete_corner_indices = [
+        corner_index
+        for corner_index, _corner, replay
+        in supplied_point_network_state_replay_cases
+        if replay.get("complete_replay_coverage", False) is True
+    ]
+    supplied_point_network_state_replay_consistent_corner_indices = [
+        corner_index
+        for corner_index, _corner, replay
+        in supplied_point_network_state_replay_cases
+        if replay.get(
+            "complete_supplied_point_network_state_replay",
+            False,
+        )
+        is True
+    ]
+    supplied_point_network_state_hash_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, replay
+        in supplied_point_network_state_replay_cases
+        if replay.get("hash_violation_point_indices", [])
+    ]
+    supplied_point_network_state_projection_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, replay
+        in supplied_point_network_state_replay_cases
+        if replay.get("projection_violation_point_indices", [])
+    ]
+    supplied_point_network_state_replay_violation_corner_indices = sorted(
+        set(supplied_point_network_state_hash_violation_corner_indices)
+        | set(
+            supplied_point_network_state_projection_violation_corner_indices
+        )
+    )
+    supplied_replay_case_indices = {
+        corner_index
+        for corner_index, _corner, _replay
+        in supplied_point_network_state_replay_cases
+    }
+    supplied_point_network_state_replay_incomplete_corner_indices = sorted(
+        (
+            set(range(len(corners))) - supplied_replay_case_indices
+        )
+        | {
+            corner_index
+            for corner_index, _corner, replay
+            in supplied_point_network_state_replay_cases
+            if replay.get("complete_replay_coverage", False)
+            is not True
+        }
+    )
+
+    supplied_point_network_state_replay_violation_details = []
+    supplied_point_network_state_replay_coverage_gap_details = []
+    for (
+        corner_index,
+        corner,
+        replay,
+    ) in supplied_point_network_state_replay_cases:
+        if (
+            replay.get("hash_violation_point_indices", [])
+            or replay.get("projection_violation_point_indices", [])
+        ):
+            detail = _critical_case_summary(corner_index, corner)
+            detail.update(
+                {
+                    "status": corner.get("status"),
+                    "replay_verdict": replay.get("replay_verdict"),
+                    "hash_violation_point_indices": replay.get(
+                        "hash_violation_point_indices",
+                        [],
+                    ),
+                    "projection_violation_point_indices": replay.get(
+                        "projection_violation_point_indices",
+                        [],
+                    ),
+                    "violation_point_indices": replay.get(
+                        "violation_point_indices",
+                        [],
+                    ),
+                    "mismatch_count": int(
+                        replay.get(
+                            "network_state_projection_mismatch_count",
+                            0,
+                        )
+                        or 0
+                    ),
+                    "mismatch_paths": replay.get(
+                        "network_state_projection_mismatch_paths",
+                        [],
+                    ),
+                    "mismatches": replay.get(
+                        "network_state_projection_mismatches",
+                        [],
+                    ),
+                    "maximum_numeric_errors": replay.get(
+                        "network_state_projection_maximum_numeric_errors",
+                        [],
+                    ),
+                }
+            )
+            supplied_point_network_state_replay_violation_details.append(
+                detail
+            )
+        if replay.get("complete_replay_coverage", False) is not True:
+            detail = _critical_case_summary(corner_index, corner)
+            detail.update(
+                {
+                    "status": corner.get("status"),
+                    "replay_verdict": replay.get("replay_verdict"),
+                    "expected_supplied_point_count": replay.get(
+                        "expected_supplied_point_count"
+                    ),
+                    "evaluated_supplied_point_count": replay.get(
+                        "evaluated_supplied_point_count"
+                    ),
+                    "independent_replay_success_count": replay.get(
+                        "independent_replay_success_count"
+                    ),
+                    "coverage_gap_point_indices": replay.get(
+                        "coverage_gap_point_indices",
+                        [],
+                    ),
+                    "coverage_gaps": replay.get(
+                        "coverage_gaps",
+                        [],
+                    ),
+                }
+            )
+            supplied_point_network_state_replay_coverage_gap_details.append(
+                detail
+            )
+
+    missing_supplied_replay_corner_indices = sorted(
+        set(range(len(corners))) - supplied_replay_case_indices
+    )
+    for corner_index in missing_supplied_replay_corner_indices:
+        corner = corners[corner_index]
+        detail = _critical_case_summary(corner_index, corner)
+        detail.update(
+            {
+                "status": corner.get("status"),
+                "replay_verdict": (
+                    "supplied_point_network_state_replay_not_available"
+                ),
+                "coverage_gap_point_indices": [],
+                "coverage_gaps": [
+                    {
+                        "point_index": None,
+                        "reason": "supplied_point_replay_audit_missing",
+                    }
+                ],
+            }
+        )
+        supplied_point_network_state_replay_coverage_gap_details.append(
+            detail
+        )
+
     selected_operating_state_replay_cases = [
         (
             corner_index,
@@ -3171,6 +3349,61 @@ def _operating_point_search_resolution_summary(
         if not invariant["strict_sign_change_preserved"]
     ]
 
+    def _maximum_supplied_point_network_state_projection_numeric_errors(
+    ) -> list[dict]:
+        grouped: dict[str, list[dict]] = {}
+        for (
+            corner_index,
+            corner,
+            replay,
+        ) in supplied_point_network_state_replay_cases:
+            for mismatch in replay.get(
+                "network_state_projection_mismatches",
+                [],
+            ):
+                field = mismatch.get("numeric_error_field")
+                absolute_error = mismatch.get("absolute_error")
+                if field is None or absolute_error is None:
+                    continue
+                witness = _critical_case_summary(corner_index, corner)
+                witness.update(
+                    {
+                        "status": corner.get("status"),
+                        "point_index": mismatch["point_index"],
+                        "airflow_m3_h": mismatch.get("airflow_m3_h"),
+                        "path": mismatch["path"],
+                        "recorded_value": mismatch.get(
+                            "recorded_value"
+                        ),
+                        "recomputed_value": mismatch.get(
+                            "recomputed_value"
+                        ),
+                        "absolute_error": float(absolute_error),
+                    }
+                )
+                grouped.setdefault(str(field), []).append(witness)
+
+        maxima = []
+        for field in sorted(grouped):
+            witnesses = grouped[field]
+            maximum = max(
+                float(witness["absolute_error"])
+                for witness in witnesses
+            )
+            maxima.append(
+                {
+                    "field": field,
+                    "comparison_basis": "same_canonical_leaf_field",
+                    "maximum_absolute_error": maximum,
+                    "witnesses": [
+                        witness
+                        for witness in witnesses
+                        if float(witness["absolute_error"]) == maximum
+                    ],
+                }
+            )
+        return maxima
+
     def _maximum_selected_operating_network_state_projection_numeric_errors(
     ) -> list[dict]:
         grouped: dict[str, list[dict]] = {}
@@ -3659,6 +3892,74 @@ def _operating_point_search_resolution_summary(
             corner_index
             for corner_index, _corner, _evidence in supplied_point_cases
         ],
+        "supplied_point_network_state_replay_applicable_corner_count": (
+            len(corners)
+        ),
+        "supplied_point_network_state_replay_evidence_corner_count": (
+            len(
+                supplied_point_network_state_replay_evidence_corner_indices
+            )
+        ),
+        "supplied_point_network_state_replay_complete_coverage_corner_count": (
+            len(
+                supplied_point_network_state_replay_complete_corner_indices
+            )
+        ),
+        "supplied_point_network_state_replay_complete_coverage": (
+            len(
+                supplied_point_network_state_replay_complete_corner_indices
+            )
+            == len(corners)
+            and len(supplied_point_network_state_replay_cases)
+            == len(corners)
+        ),
+        "supplied_point_network_state_replay_consistent_corner_count": (
+            len(
+                supplied_point_network_state_replay_consistent_corner_indices
+            )
+        ),
+        "supplied_point_network_state_replay_inconsistent_corner_count": (
+            len(
+                supplied_point_network_state_replay_violation_corner_indices
+            )
+        ),
+        "supplied_point_network_state_replay_incomplete_corner_count": (
+            len(
+                supplied_point_network_state_replay_incomplete_corner_indices
+            )
+        ),
+        "supplied_point_network_state_hash_violation_corner_indices": (
+            supplied_point_network_state_hash_violation_corner_indices
+        ),
+        "supplied_point_network_state_projection_violation_corner_indices": (
+            supplied_point_network_state_projection_violation_corner_indices
+        ),
+        "supplied_point_network_state_replay_violation_corner_indices": (
+            supplied_point_network_state_replay_violation_corner_indices
+        ),
+        "supplied_point_network_state_replay_incomplete_corner_indices": (
+            supplied_point_network_state_replay_incomplete_corner_indices
+        ),
+        "supplied_point_network_state_projection_mismatch_count": sum(
+            int(
+                replay.get(
+                    "network_state_projection_mismatch_count",
+                    0,
+                )
+                or 0
+            )
+            for _corner_index, _corner, replay
+            in supplied_point_network_state_replay_cases
+        ),
+        "supplied_point_network_state_replay_violation_details": (
+            supplied_point_network_state_replay_violation_details
+        ),
+        "supplied_point_network_state_replay_coverage_gap_details": (
+            supplied_point_network_state_replay_coverage_gap_details
+        ),
+        "maximum_supplied_point_network_state_projection_numeric_errors": (
+            _maximum_supplied_point_network_state_projection_numeric_errors()
+        ),
         "selected_operating_state_replay_evidence_corner_count": len(
             selected_operating_state_replay_cases
         ),
@@ -4826,6 +5127,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
                             "fan_curve_supplied_point_residual_audit": result.get(
                                 "fan_curve_supplied_point_residual_audit"
                             ),
+                            "fan_curve_supplied_point_network_state_replay": result.get(
+                                "fan_curve_supplied_point_network_state_replay"
+                            ),
                             "fan_curve_airflow_range_m3_h": result[
                                 "fan_curve_airflow_range_m3_h"
                             ],
@@ -4900,6 +5204,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
     )
     nominal_fan_curve_supplied_point_residual_audit = nominal.get(
         "fan_curve_supplied_point_residual_audit"
+    )
+    nominal_fan_curve_supplied_point_network_state_replay = nominal.get(
+        "fan_curve_supplied_point_network_state_replay"
     )
     fan_curve_supplied_point_residual_summary = (
         _fan_curve_supplied_point_residual_summary(
@@ -5309,6 +5616,9 @@ def analyze_fan_variable_friction_loop_uncertainty(
         ),
         "nominal_fan_curve_supplied_point_residual_audit": (
             nominal_fan_curve_supplied_point_residual_audit
+        ),
+        "nominal_fan_curve_supplied_point_network_state_replay": (
+            nominal_fan_curve_supplied_point_network_state_replay
         ),
         "fan_curve_supplied_point_residual_summary": (
             fan_curve_supplied_point_residual_summary

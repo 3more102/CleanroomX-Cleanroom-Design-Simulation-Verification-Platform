@@ -2,7 +2,44 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.92 engineering core
+## Verified development status
+
+The current validated provenance/replay development line is `codex/cleanroomx-v093-supplied-point-network-state-replay-v092-line` at `9069c465ad85e938134df912599f96b0b9a3336c`, with package/runtime version **0.93.0**. It is a direct descendant of the verified v0.92 head `f92c615fda95313a798b5bd5149bfeb4693293e0`, which in turn descends from the verified v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`.
+
+GitHub Actions CI run [#690](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/runs/36007799670) passed on Python **3.11, 3.12, and 3.13**. Per interpreter, the verified gate was:
+
+- v0.93 supplied-point network-state replay regressions: **10 passed**
+- v0.92 full per-bisection projection replay compatibility regressions: **15 passed**
+- v0.91 selected projection replay compatibility regressions: **8 passed**
+- complete suite: **461 passed**
+- representative nonlinear loop, nonlinear uncertainty, and engineering-dossier JSON/Markdown CLI smoke checks: **PASS**
+
+PR [#196](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/pull/196) carries this clean v0.92→v0.93 line. The default `main` branch is older than the verified v0.91+ provenance line and should not be used as the implementation baseline for these releases.
+
+### Network-state replay provenance ladder
+
+| Version | Audited state |
+| --- | --- |
+| v0.85 | selected operating scalar pressure-state replay |
+| v0.87 | full low/midpoint/high bisection network-state SHA-256 replay |
+| v0.88 | terminal-bracket network-state SHA-256 replay |
+| v0.89 | selected operating network-state SHA-256 replay |
+| v0.90 | terminal network-state canonical projection replay with field localization |
+| v0.91 | selected operating network-state canonical projection replay with field localization |
+| v0.92 | full per-bisection low/midpoint/high canonical projection replay with exact mismatch localization |
+| v0.93 | supplied fan-point canonical SHA-256 and field-level projection replay |
+
+### v0.92 full per-bisection projection replay
+
+v0.92 closes the field-level replay gap across every retained bounded-bisection trace row. For each applicable iteration it retains the canonical **low**, **midpoint**, and **high** network-state projections, reconstructs the exact replay airflows from the retained search origin and L/H/T decision trace, performs fresh nonlinear network solves at those exact airflows, rebuilds the same canonical projection used by terminal/selected replay, and compares retained versus recomputed state field-by-field.
+
+SHA-256 replay remains a separate audit layer; projection equality is not inferred from hash equality. Projection diagnostics retain **all** mismatches in deterministic iteration/position/path order and preserve JSON-style path, retained/recomputed value, retained/recomputed type, mismatch kind, numerical absolute error when meaningful, comparable-field identity, per-field maximum error, and tied worst witnesses. Coverage tracks checked versus expected iterations and state positions, and incomplete replay coverage cannot be reported as fully consistent.
+
+The same evidence propagates through nonlinear uncertainty aggregation, standalone JSON/Markdown reports, and engineering dossiers with exact corner → iteration → position → path provenance. Replay failures do not create, remove, or change an engineering operating point; solver decisions, no-extrapolation behavior, tolerances, convergence criteria, power calculations, and engineering acceptance semantics remain separate.
+
+This replay is deterministic numerical/provenance verification only. It is **not** cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
+
+## v0.93 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -69,6 +106,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Terminal network-state projection replay diagnostics for v0.90, retaining canonical low/high terminal node/edge/pressure-power/closure projections and independently comparing them with fresh endpoint solves to report exact JSON-style mismatch paths without changing solver decisions or engineering acceptance semantics.
 - Selected operating network-state projection replay diagnostics for v0.91, retaining the accepted solution's canonical node/edge/pressure-power/closure projection and independently comparing it with a fresh exact-selected-airflow solve to report deterministic JSON-style mismatch paths, recorded/recomputed values, type evidence, numerical absolute errors when meaningful, tied per-field worst-error witnesses, and uncertainty-corner provenance even when the retained SHA-256 is unchanged. This replay is numerical/provenance verification only: it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness, stall/surge analysis, or physical uncertainty quantification.
 - Full per-bisection network-state projection replay diagnostics for v0.92, retaining canonical low/midpoint/high projections on every bounded-bisection trace row and independently re-solving the exact reconstructed search airflows. Replay reports complete checked-versus-expected state-position coverage, exact iteration/position/path mismatch provenance, recorded/recomputed/type evidence, deterministic all-mismatch ordering, numerical absolute errors, and tied per-field worst witnesses across uncertainty corners and dossiers. This is numerical/provenance verification only: it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
+- Supplied fan-point internal network-state replay for v0.93, retaining the canonical SHA-256 and full network-state projection for every successfully evaluated supplied fan-curve sample before candidate selection, then independently re-solving each exact supplied airflow. The audit keeps hash identity separate from field-level projection equality, localizes every projection corruption to point-indexed deterministic JSON paths, preserves detailed values/types/numerical errors and tied per-field witnesses, and distinguishes actual corruption from incomplete evaluation/replay coverage across solved, no-intersection, non-converged, uncertainty, and dossier workflows. This is deterministic numerical/provenance verification only and does not change candidate discovery, interpolation, root selection, solver tolerances, convergence, or engineering acceptance.
 - Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
 - Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.

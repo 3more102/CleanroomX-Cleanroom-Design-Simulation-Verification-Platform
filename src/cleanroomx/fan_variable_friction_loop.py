@@ -491,6 +491,310 @@ def _maximum_network_state_projection_numeric_errors(
     return evidence
 
 
+def _fan_curve_supplied_point_network_state_replay_audit(
+    study: FanVariableFrictionLoopStudy,
+    curve_checks: list[dict],
+) -> dict:
+    expected_count = len(study.fan_curve.points)
+    evaluated_count = len(curve_checks)
+    replay_checks = []
+    violations = []
+    projection_mismatches = []
+    coverage_gaps = []
+
+    for missing_point_index in range(evaluated_count, expected_count):
+        point = study.fan_curve.points[missing_point_index]
+        coverage_gaps.append(
+            {
+                "point_index": missing_point_index,
+                "airflow_m3_h": float(point.airflow_m3_h),
+                "reason": "supplied_point_not_evaluated",
+            }
+        )
+
+    for point_index, check in enumerate(curve_checks):
+        point = study.fan_curve.points[point_index]
+        recorded_sha256 = check.get("network_state_sha256")
+        recorded_projection = check.get("network_state_projection")
+        replay_error = None
+        independent_replay_available = False
+        recomputed_sha256 = None
+        recomputed_projection = None
+        hash_matches = None
+        projection_matches = None
+        mismatches = []
+
+        if recorded_sha256 is None:
+            coverage_gaps.append(
+                {
+                    "point_index": point_index,
+                    "airflow_m3_h": float(point.airflow_m3_h),
+                    "reason": "recorded_network_state_sha256_missing",
+                }
+            )
+        if recorded_projection is None:
+            coverage_gaps.append(
+                {
+                    "point_index": point_index,
+                    "airflow_m3_h": float(point.airflow_m3_h),
+                    "reason": "recorded_network_state_projection_missing",
+                }
+            )
+
+        try:
+            replayed_network, _ = _solve_network_at_airflow(
+                study,
+                point.airflow_m3_h,
+            )
+            independent_replay_available = True
+            recomputed_sha256 = _network_state_sha256(replayed_network)
+            recomputed_projection = _network_state_projection(
+                replayed_network
+            )
+            if recorded_sha256 is not None:
+                hash_matches = (
+                    str(recorded_sha256) == recomputed_sha256
+                )
+            if recorded_projection is not None:
+                mismatches = _network_state_projection_differences(
+                    recorded_projection,
+                    recomputed_projection,
+                )
+                projection_matches = not mismatches
+                for mismatch in mismatches:
+                    projection_mismatches.append(
+                        {
+                            "point_index": point_index,
+                            "airflow_m3_h": float(point.airflow_m3_h),
+                            **mismatch,
+                        }
+                    )
+        except RuntimeError as exc:
+            replay_error = str(exc)
+            coverage_gaps.append(
+                {
+                    "point_index": point_index,
+                    "airflow_m3_h": float(point.airflow_m3_h),
+                    "reason": "independent_replay_failed",
+                    "replay_error": replay_error,
+                }
+            )
+
+        point_consistent = (
+            independent_replay_available
+            and hash_matches is True
+            and projection_matches is True
+        )
+        evidence = {
+            "point_index": point_index,
+            "airflow_m3_h": float(point.airflow_m3_h),
+            "independent_replay_available": (
+                independent_replay_available
+            ),
+            "recorded_network_state_sha256": (
+                None
+                if recorded_sha256 is None
+                else str(recorded_sha256)
+            ),
+            "recomputed_network_state_sha256": recomputed_sha256,
+            "network_state_hash_matches_independent_replay": (
+                hash_matches
+            ),
+            "network_state_projection_replay_available": (
+                recorded_projection is not None
+                and independent_replay_available
+            ),
+            "network_state_projection_matches_independent_replay": (
+                projection_matches
+            ),
+            "network_state_projection_mismatch_count": len(mismatches),
+            "network_state_projection_mismatch_paths": [
+                mismatch["path"] for mismatch in mismatches
+            ],
+            "network_state_projection_mismatches": mismatches,
+            "network_state_projection_maximum_numeric_errors": (
+                _maximum_network_state_projection_numeric_errors(
+                    mismatches
+                )
+            ),
+            "point_replay_consistent": point_consistent,
+            "replay_error": replay_error,
+        }
+        replay_checks.append(evidence)
+        if (
+            hash_matches is False
+            or projection_matches is False
+            or replay_error is not None
+        ):
+            violations.append(evidence)
+
+    complete_coverage = not coverage_gaps
+    inconsistent_point_indices = sorted(
+        {
+            check["point_index"]
+            for check in replay_checks
+            if check["network_state_hash_matches_independent_replay"]
+            is False
+            or check[
+                "network_state_projection_matches_independent_replay"
+            ]
+            is False
+        }
+    )
+    if not replay_checks:
+        verdict = "supplied_point_network_state_replay_not_available"
+    elif inconsistent_point_indices:
+        verdict = "supplied_point_network_state_replay_inconsistent"
+    elif not complete_coverage:
+        verdict = (
+            "supplied_point_network_state_replay_incomplete_coverage"
+        )
+    else:
+        verdict = "supplied_point_network_state_replay_consistent"
+
+    return {
+        "applicable": expected_count > 0,
+        "available": bool(replay_checks),
+        "algorithm": "sha256",
+        "canonicalization": (
+            "network-state-projection-json-sort-keys-compact-utf8-v1"
+        ),
+        "expected_supplied_point_count": expected_count,
+        "evaluated_supplied_point_count": evaluated_count,
+        "replay_check_count": len(replay_checks),
+        "independent_replay_success_count": sum(
+            check["independent_replay_available"]
+            for check in replay_checks
+        ),
+        "complete_supplied_point_coverage": (
+            evaluated_count == expected_count
+        ),
+        "replay_evidence_complete": complete_coverage,
+        "complete_replay_coverage": complete_coverage,
+        "matching_hash_count": sum(
+            check[
+                "network_state_hash_matches_independent_replay"
+            ]
+            is True
+            for check in replay_checks
+        ),
+        "matching_projection_count": sum(
+            check[
+                "network_state_projection_matches_independent_replay"
+            ]
+            is True
+            for check in replay_checks
+        ),
+        "consistent_point_count": sum(
+            check["point_replay_consistent"] is True
+            for check in replay_checks
+        ),
+        "inconsistent_point_count": len(inconsistent_point_indices),
+        "incomplete_point_count": len(
+            {
+                gap["point_index"] for gap in coverage_gaps
+            }
+        ),
+        "all_evaluated_supplied_point_network_state_hashes_match_independent_replay": (
+            all(
+                check[
+                    "network_state_hash_matches_independent_replay"
+                ]
+                is True
+                for check in replay_checks
+            )
+            if replay_checks
+            else None
+        ),
+        "all_evaluated_supplied_point_network_state_projections_match_independent_replay": (
+            all(
+                check[
+                    "network_state_projection_matches_independent_replay"
+                ]
+                is True
+                for check in replay_checks
+            )
+            if replay_checks
+            else None
+        ),
+        "complete_supplied_point_network_state_replay": (
+            complete_coverage
+            and bool(replay_checks)
+            and all(
+                check["point_replay_consistent"] is True
+                for check in replay_checks
+            )
+        ),
+        "hash_violation_point_indices": [
+            check["point_index"]
+            for check in replay_checks
+            if check[
+                "network_state_hash_matches_independent_replay"
+            ]
+            is False
+        ],
+        "projection_violation_point_indices": [
+            check["point_index"]
+            for check in replay_checks
+            if check[
+                "network_state_projection_matches_independent_replay"
+            ]
+            is False
+        ],
+        "violation_point_indices": sorted(
+            {
+                check["point_index"] for check in violations
+            }
+        ),
+        "coverage_gap_point_indices": sorted(
+            {
+                gap["point_index"] for gap in coverage_gaps
+            }
+        ),
+        "coverage_gaps": coverage_gaps,
+        "network_state_projection_mismatch_count": len(
+            projection_mismatches
+        ),
+        "network_state_projection_mismatch_paths": [
+            {
+                "point_index": mismatch["point_index"],
+                "path": mismatch["path"],
+            }
+            for mismatch in projection_mismatches
+        ],
+        "network_state_projection_unique_mismatch_paths": sorted(
+            {
+                mismatch["path"]
+                for mismatch in projection_mismatches
+            }
+        ),
+        "network_state_projection_mismatches": projection_mismatches,
+        "network_state_projection_maximum_numeric_errors": (
+            _maximum_network_state_projection_numeric_errors(
+                projection_mismatches
+            )
+        ),
+        "replay_verdict": verdict,
+        "violation_count": len(violations),
+        "violations": violations,
+        "checks": replay_checks,
+        "scope_note": (
+            "This audit independently re-solves every successfully "
+            "evaluated supplied fan-curve point at its exact supplied "
+            "airflow and compares both the retained canonical network-state "
+            "SHA-256 and full canonical projection with the fresh nonlinear "
+            "solve. It reports corruption separately from incomplete point "
+            "or replay coverage, including the successfully evaluated prefix "
+            "before network-solver failure. It does not alter candidate "
+            "discovery, root selection, solver tolerances, convergence, or "
+            "engineering acceptance. This is deterministic numerical/"
+            "provenance verification only, not physical uncertainty, fan "
+            "stability, cleanroom certification, commissioning evidence, "
+            "or equipment acceptance."
+        ),
+    }
+
+
 def _point_check(
     study: FanVariableFrictionLoopStudy,
     point: FanCurvePoint,
@@ -513,6 +817,8 @@ def _point_check(
             "max_relative_resistance_closure_error": vf[
                 "max_relative_resistance_closure_error"
             ],
+            "network_state_sha256": _network_state_sha256(network),
+            "network_state_projection": _network_state_projection(network),
         },
         network,
     )
@@ -3245,6 +3551,12 @@ def _nonconverged_result(
                 curve_checks,
             )
         ),
+        "fan_curve_supplied_point_network_state_replay": (
+            _fan_curve_supplied_point_network_state_replay_audit(
+                study,
+                curve_checks,
+            )
+        ),
         "fan_operating_point": None,
         "operating_point_search_evidence": None,
         "operating_network_solution": None,
@@ -4092,6 +4404,12 @@ def solve_fan_variable_friction_loop(
         "fan_curve_point_checks": curve_checks,
         "fan_curve_supplied_point_residual_audit": (
             _fan_curve_supplied_point_residual_audit(
+                study,
+                curve_checks,
+            )
+        ),
+        "fan_curve_supplied_point_network_state_replay": (
+            _fan_curve_supplied_point_network_state_replay_audit(
                 study,
                 curve_checks,
             )

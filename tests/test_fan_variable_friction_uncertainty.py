@@ -6,6 +6,7 @@ import pytest
 
 from cleanroomx.fan_variable_friction_loop import (
     _bisection_decision_trace_audit,
+    _fan_curve_supplied_point_network_state_replay_audit,
     _selected_operating_state_replay_audit,
     solve_fan_variable_friction_loop,
 )
@@ -1056,6 +1057,141 @@ def test_full_trace_projection_replay_missing_state_is_incomplete_coverage(
     assert gaps[0]["coverage_gaps"] == [
         {"iteration": 1, "position": "high"}
     ]
+
+
+def test_supplied_point_projection_corruption_aggregates_exact_corner_evidence(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2:
+            return result
+
+        checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+        checks[1]["network_state_projection"]["edges"][0][
+            "airflow_m3_h"
+        ] += 2.5
+        result["fan_curve_point_checks"] = checks
+        result["fan_curve_supplied_point_network_state_replay"] = (
+            _fan_curve_supplied_point_network_state_replay_audit(
+                case_study,
+                checks,
+            )
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "supplied_point_network_state_replay_complete_coverage"
+    ] is True
+    assert summary[
+        "supplied_point_network_state_replay_inconsistent_corner_count"
+    ] == 1
+    assert summary[
+        "supplied_point_network_state_projection_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "supplied_point_network_state_replay_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "supplied_point_network_state_projection_mismatch_count"
+    ] == 1
+    details = summary[
+        "supplied_point_network_state_replay_violation_details"
+    ]
+    assert len(details) == 1
+    assert details[0]["corner_index"] == 0
+    assert details[0]["projection_violation_point_indices"] == [1]
+    mismatch = details[0]["mismatches"][0]
+    assert mismatch["point_index"] == 1
+    assert mismatch["path"] == "$.edges[0].airflow_m3_h"
+    assert mismatch["absolute_error"] == pytest.approx(2.5)
+
+    maxima = summary[
+        "maximum_supplied_point_network_state_projection_numeric_errors"
+    ]
+    airflow_max = next(
+        item for item in maxima if item["field"] == "airflow_m3_h"
+    )
+    assert airflow_max["maximum_absolute_error"] == pytest.approx(2.5)
+    assert airflow_max["witnesses"][0]["corner_index"] == 0
+    assert airflow_max["witnesses"][0]["point_index"] == 1
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Supplied-point network-state replay coverage" in report
+    assert "$.edges[0].airflow_m3_h" in report
+    assert "point_index" in report
+
+
+def test_supplied_point_replay_missing_point_is_incomplete_coverage(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def omit_one_point(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2:
+            return result
+
+        checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+        checks = checks[:-1]
+        result["fan_curve_point_checks"] = checks
+        result["fan_curve_supplied_point_network_state_replay"] = (
+            _fan_curve_supplied_point_network_state_replay_audit(
+                case_study,
+                checks,
+            )
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        omit_one_point,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "supplied_point_network_state_replay_complete_coverage"
+    ] is False
+    assert summary[
+        "supplied_point_network_state_replay_incomplete_corner_count"
+    ] == 1
+    assert summary[
+        "supplied_point_network_state_replay_incomplete_corner_indices"
+    ] == [0]
+    assert summary[
+        "supplied_point_network_state_replay_violation_corner_indices"
+    ] == []
+    gaps = summary[
+        "supplied_point_network_state_replay_coverage_gap_details"
+    ]
+    assert len(gaps) == 1
+    assert gaps[0]["corner_index"] == 0
+    assert gaps[0]["coverage_gap_point_indices"]
 
 
 def test_corner_limit_rejects_before_cartesian_product_materialization(

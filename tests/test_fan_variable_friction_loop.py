@@ -12,7 +12,9 @@ from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
     _bisection_decision_trace_audit,
     _fan_curve_supplied_point_residual_audit,
+    _fan_curve_supplied_point_network_state_replay_audit,
     _network_state_sha256,
+    _point_check,
     _selected_operating_state_replay_audit,
     _solve_network_at_airflow,
     _with_selected_crossing_feature,
@@ -57,6 +59,271 @@ def _fixed_curve() -> FanCurve:
             FanCurvePoint(7200.0, 0.0),
         ),
     )
+
+
+def test_supplied_point_network_state_replay_is_complete_and_reported() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+
+    assert result["status"] == "solved"
+    checks = result["fan_curve_point_checks"]
+    replay = result["fan_curve_supplied_point_network_state_replay"]
+    assert replay["applicable"] is True
+    assert replay["available"] is True
+    assert replay["algorithm"] == "sha256"
+    assert replay["evaluated_supplied_point_count"] == len(checks)
+    assert replay["expected_supplied_point_count"] == len(checks)
+    assert replay["replay_check_count"] == len(checks)
+    assert replay["independent_replay_success_count"] == len(checks)
+    assert replay["complete_supplied_point_coverage"] is True
+    assert replay["replay_evidence_complete"] is True
+    assert replay["complete_replay_coverage"] is True
+    assert replay[
+        "all_evaluated_supplied_point_network_state_hashes_match_independent_replay"
+    ] is True
+    assert replay[
+        "all_evaluated_supplied_point_network_state_projections_match_independent_replay"
+    ] is True
+    assert replay["complete_supplied_point_network_state_replay"] is True
+    assert replay["consistent_point_count"] == len(checks)
+    assert replay["inconsistent_point_count"] == 0
+    assert replay["coverage_gap_point_indices"] == []
+    assert replay["hash_violation_point_indices"] == []
+    assert replay["projection_violation_point_indices"] == []
+    assert replay["network_state_projection_mismatch_count"] == 0
+    assert replay["replay_verdict"] == (
+        "supplied_point_network_state_replay_consistent"
+    )
+    for check in checks:
+        assert len(check["network_state_sha256"]) == 64
+        assert check["network_state_projection"]
+
+    report = markdown_fan_variable_friction_loop_report(result)
+    assert "Supplied-point network-state replay audit" in report
+    assert "Supplied-point replay complete coverage: **True**" in report
+    assert (
+        "supplied_point_network_state_replay_consistent"
+        in report
+    )
+
+
+def test_supplied_point_network_state_replay_detects_hash_corruption() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+    checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+    original_hash = checks[1]["network_state_sha256"]
+    checks[1]["network_state_sha256"] = "0" * 64
+
+    replay = _fan_curve_supplied_point_network_state_replay_audit(
+        study,
+        checks,
+    )
+
+    assert replay["complete_replay_coverage"] is True
+    assert replay["hash_violation_point_indices"] == [1]
+    assert replay["projection_violation_point_indices"] == []
+    assert replay["inconsistent_point_count"] == 1
+    assert replay["network_state_projection_mismatch_count"] == 0
+    assert replay["replay_verdict"] == (
+        "supplied_point_network_state_replay_inconsistent"
+    )
+    violation = replay["violations"][0]
+    assert violation["point_index"] == 1
+    assert violation["recorded_network_state_sha256"] == "0" * 64
+    assert violation["recomputed_network_state_sha256"] == original_hash
+    assert violation[
+        "network_state_hash_matches_independent_replay"
+    ] is False
+    assert violation[
+        "network_state_projection_matches_independent_replay"
+    ] is True
+
+
+def test_supplied_point_projection_replay_localizes_corruption() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+    checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+    original_hash = checks[1]["network_state_sha256"]
+    checks[1]["network_state_projection"]["nodes"][0][
+        "relative_pressure_pa"
+    ] += 1.0
+
+    replay = _fan_curve_supplied_point_network_state_replay_audit(
+        study,
+        checks,
+    )
+
+    assert replay["hash_violation_point_indices"] == []
+    assert replay["projection_violation_point_indices"] == [1]
+    assert replay["network_state_projection_mismatch_count"] == 1
+    mismatch = replay["network_state_projection_mismatches"][0]
+    assert mismatch["point_index"] == 1
+    assert mismatch["path"] == "$.nodes[0].relative_pressure_pa"
+    assert mismatch["mismatch_kind"] == "value_mismatch"
+    assert mismatch["absolute_error"] == pytest.approx(1.0)
+    assert checks[1]["network_state_sha256"] == original_hash
+    assert replay["checks"][1][
+        "network_state_hash_matches_independent_replay"
+    ] is True
+
+
+def test_supplied_point_projection_replay_retains_all_tied_mismatches() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+    checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+    checks[0]["network_state_projection"]["nodes"][0][
+        "relative_pressure_pa"
+    ] += 2.0
+    checks[1]["network_state_projection"]["nodes"][0][
+        "relative_pressure_pa"
+    ] += 2.0
+    checks[1]["network_state_projection"]["pressure_power"][
+        "balance_residual_w"
+    ] += 0.125
+
+    replay = _fan_curve_supplied_point_network_state_replay_audit(
+        study,
+        checks,
+    )
+
+    assert [
+        (item["point_index"], item["path"])
+        for item in replay["network_state_projection_mismatches"]
+    ] == [
+        (0, "$.nodes[0].relative_pressure_pa"),
+        (1, "$.nodes[0].relative_pressure_pa"),
+        (1, "$.pressure_power.balance_residual_w"),
+    ]
+    pressure_max = next(
+        item
+        for item in replay[
+            "network_state_projection_maximum_numeric_errors"
+        ]
+        if item["field"] == "relative_pressure_pa"
+    )
+    assert pressure_max["maximum_absolute_error"] == pytest.approx(2.0)
+    assert [
+        (item["point_index"], item["path"])
+        for item in pressure_max["witnesses"]
+    ] == [
+        (0, "$.nodes[0].relative_pressure_pa"),
+        (1, "$.nodes[0].relative_pressure_pa"),
+    ]
+
+
+def test_supplied_point_network_state_replay_reports_partial_coverage() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    result = solve_fan_variable_friction_loop(study)
+    checks = json.loads(json.dumps(result["fan_curve_point_checks"]))
+    partial = checks[:-1]
+
+    replay = _fan_curve_supplied_point_network_state_replay_audit(
+        study,
+        partial,
+    )
+
+    missing_index = len(checks) - 1
+    assert replay["evaluated_supplied_point_count"] == missing_index
+    assert replay["complete_supplied_point_coverage"] is False
+    assert replay["complete_replay_coverage"] is False
+    assert replay["inconsistent_point_count"] == 0
+    assert replay["coverage_gap_point_indices"] == [missing_index]
+    assert replay["coverage_gaps"] == [
+        {
+            "point_index": missing_index,
+            "airflow_m3_h": float(
+                study.fan_curve.points[missing_index].airflow_m3_h
+            ),
+            "reason": "supplied_point_not_evaluated",
+        }
+    ]
+    assert replay["replay_verdict"] == (
+        "supplied_point_network_state_replay_incomplete_coverage"
+    )
+
+
+def test_supplied_point_network_state_replay_covers_no_intersection() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="No-intersection supplied-point replay",
+        fan_curve=FanCurve(
+            "Low-pressure fan",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+        fixed_pressure_pa=10000.0,
+    )
+
+    result = solve_fan_variable_friction_loop(study)
+
+    assert result["status"] == "no_intersection_in_supplied_range"
+    replay = result["fan_curve_supplied_point_network_state_replay"]
+    assert replay["complete_replay_coverage"] is True
+    assert replay["complete_supplied_point_network_state_replay"] is True
+    assert replay["replay_verdict"] == (
+        "supplied_point_network_state_replay_consistent"
+    )
+
+
+
+
+def test_supplied_point_replay_preserves_partial_prefix_on_curve_failure(
+    monkeypatch,
+) -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    call_count = 0
+
+    def fail_second_point(case_study, point):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise RuntimeError("synthetic supplied-point solve failure")
+        return _point_check(case_study, point)
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_loop._point_check",
+        fail_second_point,
+    )
+    result = solve_fan_variable_friction_loop(study)
+
+    assert result["status"] == "non_converged"
+    assert result["fan_operating_point"] is None
+    assert len(result["fan_curve_point_checks"]) == 1
+    replay = result["fan_curve_supplied_point_network_state_replay"]
+    assert replay["evaluated_supplied_point_count"] == 1
+    assert replay["expected_supplied_point_count"] == len(
+        study.fan_curve.points
+    )
+    assert replay["independent_replay_success_count"] == 1
+    assert replay["consistent_point_count"] == 1
+    assert replay["inconsistent_point_count"] == 0
+    assert replay["complete_supplied_point_coverage"] is False
+    assert replay["complete_replay_coverage"] is False
+    assert replay["coverage_gap_point_indices"] == list(
+        range(1, len(study.fan_curve.points))
+    )
+    assert replay["replay_verdict"] == (
+        "supplied_point_network_state_replay_incomplete_coverage"
+    )
+    assert replay["violation_point_indices"] == []
+    assert replay["network_state_projection_mismatch_count"] == 0
 
 
 def test_fixed_resistance_case_matches_existing_fan_loop_solver() -> None:

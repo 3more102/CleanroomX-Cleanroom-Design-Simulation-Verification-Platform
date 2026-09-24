@@ -684,10 +684,13 @@ def _bisection_decision_trace_audit(
         iteration = int(step["iteration"])
         low_airflow = float(step["low_airflow_m3_h"])
         high_airflow = float(step["high_airflow_m3_h"])
+        recorded_midpoint = float(step["midpoint_airflow_m3_h"])
         recorded_width = float(step["width_m3_h"])
         recorded_width_fraction = float(
             step["width_fraction_of_supplied_segment"]
         )
+        expected_midpoint = 0.5 * (low_airflow + high_airflow)
+        absolute_midpoint_error = abs(recorded_midpoint - expected_midpoint)
         expected_width = high_airflow - low_airflow
         expected_width_fraction = 0.5 ** (iteration - 1)
         absolute_width_error = abs(recorded_width - expected_width)
@@ -697,6 +700,15 @@ def _bisection_decision_trace_audit(
         geometry_checks.append(
             {
                 "iteration": iteration,
+                "recorded_midpoint_airflow_m3_h": recorded_midpoint,
+                "expected_midpoint_from_endpoints_m3_h": expected_midpoint,
+                "absolute_midpoint_error_m3_h": absolute_midpoint_error,
+                "recorded_midpoint_matches_airflow_bracket": math.isclose(
+                    recorded_midpoint,
+                    expected_midpoint,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                ),
                 "recorded_width_m3_h": recorded_width,
                 "expected_width_from_endpoints_m3_h": expected_width,
                 "absolute_width_error_m3_h": absolute_width_error,
@@ -1082,8 +1094,12 @@ def _bisection_decision_trace_audit(
             for step in trace
         ),
         "all_midpoints_are_arithmetic_bracket_midpoints": all(
-            step["midpoint_is_arithmetic_bracket_midpoint"]
-            for step in trace
+            check["recorded_midpoint_matches_airflow_bracket"]
+            for check in geometry_checks
+        ),
+        "all_recorded_midpoints_match_airflow_brackets": all(
+            check["recorded_midpoint_matches_airflow_bracket"]
+            for check in geometry_checks
         ),
         "geometry_check_count": len(geometry_checks),
         "all_recorded_widths_match_airflow_brackets": all(
@@ -1100,6 +1116,15 @@ def _bisection_decision_trace_audit(
                 "recorded_width_fraction_matches_iteration_sequence"
             ]
             for check in geometry_checks
+        ),
+        "maximum_absolute_trace_midpoint_error_m3_h": (
+            max(
+                (
+                    check["absolute_midpoint_error_m3_h"]
+                    for check in geometry_checks
+                ),
+                default=0.0,
+            )
         ),
         "maximum_absolute_trace_width_error_m3_h": (
             max(
@@ -1162,9 +1187,11 @@ def _bisection_decision_trace_audit(
             "accepts a midpoint within the configured operating-pressure "
             "tolerance. The replay audit verifies that each nonterminal L/H "
             "decision produces the next recorded airflow/residual bracket, "
-            "that iteration numbering is contiguous, and that every recorded "
-            "bracket width equals its endpoint span with the binary width "
-            "fraction implied by its iteration. The origin replay additionally "
+            "that iteration numbering is contiguous, that every recorded "
+            "midpoint independently equals the arithmetic mean of its recorded "
+            "airflow endpoints, and that every recorded bracket width equals "
+            "its endpoint span with the binary width fraction implied by its "
+            "iteration. The origin replay additionally "
             "anchors the first trace state to the selected supplied-point "
             "bracket and reconstructs the complete decision chain through the "
             "terminal retained bracket. For an iteration-limit "

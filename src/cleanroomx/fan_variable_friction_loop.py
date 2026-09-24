@@ -2838,6 +2838,7 @@ def _selected_operating_state_replay_audit(
     recorded_network_state_sha256: str,
     segment_left: FanCurvePoint,
     segment_right: FanCurvePoint,
+    recorded_network_state_projection: dict | None = None,
     selected_supplied_point_index: int | None = None,
     bisection_trace: list[dict] | None = None,
 ) -> dict:
@@ -2862,6 +2863,24 @@ def _selected_operating_state_replay_audit(
     network_state_matches_independent_replay = (
         recorded_network_state == replayed_network_state
     )
+    recomputed_network_state_projection = _network_state_projection(
+        _replayed_network
+    )
+    network_state_projection_replay_available = (
+        recorded_network_state_projection is not None
+    )
+    network_state_projection_mismatch_paths = []
+    network_state_projection_matches_independent_replay = None
+    if network_state_projection_replay_available:
+        network_state_projection_mismatch_paths = (
+            _network_state_projection_difference_paths(
+                recorded_network_state_projection,
+                recomputed_network_state_projection,
+            )
+        )
+        network_state_projection_matches_independent_replay = (
+            not network_state_projection_mismatch_paths
+        )
 
     recorded_pressures = {
         "fan": float(recorded_fan_pressure_pa),
@@ -2907,6 +2926,16 @@ def _selected_operating_state_replay_audit(
                 "component": "network_state_sha256",
                 "recorded_network_state_sha256": recorded_network_state,
                 "recomputed_network_state_sha256": replayed_network_state,
+            }
+        )
+    if (
+        network_state_projection_replay_available
+        and network_state_projection_matches_independent_replay is False
+    ):
+        violations.append(
+            {
+                "component": "network_state_projection",
+                "mismatch_paths": network_state_projection_mismatch_paths,
             }
         )
 
@@ -2988,6 +3017,26 @@ def _selected_operating_state_replay_audit(
         "network_state_matches_independent_replay": (
             network_state_matches_independent_replay
         ),
+        "network_state_projection_replay_available": (
+            network_state_projection_replay_available
+        ),
+        "recorded_network_state_projection": (
+            recorded_network_state_projection
+        ),
+        "recomputed_network_state_projection": (
+            recomputed_network_state_projection
+        ),
+        "network_state_projection_matches_independent_replay": (
+            network_state_projection_matches_independent_replay
+        ),
+        "network_state_projection_mismatch_count": (
+            len(network_state_projection_mismatch_paths)
+            if network_state_projection_replay_available
+            else None
+        ),
+        "network_state_projection_mismatch_paths": (
+            network_state_projection_mismatch_paths
+        ),
         "component_checks": component_checks,
         "all_pressure_components_match_independent_replay": all(
             check["matches_independent_replay"]
@@ -3002,6 +3051,11 @@ def _selected_operating_state_replay_audit(
         "all_selected_operating_state_matches_independent_replay": (
             selection_origin_matches
             and network_state_matches_independent_replay
+            and (
+                network_state_projection_matches_independent_replay
+                if network_state_projection_replay_available
+                else True
+            )
             and all(
                 check["matches_independent_replay"]
                 for check in component_checks.values()
@@ -3620,6 +3674,9 @@ def solve_fan_variable_friction_loop(
             recorded_system_pressure_pa=system_pressure,
             recorded_residual_pa=residual,
             recorded_network_state_sha256=_network_state_sha256(
+                selected_network
+            ),
+            recorded_network_state_projection=_network_state_projection(
                 selected_network
             ),
             segment_left=left,

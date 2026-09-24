@@ -178,6 +178,7 @@ class CleanroomXApp:
         self.description_var = tk.StringVar(value=self.project.description)
         self.status_var = tk.StringVar(value="Ready")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
+        self.run_state_var = tk.StringVar(value="READY")
 
         self._configure_style()
         self._build_menu()
@@ -237,6 +238,34 @@ class CleanroomXApp:
             foreground=[("selected", "#102a43")],
         )
         style.configure("Status.TLabel", background="#d9e2ec", foreground="#243447", padding=(8, 4))
+        style.configure(
+            "RunState.TLabel",
+            background="#d9e2ec",
+            foreground="#486581",
+            font=("Segoe UI", 8, "bold"),
+            padding=(8, 3),
+        )
+        style.configure(
+            "RunStateActive.TLabel",
+            background="#dbeafe",
+            foreground="#1d4ed8",
+            font=("Segoe UI", 8, "bold"),
+            padding=(8, 3),
+        )
+        style.configure(
+            "RunStateSuccess.TLabel",
+            background="#dcfce7",
+            foreground="#166534",
+            font=("Segoe UI", 8, "bold"),
+            padding=(8, 3),
+        )
+        style.configure(
+            "RunStateError.TLabel",
+            background="#fee2e2",
+            foreground="#991b1b",
+            font=("Segoe UI", 8, "bold"),
+            padding=(8, 3),
+        )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -294,6 +323,12 @@ class CleanroomXApp:
         self.root.bind("<Control-s>", lambda event: self.save_project())
         self.root.bind("<F5>", lambda event: self.run_current())
         self.root.bind("<Control-0>", lambda event: self.spatial_workspace.fit_views())
+        self.root.bind("<Control-Key-1>", lambda event: self.notebook.select(self.spatial_workspace))
+        self.root.bind("<Control-Key-2>", lambda event: self.notebook.select(self.input_tab))
+        self.root.bind("<Control-Key-3>", lambda event: self.notebook.select(self.result_text.master))
+        self.root.bind("<Control-Key-4>", lambda event: self.notebook.select(self.report_text.master))
+        self.root.bind("<Control-Key-5>", lambda event: self.notebook.select(self.diagnostics_text.master))
+        self.root.bind("<Control-Key-6>", lambda event: self.notebook.select(self.plot_tab))
 
     def _build_layout(self) -> None:
         metadata = ttk.Frame(self.root, padding=(10, 9, 10, 7), style="Toolbar.TFrame")
@@ -315,6 +350,23 @@ class CleanroomXApp:
             metadata, text="Abandon", command=self.cancel_run, state="disabled", style="Danger.TButton"
         )
         self.cancel_button.grid(row=0, column=6, padx=3)
+        ttk.Label(
+            metadata,
+            text="Ctrl+1 Design   Ctrl+2 Input   Ctrl+3 Results   F5 Run   Ctrl+0 Fit",
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(7, 0))
+        self.run_state_label = ttk.Label(
+            metadata,
+            textvariable=self.run_state_var,
+            style="RunState.TLabel",
+            anchor="center",
+            width=11,
+        )
+        self.run_state_label.grid(row=1, column=4, sticky="e", padx=(4, 3), pady=(7, 0))
+        self.run_progress = ttk.Progressbar(metadata, mode="indeterminate", length=150)
+        self.run_progress.grid(
+            row=1, column=5, columnspan=2, sticky="ew", padx=(3, 0), pady=(7, 0)
+        )
         metadata.columnconfigure(1, weight=1)
         metadata.columnconfigure(3, weight=2)
 
@@ -331,9 +383,9 @@ class CleanroomXApp:
             sidebar, columns=("kind",), show="tree headings", selectmode="browse"
         )
         self.analysis_tree.heading("#0", text="Name")
-        self.analysis_tree.heading("kind", text="Kind")
+        self.analysis_tree.heading("kind", text="Workflow")
         self.analysis_tree.column("#0", width=210)
-        self.analysis_tree.column("kind", width=155)
+        self.analysis_tree.column("kind", width=190)
         scroll = ttk.Scrollbar(sidebar, orient="vertical", command=self.analysis_tree.yview)
         self.analysis_tree.configure(yscrollcommand=scroll.set)
         self.analysis_tree.pack(side="left", fill="both", expand=True)
@@ -355,9 +407,9 @@ class CleanroomXApp:
         )
         self.notebook.add(self.spatial_workspace, text="Design 2D + 3D")
 
-        input_tab = ttk.Frame(self.notebook)
-        self.notebook.add(input_tab, text="Input")
-        input_notebook = ttk.Notebook(input_tab)
+        self.input_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.input_tab, text="Input")
+        input_notebook = ttk.Notebook(self.input_tab)
         input_notebook.pack(fill="both", expand=True)
 
         structured_tab = ttk.Frame(input_notebook)
@@ -401,9 +453,9 @@ class CleanroomXApp:
         self.report_text = self._add_text_tab("Report")
         self.diagnostics_text = self._add_text_tab("Diagnostics")
 
-        plot_tab = ttk.Frame(self.notebook)
-        self.notebook.add(plot_tab, text="Plot")
-        self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
+        self.plot_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.plot_tab, text="Plot")
+        self.plot_canvas = tk.Canvas(self.plot_tab, highlightthickness=0, background="#ffffff")
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
@@ -475,7 +527,14 @@ class CleanroomXApp:
             return
         self.input_text.edit_modified(False)
         self._invalidate_last_run_for(self._editor_analysis_id)
+        self._set_run_state("READY")
         self._update_title()
+
+    def _set_run_state(self, text: str, style: str = "RunState.TLabel") -> None:
+        if hasattr(self, "run_state_var"):
+            self.run_state_var.set(text)
+        if hasattr(self, "run_state_label"):
+            self.run_state_label.configure(style=style)
 
     def _current_analysis(self) -> AnalysisDocument | None:
         selection = self.analysis_tree.selection()
@@ -584,7 +643,7 @@ class CleanroomXApp:
                 "end",
                 iid=analysis.id,
                 text=analysis.name,
-                values=(analysis.kind,),
+                values=(ANALYSIS_SPECS[analysis.kind].title,),
             )
         target = select_id or self.project.active_analysis_id
         if target and self.analysis_tree.exists(target):
@@ -1050,6 +1109,7 @@ class CleanroomXApp:
             return
         self._abandon_requested = True
         self.cancel_button.configure(state="disabled")
+        self._set_run_state("WAITING", "RunStateActive.TLabel")
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
@@ -1059,6 +1119,15 @@ class CleanroomXApp:
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
+        if hasattr(self, "run_progress"):
+            if running:
+                self.run_progress.start(12)
+            else:
+                self.run_progress.stop()
+        self._set_run_state(
+            "RUNNING" if running else "READY",
+            "RunStateActive.TLabel" if running else "RunState.TLabel",
+        )
 
     def _poll_worker(self) -> None:
         try:
@@ -1073,6 +1142,7 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._set_run_state("FAILED", "RunStateError.TLabel")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -1080,6 +1150,7 @@ class CleanroomXApp:
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
+                    self._set_run_state("COMPLETE", "RunStateSuccess.TLabel")
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
                     )
@@ -1099,7 +1170,7 @@ class CleanroomXApp:
         )
         self._draw_plot()
         if select_results:
-            self.notebook.select(1)
+            self.notebook.select(self.result_text.master)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

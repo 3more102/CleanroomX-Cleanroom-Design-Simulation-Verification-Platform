@@ -4,6 +4,16 @@ CleanroomX v0.33 couples a supplied fan pressure/airflow curve directly to the e
 
 This workflow is intentionally separate from the v0.26 fixed-resistance fan/loop solver. v0.26 is exact for a network whose edge laws remain fixed quadratic laws. v0.33 is for loop edges whose resistance was derived from explicit duct geometry, absolute roughness, and kinematic viscosity and therefore needs the v0.30 Darcy-friction closure iteration as airflow changes.
 
+## v0.94 canonical solver provenance hardening
+
+The canonical internal network result used by v0.87-v0.93 replay is extended in v0.94 to cover the complete numerically meaningful solved-network result: network/status/reference-node identity, Newton iteration count, configured mass-balance tolerance, named node and edge state, aggregate residuals, pressure-power balance, variable-friction convergence/configuration, chronological outer-iteration history, and named closure evidence. Human-readable scope notes remain outside the numerical identity.
+
+Canonicalization normalizes floating-point signed zero and sorts only semantically named node, edge, and closure collections. Chronological iteration history, supplied fan points, bisection trace order, candidate priority, and every other sequence whose position carries solver provenance remain ordered. The solver itself is not modified or rounded for hashing.
+
+All supplied-point, full-trace, terminal, and selected replay paths reuse the same canonicalizer and deterministic field comparator. SHA-256 identity remains distinct from field-level projection equality.
+
+This evidence verifies deterministic software/numerical content only. It does not establish source authenticity, cleanroom/ISO certification, CFD validity, fan acceptance, commissioning/TAB acceptance, global-root uniqueness, physical stability, stall/surge boundaries, manufacturer operating envelopes, physical uncertainty, or statistical confidence.
+
 ## Model
 
 For each candidate total airflow, CleanroomX:

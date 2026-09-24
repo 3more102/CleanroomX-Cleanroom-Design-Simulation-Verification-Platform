@@ -2419,8 +2419,16 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary["selected_midpoint_centered_corner_count"] == (
         summary["bisection_corner_count"]
     )
+    assert summary["solved_bisection_trace_evidence_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+    assert summary["bisection_trace_length_violation_corner_indices"] == []
+    assert summary["bisection_trace_sign_violation_corner_indices"] == []
+    assert summary["bisection_trace_midpoint_violation_corner_indices"] == []
+    assert summary["bisection_trace_outcome_violation_corner_indices"] == []
 
     errors = []
+    trace_lengths = []
     for corner in bisection_corners:
         evidence = corner["operating_point_search_evidence"]
         bracket = evidence["final_bisection_bracket"]
@@ -2444,6 +2452,15 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         errors.append(
             invariant["absolute_width_fraction_consistency_error"]
         )
+        trace = evidence["bisection_trace"]
+        trace_audit = evidence["bisection_trace_audit"]
+        assert trace is not None
+        assert trace_audit is not None
+        assert len(trace) == evidence["operating_iterations"]
+        assert trace_audit["terminal_outcome_consistent"] is True
+        assert trace_audit["termination_reason"] == "pressure_residual"
+        assert trace_audit["decision_sequence"].endswith("T")
+        trace_lengths.append(len(trace))
 
     maximum_error = summary[
         "maximum_absolute_width_fraction_consistency_error"
@@ -2451,11 +2468,17 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert maximum_error is not None
     assert maximum_error["value"] == pytest.approx(max(errors), abs=1e-18)
     assert maximum_error["sources"]
+    maximum_trace_steps = summary["maximum_bisection_trace_step_count"]
+    assert maximum_trace_steps is not None
+    assert maximum_trace_steps["value"] == max(trace_lengths)
+    assert maximum_trace_steps["sources"]
 
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
     assert "Bisection corners with invariant evidence" in report
-    assert "Strict sign-bracket violations" in report
+    assert "Corners with retained bisection decision traces" in report
+    assert "Trace terminal-outcome violations" in report
     assert "Maximum absolute binary-width consistency error" in report
+    assert "Maximum retained bisection decision-trace steps" in report
 
 
 def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
@@ -2494,6 +2517,13 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary[
         "iteration_limit_strict_sign_change_preserved_corner_count"
     ] == len(limit_corners)
+    assert summary[
+        "iteration_limit_bisection_trace_evidence_corner_count"
+    ] == len(limit_corners)
+    assert summary["bisection_trace_length_violation_corner_indices"] == []
+    assert summary["bisection_trace_sign_violation_corner_indices"] == []
+    assert summary["bisection_trace_midpoint_violation_corner_indices"] == []
+    assert summary["bisection_trace_outcome_violation_corner_indices"] == []
     max_error = summary[
         "maximum_iteration_limit_absolute_width_fraction_consistency_error"
     ]
@@ -2516,6 +2546,15 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         assert invariant[
             "actual_width_fraction_of_supplied_segment"
         ] == pytest.approx(0.5, abs=1e-12)
+        trace = evidence["bisection_trace"]
+        trace_audit = evidence["bisection_trace_audit"]
+        assert trace is not None
+        assert trace_audit is not None
+        assert len(trace) == evidence["operating_iterations"] == 1
+        assert trace_audit["termination_record_count"] == 0
+        assert trace_audit["terminal_outcome_consistent"] is True
+        assert trace_audit["termination_reason"] == "bisection_iteration_limit"
+        assert "T" not in trace_audit["decision_sequence"]
 
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
     assert "Bisection iteration-limit corners with search evidence" in report

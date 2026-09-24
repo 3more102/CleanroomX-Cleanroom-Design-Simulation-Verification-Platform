@@ -76,6 +76,6 @@ def test_consistency_adapter_resolves_relative_project_files():
 def test_dossier_adapter_runs_real_file_referenced_workflow():
     payload = _example("dossier_variable_friction_uncertainty_demo.json")
     run = run_analysis("dossier", payload, base_dir=ROOT / "examples")
-    assert run.result["dossier"]["name"]
+    assert run.result["dossier"] == payload["name"]
     assert "CleanroomX Engineering Dossier" in run.markdown
     json.dumps(run.result, allow_nan=False)

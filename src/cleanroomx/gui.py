@@ -163,6 +163,7 @@ class CleanroomXApp:
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
+        self._baseline_state: str | None = None
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -176,7 +177,10 @@ class CleanroomXApp:
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
-        self._baseline_state = self._project_state_signature()
+        self._capture_saved_state()
+        self.name_var.trace_add("write", lambda *_: self._update_title())
+        self.description_var.trace_add("write", lambda *_: self._update_title())
+        self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
 
@@ -396,6 +400,7 @@ class CleanroomXApp:
             return
         self.input_text.edit_modified(False)
         self._invalidate_last_run_for(self._editor_analysis_id)
+        self._update_title()
 
     def _current_analysis(self) -> AnalysisDocument | None:
         selection = self.analysis_tree.selection()
@@ -468,6 +473,8 @@ class CleanroomXApp:
         )
 
     def _has_unsaved_changes(self) -> bool:
+        if self._baseline_state is None:
+            return False
         try:
             return self._project_state_signature() != self._baseline_state
         except Exception:
@@ -475,6 +482,7 @@ class CleanroomXApp:
 
     def _capture_saved_state(self) -> None:
         self._baseline_state = self._project_state_signature()
+        self._update_title()
 
     def _confirm_project_replacement(self) -> bool:
         if not self._has_unsaved_changes():
@@ -560,6 +568,7 @@ class CleanroomXApp:
                 return
         self.project.active_analysis_id = analysis.id
         self._load_analysis_into_editor(analysis)
+        self._update_title()
 
     def _load_analysis_into_editor(self, analysis: AnalysisDocument) -> None:
         self._editor_analysis_id = analysis.id
@@ -648,7 +657,8 @@ class CleanroomXApp:
 
     def _update_title(self) -> None:
         suffix = "" if self.project_path is None else f" — {self.project_path.name}"
-        self.root.title(f"CleanroomX {__version__}{suffix}")
+        dirty = " *" if self._has_unsaved_changes() else ""
+        self.root.title(f"CleanroomX {__version__}{suffix}{dirty}")
 
     def save_project(self) -> None:
         try:
@@ -728,6 +738,7 @@ class CleanroomXApp:
         self.project.analyses.append(analysis)
         self.project.active_analysis_id = analysis_id
         self._refresh_analysis_list(select_id=analysis_id)
+        self._update_title()
 
     def rename_analysis(self) -> None:
         if self._running:
@@ -742,6 +753,7 @@ class CleanroomXApp:
         if value and value.strip():
             analysis.name = value.strip()
             self.analysis_tree.item(analysis.id, text=analysis.name)
+            self._update_title()
 
     def remove_analysis(self) -> None:
         if self._running:
@@ -762,6 +774,7 @@ class CleanroomXApp:
             self.project.analyses[0].id if self.project.analyses else None
         )
         self._refresh_analysis_list()
+        self._update_title()
 
     def import_input_json(self) -> None:
         if self._running:
@@ -789,6 +802,7 @@ class CleanroomXApp:
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
         self.status_var.set(f"Imported {Path(path).name}")
+        self._update_title()
 
     def export_input_json(self) -> None:
         try:

@@ -233,8 +233,9 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.96.0"
+    assert payload["version"] == "0.98.0"
     assert payload["analysis_count"] >= 20
+    assert payload["bindings_valid"] is True
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():
@@ -356,3 +357,51 @@ def test_clear_run_cache_discards_all_session_results_and_rendered_output():
     assert app.last_run is None
     assert app.last_run_analysis_id is None
     assert cleared[-1] == ("plot", None)
+
+
+def test_window_title_marks_unsaved_editor_changes():
+    class Root:
+        def title(self, value):
+            self.value = value
+
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Text:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self, *args):
+            return self.value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app.project_path = None
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.input_text = Text('{"value": 1}')
+    app._baseline_state = app._project_state_signature()
+
+    app._update_title()
+    assert not app.root.value.endswith("*")
+
+    app.input_text.value = '{"value": 2}'
+    app._update_title()
+    assert app.root.value.endswith("*")

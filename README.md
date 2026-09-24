@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.98 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.98.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and continues the integrated solver/provenance line through the desktop-application work without replacing validated backend workflows. The v0.98 release was completed from `codex/cleanroomx-v098-release-completion`, based on the live v0.97 application-completeness lineage, and merged into `main` after the Python 3.11/3.12/3.13 CI matrix, CLI smoke checks, and real Tk/Xvfb GUI smoke passed.
+The current release candidate is **CleanroomX v0.99.0**, built directly on the latest integrated `main` head after the v0.98 desktop release and the subsequent registry-integrity hardening. It remains a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb` and preserves the validated backend workflows while strengthening application-registry and file-reference path-context integrity.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.98 also validates every declared application parser/runner/reporter binding and launches the installed desktop entry point under Xvfb on Python 3.13 against the bundled demonstration project.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 validates catalog uniqueness, custom-adapter contracts, and every declared parser/runner/reporter binding, then launches the installed desktop entry point under Xvfb on Python 3.13 against the bundled demonstration project.
 
 ### Network-state replay provenance ladder
 
@@ -25,6 +25,13 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
+| v0.99 | registry contract integrity plus file-reference path-context provenance and stale-result prevention |
+
+### v0.99 application integrity hardening
+
+v0.99 consolidates the latest application-registry integrity work with two file-reference correctness fixes. Registry validation now checks unique catalog keys, enforces the custom-adapter contract for consistency/dossier workflows, resolves every declared callable binding, and exposes structured readiness evidence through `cleanroomx-gui --check`.
+
+Engineering dossiers can run from an unsaved GUI project when every referenced input path is absolute; relative references still require a saved project/base directory and are rejected before execution. When **Save Project As** changes the project directory, CleanroomX clears all in-memory analysis results so a cached dossier or consistency result cannot be exported under a different relative-path context. Inputs remain intact and can be rerun in the new location.
 
 ### v0.98 desktop application
 

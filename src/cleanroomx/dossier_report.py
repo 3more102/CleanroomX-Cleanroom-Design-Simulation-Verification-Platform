@@ -732,10 +732,24 @@ def markdown_dossier_report(result: dict) -> str:
                     if invariant_error is None
                     else invariant_error["value"]
                 )
+                trace_count = search_summary.get(
+                    "bisection_iteration_trace_evidence_corner_count",
+                    0,
+                )
+                trace_complete_count = search_summary.get(
+                    "bisection_iteration_trace_complete_corner_count",
+                    0,
+                )
+                trace_violations = search_summary.get(
+                    "bisection_iteration_trace_violation_corner_indices",
+                    [],
+                )
                 search_invariants = (
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
-                    f"max width-fraction error {max_error}"
+                    f"max width-fraction error {max_error}; "
+                    f"trace {trace_complete_count}/{trace_count}; "
+                    f"trace violations {trace_violations}"
                 )
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"

@@ -2321,6 +2321,23 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, invariant in invariant_cases
         if not invariant["selected_airflow_is_bracket_midpoint"]
     ]
+    trace_cases = [
+        (
+            corner_index,
+            corner,
+            evidence,
+            evidence.get("bisection_iteration_trace"),
+            evidence.get("bisection_iteration_trace_audit"),
+        )
+        for corner_index, corner, evidence in bisection_cases
+        if evidence.get("bisection_iteration_trace") is not None
+        and evidence.get("bisection_iteration_trace_audit") is not None
+    ]
+    trace_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, _trace, audit in trace_cases
+        if not audit["complete"]
+    ]
 
     def _maximum_bracket_evidence(
         key: str,
@@ -2404,6 +2421,39 @@ def _operating_point_search_resolution_summary(
             "sources": sources,
         }
 
+    def _maximum_trace_steps_evidence() -> dict | None:
+        if not trace_cases:
+            return None
+        maximum = max(
+            len(trace)
+            for _corner_index, _corner, _evidence, trace, _audit
+            in trace_cases
+        )
+        sources = []
+        for corner_index, corner, evidence, trace, audit in trace_cases:
+            if len(trace) != maximum:
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "search_method": evidence["method"],
+                    "supplied_segment_index": evidence[
+                        "supplied_segment_index"
+                    ],
+                    "operating_iterations": evidence["operating_iterations"],
+                    "final_bisection_bracket": evidence[
+                        "final_bisection_bracket"
+                    ],
+                    "bisection_iteration_trace_audit": audit,
+                }
+            )
+            sources.append(source)
+        return {
+            "value": maximum,
+            "unit": "steps",
+            "sources": sources,
+        }
+
     return {
         "corner_count": len(corners),
         "solved_corner_count": solved_corner_count,
@@ -2435,6 +2485,16 @@ def _operating_point_search_resolution_summary(
         ),
         "maximum_absolute_width_fraction_consistency_error": (
             _maximum_invariant_error_evidence()
+        ),
+        "bisection_iteration_trace_evidence_corner_count": len(trace_cases),
+        "bisection_iteration_trace_complete_corner_count": (
+            len(trace_cases) - len(trace_violation_corner_indices)
+        ),
+        "bisection_iteration_trace_violation_corner_indices": (
+            trace_violation_corner_indices
+        ),
+        "maximum_bisection_iteration_trace_step_count": (
+            _maximum_trace_steps_evidence()
         ),
         "complete_solved_corner_evidence": (
             len(cases) == solved_corner_count
@@ -2468,7 +2528,10 @@ def _operating_point_search_resolution_summary(
             "audits implementation invariants using the unrounded live "
             "bisection state: strict residual-sign bracketing, selected "
             "midpoint centering, and the absolute discrepancy between actual "
-            "and iteration-implied binary width contraction."
+            "and iteration-implied binary width contraction. v0.68 retains every "
+            "bounded-bisection midpoint/update step and audits trace numbering, "
+            "step-count agreement, residual-consistent actions, bracket "
+            "continuity, and final pressure-tolerance termination."
         ),
     }
 

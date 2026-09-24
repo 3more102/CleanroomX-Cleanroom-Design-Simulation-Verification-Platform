@@ -795,6 +795,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['strict_sign_change_violation_corner_indices']}**",
                 "- Midpoint-centering violations: "
                 f"**{search_summary['selected_midpoint_violation_corner_indices']}**",
+                "- Bisection corners with iteration-trace evidence: "
+                f"**{search_summary['bisection_iteration_trace_evidence_corner_count']}/"
+                f"{search_summary['bisection_corner_count']}**",
+                "- Bisection iteration traces passing all trace checks: "
+                f"**{search_summary['bisection_iteration_trace_complete_corner_count']}/"
+                f"{search_summary['bisection_iteration_trace_evidence_corner_count']}**",
+                "- Bisection iteration-trace violation corners: "
+                f"**{search_summary['bisection_iteration_trace_violation_corner_indices']}**",
                 f"- Complete-study coverage: **{coverage_label}**",
             ]
         )
@@ -815,6 +823,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_bracket['half_width_m3_h']} m³/h**",
                     ]
                 )
+                nominal_trace = nominal_search.get("bisection_iteration_trace")
+                nominal_trace_audit = nominal_search.get(
+                    "bisection_iteration_trace_audit"
+                )
+                if nominal_trace is not None:
+                    lines.append(
+                        "- Nominal bisection iteration trace steps: "
+                        f"**{len(nominal_trace)}**"
+                    )
+                if nominal_trace_audit is not None:
+                    lines.append(
+                        "- Nominal bisection iteration trace audit complete: "
+                        f"**{nominal_trace_audit['complete']}**"
+                    )
                 nominal_invariant = nominal_bracket.get("invariant_audit")
                 if nominal_invariant is not None:
                     lines.extend(
@@ -847,6 +869,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
             (
                 "maximum_final_bisection_width_fraction_of_supplied_segment",
                 "Final bracket width / supplied-segment span",
+            ),
+            (
+                "maximum_bisection_iteration_trace_step_count",
+                "Bisection iteration trace steps",
             ),
         )
         for key, label in search_rows:

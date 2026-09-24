@@ -867,6 +867,13 @@ def test_independent_residual_replay_detects_self_consistent_pressure_corruption
         in report
     )
     assert "Maximum absolute trace residual-replay error" in report
+    assert "Independent midpoint pressure-state replay available: **True**" in report
+    assert (
+        "Every retained midpoint pressure state matches independent replay: "
+        "**True**"
+        in report
+    )
+    assert "Maximum absolute midpoint fan-pressure replay error" in report
 
 
 def test_independent_residual_replay_detects_self_consistent_corruption() -> None:
@@ -956,6 +963,84 @@ def test_independent_residual_replay_detects_self_consistent_corruption() -> Non
     assert any(
         not check["all_residuals_match_independent_replay"]
         for check in audit["residual_replay_checks"]
+    )
+
+
+def test_pressure_state_replay_detects_coordinated_absolute_pressure_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Pressure-state replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    assert trace
+
+    pressure_shift_pa = 7.0
+    trace[0]["midpoint_fan_pressure_pa"] += pressure_shift_pa
+    trace[0]["midpoint_loop_network_pressure_pa"] += pressure_shift_pa
+    trace[0]["midpoint_system_pressure_pa"] += pressure_shift_pa
+
+    segment_index = evidence["supplied_segment_index"]
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+    )
+    assert audit is not None
+    assert audit["all_trace_pressure_state_consistent"] is True
+    assert audit["all_trace_residuals_match_independent_replay"] is True
+    assert audit["pressure_state_replay_available"] is True
+    assert (
+        audit["all_recorded_midpoint_fan_pressures_match_independent_replay"]
+        is False
+    )
+    assert (
+        audit["all_recorded_midpoint_loop_pressures_match_independent_replay"]
+        is False
+    )
+    assert (
+        audit["all_recorded_midpoint_system_pressures_match_independent_replay"]
+        is False
+    )
+    assert (
+        audit["all_recorded_midpoint_fixed_pressures_match_independent_replay"]
+        is True
+    )
+    assert (
+        audit["all_recorded_midpoint_residuals_match_pressure_state_replay"]
+        is True
+    )
+    assert audit["all_midpoint_pressure_states_match_independent_replay"] is False
+    assert (
+        audit["maximum_absolute_midpoint_fan_pressure_replay_error_pa"]
+        == pressure_shift_pa
+    )
+    assert (
+        audit["maximum_absolute_midpoint_loop_pressure_replay_error_pa"]
+        == pressure_shift_pa
+    )
+    assert (
+        audit["maximum_absolute_midpoint_system_pressure_replay_error_pa"]
+        == pressure_shift_pa
     )
 
 

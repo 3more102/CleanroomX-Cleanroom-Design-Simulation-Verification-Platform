@@ -264,8 +264,12 @@ class CleanroomXApp:
         self._build_layout()
         self._refresh_analysis_list()
         self._capture_saved_state()
-        self.name_var.trace_add("write", lambda *_: self._update_title())
-        self.description_var.trace_add("write", lambda *_: self._update_title())
+        self.name_var.trace_add(
+            "write", lambda *_: (self._update_title(), self._refresh_dashboard())
+        )
+        self.description_var.trace_add(
+            "write", lambda *_: (self._update_title(), self._refresh_dashboard())
+        )
         self.analysis_filter_var.trace_add("write", lambda *_: self._refresh_analysis_list())
         self._update_title()
         self._refresh_dashboard()
@@ -834,7 +838,7 @@ class CleanroomXApp:
             self.analysis_tree.see(target)
             if self._editor_analysis_id != target:
                 self._load_analysis_into_editor(self.project.analysis_by_id(target))
-        elif visible:
+        elif visible and (not query or select_id is not None or self._editor_analysis_id is None):
             first = visible[0].id
             self.project.active_analysis_id = first
             self.analysis_tree.selection_set(first)
@@ -1490,9 +1494,23 @@ class CleanroomXApp:
         max_y = max(room["y"] + room["width_m"] for room in placed)
         pad = 52
         scale = min((width - 2 * pad) / max(max_x - min_x, 1.0), (height - 2 * pad) / max(max_y - min_y, 1.0))
-        scale = max(8.0, min(scale, 95.0))
+        scale = max(8.0, min(scale, 95.0)) * self._visual_zoom
 
-        canvas.create_text(18, 18, anchor="nw", text=("Dimensions to scale; placement auto-arranged." if fully_scaled else "Schematic view: one or more room dimensions are unavailable."), fill="#94a3b8", font=("Segoe UI", 9))
+        canvas.create_text(
+            18,
+            18,
+            anchor="nw",
+            text=(
+                (
+                    "Dimensions to scale; placement auto-arranged."
+                    if fully_scaled
+                    else "Schematic view: one or more room dimensions are unavailable."
+                )
+                + f"  Zoom {self._visual_zoom:.0%}"
+            ),
+            fill="#94a3b8",
+            font=("Segoe UI", 9),
+        )
         palette = ("#164e63", "#1e3a8a", "#3f3f46", "#14532d", "#581c87", "#7c2d12")
         for index, room in enumerate(placed):
             x0 = pad + (room["x"] - min_x) * scale
@@ -1523,23 +1541,61 @@ class CleanroomXApp:
             return
 
         placed, fully_scaled = self._room_layout(rooms)
-        scene_w = max(room["x"] + room["length_m"] for room in placed)
-        scene_h = max(room["y"] + room["width_m"] for room in placed)
-        scene_z = max(room["height_m"] for room in placed)
         iso_x = 0.74
         iso_y = 0.38
         z_scale = 0.78
-        extent = max(scene_w + scene_h, 1.0)
-        scale = min((width - 150) / extent, (height - 130) / max((scene_w + scene_h) * iso_y + scene_z * z_scale, 1.0))
-        scale = max(7.0, min(scale, 55.0))
-        origin_x = width * 0.50
-        origin_y = 70
+        theta = math.radians(self._visual3d_yaw_deg)
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+
+        def rotate_xy(x: float, y: float) -> tuple[float, float]:
+            return x * cos_t - y * sin_t, x * sin_t + y * cos_t
+
+        raw_points: list[tuple[float, float]] = []
+        for room in placed:
+            x, y = room["x"], room["y"]
+            l, w, h = room["length_m"], room["width_m"], room["height_m"]
+            for px, py, pz in (
+                (x, y, 0),
+                (x + l, y, 0),
+                (x + l, y + w, 0),
+                (x, y + w, 0),
+                (x, y, h),
+                (x + l, y, h),
+                (x + l, y + w, h),
+                (x, y + w, h),
+            ):
+                rx, ry = rotate_xy(px, py)
+                raw_points.append(
+                    ((rx - ry) * iso_x, (rx + ry) * iso_y - pz * z_scale)
+                )
+
+        min_rx = min(point[0] for point in raw_points)
+        max_rx = max(point[0] for point in raw_points)
+        min_ry = min(point[1] for point in raw_points)
+        max_ry = max(point[1] for point in raw_points)
+        raw_w = max(max_rx - min_rx, 1.0)
+        raw_h = max(max_ry - min_ry, 1.0)
+        scale = min((width - 150) / raw_w, (height - 130) / raw_h)
+        scale = max(7.0, min(scale, 55.0)) * self._visual_zoom
+        origin_x = (width - (min_rx + max_rx) * scale) / 2
+        origin_y = (height - (min_ry + max_ry) * scale) / 2
 
         def project(x: float, y: float, z: float = 0.0) -> tuple[float, float]:
-            return (origin_x + (x - y) * iso_x * scale, origin_y + (x + y) * iso_y * scale - z * z_scale * scale)
+            rx, ry = rotate_xy(x, y)
+            return (
+                origin_x + (rx - ry) * iso_x * scale,
+                origin_y + ((rx + ry) * iso_y - z * z_scale) * scale,
+            )
 
         palette = ("#0e7490", "#1d4ed8", "#52525b", "#15803d", "#7e22ce", "#c2410c")
-        ordered = sorted(enumerate(placed), key=lambda pair: pair[1]["x"] + pair[1]["y"], reverse=True)
+        ordered = sorted(
+            enumerate(placed),
+            key=lambda pair: rotate_xy(
+                pair[1]["x"] + pair[1]["length_m"] / 2,
+                pair[1]["y"] + pair[1]["width_m"] / 2,
+            )[1],
+            reverse=True,
+        )
         for index, room in ordered:
             x, y = room["x"], room["y"]
             l, w, h = room["length_m"], room["width_m"], room["height_m"]
@@ -1560,8 +1616,23 @@ class CleanroomXApp:
             if room["height_real"]:
                 canvas.create_text(cx, cy + 9, text=f'h={h:.2g} m', fill="#dbeafe", font=("Segoe UI", 8))
 
-        note = "Scaled room dimensions; auto-arranged for preview." if fully_scaled else "Conceptual preview; missing dimensions use display defaults."
-        canvas.create_text(18, 18, anchor="nw", text=note, fill="#94a3b8", font=("Segoe UI", 9))
+        note = (
+            "Scaled room dimensions; auto-arranged for preview."
+            if fully_scaled
+            else "Conceptual preview; missing dimensions use display defaults."
+        )
+        note += (
+            f"  View {self._visual3d_yaw_deg:.0f}°"
+            f"  •  Zoom {self._visual_zoom:.0%}"
+        )
+        canvas.create_text(
+            18,
+            18,
+            anchor="nw",
+            text=note,
+            fill="#94a3b8",
+            font=("Segoe UI", 9),
+        )
 
     def export_result_json(self) -> None:
         if self.last_run is None:

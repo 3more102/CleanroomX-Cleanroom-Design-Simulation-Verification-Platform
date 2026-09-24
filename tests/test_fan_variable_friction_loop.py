@@ -258,6 +258,12 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         "all_trace_residuals_match_independent_replay"
     ] is True
     assert trace_audit[
+        "all_decisions_match_independent_residual_replay_semantics"
+    ] is True
+    assert trace_audit[
+        "independent_residual_decision_semantic_violation_iterations"
+    ] == []
+    assert trace_audit[
         "maximum_absolute_trace_residual_replay_error_pa"
     ] <= 1e-9
     assert trace_audit["all_recorded_widths_match_airflow_brackets"] is True
@@ -323,6 +329,10 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert "Maximum absolute trace midpoint-centering error" in report
     assert (
         "Every retained trace residual matches independent fan/system replay: **True**"
+        in report
+    )
+    assert (
+        "Trace decisions match independent residual-replay semantics: **True**"
         in report
     )
     assert "Trace origin-to-terminal replay anchored to supplied segment: **True**" in report
@@ -412,6 +422,12 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     assert trace_audit[
         "all_trace_residuals_match_independent_replay"
     ] is True
+    assert trace_audit[
+        "all_decisions_match_independent_residual_replay_semantics"
+    ] is True
+    assert trace_audit[
+        "independent_residual_decision_semantic_violation_iterations"
+    ] == []
     assert trace_audit[
         "maximum_absolute_trace_residual_replay_error_pa"
     ] <= 1e-9
@@ -845,11 +861,56 @@ def test_independent_residual_replay_detects_self_consistent_corruption() -> Non
     assert audit["trace_origin_to_terminal_replay_consistent"] is True
     assert audit["residual_replay_available"] is True
     assert audit["all_trace_residuals_match_independent_replay"] is False
+    assert audit[
+        "all_decisions_match_independent_residual_replay_semantics"
+    ] is True
+    assert audit[
+        "independent_residual_decision_semantic_violation_iterations"
+    ] == []
     assert audit["maximum_absolute_trace_residual_replay_error_pa"] > 0.0
     assert any(
         not check["all_residuals_match_independent_replay"]
         for check in audit["residual_replay_checks"]
     )
+
+    decision_corrupted = [
+        dict(step) for step in evidence["bisection_trace"]
+    ]
+    independent_midpoint_residual = float(
+        decision_corrupted[0]["midpoint_fan_minus_system_pressure_pa"]
+    )
+    if independent_midpoint_residual > 0.0:
+        decision_corrupted[0]["midpoint_fan_minus_system_pressure_pa"] = (
+            -abs(independent_midpoint_residual) - 1.0
+        )
+        decision_corrupted[0]["decision"] = "replace_high_endpoint"
+    else:
+        decision_corrupted[0]["midpoint_fan_minus_system_pressure_pa"] = (
+            abs(independent_midpoint_residual) + 1.0
+        )
+        decision_corrupted[0]["decision"] = "replace_low_endpoint"
+
+    decision_audit = _bisection_decision_trace_audit(
+        decision_corrupted,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+    )
+    assert decision_audit is not None
+    assert decision_audit[
+        "all_decisions_match_midpoint_residual_semantics"
+    ] is True
+    assert decision_audit[
+        "all_decisions_match_independent_residual_replay_semantics"
+    ] is False
+    assert decision_audit[
+        "independent_residual_decision_semantic_violation_iterations"
+    ] == [1]
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

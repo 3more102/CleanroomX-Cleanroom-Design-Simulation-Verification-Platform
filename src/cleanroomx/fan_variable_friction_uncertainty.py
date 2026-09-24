@@ -2596,6 +2596,15 @@ def _operating_point_search_resolution_summary(
         )
         is not True
     ]
+    trace_independent_residual_decision_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_decisions_match_independent_residual_replay_semantics",
+            False,
+        )
+        is not True
+    ]
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2986,6 +2995,13 @@ def _operating_point_search_resolution_summary(
                 "maximum_absolute_trace_residual_replay_error_pa",
                 "Pa",
             )
+        ),
+        "bisection_trace_independent_residual_decision_consistent_corner_count": (
+            len(trace_cases)
+            - len(trace_independent_residual_decision_violation_corner_indices)
+        ),
+        "bisection_trace_independent_residual_decision_violation_corner_indices": (
+            trace_independent_residual_decision_violation_corner_indices
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)

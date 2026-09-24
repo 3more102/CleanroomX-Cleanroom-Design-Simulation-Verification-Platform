@@ -74,12 +74,19 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     alternative_gap = residual_summary[
         "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
     ]
+    alternative_gap_fraction = residual_summary[
+        "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
+    ]
     if separation_count:
         assert alternative_gap is not None
         assert alternative_gap["value"] >= 0.0
         assert alternative_gap["sources"]
+        assert alternative_gap_fraction is not None
+        assert alternative_gap_fraction["value"] >= 0.0
+        assert alternative_gap_fraction["sources"]
     else:
         assert alternative_gap is None
+        assert alternative_gap_fraction is None
     assert residual_summary["residual_increase_corner_count"] == 0
     assert bracket_summary["bracket_evidence_corner_count"] == analysis[
         "corner_count"

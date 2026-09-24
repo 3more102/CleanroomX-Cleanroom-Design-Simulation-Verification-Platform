@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
 from importlib import import_module
+import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 from typing import Any, Callable
@@ -349,6 +351,28 @@ def _find_operating_point(value: Any) -> dict | None:
     return None
 
 
+
+def _find_system_curve_points(value: Any) -> list[dict] | None:
+    if isinstance(value, dict):
+        points = value.get("curve_point_checks")
+        if isinstance(points, list) and len(points) >= 2 and all(
+            isinstance(item, dict)
+            and "airflow_m3_h" in item
+            and "system_pressure_pa" in item
+            for item in points
+        ):
+            return points
+        for item in value.values():
+            found = _find_system_curve_points(item)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_system_curve_points(item)
+            if found is not None:
+                return found
+    return None
+
 def build_plot_model(payload: dict, result: dict) -> dict | None:
     curve = _find_fan_curve(payload) or _find_fan_curve(result)
     if curve is None:
@@ -358,6 +382,15 @@ def build_plot_model(payload: dict, result: dict) -> dict | None:
         float(point.get("pressure_pa", point.get("fan_pressure_pa")))
         for point in curve["points"]
     ]
+    series = [{"name": "Fan curve", "x": xs, "y": ys}]
+    system_points = _find_system_curve_points(result)
+    if system_points is not None:
+        series.append({
+            "name": "System curve",
+            "x": [float(point["airflow_m3_h"]) for point in system_points],
+            "y": [float(point["system_pressure_pa"]) for point in system_points],
+        })
+
     marker = _find_operating_point(result)
     markers: list[dict] = []
     if marker is not None:
@@ -375,7 +408,7 @@ def build_plot_model(payload: dict, result: dict) -> dict | None:
         "title": str(curve.get("name", "Fan curve")),
         "x_label": "Airflow (m³/h)",
         "y_label": "Pressure (Pa)",
-        "series": [{"name": "Fan curve", "x": xs, "y": ys}],
+        "series": series,
         "markers": markers,
     }
 
@@ -524,6 +557,51 @@ def _application_execution_provenance(
         "external_dependencies": dependencies,
     }
 
+
+
+def rebase_analysis_file_references(
+    kind: str,
+    payload: dict,
+    *,
+    source_base: str | Path,
+    target_base: str | Path | None,
+) -> dict:
+    """Preserve external-file referents when analysis JSON changes directory context."""
+    rebased = copy.deepcopy(payload)
+    if kind not in {"consistency", "dossier"}:
+        return rebased
+
+    source = Path(os.path.abspath(source_base))
+    target = None if target_base is None else Path(os.path.abspath(target_base))
+
+    def convert(value: Any) -> Any:
+        if not isinstance(value, str) or not value.strip():
+            return value
+        path = Path(value)
+        if path.is_absolute():
+            return value
+        absolute = Path(os.path.abspath(source / path))
+        if target is None:
+            return str(absolute)
+        try:
+            return os.path.relpath(absolute, start=target)
+        except ValueError:
+            return str(absolute)
+
+    if kind == "consistency":
+        for key in ("verification_project", "hvac_project"):
+            if key in rebased:
+                rebased[key] = convert(rebased[key])
+        return rebased
+
+    for key in _DOSSIER_SINGLE_PATH_KEYS:
+        if key in rebased:
+            rebased[key] = convert(rebased[key])
+    for key in _DOSSIER_LIST_PATH_KEYS:
+        values = rebased.get(key)
+        if isinstance(values, list):
+            rebased[key] = [convert(value) for value in values]
+    return rebased
 
 def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
     if not isinstance(payload.get("name"), str) or not payload["name"].strip():

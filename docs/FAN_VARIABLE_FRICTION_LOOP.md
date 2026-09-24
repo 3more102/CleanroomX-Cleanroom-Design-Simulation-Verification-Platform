@@ -91,6 +91,8 @@ v0.67 audits the retained bisection geometry against implementation invariants u
 
 v0.68 extends v0.66 alternative-candidate separation with a dimensionless scale-aware value. Each selected-to-alternative discrete point/interval airflow gap is divided by the exact supplied fan-curve airflow span for that solve, and the nearest alternative retains both absolute and normalized separation. This remains sampled-data numerical topology evidence only; it is not a continuous root-separation guarantee, physical robustness margin, stability/stall/surge criterion, manufacturer operating region, commissioning/certification result, or equipment-acceptance limit.
 
+v0.69 extends bisection auditability to iteration-limit failures. When the operating-point iteration budget is exhausted, no operating point is accepted; instead, the result preserves the remaining strict signed-residual bracket after the final budgeted midpoint evaluation and audits its width against the completed binary contraction count. This remaining bracket is numerical search-state evidence only, not physical airflow uncertainty, interpolation error, a continuous worst-case bound, or an equipment-acceptance margin.
+
 ## CLI
 
 ```text

@@ -2422,11 +2422,20 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary["bisection_trace_evidence_corner_count"] == (
         summary["bisection_corner_count"]
     )
+    assert summary["solved_bisection_trace_evidence_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
+    assert summary["iteration_limit_bisection_trace_evidence_corner_count"] == 0
     assert summary["bisection_trace_complete_coverage"] is True
+    assert summary["iteration_limit_bisection_trace_complete_coverage"] is True
     assert summary["bisection_trace_length_violation_corner_indices"] == []
     assert summary["bisection_trace_sign_violation_corner_indices"] == []
     assert summary["bisection_trace_midpoint_violation_corner_indices"] == []
     assert summary["bisection_trace_terminal_violation_corner_indices"] == []
+    assert summary["bisection_trace_outcome_violation_corner_indices"] == []
+    assert summary["bisection_trace_outcome_consistent_corner_count"] == (
+        summary["bisection_corner_count"]
+    )
     assert summary[
         "bisection_trace_iteration_sequence_violation_corner_indices"
     ] == []
@@ -2491,6 +2500,8 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
             "all_midpoints_are_arithmetic_bracket_midpoints"
         ] is True
         assert trace_audit["termination_record_is_last"] is True
+        assert trace_audit["termination_reason"] == "pressure_residual"
+        assert trace_audit["terminal_outcome_consistent"] is True
         assert trace_audit["iterations_are_contiguous_from_one"] is True
         assert trace_audit[
             "all_state_transitions_replay_recorded_decisions"
@@ -2513,7 +2524,8 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
 
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
     assert "Bisection corners with invariant evidence" in report
-    assert "Bisection corners with decision-trace evidence" in report
+    assert "Solved bisection corners with decision traces" in report
+    assert "Trace terminal-outcome violations" in report
     assert "Trace-length violations" in report
     assert "Trace iteration-sequence violations" in report
     assert "Trace state-transition replay violations" in report
@@ -2557,6 +2569,20 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary[
         "iteration_limit_strict_sign_change_preserved_corner_count"
     ] == len(limit_corners)
+    assert summary[
+        "iteration_limit_bisection_trace_evidence_corner_count"
+    ] == len(limit_corners)
+    assert summary["iteration_limit_bisection_trace_complete_coverage"] is True
+    assert summary["bisection_trace_length_violation_corner_indices"] == []
+    assert summary["bisection_trace_sign_violation_corner_indices"] == []
+    assert summary["bisection_trace_midpoint_violation_corner_indices"] == []
+    assert summary["bisection_trace_outcome_violation_corner_indices"] == []
+    assert summary[
+        "bisection_trace_iteration_sequence_violation_corner_indices"
+    ] == []
+    assert summary[
+        "bisection_trace_state_transition_violation_corner_indices"
+    ] == []
     max_error = summary[
         "maximum_iteration_limit_absolute_width_fraction_consistency_error"
     ]
@@ -2579,9 +2605,26 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
         assert invariant[
             "actual_width_fraction_of_supplied_segment"
         ] == pytest.approx(0.5, abs=1e-12)
+        trace = evidence["bisection_trace"]
+        trace_audit = evidence["bisection_trace_audit"]
+        assert trace is not None
+        assert trace_audit is not None
+        assert len(trace) == evidence["operating_iterations"] == 1
+        assert trace_audit["termination_record_count"] == 0
+        assert trace_audit["termination_record_is_last"] is False
+        assert trace_audit["termination_reason"] == "bisection_iteration_limit"
+        assert trace_audit["terminal_outcome_consistent"] is True
+        assert trace_audit["iterations_are_contiguous_from_one"] is True
+        assert trace_audit["transition_record_count"] == 0
+        assert trace_audit[
+            "all_state_transitions_replay_recorded_decisions"
+        ] is True
+        assert "T" not in trace_audit["decision_sequence"]
 
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
     assert "Bisection iteration-limit corners with search evidence" in report
+    assert "Iteration-limit corners with decision traces" in report
+    assert "Trace terminal-outcome violations: **[]**" in report
     assert "Iteration-limit remaining-bracket invariant evidence" in report
     assert (
         "Maximum iteration-limit remaining-bracket binary-width consistency error"

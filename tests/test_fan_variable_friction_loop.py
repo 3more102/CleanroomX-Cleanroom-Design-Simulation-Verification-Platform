@@ -236,6 +236,21 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     ] is True
     assert trace_audit["termination_record_count"] == 1
     assert trace_audit["termination_record_is_last"] is True
+    assert trace_audit["iterations_are_contiguous_from_one"] is True
+    assert trace_audit["transition_record_count"] == len(trace) - 1
+    assert trace_audit[
+        "all_airflow_bracket_transitions_replay_recorded_decisions"
+    ] is True
+    assert trace_audit[
+        "all_residual_bracket_transitions_replay_recorded_decisions"
+    ] is True
+    assert trace_audit[
+        "all_state_transitions_replay_recorded_decisions"
+    ] is True
+    assert all(
+        check["state_transition_replays_recorded_decision"]
+        for check in trace_audit["transition_checks"]
+    )
     assert trace_audit["decision_sequence"].endswith("T")
     assert len(trace_audit["decision_sequence"]) == len(trace)
 

@@ -636,6 +636,30 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
     assert captured["parent"] is app.root
 
 
+def test_analysis_filter_matches_name_kind_category_and_description():
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    analysis = AnalysisDocument(
+        id="room-a",
+        name="Suite A Pressure Check",
+        kind="room_verification",
+        input={},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+
+    for query in ("suite a", "room_verification", "verification", "particle"):
+        app.analysis_filter_var = Value(query)
+        assert app._analysis_matches_filter(analysis) is True
+
+    app.analysis_filter_var = Value("fan curve")
+    assert app._analysis_matches_filter(analysis) is False
+
+
 def test_render_run_selects_results_frame_instead_of_numeric_tab_index():
     class Widget:
         def __init__(self):

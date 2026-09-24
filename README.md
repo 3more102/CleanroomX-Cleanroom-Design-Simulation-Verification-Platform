@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99.1 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.99.1**, hardening the integrated v0.99 desktop application. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+The current release line is **CleanroomX v0.100.0**, built directly on the verified v0.99.1 `main` lineage. It preserves the validated solver/provenance backend and adds desktop execution-integrity evidence, portable external-file references, atomic project/export writes, backend-derived fan/system plotting, and the self-contained installed demonstration.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99.1 additionally prevents overlapping backend runs after UI abandonment, packages a self-contained demo in the wheel, validates clean-wheel installation on Python 3.11/3.12/3.13, and launches the installed wheel under Xvfb on Python 3.13.
+CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
 
 ### Network-state replay provenance ladder
 
@@ -27,6 +27,15 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
 | v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
+| v0.100 | execution provenance, portable path context, atomic exports, fan/system plot evidence, and consolidated installed-desktop release |
+
+
+### v0.100 consolidated desktop release
+
+v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves and GUI exports use same-directory atomic replacement; export failures are surfaced in the desktop UI.
+
+Fan operating-point plots reuse backend-computed system-pressure evidence and render labeled fan/system series. Abandoned runs remain exclusive until their backend worker exits. The installed wheel includes the self-contained demo and supports `cleanroomx-gui --demo`.
+
 
 ### v0.99 application registry integrity
 

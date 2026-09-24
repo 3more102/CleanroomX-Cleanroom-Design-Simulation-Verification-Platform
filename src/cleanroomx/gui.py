@@ -638,6 +638,20 @@ class CleanroomXApp:
         self._update_title()
 
     def add_analysis(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
+        previous = self._editor_analysis()
+        if previous is not None:
+            try:
+                self._commit_editor(previous)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot add analysis",
+                    f"Fix the current analysis input before adding another analysis.\n\n{exc}",
+                    parent=self.root,
+                )
+                return
         picker = AnalysisPicker(self.root)
         self.root.wait_window(picker)
         if picker.result is None:
@@ -657,6 +671,9 @@ class CleanroomXApp:
         self._refresh_analysis_list(select_id=analysis_id)
 
     def rename_analysis(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
         analysis = self._current_analysis()
         if analysis is None:
             return
@@ -668,6 +685,9 @@ class CleanroomXApp:
             self.analysis_tree.item(analysis.id, text=analysis.name)
 
     def remove_analysis(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
         analysis = self._current_analysis()
         if analysis is None:
             return
@@ -684,6 +704,9 @@ class CleanroomXApp:
         self._refresh_analysis_list()
 
     def import_input_json(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
         analysis = self._current_analysis()
         if analysis is None:
             messagebox.showinfo("No analysis", "Add or select an analysis first.")

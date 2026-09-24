@@ -201,12 +201,34 @@ def _fan_variable_friction_uncertainty_summary(results: list[dict]) -> dict:
             "missing_provenance_analyses": 0,
             "result_integrity_count": 0,
             "missing_result_integrity_analyses": 0,
+            "solver_result_integrity_complete_coverage_analyses": 0,
+            "solver_result_integrity_inconsistent_corner_count": 0,
+            "solver_result_integrity_coverage_gap_corner_count": 0,
         }
     counts = _count_statuses(item["status"] for item in results)
     missing = sum(not item["traceability"]["complete"] for item in results)
     integrity_count = sum(
         isinstance(item.get("result_integrity", {}).get("sha256"), str)
         and len(item["result_integrity"]["sha256"]) == 64
+        for item in results
+    )
+    solver_result_integrity_complete_coverage_analyses = sum(
+        item.get("solver_result_integrity_summary", {}).get(
+            "complete_corner_coverage"
+        )
+        is True
+        for item in results
+    )
+    solver_result_integrity_inconsistent_corner_count = sum(
+        item.get("solver_result_integrity_summary", {}).get(
+            "inconsistent_corner_count", 0
+        )
+        for item in results
+    )
+    solver_result_integrity_coverage_gap_corner_count = sum(
+        item.get("solver_result_integrity_summary", {}).get(
+            "incomplete_corner_count", 0
+        )
         for item in results
     )
     if counts.get("indeterminate", 0):
@@ -232,6 +254,15 @@ def _fan_variable_friction_uncertainty_summary(results: list[dict]) -> dict:
         "missing_provenance_analyses": missing,
         "result_integrity_count": integrity_count,
         "missing_result_integrity_analyses": len(results) - integrity_count,
+        "solver_result_integrity_complete_coverage_analyses": (
+            solver_result_integrity_complete_coverage_analyses
+        ),
+        "solver_result_integrity_inconsistent_corner_count": (
+            solver_result_integrity_inconsistent_corner_count
+        ),
+        "solver_result_integrity_coverage_gap_corner_count": (
+            solver_result_integrity_coverage_gap_corner_count
+        ),
     }
 
 

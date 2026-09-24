@@ -5197,11 +5197,27 @@ def analyze_fan_variable_friction_loop_uncertainty(
             "metadata_matches_expected": case["audit"].get(
                 "metadata_matches_expected"
             ),
+            "sha256_matches_recomputed": case["audit"].get(
+                "sha256_matches_recomputed"
+            ),
             "recorded_sha256": case["audit"].get("recorded_sha256"),
             "recomputed_sha256": case["audit"].get("recomputed_sha256"),
         }
         for case in solver_result_integrity_cases
-        if case["audit"].get("consistent") is not True
+        if (
+            case["audit"].get("available") is True
+            and case["audit"].get("consistent") is not True
+        )
+    ]
+    solver_result_integrity_coverage_gap_details = [
+        {
+            "case": case["case"],
+            "corner_index": case["corner_index"],
+            "status": case["status"],
+            "verdict": case["audit"].get("verdict"),
+        }
+        for case in solver_result_integrity_cases
+        if case["audit"].get("available") is not True
     ]
     solver_result_integrity_evidence_count = sum(
         case["audit"].get("available") is True
@@ -5211,6 +5227,29 @@ def analyze_fan_variable_friction_loop_uncertainty(
         case["audit"].get("consistent") is True
         for case in solver_result_integrity_cases
     )
+    corner_integrity_cases = [
+        case
+        for case in solver_result_integrity_cases
+        if case["case"] == "corner"
+    ]
+    corner_integrity_evidence_count = sum(
+        case["audit"].get("available") is True
+        for case in corner_integrity_cases
+    )
+    corner_integrity_consistent_count = sum(
+        case["audit"].get("consistent") is True
+        for case in corner_integrity_cases
+    )
+    violating_corner_indices = [
+        detail["corner_index"]
+        for detail in solver_result_integrity_violation_details
+        if detail["case"] == "corner"
+    ]
+    coverage_gap_corner_indices = [
+        detail["corner_index"]
+        for detail in solver_result_integrity_coverage_gap_details
+        if detail["case"] == "corner"
+    ]
     solver_result_integrity_summary = {
         "applicable": True,
         "expected_result_count": len(solver_result_integrity_cases),
@@ -5223,20 +5262,44 @@ def analyze_fan_variable_friction_loop_uncertainty(
         "inconsistent_result_count": len(
             solver_result_integrity_violation_details
         ),
-        "incomplete_result_count": (
-            len(solver_result_integrity_cases)
-            - solver_result_integrity_evidence_count
+        "incomplete_result_count": len(
+            solver_result_integrity_coverage_gap_details
+        ),
+        "nominal_available": (
+            nominal_solver_result_integrity_audit.get("available") is True
         ),
         "nominal_consistent": (
             nominal_solver_result_integrity_audit.get("consistent") is True
         ),
-        "violating_corner_indices": [
-            detail["corner_index"]
-            for detail in solver_result_integrity_violation_details
-            if detail["case"] == "corner"
-        ],
+        "expected_corner_count": len(corner_integrity_cases),
+        "evidence_corner_count": corner_integrity_evidence_count,
+        "complete_corner_coverage": (
+            corner_integrity_evidence_count == len(corner_integrity_cases)
+        ),
+        "consistent_corner_count": corner_integrity_consistent_count,
+        "inconsistent_corner_count": len(violating_corner_indices),
+        "incomplete_corner_count": len(coverage_gap_corner_indices),
+        "violating_corner_indices": violating_corner_indices,
+        "coverage_gap_corner_indices": coverage_gap_corner_indices,
         "source_solver_result_sha256": solver_result_integrity_records,
         "violation_details": solver_result_integrity_violation_details,
+        "coverage_gap_details": (
+            solver_result_integrity_coverage_gap_details
+        ),
+        "all_evaluated_solver_results_integrity_consistent": (
+            solver_result_integrity_evidence_count
+            == len(solver_result_integrity_cases)
+            and not solver_result_integrity_violation_details
+        ),
+        "scope_note": (
+            "The nominal solve and every evaluated uncertainty corner retain "
+            "the deterministic SHA-256 identity of their complete standalone "
+            "solver result. Missing evidence is reported as incomplete "
+            "coverage separately from retained evidence whose digest or "
+            "metadata does not recompute consistently. These digests prove "
+            "deterministic content identity only, not source authenticity, "
+            "certification, commissioning acceptance, or physical correctness."
+        ),
     }
 
     unresolved_corner_count = sum(

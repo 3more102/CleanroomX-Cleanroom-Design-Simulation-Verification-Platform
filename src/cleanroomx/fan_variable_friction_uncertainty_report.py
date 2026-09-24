@@ -175,14 +175,31 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{solver_result_integrity['consistent_result_count']}**",
                 "- Solver-result integrity inconsistent results: "
                 f"**{solver_result_integrity['inconsistent_result_count']}**",
+                "- Solver-result integrity incomplete results: "
+                f"**{solver_result_integrity['incomplete_result_count']}**",
+                "- Solver-result integrity corner coverage: "
+                f"**{solver_result_integrity['evidence_corner_count']}/"
+                f"{solver_result_integrity['expected_corner_count']}**",
+                "- Solver-result integrity complete corner coverage: "
+                f"**{solver_result_integrity['complete_corner_coverage']}**",
+                "- Solver-result integrity consistent corners: "
+                f"**{solver_result_integrity['consistent_corner_count']}**",
+                "- Solver-result integrity inconsistent corners: "
+                f"**{solver_result_integrity['inconsistent_corner_count']}**",
+                "- Solver-result integrity incomplete corners: "
+                f"**{solver_result_integrity['incomplete_corner_count']}**",
                 "- Solver-result integrity nominal consistent: "
                 f"**{solver_result_integrity['nominal_consistent']}**",
                 "- Solver-result integrity violating corner indices: "
                 f"**{solver_result_integrity['violating_corner_indices']}**",
+                "- Solver-result integrity coverage-gap corner indices: "
+                f"**{solver_result_integrity['coverage_gap_corner_indices']}**",
                 "- Source solver-result SHA-256 records: "
                 f"**{solver_result_integrity['source_solver_result_sha256']}**",
                 "- Solver-result integrity violation details: "
                 f"**{solver_result_integrity['violation_details']}**",
+                "- Solver-result integrity coverage-gap details: "
+                f"**{solver_result_integrity['coverage_gap_details']}**",
             ]
         )
 

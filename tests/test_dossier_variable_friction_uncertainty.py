@@ -388,7 +388,10 @@ def test_dossier_preserves_solver_result_integrity_linkage_corruption(
 
     assert summary["complete_coverage"] is True
     assert summary["inconsistent_result_count"] == 1
+    assert summary["inconsistent_corner_count"] == 1
+    assert summary["incomplete_corner_count"] == 0
     assert summary["violating_corner_indices"] == [0]
+    assert summary["coverage_gap_corner_indices"] == []
     assert summary["violation_details"][0]["corner_index"] == 0
     assert (
         summary["violation_details"][0]["recorded_sha256"]
@@ -400,6 +403,38 @@ def test_dossier_preserves_solver_result_integrity_linkage_corruption(
     assert "Solver-result integrity linkage" in report
     assert "inconsistent=1" in report
     assert "violating_corners=[0]" in report
+
+
+
+def test_dossier_solver_result_integrity_component_summary_counts() -> None:
+    result = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = result["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["solver_result_integrity_summary"]
+    component = result["executive_summary"]["components"][
+        "fan_variable_friction_uncertainty"
+    ]
+
+    assert summary["complete_corner_coverage"] is True
+    assert summary["consistent_corner_count"] == analysis["corner_count"]
+    assert summary["inconsistent_corner_count"] == 0
+    assert summary["incomplete_corner_count"] == 0
+    assert component[
+        "solver_result_integrity_complete_coverage_analyses"
+    ] == 1
+    assert component[
+        "solver_result_integrity_inconsistent_corner_count"
+    ] == 0
+    assert component[
+        "solver_result_integrity_coverage_gap_corner_count"
+    ] == 0
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_dossier_report(result)
+    assert "Solver-result integrity linkage for" in report
+    assert "corner_complete=True" in report
+
 
 
 def test_dossier_preserves_selected_projection_corruption_evidence(

@@ -117,8 +117,16 @@ def test_solver_result_integrity_linkage_covers_nominal_and_all_corners() -> Non
     assert summary["consistent_result_count"] == summary["expected_result_count"]
     assert summary["inconsistent_result_count"] == 0
     assert summary["incomplete_result_count"] == 0
+    assert summary["nominal_available"] is True
     assert summary["nominal_consistent"] is True
+    assert summary["expected_corner_count"] == result["corner_count"]
+    assert summary["evidence_corner_count"] == result["corner_count"]
+    assert summary["complete_corner_coverage"] is True
+    assert summary["consistent_corner_count"] == result["corner_count"]
+    assert summary["inconsistent_corner_count"] == 0
+    assert summary["incomplete_corner_count"] == 0
     assert summary["violating_corner_indices"] == []
+    assert summary["coverage_gap_corner_indices"] == []
     assert len(summary["source_solver_result_sha256"]) == (
         summary["expected_result_count"]
     )
@@ -163,12 +171,17 @@ def test_solver_result_integrity_linkage_detects_corrupted_corner_result(
     assert summary["inconsistent_result_count"] == 1
     assert summary["incomplete_result_count"] == 0
     assert summary["nominal_consistent"] is True
+    assert summary["complete_corner_coverage"] is True
+    assert summary["inconsistent_corner_count"] == 1
+    assert summary["incomplete_corner_count"] == 0
     assert summary["violating_corner_indices"] == [0]
+    assert summary["coverage_gap_corner_indices"] == []
     assert len(summary["violation_details"]) == 1
     detail = summary["violation_details"][0]
     assert detail["case"] == "corner"
     assert detail["corner_index"] == 0
     assert detail["metadata_matches_expected"] is True
+    assert detail["sha256_matches_recomputed"] is False
     assert detail["recorded_sha256"] != detail["recomputed_sha256"]
 
     json.dumps(result, sort_keys=True, allow_nan=False)
@@ -206,15 +219,23 @@ def test_solver_result_integrity_linkage_marks_missing_corner_evidence(
     assert summary["evidence_result_count"] == summary["expected_result_count"] - 1
     assert summary["complete_coverage"] is False
     assert summary["incomplete_result_count"] == 1
-    assert summary["inconsistent_result_count"] == 1
-    assert summary["violating_corner_indices"] == [0]
-    assert summary["violation_details"][0]["verdict"] == (
+    assert summary["inconsistent_result_count"] == 0
+    assert summary["incomplete_corner_count"] == 1
+    assert summary["inconsistent_corner_count"] == 0
+    assert summary["violating_corner_indices"] == []
+    assert summary["coverage_gap_corner_indices"] == [0]
+    assert summary["coverage_gap_details"][0]["verdict"] == (
         "solver_result_integrity_missing"
     )
 
     json.dumps(result, sort_keys=True, allow_nan=False)
     report = markdown_fan_variable_friction_loop_uncertainty_report(result)
     assert "Solver-result integrity complete coverage: **False**" in report
+    assert "Solver-result integrity incomplete corners: **1**" in report
+    assert (
+        "Solver-result integrity coverage-gap corner indices: **[0]**"
+        in report
+    )
 
 
 def test_nominal_result_matches_existing_nonlinear_solver() -> None:

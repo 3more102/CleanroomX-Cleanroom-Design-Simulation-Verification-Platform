@@ -2466,8 +2466,16 @@ def _operating_point_search_resolution_summary(
             evidence,
             evidence.get("bisection_trace_audit"),
         )
-        for corner_index, corner, evidence in bisection_cases
+        for corner_index, corner, evidence in cases
         if evidence.get("bisection_trace_audit") is not None
+    ]
+    solved_trace_cases = [
+        case for case in trace_cases if case[1]["status"] == "solved"
+    ]
+    iteration_limit_trace_cases = [
+        case
+        for case in trace_cases
+        if case[2].get("iteration_limit_evidence") is not None
     ]
     trace_length_violation_corner_indices = [
         corner_index
@@ -2486,9 +2494,24 @@ def _operating_point_search_resolution_summary(
         for corner_index, _corner, _evidence, audit in trace_cases
         if not audit["all_midpoints_are_arithmetic_bracket_midpoints"]
     ]
-    trace_termination_violation_corner_indices = [
+    trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["all_width_fractions_match_binary_contraction"]
+    ]
+    trace_chain_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["transition_chain_preserved"]
+    ]
+    trace_outcome_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["terminal_outcome_consistent"]
+    ]
+    solved_trace_terminal_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in solved_trace_cases
         if not audit["termination_record_is_last"]
     ]
 
@@ -2703,8 +2726,15 @@ def _operating_point_search_resolution_summary(
             midpoint_violation_corner_indices
         ),
         "bisection_trace_evidence_corner_count": len(trace_cases),
+        "solved_bisection_trace_evidence_corner_count": (
+            len(solved_trace_cases)
+        ),
+        "iteration_limit_bisection_trace_evidence_corner_count": (
+            len(iteration_limit_trace_cases)
+        ),
         "bisection_trace_complete_coverage": (
-            len(trace_cases) == len(bisection_cases)
+            len(trace_cases)
+            == len(bisection_cases) + len(iteration_limit_cases)
         ),
         "bisection_trace_length_match_corner_count": (
             len(trace_cases) - len(trace_length_violation_corner_indices)
@@ -2724,11 +2754,30 @@ def _operating_point_search_resolution_summary(
         "bisection_trace_midpoint_violation_corner_indices": (
             trace_midpoint_violation_corner_indices
         ),
+        "bisection_trace_binary_width_consistent_corner_count": (
+            len(trace_cases) - len(trace_width_violation_corner_indices)
+        ),
+        "bisection_trace_binary_width_violation_corner_indices": (
+            trace_width_violation_corner_indices
+        ),
+        "bisection_trace_chain_preserved_corner_count": (
+            len(trace_cases) - len(trace_chain_violation_corner_indices)
+        ),
+        "bisection_trace_chain_violation_corner_indices": (
+            trace_chain_violation_corner_indices
+        ),
+        "bisection_trace_outcome_consistent_corner_count": (
+            len(trace_cases) - len(trace_outcome_violation_corner_indices)
+        ),
+        "bisection_trace_outcome_violation_corner_indices": (
+            trace_outcome_violation_corner_indices
+        ),
         "bisection_trace_terminal_last_corner_count": (
-            len(trace_cases) - len(trace_termination_violation_corner_indices)
+            len(solved_trace_cases)
+            - len(solved_trace_terminal_violation_corner_indices)
         ),
         "bisection_trace_terminal_violation_corner_indices": (
-            trace_termination_violation_corner_indices
+            solved_trace_terminal_violation_corner_indices
         ),
         "maximum_bisection_trace_step_count": (
             _maximum_trace_step_count_evidence()
@@ -2795,7 +2844,10 @@ def _operating_point_search_resolution_summary(
             "complete bounded-bisection decision trace for solved bisection "
             "corners and audits trace length, per-step sign bracketing, "
             "midpoint geometry, and terminal decision placement without "
-            "adding any physical acceptance limit."
+            "adding any physical acceptance limit. v0.73 extends the retained "
+            "trace to iteration-limit outcomes, records each post-decision "
+            "bracket, and audits binary-width contraction, transition chaining, "
+            "and terminal solver-outcome consistency without accepting a root."
         ),
     }
 

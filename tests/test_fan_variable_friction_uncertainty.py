@@ -5,6 +5,7 @@ import sys
 import pytest
 
 from cleanroomx.fan_variable_friction_loop import (
+    _bisection_decision_trace_audit,
     _selected_operating_state_replay_audit,
     solve_fan_variable_friction_loop,
 )
@@ -885,6 +886,176 @@ def test_selected_projection_replay_missing_check_is_incomplete_coverage(
     assert summary[
         "selected_operating_network_state_projection_replay_violation_corner_indices"
     ] == []
+
+
+
+def test_full_trace_projection_replay_corruption_aggregates_exact_corner_evidence(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2 or result["status"] != "solved":
+            return result
+
+        evidence = result["operating_point_search_evidence"]
+        trace = json.loads(json.dumps(evidence["bisection_trace"]))
+        trace[0]["midpoint_network_state_projection"]["nodes"][0][
+            "relative_pressure_pa"
+        ] += 1.0
+        segment_index = evidence["supplied_segment_index"]
+        evidence["bisection_trace"] = trace
+        evidence["bisection_trace_audit"] = _bisection_decision_trace_audit(
+            trace,
+            operating_iterations=evidence["operating_iterations"],
+            termination_reason=result["solver_diagnostics"][
+                "termination_reason"
+            ],
+            operating_pressure_tolerance_pa=(
+                case_study.operating_pressure_tolerance_pa
+            ),
+            expected_fixed_pressure_pa=case_study.fixed_pressure_pa,
+            study=case_study,
+            segment_left=case_study.fan_curve.points[segment_index],
+            segment_right=case_study.fan_curve.points[segment_index + 1],
+            initial_bisection_bracket=evidence[
+                "initial_bisection_bracket"
+            ],
+            solved_terminal_bracket=evidence["final_bisection_bracket"],
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "bisection_trace_network_state_projection_replay_applicable"
+    ] is True
+    assert summary[
+        "bisection_trace_network_state_projection_replay_complete_coverage"
+    ] is True
+    assert summary[
+        "bisection_trace_network_state_projection_replay_inconsistent_corner_count"
+    ] == 1
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "bisection_trace_network_state_projection_replay_mismatch_count"
+    ] == 1
+    details = summary[
+        "bisection_trace_network_state_projection_replay_violation_details"
+    ]
+    assert len(details) == 1
+    assert details[0]["corner_index"] == 0
+    assert details[0]["violation_iterations"] == [1]
+    assert details[0]["violation_iteration_positions"] == [
+        {"iteration": 1, "position": "midpoint"}
+    ]
+    mismatch = details[0]["mismatches"][0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == "midpoint"
+    assert mismatch["path"] == "$.nodes[0].relative_pressure_pa"
+    assert mismatch["absolute_error"] == pytest.approx(1.0)
+
+    maxima = summary[
+        "maximum_bisection_trace_network_state_projection_numeric_errors"
+    ]
+    assert len(maxima) == 1
+    assert maxima[0]["field"] == "relative_pressure_pa"
+    assert maxima[0]["maximum_absolute_error"] == pytest.approx(1.0)
+    assert maxima[0]["witnesses"][0]["corner_index"] == 0
+    assert maxima[0]["witnesses"][0]["iteration"] == 1
+    assert maxima[0]["witnesses"][0]["position"] == "midpoint"
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "Full-trace network-state projection replay" in report
+    assert "$.nodes[0].relative_pressure_pa" in report
+    assert "midpoint" in report
+
+
+def test_full_trace_projection_replay_missing_state_is_incomplete_coverage(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def omit_one_projection(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2 or result["status"] != "solved":
+            return result
+
+        evidence = result["operating_point_search_evidence"]
+        trace = json.loads(json.dumps(evidence["bisection_trace"]))
+        del trace[0]["high_network_state_projection"]
+        segment_index = evidence["supplied_segment_index"]
+        evidence["bisection_trace"] = trace
+        evidence["bisection_trace_audit"] = _bisection_decision_trace_audit(
+            trace,
+            operating_iterations=evidence["operating_iterations"],
+            termination_reason=result["solver_diagnostics"][
+                "termination_reason"
+            ],
+            operating_pressure_tolerance_pa=(
+                case_study.operating_pressure_tolerance_pa
+            ),
+            expected_fixed_pressure_pa=case_study.fixed_pressure_pa,
+            study=case_study,
+            segment_left=case_study.fan_curve.points[segment_index],
+            segment_right=case_study.fan_curve.points[segment_index + 1],
+            initial_bisection_bracket=evidence[
+                "initial_bisection_bracket"
+            ],
+            solved_terminal_bracket=evidence["final_bisection_bracket"],
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        omit_one_projection,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "bisection_trace_network_state_projection_replay_complete_coverage"
+    ] is False
+    assert summary[
+        "bisection_trace_network_state_projection_replay_incomplete_coverage_corner_count"
+    ] == 1
+    assert summary[
+        "bisection_trace_network_state_projection_replay_coverage_gap_corner_indices"
+    ] == [0]
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    gaps = summary[
+        "bisection_trace_network_state_projection_replay_coverage_gap_details"
+    ]
+    assert len(gaps) == 1
+    assert gaps[0]["corner_index"] == 0
+    assert gaps[0]["coverage_gaps"] == [
+        {"iteration": 1, "position": "high"}
+    ]
 
 
 def test_corner_limit_rejects_before_cartesian_product_materialization(

@@ -256,6 +256,16 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['terminal_network_state_replay_violation_positions']}**",
                     "- Exact terminal network-state replay violations: "
                     f"**{trace_audit['terminal_network_state_replay_violations']}**",
+                    "- Terminal network-state projection replay available: "
+                    f"**{trace_audit['terminal_network_state_projection_replay_available']}**",
+                    "- Terminal low/high network-state projections match independent replay: "
+                    f"**{trace_audit['all_terminal_network_state_projections_match_independent_replay']}**",
+                    "- Terminal network-state projection mismatch count: "
+                    f"**{trace_audit['terminal_network_state_projection_mismatch_count']}**",
+                    "- Terminal network-state projection mismatch positions: "
+                    f"**{trace_audit['terminal_network_state_projection_mismatch_positions']}**",
+                    "- Exact terminal network-state projection mismatches: "
+                    f"**{trace_audit['terminal_network_state_projection_mismatches']}**",
                     "- Maximum absolute trace system-pressure balance error: "
                     f"**{trace_audit['maximum_absolute_trace_system_pressure_balance_error_pa']} Pa**",
                     "- Maximum absolute trace residual balance error: "

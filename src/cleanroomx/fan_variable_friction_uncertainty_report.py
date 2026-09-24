@@ -873,6 +873,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['terminal_network_state_replay_violation_count']}**",
                 "- Exact terminal network-state replay violation details: "
                 f"**{search_summary['terminal_network_state_replay_violation_details']}**",
+                "- Terminal network-state projection replay violation corners: "
+                f"**{search_summary['terminal_network_state_projection_replay_violation_corner_indices']}**",
+                "- Terminal network-state projection replay consistent corners: "
+                f"**{search_summary['terminal_network_state_projection_replay_consistent_corner_count']}**",
+                "- Terminal network-state projection mismatch records across corners: "
+                f"**{search_summary['terminal_network_state_projection_replay_violation_count']}**",
+                "- Exact terminal network-state projection mismatch details: "
+                f"**{search_summary['terminal_network_state_projection_replay_violation_details']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -967,6 +975,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_terminal_network_states_match_independent_replay']}**",
                         "- Nominal terminal network-state replay violating positions: "
                         f"**{nominal_trace_audit['terminal_network_state_replay_violation_positions']}**",
+                        "- Nominal terminal network-state projection replay consistent: "
+                        f"**{nominal_trace_audit['all_terminal_network_state_projections_match_independent_replay']}**",
+                        "- Nominal terminal network-state projection mismatch positions: "
+                        f"**{nominal_trace_audit['terminal_network_state_projection_mismatch_positions']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")

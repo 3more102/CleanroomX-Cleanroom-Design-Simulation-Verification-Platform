@@ -2791,6 +2791,46 @@ def _operating_point_search_resolution_summary(
         )
         terminal_network_state_replay_violation_details.append(detail)
 
+    terminal_network_state_projection_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_terminal_network_state_projections_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
+    terminal_network_state_projection_replay_violation_details = []
+    for corner_index, corner, evidence, audit in trace_cases:
+        mismatches = audit.get(
+            "terminal_network_state_projection_mismatches",
+            [],
+        )
+        if not mismatches:
+            continue
+        detail = _critical_case_summary(corner_index, corner)
+        terminal_replay = audit.get("terminal_network_state_replay")
+        detail.update(
+            {
+                "search_method": evidence["method"],
+                "supplied_segment_index": evidence["supplied_segment_index"],
+                "operating_iterations": evidence["operating_iterations"],
+                "terminal_kind": (
+                    terminal_replay.get("terminal_kind")
+                    if terminal_replay is not None
+                    else None
+                ),
+                "mismatch_count": len(mismatches),
+                "mismatch_positions": [
+                    mismatch["position"] for mismatch in mismatches
+                ],
+                "mismatches": mismatches,
+            }
+        )
+        terminal_network_state_projection_replay_violation_details.append(
+            detail
+        )
+
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -3481,6 +3521,28 @@ def _operating_point_search_resolution_summary(
         ),
         "terminal_network_state_replay_violation_details": (
             terminal_network_state_replay_violation_details
+        ),
+        "terminal_network_state_projection_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                terminal_network_state_projection_replay_violation_corner_indices
+            )
+        ),
+        "terminal_network_state_projection_replay_violation_corner_indices": (
+            terminal_network_state_projection_replay_violation_corner_indices
+        ),
+        "terminal_network_state_projection_replay_violation_count": sum(
+            int(
+                audit.get(
+                    "terminal_network_state_projection_mismatch_count",
+                    0,
+                )
+                or 0
+            )
+            for _corner_index, _corner, _evidence, audit in trace_cases
+        ),
+        "terminal_network_state_projection_replay_violation_details": (
+            terminal_network_state_projection_replay_violation_details
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)

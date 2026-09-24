@@ -130,13 +130,19 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['trace_matches_operating_iterations']}**",
                     "- Every trace step preserves strict sign change: "
                     f"**{trace_audit['all_steps_preserve_strict_sign_change_before_evaluation']}**",
-                    "- Every trace midpoint is the arithmetic bracket midpoint: "
+                    "- Every trace midpoint is arithmetic bracket midpoint: "
                     f"**{trace_audit['all_midpoints_are_arithmetic_bracket_midpoints']}**",
-                    "- Terminal tolerance decision is the final trace record: "
-                    f"**{trace_audit['termination_record_is_last']}**",
+                    "- Every trace width matches binary contraction: "
+                    f"**{trace_audit['all_width_fractions_match_binary_contraction']}**",
+                    "- Trace bracket-transition chain preserved: "
+                    f"**{trace_audit['transition_chain_preserved']}**",
+                    "- Trace terminal outcome consistent: "
+                    f"**{trace_audit['terminal_outcome_consistent']}**",
                     "- Trace endpoint replacements (low/high): "
                     f"**{trace_audit['replace_low_endpoint_count']}/"
                     f"{trace_audit['replace_high_endpoint_count']}**",
+                    "- Trace tolerance-accept records: "
+                    f"**{trace_audit['accept_pressure_tolerance_count']}**",
                 ]
             )
         lines.extend(["", search["scope_note"]])

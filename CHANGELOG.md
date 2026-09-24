@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.95 per-step bisection network-state projection replay — 2026-09-24
+
+- Retains the signed-zero-stable v3 canonical network-result projection alongside the existing SHA-256 for every low, midpoint, and high state recorded by bounded-bisection operating-point traces.
+- Independently re-solves the exact replayed bracket and midpoint airflows and compares every retained projection field-by-field without changing root selection, solver tolerances, or acceptance semantics.
+- Localizes per-step corruption with deterministic structured mismatch records carrying exact paths, mismatch kinds, recorded/recomputed presence and types, values, finite numeric absolute errors, iteration/position provenance, and field-local maximum-error witnesses.
+- Keeps legacy hash-only bisection traces replayable: SHA-256 evidence remains valid while missing v0.95 projection fields are reported as unavailable/incomplete projection evidence rather than fabricated corruption.
+- Propagates projection-replay evidence coverage, incomplete corners, consistency, exact violation details, mismatch counts, and field-local maximum numeric errors through nonlinear uncertainty summaries, standalone Markdown reports, and engineering dossiers.
+- Adds regressions for projection corruption with an unchanged SHA-256, legacy hash-only trace compatibility, pre-v0.95 report compatibility, solved bisection propagation, and iteration-limit propagation.
+- Preserves v0.94 selected/terminal structured projection replay, v0.93 supplied-point replay, v0.92 canonicalization, nonlinear solver equations and tolerances, iteration budgets, no-extrapolation behavior, and engineering acceptance boundaries.
+- Bumped package/runtime metadata to v0.95.0.
+
 ## v0.94 selected operating network-state projection replay — 2026-09-24
 
 - Retains the signed-zero-stable canonical selected operating network-result projection alongside its SHA-256 fingerprint and independently re-solves the exact accepted airflow for field-by-field replay.

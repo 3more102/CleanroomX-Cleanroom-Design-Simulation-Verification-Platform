@@ -25,11 +25,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
-| v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
+| v0.99 | structural application-registry integrity, auditable headless readiness metadata, and abandoned-worker execution exclusivity |
 
 ### v0.99 application registry integrity
 
-v0.99 strengthens the completed desktop release by validating the registry as a software contract rather than only checking importability. Duplicate analysis keys are rejected; every normal analysis must retain parser and runner bindings; `consistency` and `dossier` must remain explicit custom application adapters; every declared parser, runner, and reporter must resolve to a callable; and the validation returns counts plus adapter metadata. `cleanroomx-gui --check` exposes the same evidence so installation/readiness checks can verify the catalog they are about to operate.
+v0.99 strengthens the completed desktop release by validating the registry as a software contract rather than only checking importability. Duplicate analysis keys are rejected; every normal analysis must retain parser and runner bindings; `consistency` and `dossier` must remain explicit custom application adapters; every declared parser, runner, and reporter must resolve to a callable; and the validation returns counts plus adapter metadata. `cleanroomx-gui --check` exposes the same evidence so installation/readiness checks can verify the catalog they are about to operate. GUI **Abandon** also retains execution exclusivity until the abandoned worker exits, so a second backend analysis cannot overlap it.
 
 ### v0.98 desktop application
 

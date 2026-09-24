@@ -32,7 +32,6 @@ from .project import (
 )
 from .gui_design import (
     BG as DESIGN_BG,
-    TEXT as DESIGN_TEXT,
     draw_plan_2d,
     draw_preview_3d,
 )

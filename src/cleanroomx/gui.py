@@ -47,6 +47,14 @@ _UNIT_SUFFIXES = (
 )
 
 
+def _reject_json_constant(value: str):
+    raise ValueError(f"non-finite JSON constant is not allowed: {value}")
+
+
+def _strict_json_loads(text: str):
+    return json.loads(text, parse_constant=_reject_json_constant)
+
+
 def unit_hint(path: str) -> str:
     key = path.rsplit(".", 1)[-1].split("[", 1)[0].lower()
     for suffix, unit in _UNIT_SUFFIXES:
@@ -373,7 +381,7 @@ class CleanroomXApp:
         if analysis is None:
             raise ValueError("select or add an analysis first")
         try:
-            payload = json.loads(self.input_text.get("1.0", "end-1c"))
+            payload = _strict_json_loads(self.input_text.get("1.0", "end-1c"))
         except json.JSONDecodeError as exc:
             raise ValueError(
                 f"input JSON is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
@@ -405,7 +413,7 @@ class CleanroomXApp:
         if self._editor_analysis_id is not None:
             text = self.input_text.get("1.0", "end-1c")
             try:
-                payload = json.loads(text)
+                payload = _strict_json_loads(text)
             except json.JSONDecodeError as exc:
                 raise ValueError(
                     f"input JSON is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
@@ -464,6 +472,7 @@ class CleanroomXApp:
             self._load_analysis_into_editor(self.project.analysis_by_id(target))
         elif self.project.analyses:
             first = self.project.analyses[0].id
+            self.project.active_analysis_id = first
             self.analysis_tree.selection_set(first)
             self.analysis_tree.focus(first)
             self._load_analysis_into_editor(self.project.analyses[0])
@@ -523,7 +532,7 @@ class CleanroomXApp:
         if not text:
             return
         try:
-            payload = json.loads(text)
+            payload = _strict_json_loads(text)
         except json.JSONDecodeError as exc:
             if not silent:
                 messagebox.showerror(
@@ -719,7 +728,7 @@ class CleanroomXApp:
         if not path:
             return
         try:
-            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+            payload = _strict_json_loads(Path(path).read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("input file must contain a JSON object")
         except Exception as exc:

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.91 selected operating network-state projection replay diagnostics — 2026-09-24
+
+- Retains the canonical selected operating network-state projection alongside the existing selected-state SHA-256 fingerprint.
+- Independently re-solves the exact retained selected airflow and compares node, edge, pressure-power, and variable-friction closure projection fields with the fresh solved state.
+- Localizes selected projection corruption to deterministic JSON-style field paths such as `$.nodes[0].relative_pressure_pa`, including cases where the retained selected-state SHA-256 itself remains unchanged.
+- Propagates projection replay availability, consistency, mismatch counts, exact paths, violating uncertainty-corner indices, and report evidence while preserving the existing pressure and fingerprint replay diagnostics.
+- Preserves v0.90 terminal projection replay, v0.89 selected fingerprint replay, root selection, no-extrapolation behavior, solver tolerances, iteration budgets, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.91.0.
+
 ## v0.90 terminal network-state projection replay diagnostics — 2026-09-24
 
 - Retains canonical low/high terminal network-state projections alongside their SHA-256 fingerprints on solved final and post-decision iteration-limit brackets.

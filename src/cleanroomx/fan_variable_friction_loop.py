@@ -2029,7 +2029,7 @@ def _bisection_decision_trace_audit(
             "iteration": int(operating_iterations),
             "algorithm": "sha256",
             "canonicalization": (
-                "network-state-projection-json-sort-keys-compact-utf8-v1"
+                _NETWORK_STATE_CANONICALIZATION
             ),
             "low": terminal_network_position_checks["low"],
             "high": terminal_network_position_checks["high"],
@@ -3263,7 +3263,7 @@ def _selected_operating_state_replay_audit(
         "network_state_replay_available": True,
         "network_state_replay_algorithm": "sha256",
         "network_state_replay_canonicalization": (
-            "network-state-projection-json-sort-keys-compact-utf8-v1"
+            _NETWORK_STATE_CANONICALIZATION
         ),
         "recorded_network_state_sha256": recorded_network_state,
         "recomputed_network_state_sha256": replayed_network_state,

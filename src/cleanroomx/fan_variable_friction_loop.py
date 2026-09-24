@@ -1730,7 +1730,14 @@ def _bisection_decision_trace_audit(
                 f"{position}_network_state_sha256"
                 for position in ("low", "midpoint", "high")
             )
+            network_projection_fields = tuple(
+                f"{position}_network_state_projection"
+                for position in ("low", "midpoint", "high")
+            )
             if all(field in step for field in network_state_fields):
+                network_projection_replay_available = all(
+                    field in step for field in network_projection_fields
+                )
                 network_position_states = {
                     "low": low_state,
                     "midpoint": midpoint_state,
@@ -1746,6 +1753,27 @@ def _bisection_decision_trace_audit(
                     recomputed_sha256 = str(
                         recomputed_state["network_state_sha256"]
                     )
+                    projection_mismatches = []
+                    projection_mismatch_paths = []
+                    projection_matches = None
+                    if network_projection_replay_available:
+                        recorded_projection = step[
+                            f"{position}_network_state_projection"
+                        ]
+                        recomputed_projection = recomputed_state[
+                            "network_state_projection"
+                        ]
+                        projection_mismatches = (
+                            _network_state_projection_differences(
+                                recorded_projection,
+                                recomputed_projection,
+                            )
+                        )
+                        projection_mismatch_paths = [
+                            mismatch["path"]
+                            for mismatch in projection_mismatches
+                        ]
+                        projection_matches = not projection_mismatches
                     network_position_checks[position] = {
                         "recorded_network_state_sha256": recorded_sha256,
                         "recomputed_network_state_sha256": (
@@ -1754,6 +1782,20 @@ def _bisection_decision_trace_audit(
                         "network_state_matches_independent_replay": (
                             recorded_sha256 == recomputed_sha256
                         ),
+                        "network_state_projection_matches_independent_replay": (
+                            projection_matches
+                        ),
+                        "network_state_projection_mismatch_paths": (
+                            projection_mismatch_paths
+                        ),
+                        "network_state_projection_mismatches": (
+                            projection_mismatches
+                        ),
+                        "network_state_projection_maximum_numeric_errors": (
+                            _maximum_network_state_projection_numeric_errors(
+                                projection_mismatches
+                            )
+                        ),
                     }
                 network_state_replay_checks.append(
                     {
@@ -1761,6 +1803,9 @@ def _bisection_decision_trace_audit(
                         "algorithm": "sha256",
                         "canonicalization": (
                             _NETWORK_STATE_CANONICALIZATION
+                        ),
+                        "network_state_projection_replay_available": (
+                            network_projection_replay_available
                         ),
                         "low": network_position_checks["low"],
                         "midpoint": network_position_checks["midpoint"],
@@ -1771,6 +1816,16 @@ def _bisection_decision_trace_audit(
                             ]
                             for check in network_position_checks.values()
                         ),
+                        "all_network_state_projections_match_independent_replay": (
+                            all(
+                                check[
+                                    "network_state_projection_matches_independent_replay"
+                                ]
+                                for check in network_position_checks.values()
+                            )
+                            if network_projection_replay_available
+                            else None
+                        ),
                     }
                 )
 
@@ -1779,6 +1834,64 @@ def _bisection_decision_trace_audit(
                 replay_low_airflow = replay_midpoint_airflow
             elif decision == "replace_high_endpoint":
                 replay_high_airflow = replay_midpoint_airflow
+
+    network_state_projection_replay_violations = []
+    network_state_projection_mismatch_leaves = []
+    for replay_check in network_state_replay_checks:
+        if not replay_check.get(
+            "network_state_projection_replay_available",
+            False,
+        ):
+            continue
+        iteration = int(replay_check["iteration"])
+        for position in ("low", "midpoint", "high"):
+            position_check = replay_check[position]
+            if position_check.get(
+                "network_state_projection_matches_independent_replay"
+            ) is True:
+                continue
+            mismatches = position_check.get(
+                "network_state_projection_mismatches",
+                [],
+            )
+            witness = {
+                "iteration": iteration,
+                "position": position,
+                "mismatch_paths": position_check.get(
+                    "network_state_projection_mismatch_paths",
+                    [],
+                ),
+                "mismatches": mismatches,
+                "maximum_numeric_errors": position_check.get(
+                    "network_state_projection_maximum_numeric_errors",
+                    [],
+                ),
+            }
+            network_state_projection_replay_violations.append(witness)
+            for mismatch in mismatches:
+                network_state_projection_mismatch_leaves.append(
+                    {
+                        "iteration": iteration,
+                        "position": position,
+                        **mismatch,
+                    }
+                )
+    network_state_projection_replay_evidence_complete = (
+        residual_replay_available
+        and len(network_state_replay_checks) == len(trace)
+        and all(
+            check.get(
+                "network_state_projection_replay_available",
+                False,
+            )
+            for check in network_state_replay_checks
+        )
+    )
+    network_state_projection_maximum_numeric_errors = (
+        _maximum_network_state_projection_numeric_errors(
+            network_state_projection_mismatch_leaves
+        )
+    )
 
     pressure_component_replay_violations = []
     pressure_component_replay_candidates = []
@@ -2925,6 +3038,78 @@ def _bisection_decision_trace_audit(
             if not check["all_network_states_match_independent_replay"]
         ],
         "network_state_replay_checks": network_state_replay_checks,
+        "network_state_projection_replay_available": (
+            network_state_projection_replay_evidence_complete
+        ),
+        "network_state_projection_replay_evidence_complete": (
+            network_state_projection_replay_evidence_complete
+        ),
+        "all_low_network_state_projections_match_independent_replay": (
+            all(
+                check["low"][
+                    "network_state_projection_matches_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if network_state_projection_replay_evidence_complete
+            else None
+        ),
+        "all_midpoint_network_state_projections_match_independent_replay": (
+            all(
+                check["midpoint"][
+                    "network_state_projection_matches_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if network_state_projection_replay_evidence_complete
+            else None
+        ),
+        "all_high_network_state_projections_match_independent_replay": (
+            all(
+                check["high"][
+                    "network_state_projection_matches_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if network_state_projection_replay_evidence_complete
+            else None
+        ),
+        "all_trace_network_state_projections_match_independent_replay": (
+            all(
+                check[
+                    "all_network_state_projections_match_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if network_state_projection_replay_evidence_complete
+            else None
+        ),
+        "network_state_projection_replay_violation_count": len(
+            network_state_projection_replay_violations
+        ),
+        "network_state_projection_mismatch_count": len(
+            network_state_projection_mismatch_leaves
+        ),
+        "network_state_projection_replay_violation_iterations": sorted(
+            {
+                witness["iteration"]
+                for witness in network_state_projection_replay_violations
+            }
+        ),
+        "network_state_projection_replay_violation_positions": [
+            position
+            for position in ("low", "midpoint", "high")
+            if any(
+                witness["position"] == position
+                for witness in network_state_projection_replay_violations
+            )
+        ],
+        "network_state_projection_replay_violations": (
+            network_state_projection_replay_violations
+        ),
+        "network_state_projection_maximum_numeric_errors": (
+            network_state_projection_maximum_numeric_errors
+        ),
         "terminal_pressure_component_replay_available": (
             terminal_pressure_component_replay is not None
         ),
@@ -3655,6 +3840,9 @@ def solve_fan_variable_friction_loop(
                             "low_network_state_sha256": (
                                 low_network_state_sha256
                             ),
+                            "low_network_state_projection": (
+                                low_network_state_projection
+                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
                                 9,
@@ -3673,6 +3861,9 @@ def solve_fan_variable_friction_loop(
                             ),
                             "high_network_state_sha256": (
                                 high_network_state_sha256
+                            ),
+                            "high_network_state_projection": (
+                                high_network_state_projection
                             ),
                             "midpoint_fan_pressure_pa": round(
                                 fan_pressure,
@@ -3696,6 +3887,9 @@ def solve_fan_variable_friction_loop(
                             ),
                             "midpoint_network_state_sha256": (
                                 midpoint_network_state_sha256
+                            ),
+                            "midpoint_network_state_projection": (
+                                midpoint_network_state_projection
                             ),
                             "decision": decision,
                             "strict_sign_change_before_evaluation": (

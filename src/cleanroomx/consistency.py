@@ -116,6 +116,10 @@ def analyze_hvac_fan_airflow_consistency(
     fan_parallel_networks: list[dict] | None = None,
     fan_loop_networks: list[dict] | None = None,
     fan_speed_studies: list[dict] | None = None,
+    fan_loop_speed_studies: list[dict] | None = None,
+    fan_variable_friction_loops: list[dict] | None = None,
+    fan_variable_friction_speed_studies: list[dict] | None = None,
+    fan_variable_friction_uncertainty_analyses: list[dict] | None = None,
     airflow_abs_tolerance_m3_h: float = 0.0,
 ) -> dict:
     """Compare solved fan-study airflow against the HVAC governing airflow."""
@@ -177,6 +181,12 @@ def analyze_hvac_fan_airflow_consistency(
         add_check("fan_parallel_network", item, "fan_operating_point")
     for item in fan_loop_networks or []:
         add_check("fan_loop_network", item, "fan_operating_point")
+    for item in fan_variable_friction_loops or []:
+        add_check(
+            "fan_variable_friction_loop",
+            item,
+            "fan_operating_point",
+        )
     for study in fan_speed_studies or []:
         study_name = str(study.get("study", "")).strip() or "unnamed"
         for case in study.get("speed_cases", []):
@@ -189,6 +199,48 @@ def analyze_hvac_fan_airflow_consistency(
                     "operating_point": case.get("operating_point"),
                 },
                 "operating_point",
+            )
+    for study in fan_loop_speed_studies or []:
+        study_name = str(study.get("study", "")).strip() or "unnamed"
+        for case in study.get("speed_cases", []):
+            ratio = case.get("speed_ratio")
+            add_check(
+                "fan_loop_speed_case",
+                {
+                    "study": f"{study_name} @ {ratio}x",
+                    "status": case.get("status"),
+                    "fan_operating_point": case.get("fan_operating_point"),
+                },
+                "fan_operating_point",
+            )
+
+    for study in fan_variable_friction_speed_studies or []:
+        study_name = str(study.get("study", "")).strip() or "unnamed"
+        for case in study.get("speed_cases", []):
+            ratio = case.get("speed_ratio")
+            add_check(
+                "fan_variable_friction_speed_case",
+                {
+                    "study": f"{study_name} @ {ratio}x",
+                    "status": case.get("status"),
+                    "fan_operating_point": case.get("fan_operating_point"),
+                },
+                "fan_operating_point",
+            )
+
+    for analysis in fan_variable_friction_uncertainty_analyses or []:
+        analysis_name = str(analysis.get("analysis", "")).strip() or "unnamed"
+        for corner_index, corner in enumerate(
+            analysis.get("corners", []), start=1
+        ):
+            add_check(
+                "fan_variable_friction_uncertainty_corner",
+                {
+                    "study": f"{analysis_name} @ corner {corner_index}",
+                    "status": corner.get("status"),
+                    "fan_operating_point": corner.get("operating_point"),
+                },
+                "fan_operating_point",
             )
 
     if not checks:
@@ -220,8 +272,9 @@ def analyze_hvac_fan_airflow_consistency(
         "study_airflow_checks": checks,
         "scope_note": (
             "This is a cross-study airflow consistency check. The absolute airflow "
-            "tolerance is supplied by the user. Unsolved fan studies are preserved as "
-            "not comparable rather than failed. This check does not establish airflow "
+            "tolerance is supplied by the user. Unsolved or numerically non-converged "
+            "fan studies are preserved as not comparable rather than converted into "
+            "an airflow mismatch. This check does not establish airflow "
             "adequacy, fan selection, commissioning acceptance, cleanroom certification, "
             "or a standards-derived tolerance."
         ),

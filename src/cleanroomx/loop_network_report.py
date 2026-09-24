@@ -13,18 +13,25 @@ def markdown_looped_network_report(result: dict) -> str:
         f"- Mass-balance tolerance: **{result['mass_balance_tolerance_m3_h']} m³/h**",
         f"- Maximum node continuity residual: **{result['max_abs_mass_balance_residual_m3_h']} m³/h**",
         f"- Maximum edge pressure-law residual: **{result['max_abs_pressure_law_residual_pa']} Pa**",
+        "- Net node-injection pressure power: "
+        f"**{result['pressure_power']['net_node_injection_power_w']} W**",
+        "- Total edge pressure-power dissipation: "
+        f"**{result['pressure_power']['total_edge_dissipation_w']} W**",
+        "- Pressure-power balance residual: "
+        f"**{result['pressure_power']['balance_residual_w']} W**",
         "",
         "## Nodes",
         "",
-        "| Node | Relative pressure (Pa) | Specified injection (m³/h) | Net edge outflow (m³/h) | Continuity residual (m³/h) |",
-        "|---|---:|---:|---:|---:|",
+        "| Node | Relative pressure (Pa) | Specified injection (m³/h) | Net edge outflow (m³/h) | Continuity residual (m³/h) | Specified pressure power (W) |",
+        "|---|---:|---:|---:|---:|---:|",
     ]
     for node in result["nodes"]:
         lines.append(
             f"| {node['name']} | {node['relative_pressure_pa']} | "
             f"{node['specified_injection_m3_h']} | "
             f"{node['net_edge_outflow_m3_h']} | "
-            f"{node['mass_balance_residual_m3_h']} |"
+            f"{node['mass_balance_residual_m3_h']} | "
+            f"{node['specified_pressure_power_w']} |"
         )
 
     lines.extend(
@@ -32,8 +39,8 @@ def markdown_looped_network_report(result: dict) -> str:
             "",
             "## Edges",
             "",
-            "| Edge | Declared start | Declared end | Solved airflow (m³/h) | Actual direction | Pressure difference (Pa) | R [Pa/(m³/s)²] | R basis | Pressure-law residual (Pa) |",
-            "|---|---|---|---:|---|---:|---:|---|---:|",
+            "| Edge | Declared start | Declared end | Solved airflow (m³/h) | Actual direction | Pressure difference (Pa) | R [Pa/(m³/s)²] | R basis | Pressure-law residual (Pa) | Dissipated pressure power (W) |",
+            "|---|---|---|---:|---|---:|---:|---|---:|---:|",
         ]
     )
     for edge in result["edges"]:
@@ -43,7 +50,8 @@ def markdown_looped_network_report(result: dict) -> str:
             f"{edge['pressure_difference_pa']} | "
             f"{edge['resistance_pa_per_m3_s_squared']} | "
             f"{edge.get('resistance_basis', 'explicit')} | "
-            f"{edge['pressure_law_residual_pa']} |"
+            f"{edge['pressure_law_residual_pa']} | "
+            f"{edge['dissipated_pressure_power_w']} |"
         )
 
     derived_edges = [

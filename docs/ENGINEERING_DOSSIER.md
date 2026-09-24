@@ -1,6 +1,20 @@
 # Engineering dossier workflow
 
+## v0.95 solver-result integrity linkage
+
+For each nonlinear fan/variable-friction uncertainty analysis, the dossier now preserves the nominal/corner solver-result integrity linkage in addition to the existing uncertainty-result digest and network-state replay evidence. Dossier summaries report complete integrity coverage, inconsistent-corner counts, and coverage-gap counts; detailed JSON retains the exact violating and missing-evidence corner indices.
+
+Missing solver-result integrity evidence is therefore distinguishable from a recomputed digest mismatch. This remains deterministic software-content provenance and does not create a new cleanroom, equipment, commissioning, certification, or regulatory acceptance criterion.
+
 The CleanroomX engineering dossier combines existing analysis outputs into one auditable Markdown or JSON package. It is a reporting and traceability layer; it does not create new acceptance limits and it does not convert CleanroomX screening into certification.
+
+## v0.94 canonical solver provenance hardening
+
+For nonlinear fan/variable-friction analyses, the dossier keeps v0.94 canonical solver-result identity separate from source-file fingerprints and the v0.57 top-level nonlinear uncertainty result-integrity digest. The richer canonical replay covers solver/network identity, Newton iteration metadata, configured mass-balance tolerance, final node/edge/pressure-power evidence, variable-friction convergence/configuration, chronological outer-iteration history, and named closure evidence.
+
+Field-level corruption in those newly covered solver-provenance fields remains visible through the existing selected, terminal, full-trace, and supplied-point replay summaries with exact corner/iteration/position/point/path provenance as applicable. Markdown stays concise; complete mismatch records remain in machine-readable JSON.
+
+These digests are deterministic content identities only. They do not prove source authenticity or physical correctness and are not cleanroom/ISO certification, CFD validation, fan acceptance, manufacturer approval, commissioning/TAB evidence, global-root uniqueness, physical stability, stall/surge analysis, physical uncertainty quantification, or statistical confidence analysis.
 
 ## Manifest
 
@@ -18,12 +32,27 @@ A dossier manifest can reference:
 - zero or more reference-flow fan/duct-network operating-point studies;
 - zero or more fan-driven passive parallel-network operating-point studies;
 - zero or more fan-driven fixed-resistance loop-network operating-point studies;
+- zero or more bounded fan/loop-network uncertainty analyses;
 - zero or more explicit loop damper-resistance scenario studies;
 - zero or more fan affinity-law speed studies;
+- zero or more fan-speed/fixed-resistance-loop studies;
+- zero or more fan/variable-friction-loop operating-point studies;
+- zero or more fan-speed/variable-friction-loop studies;
+- zero or more bounded fan/variable-friction-loop uncertainty analyses;
 - an optional v0.17 verification/HVAC duplicated-input consistency check;
 - an optional v0.22 HVAC/fan operating-airflow consistency check with project-supplied absolute tolerance.
 
 Paths are resolved relative to the manifest file. Existing manifests that omit optional analysis lists or consistency checks remain valid.
+
+For complete fan/variable-friction-loop uncertainty analyses, v0.49 dossier Markdown includes both the operating-airflow evaluated-corner envelope and the fan air-power evaluated-corner envelope. Indeterminate analyses show no complete air-power envelope.
+
+For v0.91 nonlinear fan/variable-friction-loop uncertainty analyses, the dossier preserves selected operating-state SHA-256 identity/replay, terminal projection replay, selected network-state projection replay applicability and coverage, exact violating corner indices, deterministic mismatch paths, recorded/recomputed/type evidence, numerical mismatch errors when meaningful, and tied per-field worst-error witnesses. A selected-projection corruption remains visible through dossier JSON and Markdown instead of being collapsed into the ordinary engineering result. This evidence is numerical/provenance verification only; it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness, stall/surge analysis, or physical uncertainty quantification.
+
+For v0.92 the dossier also preserves the complete per-bisection low/midpoint/high network-state projection replay layer. It reports trace-projection applicability, any-evidence and complete-coverage counts, corruption and coverage-gap corners, exact corner/iteration/position/path mismatch records, retained/recomputed/type evidence, total mismatch counts, and tied per-field worst numerical witnesses while keeping result-integrity SHA-256, v0.87 full-trace fingerprint replay, terminal replay, and v0.91 selected projection replay distinct. A trace projection corruption or missing applicable check remains visible through dossier JSON and Markdown. This is deterministic numerical/provenance evidence only, not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
+
+For v0.93 the dossier additionally preserves supplied fan-point network-state replay across all nonlinear uncertainty corners. It keeps sampled-point SHA-256 violations, field-level projection violations, incomplete-coverage corners, exact corner/point/path mismatch records, coverage-gap reasons, detailed retained/recomputed/type evidence, mismatch totals, and tied per-field worst numerical witnesses distinct from selected, terminal, and bisection replay. Thus corruption in a sampled candidate anchor or a missing pre-failure point remains visible through dossier JSON and Markdown without changing the underlying engineering outcome.
+
+For v0.94 all of those replay layers use the shared signed-zero-stable, named-collection-order-invariant v3 canonical network-result representation. Dossier-preserved mismatch evidence can therefore identify deterministic solver metadata/configuration/history corruption as well as solved node/edge/pressure-power/closure corruption. Chronological solver history remains order-sensitive, and the stronger canonical identity remains content-integrity evidence rather than proof of source authenticity or engineering certification.
 
 Example:
 
@@ -44,8 +73,13 @@ Example:
   "fan_duct_network_studies": ["fan_duct_network_demo.json"],
   "fan_parallel_network_studies": ["fan_parallel_network_demo.json"],
   "fan_loop_network_studies": ["fan_loop_network_demo.json"],
+  "fan_loop_uncertainty_analyses": ["fan_loop_uncertainty_demo.json"],
   "damper_studies": ["damper_study_demo.json"],
   "fan_speed_studies": ["fan_speed_dossier_demo.json"],
+  "fan_loop_speed_studies": ["fan_loop_speed_demo.json"],
+  "fan_variable_friction_loop_studies": ["fan_variable_friction_loop_demo.json"],
+  "fan_variable_friction_speed_studies": ["fan_variable_friction_speed_demo.json"],
+  "fan_variable_friction_uncertainty_analyses": ["fan_variable_friction_uncertainty_demo.json"],
   "consistency_checks": {
     "verification_hvac_airflow": {
       "room_airflow_abs_tolerance_m3_h": 0.0,
@@ -68,7 +102,7 @@ A `fail` contributes to dossier attention tracking. `not_comparable` is preserve
 
 Both `verification_project` and `hvac_project` are required when this consistency block is configured. The already-hashed source files are reused; no duplicate input files are introduced.
 
-The optional `hvac_fan_operating_airflow` check can compare HVAC governing airflow against solved standalone fan/system, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points. Unsolved fan/loop studies are preserved as not comparable rather than converted into failures.
+The optional `hvac_fan_operating_airflow` check can compare HVAC governing airflow against solved standalone fan/system, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, fan/variable-friction-loop, standalone fan-speed, fixed-resistance fan-speed/loop, variable-friction fan-speed/loop, and every evaluated fan/variable-friction uncertainty corner. Each uncertainty corner remains an explicit comparison record; unresolved or numerically non-converged corners are preserved as `not_comparable` rather than fabricated into airflow values.
 
 See `docs/CROSS_MODULE_CONSISTENCY.md` for the standalone checker and its engineering boundary.
 
@@ -80,11 +114,11 @@ Each referenced source file is hashed byte-for-byte with SHA-256. The report rec
 
 The dossier preserves component-specific states instead of turning every result into a certification verdict:
 
-- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a bounded fan/system uncertainty analysis has an unresolved corner, a configured cross-module consistency check failed, or any standalone/integrated fan or fan-speed case has no intersection inside the supplied fan-curve range;
+- `attention_required`: one or more configured checks failed, a recovery test is incomplete or indeterminate, an uncertainty result is indeterminate, a bounded fan/system uncertainty analysis has an unresolved corner, a configured cross-module consistency check failed, any bounded fan case has no intersection inside the supplied fan-curve range, or a nonlinear fan/variable-friction solve is `non_converged`;
 - `complete_with_unchecked`: no attention item is present, but one or more configured acceptance checks remain `not_checked`, a configured consistency check is `not_comparable`, an HVAC/fan airflow comparison has unresolved fan cases, or a standalone psychrometric/fan-system uncertainty analysis has incomplete provenance;
 - `no_adverse_findings`: no attention or unchecked acceptance states are present.
 
-A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. Damper scenarios remain explicit resistance sensitivity studies and do not infer damper position or balancing acceptance. A complete fan/system uncertainty airflow/pressure envelope is reported only when every bounded system corner intersects the supplied fan curve; otherwise the analysis remains indeterminate. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric or fan-system provenance is tracked as unresolved traceability rather than a numerical failure. HVAC calculations remain preliminary screening.
+A recovery result that is indeterminate because its supplied concentration-uncertainty interval overlaps the target is preserved as an attention item rather than being promoted to pass or collapsed into fail. Solved standalone, reference-flow fan/duct, passive parallel-network, fixed-resistance fan/loop-network, and fan-speed operating points are reported as bounded engineering screening, not equipment acceptance. Damper scenarios remain explicit resistance sensitivity studies and do not infer damper position or balancing acceptance. A complete fan/system uncertainty airflow/pressure envelope is reported only when every bounded system corner intersects the supplied fan curve; otherwise the analysis remains indeterminate. A completed psychrometric-state envelope is likewise screening rather than a conformity decision. Missing psychrometric, fan-system, or fan/loop uncertainty provenance is tracked as unresolved traceability rather than a numerical failure. Fan/loop uncertainty becomes an attention item when one or more configured corners are unresolved; fan-speed/loop studies become attention items when any transformed curve has no bounded intersection. The nonlinear v0.33/v0.34 fan/variable-friction workflows additionally make every `non_converged` result an attention item, preserve termination/residual evidence, and never promote numerical failure to PASS. The v0.37 nonlinear uncertainty workflow is dossier-integrated in v0.38 and now retains the v0.45 fan-speed, independent fan-point pressure/airflow-coordinate or explicit whole-curve scenario evidence plus physical/geometry bounds. Dossier executive summaries count supplied whole-curve scenarios, and Markdown analysis rows surface their names so correlated fan-performance cases remain visible to reviewers. An `indeterminate` uncertainty analysis is an attention item, while incomplete fan-curve/fan-speed/fan-point/fan-scenario/fixed-pressure/local-loss/roughness/viscosity/density/length/dimension provenance is tracked separately as unresolved traceability. Complete corner envelopes are preserved only when the nominal case and every configured corner solve. The v0.64 dossier row additionally surfaces the maximum configured-pressure-tolerance and solved-pressure-residual airflow equivalents derived from local crossing gradients; these remain numerical solver diagnostics rather than physical uncertainty or equipment acceptance margins. v0.65 additionally surfaces the maximum final bisection half-width and solved-corner search-evidence coverage, while preserving direct supplied-point contacts as valid non-bisection search provenance; search width remains a numerical root-search diagnostic rather than a physical uncertainty or acceptance margin. HVAC calculations remain preliminary screening.
 
 ## CLI
 

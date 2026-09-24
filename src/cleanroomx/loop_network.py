@@ -325,6 +325,9 @@ def solve_looped_network(
                     injection_m3_h - residual_m3_h, 9
                 ),
                 "mass_balance_residual_m3_h": round(residual_m3_h, 12),
+                "specified_pressure_power_w": round(
+                    pressures[node] * injections_m3_s[node], 12
+                ),
             }
         )
 
@@ -372,8 +375,25 @@ def solve_looped_network(
                 "pressure_law_residual_pa": round(
                     pressure_error_pa, 12
                 ),
+                "dissipated_pressure_power_w": round(
+                    airflow_m3_s * actual_pressure_difference_pa, 12
+                ),
             }
         )
+
+    total_edge_dissipation_w = sum(
+        airflow_m3_s
+        * (
+            pressures[edge.start_node] - pressures[edge.end_node]
+        )
+        for edge, airflow_m3_s in zip(network.edges, edge_flows)
+    )
+    net_node_injection_power_w = sum(
+        pressures[node] * injections_m3_s[node] for node in nodes
+    )
+    pressure_power_balance_residual_w = (
+        net_node_injection_power_w - total_edge_dissipation_w
+    )
 
     max_mass_balance_error_m3_h = max(
         abs(residuals[node] * 3600.0) for node in nodes
@@ -392,6 +412,17 @@ def solve_looped_network(
         "max_abs_pressure_law_residual_pa": round(
             max(pressure_law_errors, default=0.0), 12
         ),
+        "pressure_power": {
+            "net_node_injection_power_w": round(
+                net_node_injection_power_w, 12
+            ),
+            "total_edge_dissipation_w": round(
+                total_edge_dissipation_w, 12
+            ),
+            "balance_residual_w": round(
+                pressure_power_balance_residual_w, 12
+            ),
+        },
         "scope_note": (
             "This solver handles connected steady-state networks with arbitrary loops "
             "when every edge uses a fixed quadratic pressure-loss law "

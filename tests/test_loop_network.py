@@ -417,3 +417,37 @@ def test_direct_explicit_resistance_remains_backward_compatible() -> None:
     result = solve_looped_network(network)
     assert result["edges"][0]["resistance_basis"] == "explicit"
     assert result["edges"][0]["resistance_evidence"] is None
+
+
+def test_pressure_power_balance_matches_analytical_symmetric_loop() -> None:
+    result = solve_looped_network(_symmetric_loop())
+    power = result["pressure_power"]
+
+    assert power["net_node_injection_power_w"] == pytest.approx(0.5, abs=1e-9)
+    assert power["total_edge_dissipation_w"] == pytest.approx(0.5, abs=1e-9)
+    assert abs(power["balance_residual_w"]) <= 1e-9
+    assert sum(
+        edge["dissipated_pressure_power_w"] for edge in result["edges"]
+    ) == pytest.approx(power["total_edge_dissipation_w"], abs=1e-9)
+    assert all(
+        edge["dissipated_pressure_power_w"] >= 0.0
+        for edge in result["edges"]
+    )
+
+
+def test_reverse_declared_edge_still_dissipates_positive_pressure_power() -> None:
+    network = LoopedFlowNetwork(
+        name="Reverse power direction",
+        node_injections_m3_h={"Source": 3600.0, "Sink": -3600.0},
+        edges=(
+            QuadraticFlowEdge("Reverse", "Sink", "Source", 2.0),
+        ),
+        reference_node="Source",
+    )
+    result = solve_looped_network(network)
+    edge = result["edges"][0]
+
+    assert edge["airflow_m3_h"] < 0.0
+    assert edge["pressure_difference_pa"] < 0.0
+    assert edge["dissipated_pressure_power_w"] == pytest.approx(2.0)
+    assert abs(result["pressure_power"]["balance_residual_w"]) <= 1e-9

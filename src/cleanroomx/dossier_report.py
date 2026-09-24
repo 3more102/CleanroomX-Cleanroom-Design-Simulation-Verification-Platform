@@ -46,11 +46,51 @@ def markdown_dossier_report(result: dict) -> str:
                 f"missing_provenance={component['missing_provenance_analyses']}, "
                 f"indeterminate={component['counts'].get('indeterminate', 0)}"
             )
+        elif name == "fan_loop_uncertainty" and component["status"] != "not_included":
+            detail = (
+                f"analyses={component['analysis_count']}, "
+                f"missing_provenance={component['missing_provenance_analyses']}, "
+                f"indeterminate={component['counts'].get('indeterminate', 0)}"
+            )
         elif name == "fan_speed_studies" and component["status"] != "not_included":
             detail = (
                 f"studies={component['study_count']}, "
                 f"speed_cases={component['speed_case_count']}, "
                 f"{_fmt_counts(component.get('counts', {}))}"
+            )
+        elif name == "fan_loop_speed_studies" and component["status"] != "not_included":
+            detail = (
+                f"studies={component['study_count']}, "
+                f"speed_cases={component['speed_case_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
+        elif (
+            name == "fan_variable_friction_loops"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"studies={component['study_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
+        elif (
+            name == "fan_variable_friction_speed_studies"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"studies={component['study_count']}, "
+                f"speed_cases={component['speed_case_count']}, "
+                f"{_fmt_counts(component.get('counts', {}))}"
+            )
+        elif (
+            name == "fan_variable_friction_uncertainty"
+            and component["status"] != "not_included"
+        ):
+            detail = (
+                f"analyses={component['analysis_count']}, "
+                f"corners={component['corner_count']}, "
+                f"fan_curve_scenarios={component.get('fan_curve_scenario_count', 0)}, "
+                f"missing_provenance={component['missing_provenance_analyses']}, "
+                f"indeterminate={component['counts'].get('indeterminate', 0)}"
             )
         elif name == "cross_module_consistency" and component["status"] != "not_included":
             detail = (
@@ -407,6 +447,1050 @@ def markdown_dossier_report(result: dict) -> str:
             airflow = "—" if point is None else point["airflow_m3_h"]
             pressure = "—" if check is None else check["total_system_pressure_pa"]
             lines.append(f"| {item['study']} | {item['status']} | {item['equivalent_loop_resistance_pa_per_m3_s_squared']} | {airflow} | {pressure} |")
+
+    if result.get("fan_variable_friction_loop_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan / variable-friction loop studies",
+                "",
+                "| Study | Status | Operating airflow m³/h | System pressure Pa | "
+                "Outer iterations | Resistance closure | Continuity residual m³/h | "
+                "Edge-law residual Pa | Fan-system residual Pa | Fluid air power kW | "
+                "Electrical input kW | Edge dissipation W | Termination |",
+                "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for item in result["fan_variable_friction_loop_studies"]:
+            point = item.get("fan_operating_point")
+            check = item.get("system_pressure_check")
+            diagnostics = item.get("solver_diagnostics", {})
+            power = item.get("power_evidence")
+            airflow = "—" if point is None else point["airflow_m3_h"]
+            pressure = (
+                "—" if check is None else check["total_system_pressure_pa"]
+            )
+            residual = (
+                "—" if check is None else check["fan_minus_system_pressure_pa"]
+            )
+            fluid_power = (
+                "—" if power is None else power["fluid_air_power_kw"]
+            )
+            electrical_power = (
+                "—"
+                if power is None or power["electrical_input_kw"] is None
+                else power["electrical_input_kw"]
+            )
+            edge_dissipation = (
+                "—"
+                if power is None
+                else power["system_components"][
+                    "loop_network_edge_dissipation_w"
+                ]
+            )
+            lines.append(
+                f"| {item['study']} | {item['status']} | {airflow} | "
+                f"{pressure} | {diagnostics.get('network_outer_iterations', '—')} | "
+                f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
+                f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
+                f"{diagnostics.get('max_abs_pressure_law_residual_pa', '—')} | "
+                f"{residual} | {fluid_power} | {electrical_power} | "
+                f"{edge_dissipation} | "
+                f"{diagnostics.get('termination_reason', '—')} |"
+            )
+
+    if result.get("fan_loop_uncertainty_analyses"):
+        lines.extend(
+            [
+                "",
+                "## Fan/loop-network uncertainty analyses",
+                "",
+                "| Analysis | Status | Corners | Solved | Unresolved | Operating airflow envelope m³/h | Provenance complete |",
+                "|---|---|---:|---:|---:|---|---|",
+            ]
+        )
+        for item in result["fan_loop_uncertainty_analyses"]:
+            envelope = item.get("operating_point_envelope")
+            airflow_envelope = (
+                "—"
+                if envelope is None
+                else (
+                    f"{envelope['airflow_m3_h']['lower']}–"
+                    f"{envelope['airflow_m3_h']['upper']}"
+                )
+            )
+            lines.append(
+                f"| {item['analysis']} | {item['status']} | {item['corner_count']} | "
+                f"{item['solved_corner_count']} | {item['unresolved_corner_count']} | "
+                f"{airflow_envelope} | {item['traceability']['complete']} |"
+            )
+
+    if result.get("fan_variable_friction_uncertainty_analyses"):
+        lines.extend(
+            [
+                "",
+                "## Fan / variable-friction loop uncertainty analyses",
+                "",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant / trace audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Min alternative candidate gap / min supplied spacing | Min alternative candidate index gap | Residual topology | Provenance complete |",
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+            ]
+        )
+        for item in result[
+            "fan_variable_friction_uncertainty_analyses"
+        ]:
+            envelope = item.get("operating_point_envelope")
+            airflow_envelope = (
+                "—"
+                if envelope is None
+                else (
+                    f"{envelope['airflow_m3_h']['lower']}–"
+                    f"{envelope['airflow_m3_h']['upper']}"
+                )
+            )
+            air_power = (
+                "—"
+                if envelope is None or envelope.get("air_power_kw") is None
+                else (
+                    f"{envelope['air_power_kw']['lower']}–"
+                    f"{envelope['air_power_kw']['upper']}"
+                )
+            )
+            excursions = item.get("operating_point_excursions_from_nominal")
+            airflow_excursion = "—"
+            if excursions is not None:
+                airflow_evidence = excursions.get("airflow_m3_h")
+                if airflow_evidence is not None:
+                    lower_percent = airflow_evidence.get("lower_percent")
+                    upper_percent = airflow_evidence.get("upper_percent")
+                    if lower_percent is not None and upper_percent is not None:
+                        airflow_excursion = (
+                            f"{lower_percent}–{upper_percent}"
+                        )
+            power_ranges = item.get("power_evidence_corner_ranges")
+            power_availability = item.get("power_evidence_availability")
+            electrical_input = "—"
+            specific_fan_power = "—"
+            electrical_coverage = "—"
+            sfp_coverage = "—"
+            if power_availability is not None:
+                electrical_evidence = power_availability.get(
+                    "electrical_input_kw"
+                )
+                if electrical_evidence is not None:
+                    electrical_coverage = (
+                        f"{electrical_evidence['status']} "
+                        f"({electrical_evidence['available_corner_count']}/"
+                        f"{electrical_evidence['total_corner_count']})"
+                    )
+                sfp_evidence = power_availability.get(
+                    "specific_fan_power_w_per_m3_s"
+                )
+                if sfp_evidence is not None:
+                    sfp_coverage = (
+                        f"{sfp_evidence['status']} "
+                        f"({sfp_evidence['available_corner_count']}/"
+                        f"{sfp_evidence['total_corner_count']})"
+                    )
+            if power_ranges is not None:
+                electrical_range = power_ranges.get("electrical_input_kw")
+                if electrical_range is not None:
+                    electrical_input = (
+                        f"{electrical_range['lower']}–"
+                        f"{electrical_range['upper']}"
+                    )
+                sfp_range = power_ranges.get(
+                    "specific_fan_power_w_per_m3_s"
+                )
+                if sfp_range is not None:
+                    specific_fan_power = (
+                        f"{sfp_range['lower']}–{sfp_range['upper']}"
+                    )
+            no_intersection_summary = item.get(
+                "fan_curve_no_intersection_summary", {}
+            )
+            no_intersection_cases = no_intersection_summary.get(
+                "no_intersection_corner_count", 0
+            )
+            scenario_names = ", ".join(
+                scenario["name"]
+                for scenario in item.get("fan_curve_scenarios", [])
+            ) or "—"
+            solver_quality = item.get("solver_quality_summary", {})
+            solver_tolerance_audit = (
+                solver_quality
+                .get("configured_tolerance_assessment", {})
+                .get("status", "—")
+            )
+            iteration_budget_audit = (
+                solver_quality
+                .get("configured_iteration_assessment", {})
+                .get("status", "—")
+            )
+            boundary_summary = item.get(
+                "fan_curve_boundary_clearance_summary"
+            )
+            fan_curve_headroom = "—"
+            boundary_coverage = "—"
+            if boundary_summary is not None:
+                boundary_coverage = (
+                    f"{boundary_summary['solved_corner_count']}/"
+                    f"{boundary_summary['corner_count']}"
+                )
+                boundary_evidence = boundary_summary.get(
+                    "minimum_nearest_boundary_headroom_m3_h"
+                )
+                if boundary_evidence is not None:
+                    fan_curve_headroom = boundary_evidence["value"]
+            bracket_summary = item.get(
+                "fan_curve_intersection_bracket_summary"
+            )
+            bracket_gap = "—"
+            bracket_coverage = "—"
+            if bracket_summary is not None:
+                bracket_coverage = (
+                    f"{bracket_summary['bracket_evidence_corner_count']}/"
+                    f"{bracket_summary['corner_count']}"
+                )
+                bracket_evidence = bracket_summary.get(
+                    "minimum_nearest_endpoint_absolute_pressure_gap_pa"
+                )
+                if bracket_evidence is not None:
+                    bracket_gap = bracket_evidence["value"]
+            conditioning_summary = item.get(
+                "fan_curve_crossing_conditioning_summary"
+            )
+            crossing_gradient = "—"
+            crossing_coverage = "—"
+            if conditioning_summary is not None:
+                crossing_coverage = (
+                    f"{conditioning_summary['conditioning_evidence_corner_count']}/"
+                    f"{conditioning_summary['corner_count']}"
+                )
+                crossing_evidence = conditioning_summary.get(
+                    "minimum_absolute_fan_minus_system_slope_pa_per_m3_h"
+                )
+                if crossing_evidence is not None:
+                    crossing_gradient = crossing_evidence["value"]
+            pressure_airflow_summary = item.get(
+                "pressure_residual_airflow_equivalence_summary"
+            )
+            pressure_tolerance_airflow_equivalent = "—"
+            solved_residual_airflow_equivalent = "—"
+            pressure_airflow_coverage = "—"
+            if pressure_airflow_summary is not None:
+                pressure_airflow_coverage = (
+                    f"{pressure_airflow_summary['evaluable_corner_count']}/"
+                    f"{pressure_airflow_summary['corner_count']}"
+                )
+                tolerance_evidence = pressure_airflow_summary.get(
+                    "maximum_configured_tolerance_equivalent_airflow_m3_h"
+                )
+                if tolerance_evidence is not None:
+                    pressure_tolerance_airflow_equivalent = (
+                        tolerance_evidence["value"]
+                    )
+                residual_evidence = pressure_airflow_summary.get(
+                    "maximum_solved_residual_equivalent_airflow_m3_h"
+                )
+                if residual_evidence is not None:
+                    solved_residual_airflow_equivalent = (
+                        residual_evidence["value"]
+                    )
+            search_summary = item.get(
+                "operating_point_search_resolution_summary"
+            )
+            search_half_width = "—"
+            search_coverage = "—"
+            search_invariants = "—"
+            if search_summary is not None:
+                search_coverage = (
+                    f"{search_summary['search_evidence_corner_count']}/"
+                    f"{search_summary['corner_count']}"
+                )
+                search_evidence = search_summary.get(
+                    "maximum_final_bisection_half_width_m3_h"
+                )
+                if search_evidence is not None:
+                    search_half_width = search_evidence["value"]
+                invariant_count = search_summary.get(
+                    "bisection_invariant_evidence_corner_count",
+                    0,
+                )
+                sign_count = search_summary.get(
+                    "strict_sign_change_preserved_corner_count",
+                    0,
+                )
+                midpoint_count = search_summary.get(
+                    "selected_midpoint_centered_corner_count",
+                    0,
+                )
+                invariant_error = search_summary.get(
+                    "maximum_absolute_width_fraction_consistency_error"
+                )
+                max_error = (
+                    "—"
+                    if invariant_error is None
+                    else invariant_error["value"]
+                )
+                trace_count = search_summary.get(
+                    "bisection_trace_evidence_corner_count",
+                    0,
+                )
+                bisection_count = search_summary.get(
+                    "bisection_corner_count",
+                    0,
+                )
+                trace_expected_count = (
+                    bisection_count
+                    + search_summary.get(
+                        "iteration_limit_search_evidence_corner_count",
+                        0,
+                    )
+                )
+                trace_outcome_count = search_summary.get(
+                    "bisection_trace_terminal_outcome_consistent_corner_count",
+                    0,
+                )
+                trace_decision_semantic_count = search_summary.get(
+                    "bisection_trace_decision_semantic_consistent_corner_count",
+                    0,
+                )
+                trace_origin_replay_count = search_summary.get(
+                    "bisection_trace_origin_replay_corner_count",
+                    0,
+                )
+                limit_terminal_replay_count = search_summary.get(
+                    "iteration_limit_trace_terminal_replay_corner_count",
+                    0,
+                )
+                trace_length_violations = len(
+                    search_summary.get(
+                        "bisection_trace_length_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_sign_violations = len(
+                    search_summary.get(
+                        "bisection_trace_sign_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_midpoint_violations = len(
+                    search_summary.get(
+                        "bisection_trace_midpoint_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_width_violations = len(
+                    search_summary.get(
+                        "bisection_trace_width_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_width_fraction_violations = len(
+                    search_summary.get(
+                        "bisection_trace_width_fraction_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_geometry_count = search_summary.get(
+                    "bisection_trace_geometry_consistent_corner_count",
+                    0,
+                )
+                trace_raw_state_count = search_summary.get(
+                    "bisection_trace_raw_state_consistent_corner_count",
+                    0,
+                )
+                trace_raw_state_violations = len(
+                    search_summary.get(
+                        "bisection_trace_raw_state_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_pressure_state_count = search_summary.get(
+                    "bisection_trace_pressure_state_consistent_corner_count",
+                    0,
+                )
+                trace_pressure_state_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_state_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_system_pressure_error = search_summary.get(
+                    "maximum_bisection_trace_system_pressure_balance_error_pa"
+                )
+                max_trace_system_pressure_error = (
+                    "—"
+                    if trace_system_pressure_error is None
+                    else trace_system_pressure_error["value"]
+                )
+                trace_residual_balance_error = search_summary.get(
+                    "maximum_bisection_trace_residual_balance_error_pa"
+                )
+                max_trace_residual_balance_error = (
+                    "—"
+                    if trace_residual_balance_error is None
+                    else trace_residual_balance_error["value"]
+                )
+                trace_residual_replay_count = search_summary.get(
+                    "bisection_trace_residual_replay_consistent_corner_count",
+                    0,
+                )
+                trace_residual_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_residual_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_residual_replay_error = search_summary.get(
+                    "maximum_bisection_trace_residual_replay_error_pa"
+                )
+                max_trace_residual_replay_error = (
+                    "—"
+                    if trace_residual_replay_error is None
+                    else trace_residual_replay_error["value"]
+                )
+                trace_pressure_component_replay_count = search_summary.get(
+                    "bisection_trace_pressure_component_replay_consistent_corner_count",
+                    0,
+                )
+                trace_pressure_component_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_component_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_pressure_component_replay_error = search_summary.get(
+                    "maximum_bisection_trace_pressure_component_replay_error_pa"
+                )
+                max_trace_pressure_component_replay_error = (
+                    "—"
+                    if trace_pressure_component_replay_error is None
+                    else trace_pressure_component_replay_error["value"]
+                )
+                supplied_point_network_state_replay_applicable_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_applicable_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_evidence_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_consistent_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_inconsistent_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_inconsistent_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_incomplete_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_incomplete_corner_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_projection_mismatch_count = (
+                    search_summary.get(
+                        "supplied_point_network_state_projection_mismatch_count",
+                        0,
+                    )
+                )
+                supplied_point_network_state_replay_violation_details = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_violation_details",
+                        [],
+                    )
+                )
+                supplied_point_network_state_replay_coverage_gap_details = (
+                    search_summary.get(
+                        "supplied_point_network_state_replay_coverage_gap_details",
+                        [],
+                    )
+                )
+                supplied_point_network_state_projection_maximum_numeric_errors = (
+                    search_summary.get(
+                        "maximum_supplied_point_network_state_projection_numeric_errors",
+                        [],
+                    )
+                )
+                solved_search_evidence_count = search_summary.get(
+                    "solved_search_evidence_corner_count",
+                    0,
+                )
+                selected_network_state_replay_count = search_summary.get(
+                    "selected_operating_network_state_replay_consistent_corner_count",
+                    0,
+                )
+                selected_network_state_replay_violations = len(
+                    search_summary.get(
+                        "selected_operating_network_state_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                selected_network_state_projection_replay_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                selected_network_state_projection_replay_violations = len(
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                selected_network_state_projection_replay_applicable_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_applicable_corner_count",
+                        solved_search_evidence_count,
+                    )
+                )
+                selected_network_state_projection_replay_coverage_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                selected_network_state_projection_replay_complete_coverage = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_complete_coverage",
+                        False,
+                    )
+                )
+                selected_network_state_projection_mismatch_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_mismatch_count",
+                        0,
+                    )
+                )
+                selected_network_state_projection_violation_details = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_violation_details",
+                        [],
+                    )
+                )
+                selected_network_state_projection_maximum_numeric_errors = (
+                    search_summary.get(
+                        "maximum_selected_operating_network_state_projection_numeric_errors",
+                        [],
+                    )
+                )
+                trace_network_state_replay_count = search_summary.get(
+                    "bisection_trace_network_state_replay_consistent_corner_count",
+                    0,
+                )
+                trace_network_state_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_network_state_projection_applicable_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_applicable_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_coverage_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_evidence_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_complete_coverage = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_complete_coverage",
+                        False,
+                    )
+                )
+                trace_network_state_projection_consistent_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_violations = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_network_state_projection_coverage_gaps = len(
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_coverage_gap_corner_indices",
+                        [],
+                    )
+                )
+                trace_network_state_projection_mismatch_count = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_mismatch_count",
+                        0,
+                    )
+                )
+                trace_network_state_projection_violation_details = (
+                    search_summary.get(
+                        "bisection_trace_network_state_projection_replay_violation_details",
+                        [],
+                    )
+                )
+                trace_network_state_projection_maximum_numeric_errors = (
+                    search_summary.get(
+                        "maximum_bisection_trace_network_state_projection_numeric_errors",
+                        [],
+                    )
+                )
+                terminal_network_state_replay_count = search_summary.get(
+                    "terminal_network_state_replay_consistent_corner_count",
+                    0,
+                )
+                terminal_network_state_replay_violations = len(
+                    search_summary.get(
+                        "terminal_network_state_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                terminal_network_state_projection_replay_count = (
+                    search_summary.get(
+                        "terminal_network_state_projection_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                terminal_network_state_projection_replay_violations = len(
+                    search_summary.get(
+                        "terminal_network_state_projection_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_midpoint_error = search_summary.get(
+                    "maximum_bisection_trace_midpoint_error_m3_h"
+                )
+                max_trace_midpoint_error = (
+                    "—"
+                    if trace_midpoint_error is None
+                    else trace_midpoint_error["value"]
+                )
+                trace_width_error = search_summary.get(
+                    "maximum_bisection_trace_width_error_m3_h"
+                )
+                max_trace_width_error = (
+                    "—"
+                    if trace_width_error is None
+                    else trace_width_error["value"]
+                )
+                trace_width_fraction_error = search_summary.get(
+                    "maximum_bisection_trace_width_fraction_error"
+                )
+                max_trace_width_fraction_error = (
+                    "—"
+                    if trace_width_fraction_error is None
+                    else trace_width_fraction_error["value"]
+                )
+                trace_terminal_violations = len(
+                    search_summary.get(
+                        "bisection_trace_terminal_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_iteration_violations = len(
+                    search_summary.get(
+                        "bisection_trace_iteration_sequence_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_state_transition_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_outcome_violations = len(
+                    search_summary.get(
+                        "bisection_trace_terminal_outcome_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_decision_semantic_violations = len(
+                    search_summary.get(
+                        "bisection_trace_decision_semantic_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_origin_replay_violations = len(
+                    search_summary.get(
+                        "bisection_trace_origin_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_terminal_replay_violations = len(
+                    search_summary.get(
+                        "iteration_limit_trace_terminal_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                limit_count = search_summary.get(
+                    "iteration_limit_search_evidence_corner_count",
+                    0,
+                )
+                limit_invariant_count = search_summary.get(
+                    "iteration_limit_invariant_evidence_corner_count",
+                    0,
+                )
+                limit_sign_count = search_summary.get(
+                    "iteration_limit_strict_sign_change_preserved_corner_count",
+                    0,
+                )
+                limit_error = search_summary.get(
+                    "maximum_iteration_limit_absolute_width_fraction_consistency_error"
+                )
+                max_limit_error = (
+                    "—"
+                    if limit_error is None
+                    else limit_error["value"]
+                )
+                search_invariants = (
+                    f"sign {sign_count}/{invariant_count}; "
+                    f"midpoint {midpoint_count}/{invariant_count}; "
+                    f"trace {trace_count}/{trace_expected_count}; "
+                    f"trace violations L/S/M/T/I/R/D/A/O/F "
+                    f"{trace_length_violations}/{trace_sign_violations}/"
+                    f"{trace_midpoint_violations}/{trace_terminal_violations}/"
+                    f"{trace_iteration_violations}/{trace_replay_violations}/"
+                    f"{trace_decision_semantic_violations}/"
+                    f"{trace_origin_replay_violations}/"
+                    f"{trace_outcome_violations}/"
+                    f"{limit_terminal_replay_violations}; "
+                    f"trace geometry violations W/N "
+                    f"{trace_width_violations}/{trace_width_fraction_violations}; "
+                    f"trace-geometry {trace_geometry_count}/{trace_count}; "
+                    f"trace-raw-state {trace_raw_state_count}/{trace_count}; "
+                    f"raw-state violations {trace_raw_state_violations}; "
+                    f"trace-pressure-state {trace_pressure_state_count}/{trace_count}; "
+                    f"pressure-state violations {trace_pressure_state_violations}; "
+                    f"max trace system-pressure identity error "
+                    f"{max_trace_system_pressure_error} Pa; "
+                    f"max trace residual identity error "
+                    f"{max_trace_residual_balance_error} Pa; "
+                    f"residual-replay {trace_residual_replay_count}/{trace_count}; "
+                    f"residual-replay violations {trace_residual_replay_violations}; "
+                    f"max residual-replay error {max_trace_residual_replay_error} Pa; "
+                    f"pressure-component-replay "
+                    f"{trace_pressure_component_replay_count}/{trace_count}; "
+                    f"pressure-component-replay violations "
+                    f"{trace_pressure_component_replay_violations}; "
+                    f"max pressure-component-replay error "
+                    f"{max_trace_pressure_component_replay_error} Pa; "
+                    f"supplied-point-network-state-replay "
+                    f"{supplied_point_network_state_replay_consistent_count}/"
+                    f"{supplied_point_network_state_replay_applicable_count}; "
+                    f"supplied-point-network-state-replay coverage "
+                    f"{supplied_point_network_state_replay_evidence_count}/"
+                    f"{supplied_point_network_state_replay_applicable_count}; "
+                    f"supplied-point-network-state-replay inconsistent "
+                    f"{supplied_point_network_state_replay_inconsistent_count}; "
+                    f"supplied-point-network-state-replay incomplete "
+                    f"{supplied_point_network_state_replay_incomplete_count}; "
+                    f"supplied-point-network-state-projection mismatches "
+                    f"{supplied_point_network_state_projection_mismatch_count}; "
+                    f"supplied-point-network-state details "
+                    f"{supplied_point_network_state_replay_violation_details}; "
+                    f"supplied-point-network-state coverage-gaps "
+                    f"{supplied_point_network_state_replay_coverage_gap_details}; "
+                    f"supplied-point-network-state max-numeric-errors "
+                    f"{supplied_point_network_state_projection_maximum_numeric_errors}; "
+                    f"selected-network-state-replay "
+                    f"{selected_network_state_replay_count}/"
+                    f"{solved_search_evidence_count}; "
+                    f"selected-network-state violations "
+                    f"{selected_network_state_replay_violations}; "
+                    f"selected-network-state-projection-replay "
+                    f"{selected_network_state_projection_replay_count}/"
+                    f"{selected_network_state_projection_replay_applicable_count}; "
+                    f"selected-network-state-projection-replay coverage "
+                    f"{selected_network_state_projection_replay_coverage_count}/"
+                    f"{selected_network_state_projection_replay_applicable_count} "
+                    f"complete={selected_network_state_projection_replay_complete_coverage}; "
+                    f"selected-network-state-projection-replay violations "
+                    f"{selected_network_state_projection_replay_violations}; "
+                    f"selected-network-state-projection mismatches "
+                    f"{selected_network_state_projection_mismatch_count}; "
+                    f"selected-network-state-projection details "
+                    f"{selected_network_state_projection_violation_details}; "
+                    f"selected-network-state-projection max-numeric-errors "
+                    f"{selected_network_state_projection_maximum_numeric_errors}; "
+                    f"network-state-replay "
+                    f"{trace_network_state_replay_count}/{trace_count}; "
+                    f"network-state-replay violations "
+                    f"{trace_network_state_replay_violations}; "
+                    f"full-trace-network-state-projection-replay "
+                    f"{trace_network_state_projection_consistent_count}/"
+                    f"{trace_network_state_projection_applicable_count}; "
+                    f"full-trace-network-state-projection coverage "
+                    f"{trace_network_state_projection_coverage_count}/"
+                    f"{trace_network_state_projection_applicable_count} "
+                    f"complete={trace_network_state_projection_complete_coverage}; "
+                    f"full-trace-network-state-projection violations "
+                    f"{trace_network_state_projection_violations}; "
+                    f"full-trace-network-state-projection coverage-gaps "
+                    f"{trace_network_state_projection_coverage_gaps}; "
+                    f"full-trace-network-state-projection mismatches "
+                    f"{trace_network_state_projection_mismatch_count}; "
+                    f"full-trace-network-state-projection details "
+                    f"{trace_network_state_projection_violation_details}; "
+                    f"full-trace-network-state-projection max-numeric-errors "
+                    f"{trace_network_state_projection_maximum_numeric_errors}; "
+                    f"terminal-network-state-replay "
+                    f"{terminal_network_state_replay_count}/{trace_count}; "
+                    f"terminal-network-state-replay violations "
+                    f"{terminal_network_state_replay_violations}; "
+                    f"terminal-network-state-projection-replay "
+                    f"{terminal_network_state_projection_replay_count}/{trace_count}; "
+                    f"terminal-network-state-projection-replay violations "
+                    f"{terminal_network_state_projection_replay_violations}; "
+                    f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
+                    f"max trace width error {max_trace_width_error} m3/h; "
+                    f"max trace normalized-width error "
+                    f"{max_trace_width_fraction_error}; "
+                    f"trace-decision {trace_decision_semantic_count}/{trace_count}; "
+                    f"trace-origin {trace_origin_replay_count}/{trace_count}; "
+                    f"trace-outcome {trace_outcome_count}/{trace_count}; "
+                    f"limit-final-replay {limit_terminal_replay_count}/"
+                    f"{limit_count}; "
+                    f"max width-fraction error {max_error}; "
+                    f"iteration-limit {limit_count}; "
+                    f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "
+                    f"remaining max width-fraction error {max_limit_error}"
+                )
+            segment_summary = item.get(
+                "fan_curve_segment_position_summary"
+            )
+            segment_clearance = "—"
+            segment_coverage = "—"
+            if segment_summary is not None:
+                segment_coverage = (
+                    f"{segment_summary['segment_position_evidence_corner_count']}/"
+                    f"{segment_summary['corner_count']}"
+                )
+                segment_evidence = segment_summary.get(
+                    "minimum_nearest_segment_endpoint_clearance_m3_h"
+                )
+                if segment_evidence is not None:
+                    segment_clearance = segment_evidence["value"]
+            residual_summary = item.get(
+                "fan_curve_supplied_point_residual_summary"
+            )
+            alternative_candidate_gap = "—"
+            alternative_candidate_gap_fraction = "—"
+            alternative_candidate_gap_fraction_of_minimum_spacing = "—"
+            alternative_candidate_index_gap = "—"
+            residual_topology = "—"
+            if residual_summary is not None:
+                alternative_gap_evidence = residual_summary.get(
+                    "minimum_selected_to_alternative_candidate_interval_gap_m3_h"
+                )
+                if alternative_gap_evidence is not None:
+                    alternative_candidate_gap = alternative_gap_evidence[
+                        "value"
+                    ]
+                normalized_alternative_gap_evidence = residual_summary.get(
+                    "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
+                )
+                if normalized_alternative_gap_evidence is not None:
+                    alternative_candidate_gap_fraction = (
+                        normalized_alternative_gap_evidence["value"]
+                    )
+                spacing_normalized_alternative_gap_evidence = residual_summary.get(
+                    "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_minimum_supplied_point_spacing"
+                )
+                if spacing_normalized_alternative_gap_evidence is not None:
+                    alternative_candidate_gap_fraction_of_minimum_spacing = (
+                        spacing_normalized_alternative_gap_evidence["value"]
+                    )
+                index_alternative_gap_evidence = residual_summary.get(
+                    "minimum_selected_to_alternative_candidate_feature_index_interval_gap"
+                )
+                if index_alternative_gap_evidence is not None:
+                    alternative_candidate_index_gap = (
+                        index_alternative_gap_evidence["value"]
+                    )
+                residual_topology = (
+                    "coverage "
+                    f"{residual_summary['complete_supplied_point_coverage_corner_count']}/"
+                    f"{residual_summary['corner_count']}; mono "
+                    f"{residual_summary['monotonic_non_increasing_corner_count']}/"
+                    f"{residual_summary['corner_count']}; selected "
+                    f"{residual_summary['selected_candidate_feature_corner_count']}/"
+                    f"{residual_summary['solved_corner_count']}; multi "
+                    f"{residual_summary['multiple_candidate_feature_corner_count']}; "
+                    "reverse "
+                    f"{residual_summary['reverse_strict_sign_change_corner_count']}"
+                )
+            lines.append(
+                f"| {item['analysis']} | {item['status']} | "
+                f"{item['corner_count']} | {item['solved_corner_count']} | "
+                f"{item['unresolved_corner_count']} | "
+                f"{no_intersection_cases} | {scenario_names} | "
+                f"{airflow_envelope} | {airflow_excursion} | {air_power} | "
+                f"{electrical_input} | {electrical_coverage} | "
+                f"{specific_fan_power} | {sfp_coverage} | "
+                f"{item['nominal_status']} | "
+                f"{solver_tolerance_audit} | {iteration_budget_audit} | "
+                f"{fan_curve_headroom} | "
+                f"{boundary_coverage} | "
+                f"{bracket_gap} | {bracket_coverage} | "
+                f"{crossing_gradient} | {crossing_coverage} | "
+                f"{pressure_tolerance_airflow_equivalent} | "
+                f"{solved_residual_airflow_equivalent} | "
+                f"{pressure_airflow_coverage} | "
+                f"{search_half_width} | {search_coverage} | "
+                f"{search_invariants} | "
+                f"{segment_clearance} | {segment_coverage} | "
+                f"{alternative_candidate_gap} | "
+                f"{alternative_candidate_gap_fraction} | "
+                f"{alternative_candidate_gap_fraction_of_minimum_spacing} | "
+                f"{alternative_candidate_index_gap} | "
+                f"{residual_topology} | "
+                f"{item['traceability']['complete']} |"
+            )
+            solver_result_integrity = item.get(
+                "solver_result_integrity_summary"
+            )
+            if solver_result_integrity:
+                lines.append(
+                    "- Solver-result integrity linkage for "
+                    f"**{item['analysis']}**: "
+                    f"coverage={solver_result_integrity['evidence_result_count']}/"
+                    f"{solver_result_integrity['expected_result_count']}; "
+                    f"complete={solver_result_integrity['complete_coverage']}; "
+                    f"consistent={solver_result_integrity['consistent_result_count']}; "
+                    f"inconsistent={solver_result_integrity['inconsistent_result_count']}; "
+                    f"incomplete={solver_result_integrity['incomplete_result_count']}; "
+                    f"corner_coverage="
+                    f"{solver_result_integrity['evidence_corner_count']}/"
+                    f"{solver_result_integrity['expected_corner_count']}; "
+                    f"corner_complete="
+                    f"{solver_result_integrity['complete_corner_coverage']}; "
+                    "violating_corners="
+                    f"{solver_result_integrity['violating_corner_indices']}; "
+                    "coverage_gap_corners="
+                    f"{solver_result_integrity['coverage_gap_corner_indices']}"
+                )
+            integrity = item.get("result_integrity")
+            if integrity:
+                lines.append(
+                    f"- Result SHA-256 for **{item['analysis']}**: "
+                    f"`{integrity['sha256']}`"
+                )
+            if item["traceability"]["missing_provenance"]:
+                lines.append(
+                    "- Missing uncertainty provenance for "
+                    f"**{item['analysis']}**: "
+                    + ", ".join(
+                        item["traceability"]["missing_provenance"]
+                    )
+                )
+
+    if result.get("fan_loop_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan-speed / loop-network studies",
+                "",
+                "| Study | Speed ratio | Speed rpm | Status | Operating airflow m³/h | System pressure Pa | Continuity residual m³/h | Fan-system residual Pa |",
+                "|---|---:|---:|---|---:|---:|---:|---:|",
+            ]
+        )
+        for study in result["fan_loop_speed_studies"]:
+            for case in study.get("speed_cases", []):
+                point = case.get("fan_operating_point")
+                network = case.get("operating_network_solution")
+                check = case.get("system_pressure_check")
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = "—" if point is None else point["system_pressure_pa"]
+                continuity = (
+                    "—"
+                    if network is None
+                    else network["max_abs_mass_balance_residual_m3_h"]
+                )
+                residual = (
+                    "—"
+                    if check is None
+                    else check["fan_minus_system_pressure_pa"]
+                )
+                rpm = "—" if case.get("speed_rpm") is None else case["speed_rpm"]
+                lines.append(
+                    f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
+                    f"{case['status']} | {airflow} | {pressure} | "
+                    f"{continuity} | {residual} |"
+                )
+
+    if result.get("fan_variable_friction_speed_studies"):
+        lines.extend(
+            [
+                "",
+                "## Fan-speed / variable-friction loop studies",
+                "",
+                "| Study | Speed ratio | Speed rpm | Status | Operating airflow m³/h | "
+                "System pressure Pa | Outer iterations | Resistance closure | "
+                "Continuity residual m³/h | Edge-law residual Pa | "
+                "Fan-system residual Pa | Fluid air power kW | "
+                "Electrical input kW | Edge dissipation W | Termination |",
+                "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+            ]
+        )
+        for study in result["fan_variable_friction_speed_studies"]:
+            for case in study.get("speed_cases", []):
+                point = case.get("fan_operating_point")
+                check = case.get("system_pressure_check")
+                diagnostics = case.get("solver_diagnostics", {})
+                power = case.get("power_evidence")
+                airflow = "—" if point is None else point["airflow_m3_h"]
+                pressure = (
+                    "—" if check is None else check["total_system_pressure_pa"]
+                )
+                residual = (
+                    "—"
+                    if check is None
+                    else check["fan_minus_system_pressure_pa"]
+                )
+                fluid_power = (
+                    "—" if power is None else power["fluid_air_power_kw"]
+                )
+                electrical_power = (
+                    "—"
+                    if power is None or power["electrical_input_kw"] is None
+                    else power["electrical_input_kw"]
+                )
+                edge_dissipation = (
+                    "—"
+                    if power is None
+                    else power["system_components"][
+                        "loop_network_edge_dissipation_w"
+                    ]
+                )
+                rpm = (
+                    "—" if case.get("speed_rpm") is None else case["speed_rpm"]
+                )
+                lines.append(
+                    f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
+                    f"{case['status']} | {airflow} | {pressure} | "
+                    f"{diagnostics.get('network_outer_iterations', '—')} | "
+                    f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
+                    f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
+                    f"{diagnostics.get('max_abs_pressure_law_residual_pa', '—')} | "
+                    f"{residual} | {fluid_power} | {electrical_power} | "
+                    f"{edge_dissipation} | "
+                    f"{diagnostics.get('termination_reason', '—')} |"
+                )
 
     if result.get("damper_studies"):
         lines.extend(["", "## Loop damper-resistance scenario studies", "", "| Study | Status | Cases | Baseline continuity residual m³/h | Baseline pressure-law residual Pa |", "|---|---|---:|---:|---:|"])

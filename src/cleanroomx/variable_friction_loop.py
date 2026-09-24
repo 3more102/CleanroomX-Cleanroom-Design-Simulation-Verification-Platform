@@ -37,6 +37,50 @@ def _is_automatic_geometry_edge(edge: QuadraticFlowEdge) -> bool:
     )
 
 
+def _validate_automatic_geometry_evidence(
+    edge: QuadraticFlowEdge,
+) -> None:
+    evidence = edge.resistance_evidence
+    if evidence is None:
+        raise ValueError(
+            f"automatic-friction edge {edge.name!r} requires resistance evidence"
+        )
+
+    required = {
+        "length_m",
+        "air_density_kg_m3",
+        "local_loss_coefficient",
+        "absolute_roughness_m",
+        "kinematic_viscosity_m2_s",
+        "reference_airflow_m3_h",
+        "shape",
+        "area_m2",
+        "hydraulic_diameter_m",
+        "friction_factor",
+    }
+    missing = sorted(required - set(evidence))
+    if missing:
+        raise ValueError(
+            f"automatic-friction edge {edge.name!r} has incomplete resistance "
+            "evidence; missing: " + ", ".join(missing)
+        )
+
+    reference_airflow = _positive(
+        evidence["reference_airflow_m3_h"],
+        f"automatic-friction edge {edge.name!r} reference_airflow_m3_h",
+    )
+    _positive(
+        evidence["friction_factor"],
+        f"automatic-friction edge {edge.name!r} friction_factor",
+    )
+
+    # Reconstruct the geometry/friction calculation at the stored reference
+    # airflow. This validates finite physical evidence and the stored shape
+    # before any near-zero-flow branch can freeze the resistance and otherwise
+    # conceal malformed automatic-friction provenance.
+    _target_evidence_at_airflow(edge, reference_airflow)
+
+
 def _rectangular_dimensions(
     area_m2: float,
     hydraulic_diameter_m: float,
@@ -352,11 +396,13 @@ def solve_variable_friction_looped_network(
             "max_outer_iterations must be an integer > 0"
         )
 
-    automatic_edge_count = sum(
-        1
-        for edge in network.edges
-        if _is_automatic_geometry_edge(edge)
-    )
+    automatic_edges = [
+        edge for edge in network.edges if _is_automatic_geometry_edge(edge)
+    ]
+    for edge in automatic_edges:
+        _validate_automatic_geometry_evidence(edge)
+    automatic_edge_count = len(automatic_edges)
+
     if automatic_edge_count == 0:
         solved = solve_looped_network(
             network,

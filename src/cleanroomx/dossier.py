@@ -165,6 +165,177 @@ def _fan_system_uncertainty_summary(results: list[dict]) -> dict:
     }
 
 
+def _fan_loop_uncertainty_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "analysis_count": 0,
+            "missing_provenance_analyses": 0,
+        }
+    counts = _count_statuses(item["status"] for item in results)
+    missing = sum(not item["traceability"]["complete"] for item in results)
+    if counts.get("indeterminate", 0):
+        status = "attention_required"
+    elif missing:
+        status = "complete_with_missing_provenance"
+    else:
+        status = "screening_complete"
+    return {
+        "status": status,
+        "counts": counts,
+        "analysis_count": len(results),
+        "missing_provenance_analyses": missing,
+    }
+
+
+def _fan_variable_friction_uncertainty_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "analysis_count": 0,
+            "corner_count": 0,
+            "fan_curve_scenario_count": 0,
+            "no_intersection_corner_count": 0,
+            "missing_provenance_analyses": 0,
+            "result_integrity_count": 0,
+            "missing_result_integrity_analyses": 0,
+            "solver_result_integrity_complete_coverage_analyses": 0,
+            "solver_result_integrity_inconsistent_corner_count": 0,
+            "solver_result_integrity_coverage_gap_corner_count": 0,
+        }
+    counts = _count_statuses(item["status"] for item in results)
+    missing = sum(not item["traceability"]["complete"] for item in results)
+    integrity_count = sum(
+        isinstance(item.get("result_integrity", {}).get("sha256"), str)
+        and len(item["result_integrity"]["sha256"]) == 64
+        for item in results
+    )
+    solver_result_integrity_complete_coverage_analyses = sum(
+        item.get("solver_result_integrity_summary", {}).get(
+            "complete_corner_coverage"
+        )
+        is True
+        for item in results
+    )
+    solver_result_integrity_inconsistent_corner_count = sum(
+        item.get("solver_result_integrity_summary", {}).get(
+            "inconsistent_corner_count", 0
+        )
+        for item in results
+    )
+    solver_result_integrity_coverage_gap_corner_count = sum(
+        item.get("solver_result_integrity_summary", {}).get(
+            "incomplete_corner_count", 0
+        )
+        for item in results
+    )
+    if counts.get("indeterminate", 0):
+        status = "attention_required"
+    elif missing:
+        status = "complete_with_missing_provenance"
+    else:
+        status = "screening_complete"
+    return {
+        "status": status,
+        "counts": counts,
+        "analysis_count": len(results),
+        "corner_count": sum(item.get("corner_count", 0) for item in results),
+        "fan_curve_scenario_count": sum(
+            len(item.get("fan_curve_scenarios", [])) for item in results
+        ),
+        "no_intersection_corner_count": sum(
+            item.get("fan_curve_no_intersection_summary", {}).get(
+                "no_intersection_corner_count", 0
+            )
+            for item in results
+        ),
+        "missing_provenance_analyses": missing,
+        "result_integrity_count": integrity_count,
+        "missing_result_integrity_analyses": len(results) - integrity_count,
+        "solver_result_integrity_complete_coverage_analyses": (
+            solver_result_integrity_complete_coverage_analyses
+        ),
+        "solver_result_integrity_inconsistent_corner_count": (
+            solver_result_integrity_inconsistent_corner_count
+        ),
+        "solver_result_integrity_coverage_gap_corner_count": (
+            solver_result_integrity_coverage_gap_corner_count
+        ),
+    }
+
+
+def _fan_loop_speed_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "study_count": 0,
+            "speed_case_count": 0,
+        }
+    statuses = [
+        case["status"]
+        for result in results
+        for case in result.get("speed_cases", [])
+    ]
+    counts = _count_statuses(statuses)
+    unresolved = counts.get("no_intersection_in_supplied_range", 0)
+    return {
+        "status": "attention_required" if unresolved else "screening_complete",
+        "counts": counts,
+        "study_count": len(results),
+        "speed_case_count": len(statuses),
+    }
+
+
+def _fan_variable_friction_loop_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "study_count": 0,
+        }
+    counts = _count_statuses(item["status"] for item in results)
+    non_solved = sum(
+        count for status, count in counts.items() if status != "solved"
+    )
+    return {
+        "status": (
+            "attention_required" if non_solved else "screening_complete"
+        ),
+        "counts": counts,
+        "study_count": len(results),
+    }
+
+
+def _fan_variable_friction_speed_summary(results: list[dict]) -> dict:
+    if not results:
+        return {
+            "status": "not_included",
+            "counts": {},
+            "study_count": 0,
+            "speed_case_count": 0,
+        }
+    statuses = [
+        case["status"]
+        for result in results
+        for case in result.get("speed_cases", [])
+    ]
+    counts = _count_statuses(statuses)
+    non_solved = sum(
+        count for status, count in counts.items() if status != "solved"
+    )
+    return {
+        "status": (
+            "attention_required" if non_solved else "screening_complete"
+        ),
+        "counts": counts,
+        "study_count": len(results),
+        "speed_case_count": len(statuses),
+    }
+
+
 def _fan_operating_point_summary(results: list[dict]) -> dict:
     if not results:
         return {"status": "not_included", "counts": {}, "study_count": 0}
@@ -300,8 +471,13 @@ def summarize_dossier_components(
     fan_duct_networks: list[dict] | None = None,
     fan_parallel_networks: list[dict] | None = None,
     fan_loop_networks: list[dict] | None = None,
+    fan_loop_uncertainty: list[dict] | None = None,
     damper_studies: list[dict] | None = None,
     fan_speed_studies: list[dict] | None = None,
+    fan_loop_speed_studies: list[dict] | None = None,
+    fan_variable_friction_loops: list[dict] | None = None,
+    fan_variable_friction_speed_studies: list[dict] | None = None,
+    fan_variable_friction_uncertainty: list[dict] | None = None,
     consistency: dict | None = None,
     fan_airflow_consistency: dict | None = None,
 ) -> dict:
@@ -315,8 +491,17 @@ def summarize_dossier_components(
     fan_duct_networks = fan_duct_networks or []
     fan_parallel_networks = fan_parallel_networks or []
     fan_loop_networks = fan_loop_networks or []
+    fan_loop_uncertainty = fan_loop_uncertainty or []
     damper_studies = damper_studies or []
     fan_speed_studies = fan_speed_studies or []
+    fan_loop_speed_studies = fan_loop_speed_studies or []
+    fan_variable_friction_loops = fan_variable_friction_loops or []
+    fan_variable_friction_speed_studies = (
+        fan_variable_friction_speed_studies or []
+    )
+    fan_variable_friction_uncertainty = (
+        fan_variable_friction_uncertainty or []
+    )
 
     components = {
         "verification": _verification_summary(verification),
@@ -335,8 +520,27 @@ def summarize_dossier_components(
         "fan_duct_networks": _fan_duct_network_summary(fan_duct_networks),
         "fan_parallel_networks": _fan_parallel_network_summary(fan_parallel_networks),
         "fan_loop_networks": _fan_loop_network_summary(fan_loop_networks),
+        "fan_loop_uncertainty": _fan_loop_uncertainty_summary(
+            fan_loop_uncertainty
+        ),
         "damper_studies": _damper_study_summary(damper_studies),
         "fan_speed_studies": _fan_speed_summary(fan_speed_studies),
+        "fan_loop_speed_studies": _fan_loop_speed_summary(
+            fan_loop_speed_studies
+        ),
+        "fan_variable_friction_loops": _fan_variable_friction_loop_summary(
+            fan_variable_friction_loops
+        ),
+        "fan_variable_friction_speed_studies": (
+            _fan_variable_friction_speed_summary(
+                fan_variable_friction_speed_studies
+            )
+        ),
+        "fan_variable_friction_uncertainty": (
+            _fan_variable_friction_uncertainty_summary(
+                fan_variable_friction_uncertainty
+            )
+        ),
         "cross_module_consistency": _consistency_summary(consistency),
         "hvac_fan_operating_airflow_consistency": _fan_airflow_consistency_summary(
             fan_airflow_consistency
@@ -372,9 +576,30 @@ def summarize_dossier_components(
         "fan_loop_networks_unsolved": components["fan_loop_networks"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
+        "fan_loop_uncertainty_indeterminate": components[
+            "fan_loop_uncertainty"
+        ]["counts"].get("indeterminate", 0),
         "fan_speed_studies_unsolved": components["fan_speed_studies"]["counts"].get(
             "no_intersection_in_supplied_range", 0
         ),
+        "fan_loop_speed_studies_unsolved": components[
+            "fan_loop_speed_studies"
+        ]["counts"].get("no_intersection_in_supplied_range", 0),
+        "fan_variable_friction_loops_unsolved": components[
+            "fan_variable_friction_loops"
+        ]["counts"].get("no_intersection_in_supplied_range", 0),
+        "fan_variable_friction_loops_non_converged": components[
+            "fan_variable_friction_loops"
+        ]["counts"].get("non_converged", 0),
+        "fan_variable_friction_speed_studies_unsolved": components[
+            "fan_variable_friction_speed_studies"
+        ]["counts"].get("no_intersection_in_supplied_range", 0),
+        "fan_variable_friction_speed_studies_non_converged": components[
+            "fan_variable_friction_speed_studies"
+        ]["counts"].get("non_converged", 0),
+        "fan_variable_friction_uncertainty_indeterminate": components[
+            "fan_variable_friction_uncertainty"
+        ]["counts"].get("indeterminate", 0),
         "cross_module_consistency_failures": (
             components["cross_module_consistency"]["issue_count"]
             if components["cross_module_consistency"]["status"] == "fail"
@@ -399,6 +624,12 @@ def summarize_dossier_components(
         ].get("missing_provenance_analyses", 0),
         "fan_system_uncertainty_missing_provenance": components[
             "fan_system_uncertainty"
+        ].get("missing_provenance_analyses", 0),
+        "fan_loop_uncertainty_missing_provenance": components[
+            "fan_loop_uncertainty"
+        ].get("missing_provenance_analyses", 0),
+        "fan_variable_friction_uncertainty_missing_provenance": components[
+            "fan_variable_friction_uncertainty"
         ].get("missing_provenance_analyses", 0),
         "cross_module_consistency_not_comparable": (
             1
@@ -479,6 +710,26 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .fan_network_io import load_fan_driven_parallel_network_study
     from .fan_loop_network import solve_fan_loop_network
     from .fan_loop_network_io import load_fan_loop_network_study
+    from .fan_loop_uncertainty import analyze_fan_loop_network_uncertainty
+    from .fan_loop_uncertainty_io import load_fan_loop_network_uncertainty
+    from .fan_loop_speed import analyze_fan_loop_speed_study
+    from .fan_loop_speed_io import load_fan_loop_speed_study
+    from .fan_variable_friction_loop import solve_fan_variable_friction_loop
+    from .fan_variable_friction_loop_io import (
+        load_fan_variable_friction_loop_study,
+    )
+    from .fan_variable_friction_speed import (
+        analyze_fan_variable_friction_speed_study,
+    )
+    from .fan_variable_friction_speed_io import (
+        load_fan_variable_friction_speed_study,
+    )
+    from .fan_variable_friction_uncertainty import (
+        analyze_fan_variable_friction_loop_uncertainty,
+    )
+    from .fan_variable_friction_uncertainty_io import (
+        load_fan_variable_friction_loop_uncertainty,
+    )
     from .damper_study import solve_loop_damper_study
     from .damper_study_io import load_loop_damper_study
     from .fan_speed import analyze_fan_speed_study
@@ -619,6 +870,74 @@ def build_dossier(manifest_path: str | Path) -> dict:
             solve_fan_loop_network(load_fan_loop_network_study(source["_resolved_path"]))
         )
 
+    fan_loop_uncertainty: list[dict] = []
+    for item in data.get("fan_loop_uncertainty_analyses", []):
+        source = _source_record(
+            "fan_loop_uncertainty_analysis", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_loop_uncertainty.append(
+            analyze_fan_loop_network_uncertainty(
+                load_fan_loop_network_uncertainty(source["_resolved_path"])
+            )
+        )
+
+    fan_loop_speed_studies: list[dict] = []
+    for item in data.get("fan_loop_speed_studies", []):
+        source = _source_record("fan_loop_speed_study", item, manifest_dir)
+        source_records.append(source)
+        fan_loop_speed_studies.append(
+            analyze_fan_loop_speed_study(
+                load_fan_loop_speed_study(source["_resolved_path"])
+            )
+        )
+
+    fan_variable_friction_loops: list[dict] = []
+    for item in data.get("fan_variable_friction_loop_studies", []):
+        source = _source_record(
+            "fan_variable_friction_loop_study", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_variable_friction_loops.append(
+            solve_fan_variable_friction_loop(
+                load_fan_variable_friction_loop_study(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
+    fan_variable_friction_speed_studies: list[dict] = []
+    for item in data.get("fan_variable_friction_speed_studies", []):
+        source = _source_record(
+            "fan_variable_friction_speed_study", item, manifest_dir
+        )
+        source_records.append(source)
+        fan_variable_friction_speed_studies.append(
+            analyze_fan_variable_friction_speed_study(
+                load_fan_variable_friction_speed_study(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
+    fan_variable_friction_uncertainty: list[dict] = []
+    for item in data.get(
+        "fan_variable_friction_uncertainty_analyses", []
+    ):
+        source = _source_record(
+            "fan_variable_friction_uncertainty_analysis",
+            item,
+            manifest_dir,
+        )
+        source_records.append(source)
+        fan_variable_friction_uncertainty.append(
+            analyze_fan_variable_friction_loop_uncertainty(
+                load_fan_variable_friction_loop_uncertainty(
+                    source["_resolved_path"]
+                )
+            )
+        )
+
     damper_studies: list[dict] = []
     for item in data.get("damper_studies", []):
         source = _source_record("damper_study", item, manifest_dir)
@@ -693,6 +1012,10 @@ def build_dossier(manifest_path: str | Path) -> dict:
             or fan_parallel_networks
             or fan_loop_networks
             or fan_speed_studies
+            or fan_loop_speed_studies
+            or fan_variable_friction_loops
+            or fan_variable_friction_speed_studies
+            or fan_variable_friction_uncertainty
         ):
             raise ValueError(
                 "hvac_fan_operating_airflow consistency requires at least one "
@@ -712,6 +1035,14 @@ def build_dossier(manifest_path: str | Path) -> dict:
             fan_parallel_networks=fan_parallel_networks,
             fan_loop_networks=fan_loop_networks,
             fan_speed_studies=fan_speed_studies,
+            fan_loop_speed_studies=fan_loop_speed_studies,
+            fan_variable_friction_loops=fan_variable_friction_loops,
+            fan_variable_friction_speed_studies=(
+                fan_variable_friction_speed_studies
+            ),
+            fan_variable_friction_uncertainty_analyses=(
+                fan_variable_friction_uncertainty
+            ),
             airflow_abs_tolerance_m3_h=fan_airflow_config.get(
                 "airflow_abs_tolerance_m3_h", 0.0
             ),
@@ -730,8 +1061,17 @@ def build_dossier(manifest_path: str | Path) -> dict:
         fan_duct_networks=fan_duct_networks,
         fan_parallel_networks=fan_parallel_networks,
         fan_loop_networks=fan_loop_networks,
+        fan_loop_uncertainty=fan_loop_uncertainty,
         damper_studies=damper_studies,
         fan_speed_studies=fan_speed_studies,
+        fan_loop_speed_studies=fan_loop_speed_studies,
+        fan_variable_friction_loops=fan_variable_friction_loops,
+        fan_variable_friction_speed_studies=(
+            fan_variable_friction_speed_studies
+        ),
+        fan_variable_friction_uncertainty=(
+            fan_variable_friction_uncertainty
+        ),
         consistency=consistency,
         fan_airflow_consistency=fan_airflow_consistency,
     )
@@ -757,8 +1097,19 @@ def build_dossier(manifest_path: str | Path) -> dict:
         "fan_duct_network_studies": fan_duct_networks,
         "fan_parallel_network_studies": fan_parallel_networks,
         "fan_loop_network_studies": fan_loop_networks,
+        "fan_loop_uncertainty_analyses": fan_loop_uncertainty,
         "damper_studies": damper_studies,
         "fan_speed_studies": fan_speed_studies,
+        "fan_loop_speed_studies": fan_loop_speed_studies,
+        "fan_variable_friction_loop_studies": (
+            fan_variable_friction_loops
+        ),
+        "fan_variable_friction_speed_studies": (
+            fan_variable_friction_speed_studies
+        ),
+        "fan_variable_friction_uncertainty_analyses": (
+            fan_variable_friction_uncertainty
+        ),
         "consistency_checks": {
             "verification_hvac_airflow": consistency,
             "hvac_fan_operating_airflow": fan_airflow_consistency,

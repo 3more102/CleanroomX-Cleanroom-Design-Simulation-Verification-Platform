@@ -1,0 +1,11 @@
+{
+  "name": "Variable-Friction Fan Engineering Dossier",
+  "project_reference": "CRX-V035",
+  "revision": "A",
+  "fan_variable_friction_loop_studies": [
+    "fan_variable_friction_loop_demo.json"
+  ],
+  "fan_variable_friction_speed_studies": [
+    "fan_variable_friction_speed_demo.json"
+  ]
+}

@@ -1,0 +1,666 @@
+from __future__ import annotations
+
+
+def markdown_fan_variable_friction_loop_report(result: dict) -> str:
+    diagnostics = result["solver_diagnostics"]
+    lines = [
+        f"# CleanroomX Fan / Variable-Friction Loop Report — {result['study']}",
+        "",
+        f"- Fan curve: **{result['fan_curve']}**",
+        f"- Status: **{result['status'].upper()}**",
+        f"- Fan discharge node: **{result['fan_discharge_node']}**",
+        f"- Fan suction node: **{result['fan_suction_node']}**",
+        f"- Fixed pressure: **{result['fixed_pressure_pa']} Pa**",
+        "- Fan-curve airflow range: "
+        f"**{result['fan_curve_airflow_range_m3_h'][0]}–"
+        f"{result['fan_curve_airflow_range_m3_h'][1]} m³/h**",
+        "",
+        "## Solver diagnostics",
+        "",
+        f"- Converged: **{diagnostics['converged']}**",
+        f"- Termination reason: **{diagnostics['termination_reason']}**",
+        "- Operating-point pressure tolerance: "
+        f"**{diagnostics['operating_pressure_tolerance_pa']} Pa**",
+        f"- Operating iterations: **{diagnostics['operating_iterations']}**",
+    ]
+
+    supplied_replay = result.get(
+        "fan_curve_supplied_point_network_state_replay"
+    )
+    if supplied_replay is not None:
+        lines.extend(
+            [
+                "",
+                "## Supplied-point network-state replay audit",
+                "",
+                "- Supplied-point replay applicable: "
+                f"**{supplied_replay['applicable']}**",
+                "- Supplied-point replay available: "
+                f"**{supplied_replay['available']}**",
+                "- Supplied-point replay coverage: "
+                f"**{supplied_replay['evaluated_supplied_point_count']}/"
+                f"{supplied_replay['expected_supplied_point_count']} evaluated; "
+                f"{supplied_replay['independent_replay_success_count']}/"
+                f"{supplied_replay['evaluated_supplied_point_count']} independently replayed**",
+                "- Supplied-point replay complete coverage: "
+                f"**{supplied_replay['complete_replay_coverage']}**",
+                "- Supplied-point replay verdict: "
+                f"**{supplied_replay['replay_verdict']}**",
+                "- All evaluated supplied-point network-state hashes match independent replay: "
+                f"**{supplied_replay['all_evaluated_supplied_point_network_state_hashes_match_independent_replay']}**",
+                "- All evaluated supplied-point network-state projections match independent replay: "
+                f"**{supplied_replay['all_evaluated_supplied_point_network_state_projections_match_independent_replay']}**",
+                "- Supplied-point hash replay violation points: "
+                f"**{supplied_replay['hash_violation_point_indices']}**",
+                "- Supplied-point projection replay violation points: "
+                f"**{supplied_replay['projection_violation_point_indices']}**",
+                "- Supplied-point replay coverage-gap points: "
+                f"**{supplied_replay['coverage_gap_point_indices']}**",
+                "- Supplied-point replay coverage-gap details: "
+                f"**{supplied_replay['coverage_gaps']}**",
+                "- Supplied-point network-state projection mismatch count: "
+                f"**{supplied_replay['network_state_projection_mismatch_count']}**",
+                "- Supplied-point network-state projection mismatch paths: "
+                f"**{supplied_replay['network_state_projection_mismatch_paths']}**",
+                "- Supplied-point network-state projection mismatch details: "
+                f"**{supplied_replay['network_state_projection_mismatches']}**",
+                "- Supplied-point network-state projection maximum numerical replay errors by field: "
+                f"**{supplied_replay['network_state_projection_maximum_numeric_errors']}**",
+            ]
+        )
+
+    search = result.get("operating_point_search_evidence")
+    if search is not None:
+        lines.extend(
+            [
+                "",
+                "## Operating-point search evidence",
+                "",
+                f"- Search method: **{search['method']}**",
+                "- Supplied interpolation segment: "
+                f"**{search['supplied_segment_low_airflow_m3_h']}–"
+                f"{search['supplied_segment_high_airflow_m3_h']} m³/h**",
+            ]
+        )
+        if search["selected_supplied_point_index"] is not None:
+            lines.append(
+                "- Selected supplied-point index: "
+                f"**{search['selected_supplied_point_index']}**"
+            )
+        selected_replay = search.get("selected_operating_state_replay")
+        if selected_replay is not None:
+            lines.extend(
+                [
+                    "- Selected-state replay source: "
+                    f"**{selected_replay['selection_source']}**",
+                    "- Selected airflow matches retained search origin: "
+                    f"**{selected_replay['selected_airflow_matches_search_origin']}**",
+                    "- Selected fan/loop/system/residual state matches independent replay: "
+                    f"**{selected_replay['all_pressure_components_match_independent_replay']}**",
+                    "- Selected internal network-state fingerprint matches independent replay: "
+                    f"**{selected_replay['network_state_matches_independent_replay']}**",
+                    "- Selected recorded network-state SHA-256: "
+                    f"**{selected_replay['recorded_network_state_sha256']}**",
+                    "- Selected recomputed network-state SHA-256: "
+                    f"**{selected_replay['recomputed_network_state_sha256']}**",
+                    "- Selected network-state projection replay available: "
+                    f"**{selected_replay.get('network_state_projection_replay_available', False)}**",
+                    "- Selected network-state projection matches independent replay: "
+                    f"**{selected_replay.get('network_state_projection_matches_independent_replay')}**",
+                    "- Selected network-state projection replay verdict: "
+                    f"**{selected_replay.get('network_state_projection_replay_verdict')}**",
+                    "- Selected network-state projection mismatch count: "
+                    f"**{selected_replay.get('network_state_projection_mismatch_count')}**",
+                    "- Selected network-state projection mismatch paths: "
+                    f"**{selected_replay.get('network_state_projection_mismatch_paths', [])}**",
+                    "- Selected network-state projection mismatch details: "
+                    f"**{selected_replay.get('network_state_projection_mismatches', [])}**",
+                    "- Selected network-state projection maximum numerical replay errors by field: "
+                    f"**{selected_replay.get('network_state_projection_maximum_numeric_errors', [])}**",
+                    "- Complete selected operating-state replay consistent: "
+                    f"**{selected_replay['all_selected_operating_state_matches_independent_replay']}**",
+                    "- Selected-state replay violation count: "
+                    f"**{selected_replay['violation_count']}**",
+                    "- Maximum selected-state pressure replay error: "
+                    f"**{selected_replay['maximum_absolute_pressure_replay_error_pa']} Pa**",
+                    "- Selected-state replay violations: "
+                    f"**{selected_replay['violations']}**",
+                    "- Tied maximum selected-state replay witnesses: "
+                    f"**{selected_replay['maximum_pressure_replay_error_witnesses']}**",
+                ]
+            )
+        bracket = search["final_bisection_bracket"]
+        if bracket is None:
+            iteration_limit = search.get("iteration_limit_evidence")
+            if iteration_limit is None:
+                lines.append("- Final bisection bracket: **not applicable**")
+            else:
+                remaining = iteration_limit["remaining_bisection_bracket"]
+                invariant = remaining.get("invariant_audit")
+                lines.extend(
+                    [
+                        "- Accepted operating point: **none (iteration limit)**",
+                        "- Last evaluated midpoint airflow: "
+                        f"**{iteration_limit['last_evaluated_midpoint_airflow_m3_h']} m³/h**",
+                        "- Last evaluated fan-system pressure residual: "
+                        f"**{iteration_limit['last_evaluated_fan_minus_system_pressure_pa']} Pa**",
+                        "- Pressure tolerance satisfied: "
+                        f"**{iteration_limit['pressure_tolerance_satisfied']}**",
+                        "- Remaining active bisection bracket: "
+                        f"**{remaining['low_airflow_m3_h']}–"
+                        f"{remaining['high_airflow_m3_h']} m³/h**",
+                        "- Remaining bisection bracket width: "
+                        f"**{remaining['width_m3_h']} m³/h**",
+                        "- Remaining bracket width / supplied-segment span: "
+                        f"**{remaining['width_fraction_of_supplied_segment']}**",
+                    ]
+                )
+                if invariant is not None:
+                    lines.extend(
+                        [
+                            "- Remaining bracket strict sign change preserved: "
+                            f"**{invariant['strict_sign_change_preserved']}**",
+                            "- Completed binary contraction steps: "
+                            f"**{invariant['binary_contraction_step_count']}**",
+                            "- Expected remaining width / supplied-segment span: "
+                            f"**{invariant['expected_width_fraction_of_supplied_segment']}**",
+                            "- Actual remaining width / supplied-segment span: "
+                            f"**{invariant['actual_width_fraction_of_supplied_segment']}**",
+                            "- Remaining-bracket binary-width consistency error: "
+                            f"**{invariant['absolute_width_fraction_consistency_error']}**",
+                        ]
+                    )
+        else:
+            lines.extend(
+                [
+                    "- Final active bisection bracket: "
+                    f"**{bracket['low_airflow_m3_h']}–"
+                    f"{bracket['high_airflow_m3_h']} m³/h**",
+                    "- Final bisection bracket width: "
+                    f"**{bracket['width_m3_h']} m³/h**",
+                    "- Final bisection half-width: "
+                    f"**{bracket['half_width_m3_h']} m³/h**",
+                    "- Final bracket width / supplied-segment span: "
+                    f"**{bracket['width_fraction_of_supplied_segment']}**",
+                    "- Final bracket residuals: "
+                    f"**{bracket['low_fan_minus_system_pressure_pa']} Pa / "
+                    f"{bracket['high_fan_minus_system_pressure_pa']} Pa**",
+                ]
+            )
+            invariant = bracket.get("invariant_audit")
+            if invariant is not None:
+                lines.extend(
+                    [
+                        "- Strict sign-change bracket preserved: "
+                        f"**{invariant['strict_sign_change_preserved']}**",
+                        "- Selected airflow is bracket midpoint: "
+                        f"**{invariant['selected_airflow_is_bracket_midpoint']}**",
+                        "- Binary contraction steps before accepted midpoint: "
+                        f"**{invariant['binary_contraction_step_count']}**",
+                        "- Expected width / supplied-segment span: "
+                        f"**{invariant['expected_width_fraction_of_supplied_segment']}**",
+                        "- Actual width / supplied-segment span: "
+                        f"**{invariant['actual_width_fraction_of_supplied_segment']}**",
+                        "- Absolute binary-width consistency error: "
+                        f"**{invariant['absolute_width_fraction_consistency_error']}**",
+                    ]
+                )
+        trace_audit = search.get("bisection_trace_audit")
+        if trace_audit is not None:
+            lines.extend(
+                [
+                    "- Bisection decision-trace steps: "
+                    f"**{trace_audit['step_count']}**",
+                    "- Bisection decision sequence (L/H/T): "
+                    f"**{trace_audit['decision_sequence']}**",
+                    "- Trace length matches operating iterations: "
+                    f"**{trace_audit['trace_matches_operating_iterations']}**",
+                    "- Every trace step preserves strict sign change: "
+                    f"**{trace_audit['all_steps_preserve_strict_sign_change_before_evaluation']}**",
+                    "- Every trace midpoint is the arithmetic bracket midpoint: "
+                    f"**{trace_audit['all_midpoints_are_arithmetic_bracket_midpoints']}**",
+                    "- Recomputed numeric trace brackets preserve strict sign change: "
+                    f"**{trace_audit['all_numeric_brackets_preserve_strict_sign_change']}**",
+                    "- Recorded trace sign flags match numeric residuals: "
+                    f"**{trace_audit['all_recorded_sign_flags_match_numeric_residuals']}**",
+                    "- Recomputed numeric trace midpoints equal bracket centers: "
+                    f"**{trace_audit['all_numeric_midpoints_are_arithmetic_bracket_midpoints']}**",
+                    "- Recorded trace midpoint flags match numeric geometry: "
+                    f"**{trace_audit['all_recorded_midpoint_flags_match_numeric_geometry']}**",
+                    "- Complete trace raw-state audit consistent: "
+                    f"**{trace_audit['all_trace_raw_state_consistent']}**",
+                    "- Trace pressure-state evidence complete: "
+                    f"**{trace_audit['pressure_state_evidence_complete']}**",
+                    "- Recorded trace fixed pressure matches study input: "
+                    f"**{trace_audit['all_recorded_fixed_pressure_values_match_study']}**",
+                    "- Recorded trace system pressure equals fixed plus loop pressure: "
+                    f"**{trace_audit['all_recorded_system_pressures_match_fixed_plus_loop']}**",
+                    "- Recorded trace residual equals fan minus system pressure: "
+                    f"**{trace_audit['all_recorded_residuals_match_fan_minus_system']}**",
+                    "- Complete trace pressure-state audit consistent: "
+                    f"**{trace_audit['all_trace_pressure_state_consistent']}**",
+                    "- Independent fan/system residual replay available: "
+                    f"**{trace_audit['residual_replay_available']}**",
+                    "- Residual replay checks: "
+                    f"**{trace_audit['residual_replay_check_count']}**",
+                    "- Every retained low residual matches independent replay: "
+                    f"**{trace_audit['all_recorded_low_residuals_match_independent_replay']}**",
+                    "- Every retained high residual matches independent replay: "
+                    f"**{trace_audit['all_recorded_high_residuals_match_independent_replay']}**",
+                    "- Every retained midpoint residual matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_residuals_match_independent_replay']}**",
+                    "- Every retained trace residual matches independent fan/system replay: "
+                    f"**{trace_audit['all_trace_residuals_match_independent_replay']}**",
+                    "- Maximum absolute trace residual-replay error: "
+                    f"**{trace_audit['maximum_absolute_trace_residual_replay_error_pa']} Pa**",
+                    "- Independent per-step bracket pressure-component replay complete: "
+                    f"**{trace_audit['pressure_component_replay_evidence_complete']}**",
+                    "- Recorded midpoint fan pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_fan_pressures_match_independent_replay']}**",
+                    "- Recorded midpoint loop pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_loop_pressures_match_independent_replay']}**",
+                    "- Recorded midpoint total system pressure matches independent replay: "
+                    f"**{trace_audit['all_recorded_midpoint_system_pressures_match_independent_replay']}**",
+                    "- Every retained midpoint pressure component matches independent replay: "
+                    f"**{trace_audit['all_midpoint_pressure_components_match_independent_replay']}**",
+                    "- Every retained low-endpoint pressure component matches independent replay: "
+                    f"**{trace_audit['all_low_pressure_components_match_independent_replay']}**",
+                    "- Every retained high-endpoint pressure component matches independent replay: "
+                    f"**{trace_audit['all_high_pressure_components_match_independent_replay']}**",
+                    "- Every retained low/midpoint/high pressure component matches independent replay: "
+                    f"**{trace_audit['all_trace_pressure_components_match_independent_replay']}**",
+                    "- Maximum absolute trace pressure-component replay error: "
+                    f"**{trace_audit['maximum_absolute_trace_pressure_component_replay_error_pa']} Pa**",
+                    "- Pressure-component replay violation count: "
+                    f"**{trace_audit['pressure_component_replay_violation_count']}**",
+                    "- Pressure-component replay violating iterations: "
+                    f"**{trace_audit['pressure_component_replay_violation_iterations']}**",
+                    "- Pressure-component replay violating bracket positions: "
+                    f"**{trace_audit['pressure_component_replay_violation_positions']}**",
+                    "- Pressure-component replay violating components: "
+                    f"**{trace_audit['pressure_component_replay_violation_components']}**",
+                    "- Tied maximum pressure-component replay witnesses: "
+                    f"**{trace_audit['maximum_trace_pressure_component_replay_error_witnesses']}**",
+                    "- Independent network-state fingerprint replay available: "
+                    f"**{trace_audit['network_state_replay_available']}**",
+                    "- Network-state fingerprint replay complete: "
+                    f"**{trace_audit['network_state_replay_evidence_complete']}**",
+                    "- Every retained low-endpoint network state matches independent replay: "
+                    f"**{trace_audit['all_low_network_states_match_independent_replay']}**",
+                    "- Every retained midpoint network state matches independent replay: "
+                    f"**{trace_audit['all_midpoint_network_states_match_independent_replay']}**",
+                    "- Every retained high-endpoint network state matches independent replay: "
+                    f"**{trace_audit['all_high_network_states_match_independent_replay']}**",
+                    "- Every retained low/midpoint/high network state matches independent replay: "
+                    f"**{trace_audit['all_trace_network_states_match_independent_replay']}**",
+                    "- Network-state replay violation iterations: "
+                    f"**{trace_audit['network_state_replay_violation_iterations']}**",
+                    "- Full-trace network-state projection replay applicable: "
+                    f"**{trace_audit['network_state_projection_replay_applicable']}**",
+                    "- Full-trace network-state projection replay available: "
+                    f"**{trace_audit['network_state_projection_replay_available']}**",
+                    "- Full-trace network-state projection replay coverage: "
+                    f"**{trace_audit['network_state_projection_replay_checked_state_position_count']}/"
+                    f"{trace_audit['network_state_projection_replay_expected_state_position_count']} state positions**",
+                    "- Full-trace network-state projection replay complete coverage: "
+                    f"**{trace_audit['network_state_projection_replay_complete_coverage']}**",
+                    "- Full-trace network-state projection replay verdict: "
+                    f"**{trace_audit['network_state_projection_replay_verdict']}**",
+                    "- Full-trace network-state projection replay violating iterations: "
+                    f"**{trace_audit['network_state_projection_replay_violation_iterations']}**",
+                    "- Full-trace network-state projection replay violating iteration/positions: "
+                    f"**{trace_audit['network_state_projection_replay_violation_iteration_positions']}**",
+                    "- Full-trace network-state projection replay coverage gaps: "
+                    f"**{trace_audit['network_state_projection_replay_coverage_gaps']}**",
+                    "- Full-trace network-state projection mismatch count: "
+                    f"**{trace_audit['network_state_projection_replay_mismatch_count']}**",
+                    "- Full-trace network-state projection mismatch paths: "
+                    f"**{trace_audit['network_state_projection_replay_mismatch_paths']}**",
+                    "- Full-trace network-state projection mismatch details: "
+                    f"**{trace_audit['network_state_projection_replay_mismatches']}**",
+                    "- Full-trace network-state projection maximum numerical replay errors by field: "
+                    f"**{trace_audit['network_state_projection_replay_maximum_numeric_errors']}**",
+                    "- Terminal bisection-bracket pressure components match independent replay: "
+                    f"**{trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
+                    "- Terminal pressure-component replay violation count: "
+                    f"**{trace_audit['terminal_pressure_component_replay_violation_count']}**",
+                    "- Maximum absolute terminal pressure-component replay error: "
+                    f"**{trace_audit['maximum_absolute_terminal_pressure_component_replay_error_pa']} Pa**",
+                    "- Exact terminal pressure-component replay violations: "
+                    f"**{trace_audit['terminal_pressure_component_replay_violations']}**",
+                    "- Tied maximum terminal pressure-component replay witnesses: "
+                    f"**{trace_audit['maximum_terminal_pressure_component_replay_error_witnesses']}**",
+                    "- Terminal network-state fingerprint replay available: "
+                    f"**{trace_audit['terminal_network_state_replay_available']}**",
+                    "- Terminal low/high network states match independent replay: "
+                    f"**{trace_audit['all_terminal_network_states_match_independent_replay']}**",
+                    "- Terminal network-state replay violation count: "
+                    f"**{trace_audit['terminal_network_state_replay_violation_count']}**",
+                    "- Terminal network-state replay violating bracket positions: "
+                    f"**{trace_audit['terminal_network_state_replay_violation_positions']}**",
+                    "- Exact terminal network-state replay violations: "
+                    f"**{trace_audit['terminal_network_state_replay_violations']}**",
+                    "- Terminal network-state projection replay available: "
+                    f"**{trace_audit['terminal_network_state_projection_replay_available']}**",
+                    "- Terminal low/high network-state projections match independent replay: "
+                    f"**{trace_audit['all_terminal_network_state_projections_match_independent_replay']}**",
+                    "- Terminal network-state projection mismatch count: "
+                    f"**{trace_audit['terminal_network_state_projection_mismatch_count']}**",
+                    "- Terminal network-state projection mismatch positions: "
+                    f"**{trace_audit['terminal_network_state_projection_mismatch_positions']}**",
+                    "- Exact terminal network-state projection mismatches: "
+                    f"**{trace_audit['terminal_network_state_projection_mismatches']}**",
+                    "- Maximum absolute trace system-pressure balance error: "
+                    f"**{trace_audit['maximum_absolute_trace_system_pressure_balance_error_pa']} Pa**",
+                    "- Maximum absolute trace residual balance error: "
+                    f"**{trace_audit['maximum_absolute_trace_residual_balance_error_pa']} Pa**",
+                    "- Maximum absolute trace midpoint-centering error: "
+                    f"**{trace_audit['maximum_absolute_trace_midpoint_error_m3_h']} m³/h**",
+                    "- Every recorded trace width matches its airflow endpoints: "
+                    f"**{trace_audit['all_recorded_widths_match_airflow_brackets']}**",
+                    "- Every recorded trace width fraction matches binary iteration contraction: "
+                    f"**{trace_audit['all_recorded_width_fractions_match_iteration_sequence']}**",
+                    "- Maximum absolute trace bracket-width consistency error: "
+                    f"**{trace_audit['maximum_absolute_trace_width_error_m3_h']} m³/h**",
+                    "- Maximum absolute trace width-fraction consistency error: "
+                    f"**{trace_audit['maximum_absolute_trace_width_fraction_error']}**",
+                    "- Trace terminal solver outcome consistent: "
+                    f"**{trace_audit['terminal_outcome_consistent']}**",
+                    "- Trace iteration sequence is contiguous from one: "
+                    f"**{trace_audit['iterations_are_contiguous_from_one']}**",
+                    "- Trace state transitions replay recorded L/H decisions: "
+                    f"**{trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                    "- Trace decisions match midpoint residual/tolerance semantics: "
+                    f"**{trace_audit['all_decisions_match_midpoint_residual_semantics']}**",
+                    "- Trace origin-to-terminal replay anchored to supplied segment: "
+                    f"**{trace_audit['trace_origin_to_terminal_replay_consistent']}**",
+                    "- Trace endpoint replacements (low/high): "
+                    f"**{trace_audit['replace_low_endpoint_count']}/"
+                    f"{trace_audit['replace_high_endpoint_count']}**",
+                ]
+            )
+            terminal_replay = trace_audit.get(
+                "iteration_limit_terminal_replay"
+            )
+            if terminal_replay is not None:
+                lines.append(
+                    "- Iteration-limit remaining bracket replays final L/H "
+                    "decision: "
+                    f"**{terminal_replay['terminal_bracket_replays_recorded_decision']}**"
+                )
+        lines.extend(["", search["scope_note"]])
+
+    point = result["fan_operating_point"]
+    if point is None:
+        lines.extend(["", "## Operating point", "", result["message"]])
+    else:
+        network = result["operating_network_solution"]
+        check = result["system_pressure_check"]
+        variable = network["variable_friction"]
+        power = result["power_evidence"]
+        components = power["system_components"]
+        lines.extend(
+            [
+                "",
+                "## Operating point",
+                "",
+                f"- Airflow: **{point['airflow_m3_h']} m³/h**",
+                f"- Fan pressure: **{point['fan_pressure_pa']} Pa**",
+                "- Variable-friction loop pressure: "
+                f"**{check['loop_network_pressure_pa']} Pa**",
+                f"- Total system pressure: **{check['total_system_pressure_pa']} Pa**",
+                "- Fan-system pressure residual: "
+                f"**{check['fan_minus_system_pressure_pa']} Pa**",
+                f"- Fluid air power: **{power['fluid_air_power_kw']} kW**",
+                "- Loop edge pressure-power dissipation: "
+                f"**{components['loop_network_edge_dissipation_w']} W**",
+                "- Loop pressure-power balance residual: "
+                f"**{components['loop_network_energy_balance_residual_w']} W**",
+                "- Fan-to-fixed-plus-edge-loss power residual: "
+                f"**{components['fan_to_fixed_plus_edge_loss_residual_w']} W**",
+                "- Shaft power: "
+                f"**{power['shaft_power_kw'] if power['shaft_power_kw'] is not None else 'not reported (no explicit fan efficiency)'}**",
+                "- Electrical input: "
+                f"**{power['electrical_input_kw'] if power['electrical_input_kw'] is not None else 'not reported (explicit fan/motor/VFD efficiencies required)'}**",
+                "- Specific fan power: "
+                f"**{power['specific_fan_power_w_per_m3_s'] if power['specific_fan_power_w_per_m3_s'] is not None else 'not reported'}**",
+                "- Network outer iterations: "
+                f"**{variable['outer_iterations']}**",
+                "- Maximum relative resistance closure error: "
+                f"**{variable['max_relative_resistance_closure_error']}**",
+                "- Maximum continuity residual: "
+                f"**{network['max_abs_mass_balance_residual_m3_h']} m³/h**",
+                "- Maximum edge pressure-law residual: "
+                f"**{network['max_abs_pressure_law_residual_pa']} Pa**",
+                "",
+                "### Operating loop edges",
+                "",
+                "| Edge | Basis | Airflow (m³/h) | Direction | Resistance Pa/(m³/s)² | Dissipated pressure power W |",
+                "|---|---|---:|---|---:|---:|",
+            ]
+        )
+        for edge in network["edges"]:
+            lines.append(
+                f"| {edge['name']} | {edge['resistance_basis']} | "
+                f"{edge['airflow_m3_h']} | {edge['flow_direction']} | "
+                f"{edge['resistance_pa_per_m3_s_squared']} | "
+                f"{edge['dissipated_pressure_power_w']} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "### Variable-friction edge closure",
+                "",
+                "| Edge | State | Airflow (m³/h) | Used R | Target R | Relative change | Reynolds |",
+                "|---|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for row in variable["edge_closure"]:
+            target_r = (
+                "—"
+                if row["target_resistance_pa_per_m3_s_squared"] is None
+                else row["target_resistance_pa_per_m3_s_squared"]
+            )
+            reynolds = (
+                "—"
+                if row["target_reynolds_number"] is None
+                else row["target_reynolds_number"]
+            )
+            lines.append(
+                f"| {row['name']} | {row['state']} | {row['airflow_m3_h']} | "
+                f"{row['used_resistance_pa_per_m3_s_squared']} | {target_r} | "
+                f"{row['relative_resistance_change']} | {reynolds} |"
+            )
+
+    lines.extend(
+        [
+            "",
+            "## Supplied fan-curve checks",
+            "",
+            "| Airflow (m³/h) | Fan pressure (Pa) | Loop pressure (Pa) | Total system pressure (Pa) | Margin (Pa) | Network outer iterations |",
+            "|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in result["fan_curve_point_checks"]:
+        lines.append(
+            f"| {row['airflow_m3_h']} | {row['fan_pressure_pa']} | "
+            f"{row['loop_network_pressure_pa']} | {row['system_pressure_pa']} | "
+            f"{row['pressure_margin_pa']} | {row['network_outer_iterations']} |"
+        )
+
+    audit = result.get("fan_curve_supplied_point_residual_audit")
+    if audit:
+        lines.extend(
+            [
+                "",
+                "## Supplied-point residual topology audit",
+                "",
+                "- Supplied-point coverage: "
+                f"**{audit['evaluated_supplied_point_count']}/"
+                f"{audit['expected_supplied_point_count']}** "
+                f"({'complete' if audit['complete_supplied_point_coverage'] else 'partial'})",
+                "- Residual monotonic non-increasing within configured tolerance: "
+                f"**{audit['residual_monotonic_non_increasing_with_tolerance']}**",
+                "- Tolerance-contact supplied points: "
+                f"**{audit['tolerance_contact_point_count']}**",
+                "- Solver-eligible strict positive-to-negative supplied segments: "
+                f"**{audit['strict_sign_change_segment_count']}**",
+                "- Reverse strict negative-to-positive supplied segments (audit-only): "
+                f"**{audit['reverse_strict_sign_change_segment_count']}**",
+                "- All strict bidirectional sign-change supplied segments: "
+                f"**{audit['all_strict_sign_change_segment_count']}**",
+                "- Candidate crossing features: "
+                f"**{audit['candidate_crossing_feature_count']}**",
+                "- Minimum adjacent supplied-point airflow spacing: "
+                f"**{audit['minimum_supplied_point_airflow_spacing_m3_h']} m³/h**",
+                "- Maximum adjacent supplied-point airflow spacing: "
+                f"**{audit['maximum_supplied_point_airflow_spacing_m3_h']} m³/h**",
+                "- Supplied-point spacing max/min ratio: "
+                f"**{audit['supplied_point_airflow_spacing_ratio_max_to_min']}**",
+                "- Selection policy: "
+                f"**{audit['selection_policy']}**",
+                "- Residual-increase transitions: "
+                f"**{audit['residual_increase_transition_count']}**",
+                "- Largest positive residual increase: "
+                f"**{audit['largest_positive_residual_increase_pa']} Pa**",
+            ]
+        )
+        selected = audit.get("selected_candidate_feature")
+        if selected is None:
+            lines.append("- Selected discrete candidate: **not available**")
+        else:
+            if selected["feature_kind"] == "supplied_point_tolerance_contact":
+                selected_text = (
+                    f"supplied point {selected['point_index']} at "
+                    f"{selected['airflow_m3_h']} m³/h"
+                )
+            else:
+                selected_text = (
+                    f"strict sign-change segment "
+                    f"{selected['low_point_index']}–"
+                    f"{selected['high_point_index']} "
+                    f"({selected['low_airflow_m3_h']}–"
+                    f"{selected['high_airflow_m3_h']} m³/h)"
+                )
+            lines.extend(
+                [
+                    "- Selected discrete candidate: "
+                    f"**{selected_text}**",
+                    "- Selected candidate priority rank: "
+                    f"**{audit['selected_candidate_feature_rank']}**",
+                    "- Additional discrete candidate features: "
+                    f"**{audit['additional_candidate_feature_count']}**",
+                    "- Selected candidate is the only discrete feature: "
+                    f"**{audit['selected_candidate_is_only_discrete_feature']}**",
+                ]
+            )
+            alternative_gap = audit.get(
+                "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+            )
+            if alternative_gap is None:
+                lines.append(
+                    "- Nearest alternative candidate interval gap: "
+                    "**not available (no additional discrete candidate)**"
+                )
+            else:
+                lines.extend(
+                    [
+                        "- Nearest alternative candidate interval gap: "
+                        f"**{alternative_gap} m³/h**",
+                        "- Nearest alternative candidate gap / supplied fan-curve span: "
+                        f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span']}**",
+                        "- Nearest alternative candidate gap / minimum supplied-point spacing: "
+                        f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing']}**",
+                        "- Nearest alternative candidate supplied-point index-interval gap: "
+                        f"**{audit['nearest_alternative_candidate_feature_index_interval_gap']} index step(s)**",
+                        "- Selected airflow overlaps an alternative candidate interval: "
+                        f"**{audit['selected_airflow_overlaps_alternative_candidate_interval']}**",
+                    ]
+                )
+                alternatives = audit.get("alternative_candidate_features") or []
+                if alternatives:
+                    lines.extend(
+                        [
+                            "",
+                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span | Gap / min supplied spacing | Supplied-point index-interval gap |",
+                            "|---:|---|---|---:|---:|---:|---:|",
+                        ]
+                    )
+                    for feature in alternatives:
+                        if (
+                            feature["feature_kind"]
+                            == "supplied_point_tolerance_contact"
+                        ):
+                            feature_text = (
+                                f"supplied point {feature['point_index']}"
+                            )
+                        else:
+                            feature_text = (
+                                "strict sign-change segment "
+                                f"{feature['low_point_index']}–"
+                                f"{feature['high_point_index']}"
+                            )
+                        lines.append(
+                            f"| {feature['solver_priority_rank']} | "
+                            f"{feature_text} | "
+                            f"{feature['airflow_interval_low_m3_h']}–"
+                            f"{feature['airflow_interval_high_m3_h']} | "
+                            f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} | "
+                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span']} | "
+                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing']} | "
+                            f"{feature['selected_feature_to_candidate_feature_index_interval_gap']} |"
+                        )
+        reverse_segments = audit.get("reverse_strict_sign_change_segments") or []
+        if reverse_segments:
+            lines.extend(
+                [
+                    "",
+                    "| Reverse segment low point | High point | Airflow span (m³/h) | Low residual (Pa) | High residual (Pa) |",
+                    "|---:|---:|---|---:|---:|",
+                ]
+            )
+            for segment in reverse_segments:
+                lines.append(
+                    f"| {segment['low_point_index']} | "
+                    f"{segment['high_point_index']} | "
+                    f"{segment['low_airflow_m3_h']}–"
+                    f"{segment['high_airflow_m3_h']} | "
+                    f"{segment['low_fan_minus_system_pressure_pa']} | "
+                    f"{segment['high_fan_minus_system_pressure_pa']} |"
+                )
+        if audit["residual_transitions"]:
+            lines.extend(
+                [
+                    "",
+                    "| Low point | High point | Airflow span (m³/h) | Residual change (Pa) | Classification |",
+                    "|---:|---:|---|---:|---|",
+                ]
+            )
+            for transition in audit["residual_transitions"]:
+                lines.append(
+                    f"| {transition['low_point_index']} | "
+                    f"{transition['high_point_index']} | "
+                    f"{transition['low_airflow_m3_h']}–"
+                    f"{transition['high_airflow_m3_h']} | "
+                    f"{transition['residual_change_pa']} | "
+                    f"{transition['classification']} |"
+                )
+        lines.extend(["", audit["scope_note"]])
+
+    integrity = result.get("result_integrity")
+    if integrity is not None:
+        lines.extend(
+            [
+                "",
+                "## Solver result integrity",
+                "",
+                f"- Algorithm: **{integrity['algorithm']}**",
+                f"- Canonicalization: `{integrity['canonicalization']}`",
+                f"- Scope: `{integrity['scope']}`",
+                f"- SHA-256: `{integrity['sha256']}`",
+            ]
+        )
+
+    lines.extend(["", "## Engineering note", "", result["scope_note"], ""])
+    return "\n".join(lines)

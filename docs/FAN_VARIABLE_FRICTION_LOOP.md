@@ -38,6 +38,8 @@ v0.89 applies the same canonical network-state identity to the accepted selected
 
 v0.90 hardens that fingerprint canonicalization against harmless collection-order changes. Solved node rows, solved edge rows, and variable-friction edge-closure rows are sorted by their unique names before compact JSON serialization and SHA-256 hashing. Trace, terminal-bracket, and selected operating-state replay therefore compare semantic solved-state content rather than incidental enumeration order while retaining sensitivity to the same numeric state.
 
+v0.91 retains that same order-invariant canonical projection for the terminal bracket itself, not only its digest. Solved final and post-decision iteration-limit low/high endpoint projections are independently reconstructed and compared field-by-field, with exact deterministic JSON-style mismatch paths for node, edge, pressure-power, or variable-friction closure differences. This makes terminal-state corruption directly localizable while preserving v0.90's immunity to harmless named-collection reordering. The projection remains implementation provenance only.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

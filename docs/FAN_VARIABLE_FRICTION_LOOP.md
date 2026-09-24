@@ -4,6 +4,8 @@ CleanroomX v0.33 couples a supplied fan pressure/airflow curve directly to the e
 
 This workflow is intentionally separate from the v0.26 fixed-resistance fan/loop solver. v0.26 is exact for a network whose edge laws remain fixed quadratic laws. v0.33 is for loop edges whose resistance was derived from explicit duct geometry, absolute roughness, and kinematic viscosity and therefore needs the v0.30 Darcy-friction closure iteration as airflow changes.
 
+For retained bounded-bisection traces, v0.80 also records midpoint fan pressure and total system pressure and independently verifies that their difference reproduces the stored midpoint fan-minus-system residual within rounding tolerance. This audit checks numerical provenance only; it does not add a physical uncertainty or acceptance margin.
+
 ## Model
 
 For each candidate total airflow, CleanroomX:

@@ -822,6 +822,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_residual_replay_violation_corner_indices']}**",
                 "- Maximum trace residual-replay error: "
                 f"**{search_summary['maximum_bisection_trace_residual_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_residual_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Trace independent full pressure-state replay violation corners: "
+                f"**{search_summary['bisection_trace_pressure_state_replay_violation_corner_indices']}**",
+                "- Maximum midpoint fan-pressure replay error: "
+                f"**{search_summary['maximum_bisection_trace_midpoint_fan_pressure_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_midpoint_fan_pressure_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Maximum midpoint loop-pressure replay error: "
+                f"**{search_summary['maximum_bisection_trace_midpoint_loop_pressure_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_midpoint_loop_pressure_replay_error_pa'] is not None else 'not available'} Pa**",
+                "- Maximum midpoint system-pressure replay error: "
+                f"**{search_summary['maximum_bisection_trace_midpoint_system_pressure_replay_error_pa']['value'] if search_summary['maximum_bisection_trace_midpoint_system_pressure_replay_error_pa'] is not None else 'not available'} Pa**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -902,6 +910,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_recorded_width_fractions_match_iteration_sequence']}**",
                         "- Nominal trace pressure-state audit consistent: "
                         f"**{nominal_trace_audit['all_trace_pressure_state_consistent']}**",
+                        "- Nominal trace independent full pressure-state replay consistent: "
+                        f"**{nominal_trace_audit['all_midpoint_pressure_states_match_independent_replay']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")

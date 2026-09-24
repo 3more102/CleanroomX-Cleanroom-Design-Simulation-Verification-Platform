@@ -258,6 +258,7 @@ def _fan_curve_supplied_point_residual_audit(
     ]
 
     strict_sign_change_segments = []
+    reverse_strict_sign_change_segments = []
     residual_transitions = []
     positive_increases = []
     for index, (left, right) in enumerate(
@@ -285,6 +286,21 @@ def _fan_curve_supplied_point_residual_audit(
         )
         if left_residual > 0.0 and right_residual < 0.0:
             strict_sign_change_segments.append(
+                {
+                    "low_point_index": index,
+                    "high_point_index": index + 1,
+                    "low_airflow_m3_h": left["airflow_m3_h"],
+                    "high_airflow_m3_h": right["airflow_m3_h"],
+                    "low_fan_minus_system_pressure_pa": left[
+                        "pressure_margin_pa"
+                    ],
+                    "high_fan_minus_system_pressure_pa": right[
+                        "pressure_margin_pa"
+                    ],
+                }
+            )
+        elif left_residual < 0.0 and right_residual > 0.0:
+            reverse_strict_sign_change_segments.append(
                 {
                     "low_point_index": index,
                     "high_point_index": index + 1,
@@ -338,6 +354,14 @@ def _fan_curve_supplied_point_residual_audit(
         "tolerance_contact_points": tolerance_contacts,
         "strict_sign_change_segment_count": len(strict_sign_change_segments),
         "strict_sign_change_segments": strict_sign_change_segments,
+        "reverse_strict_sign_change_segment_count": len(
+            reverse_strict_sign_change_segments
+        ),
+        "reverse_strict_sign_change_segments": reverse_strict_sign_change_segments,
+        "all_strict_sign_change_segment_count": (
+            len(strict_sign_change_segments)
+            + len(reverse_strict_sign_change_segments)
+        ),
         "candidate_crossing_feature_count": len(candidate_features),
         "candidate_crossing_features_in_solver_priority_order": (
             candidate_features
@@ -369,10 +393,12 @@ def _fan_curve_supplied_point_residual_audit(
         "scope_note": (
             "This is a discrete audit of fan-minus-system pressure residuals "
             "at the supplied fan-curve points already evaluated by the solver. "
-            "It reports tolerance contacts, strict sign-change segments, and "
-            "whether those sampled residuals are non-increasing within the "
-            "configured pressure tolerance. Candidate features are ordered "
-            "using the solver's actual selection priority, while selected-"
+            "It reports tolerance contacts, solver-eligible positive-to-negative "
+            "strict sign-change segments, audit-only reverse negative-to-positive "
+            "strict sign-change segments, and whether those sampled residuals are "
+            "non-increasing within the configured pressure tolerance. Candidate "
+            "features remain limited to the solver's actual positive-to-negative "
+            "selection priority, while selected-"
             "candidate provenance is added only for solved results. For solved "
             "cases with additional candidates, airflow separation is measured "
             "only to each alternative discrete point or sign-change interval "

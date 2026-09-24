@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.78 bisection trace decision-semantics audit — 2026-09-24
+
+- Independently verifies every retained bounded-bisection L/H/T decision against the recorded midpoint fan-minus-system residual and the configured operating-pressure tolerance.
+- Retains per-step recorded/expected decision evidence plus exact violating iteration numbers, separate from state-transition replay and origin-to-terminal replay.
+- Aggregates exact nonlinear uncertainty-corner indices for decision-semantic violations and surfaces the evidence in standalone loop, uncertainty, and engineering-dossier Markdown.
+- Adds solved, iteration-limit, and deliberate decision-corruption regression coverage while preserving v0.76 geometry checks and v0.77 origin replay.
+- Does not change candidate priority, root selection, root-acceptance rules, iteration budgets, fan-curve no-extrapolation behavior, or any engineering acceptance criterion.
+- Treats decision semantics strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, a stall/surge criterion, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.78.0.
+
 ## v0.77 bisection trace origin-to-terminal replay — 2026-09-24
 
 - Anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points.

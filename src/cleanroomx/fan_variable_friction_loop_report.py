@@ -144,6 +144,12 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     f"**{trace_audit['all_trace_raw_state_consistent']}**",
                     "- Maximum absolute trace midpoint-centering error: "
                     f"**{trace_audit['maximum_absolute_trace_midpoint_error_m3_h']} m³/h**",
+                    "- Independent trace midpoint residual recomputation complete: "
+                    f"**{trace_audit['midpoint_residual_recompute_complete']}**",
+                    "- Every recorded trace midpoint residual matches independent fan/system re-solve: "
+                    f"**{trace_audit['all_midpoint_residuals_match_independent_recomputation']}**",
+                    "- Maximum absolute trace midpoint residual recomputation error: "
+                    f"**{trace_audit['maximum_absolute_midpoint_residual_recompute_error_pa']} Pa**",
                     "- Every recorded trace width matches its airflow endpoints: "
                     f"**{trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                     "- Every recorded trace width fraction matches binary iteration contraction: "

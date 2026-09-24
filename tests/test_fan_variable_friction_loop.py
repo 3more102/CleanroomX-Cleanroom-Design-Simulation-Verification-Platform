@@ -1525,24 +1525,36 @@ def test_terminal_network_state_projection_replay_localizes_internal_corruption(
     mismatches = corrupted_audit[
         "terminal_network_state_projection_mismatches"
     ]
-    assert len(mismatches) == 1
-    mismatch = mismatches[0]
-    assert mismatch["iteration"] == 1
-    assert mismatch["position"] == "low"
-    assert mismatch["mismatch_paths"] == [
+    assert mismatches == [
+        {
+            "iteration": 1,
+            "position": "low",
+            "mismatch_paths": [
+                "$.nodes[0].relative_pressure_pa",
+            ],
+        }
+    ]
+    mismatch_details = corrupted_audit[
+        "terminal_network_state_projection_mismatch_details"
+    ]
+    assert len(mismatch_details) == 1
+    detail = mismatch_details[0]
+    assert detail["iteration"] == 1
+    assert detail["position"] == "low"
+    assert detail["mismatch_paths"] == [
         "$.nodes[0].relative_pressure_pa"
     ]
-    assert len(mismatch["mismatches"]) == 1
-    leaf = mismatch["mismatches"][0]
+    assert len(detail["mismatches"]) == 1
+    leaf = detail["mismatches"][0]
     assert leaf["path"] == "$.nodes[0].relative_pressure_pa"
     assert leaf["mismatch_kind"] == "value_mismatch"
     assert leaf["absolute_error"] == pytest.approx(1.0)
     assert leaf["numeric_error_field"] == "relative_pressure_pa"
-    assert len(mismatch["maximum_numeric_errors"]) == 1
-    assert mismatch["maximum_numeric_errors"][0]["field"] == (
+    assert len(detail["maximum_numeric_errors"]) == 1
+    assert detail["maximum_numeric_errors"][0]["field"] == (
         "relative_pressure_pa"
     )
-    assert mismatch["maximum_numeric_errors"][0][
+    assert detail["maximum_numeric_errors"][0][
         "maximum_absolute_error"
     ] == pytest.approx(1.0)
     terminal_replay = corrupted_audit["terminal_network_state_replay"]
@@ -1598,6 +1610,9 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     ] is True
     assert replay["network_state_projection_mismatch_count"] == 0
     assert replay["network_state_projection_mismatch_paths"] == []
+    assert replay["network_state_projection_replay_verdict"] == (
+        "selected_network_state_projection_replay_consistent"
+    )
     assert replay["network_state_projection_mismatches"] == []
     assert replay["network_state_projection_maximum_numeric_errors"] == []
     assert replay["selected_network_state_projection_replay_consistent"] is True
@@ -1762,12 +1777,16 @@ def test_selected_operating_state_projection_replay_localizes_corruption() -> No
         "all_selected_operating_state_matches_independent_replay"
     ] is False
     assert corrupted["violation_count"] == 1
-    projection_violation = corrupted["violations"][0]
-    assert projection_violation["component"] == "network_state_projection"
-    assert projection_violation["mismatch_paths"] == [
-        "$.nodes[0].relative_pressure_pa"
+    assert corrupted["violations"] == [
+        {
+            "component": "network_state_projection",
+            "mismatch_paths": ["$.nodes[0].relative_pressure_pa"],
+        }
     ]
-    mismatches = projection_violation["mismatches"]
+    assert corrupted["network_state_projection_replay_verdict"] == (
+        "selected_network_state_projection_replay_inconsistent"
+    )
+    mismatches = corrupted["network_state_projection_mismatches"]
     assert len(mismatches) == 1
     assert mismatches[0]["path"] == "$.nodes[0].relative_pressure_pa"
     assert mismatches[0]["mismatch_kind"] == "value_mismatch"
@@ -1781,16 +1800,12 @@ def test_selected_operating_state_projection_replay_localizes_corruption() -> No
     ) == pytest.approx(1.0)
     assert mismatches[0]["absolute_error"] == pytest.approx(1.0)
     assert mismatches[0]["numeric_error_field"] == "relative_pressure_pa"
-    maximum_errors = projection_violation["maximum_numeric_errors"]
+    maximum_errors = corrupted[
+        "network_state_projection_maximum_numeric_errors"
+    ]
     assert len(maximum_errors) == 1
     assert maximum_errors[0]["field"] == "relative_pressure_pa"
     assert maximum_errors[0]["maximum_absolute_error"] == pytest.approx(1.0)
-    assert corrupted[
-        "network_state_projection_mismatches"
-    ] == mismatches
-    assert corrupted[
-        "network_state_projection_maximum_numeric_errors"
-    ] == maximum_errors
 
 
 def _selected_projection_replay_with_mutation(mutator):

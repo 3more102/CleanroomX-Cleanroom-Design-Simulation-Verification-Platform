@@ -279,6 +279,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_grid = tk.BooleanVar(value=True)
         self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_device_labels = tk.BooleanVar(value=True)
+        self._view_mode = tk.StringVar(value="split")
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []
         self._history_current: dict | None = None
@@ -310,6 +311,24 @@ class SpatialDesignWorkspace(ttk.Frame):
             style="Accent.TButton",
             command=self._on_sync_requested,
         ).pack(side="right")
+        view_modes = ttk.Frame(studio_header, style="Surface.TFrame")
+        view_modes.pack(side="right", padx=(0, 10))
+        ttk.Label(view_modes, text="VIEW", style="Muted.TLabel").pack(side="left", padx=(0, 4))
+        ttk.Button(
+            view_modes,
+            text="Split",
+            command=lambda: self.set_view_mode("split"),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            view_modes,
+            text="2D Focus",
+            command=lambda: self.set_view_mode("2d"),
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            view_modes,
+            text="3D Focus",
+            command=lambda: self.set_view_mode("3d"),
+        ).pack(side="left", padx=2)
 
         toolbar = ttk.Frame(self, style="Surface.TFrame", padding=(10, 5, 10, 8))
         toolbar.pack(fill="x", padx=6)
@@ -364,10 +383,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self.redraw,
         ).pack(side="left", padx=4)
 
-        body = ttk.Panedwindow(self, orient="horizontal")
+        body = self.body_panes = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
 
-        two_d = ttk.Frame(body)
+        two_d = self.two_d_frame = ttk.Frame(body)
         body.add(two_d, weight=4)
         header2 = ttk.Frame(two_d, style="Surface.TFrame")
         header2.pack(fill="x")
@@ -397,10 +416,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.pack(fill="both", expand=True)
         ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=2)
 
-        right = ttk.Panedwindow(body, orient="vertical")
+        right = self.right_panes = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=4)
 
-        three_d = ttk.Frame(right)
+        three_d = self.three_d_frame = ttk.Frame(right)
         right.add(three_d, weight=3)
         header3 = ttk.Frame(three_d)
         header3.pack(fill="x")
@@ -431,7 +450,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d = tk.Canvas(three_d, background="#111820", highlightthickness=1)
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(right, padding=6)
+        inspector = self.inspector_frame = ttk.Frame(right, padding=6)
         right.add(inspector, weight=2)
         ttk.Label(inspector, text="PROPERTIES", style="Section.TLabel").grid(
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
@@ -511,6 +530,69 @@ class SpatialDesignWorkspace(ttk.Frame):
             self.selected = None
         self._load_property_panel()
         self.redraw()
+
+    @staticmethod
+    def _pane_contains(paned: ttk.Panedwindow, child: tk.Misc) -> bool:
+        child_name = str(child)
+        return child_name in {str(item) for item in paned.panes()}
+
+    def set_view_mode(self, mode: str) -> None:
+        """Switch between split, 2D-focused, and 3D-focused engineering views."""
+        if mode not in {"split", "2d", "3d"}:
+            mode = "split"
+
+        body = self.body_panes
+        has_2d = self._pane_contains(body, self.two_d_frame)
+        has_right = self._pane_contains(body, self.right_panes)
+
+        if mode == "2d":
+            if not has_2d:
+                body.insert(0, self.two_d_frame, weight=4)
+            if has_right:
+                body.forget(self.right_panes)
+            self.canvas_2d.focus_set()
+            message = "2D plan focus"
+        elif mode == "3d":
+            if has_2d:
+                body.forget(self.two_d_frame)
+            if not has_right:
+                body.add(self.right_panes, weight=4)
+            self.canvas_3d.focus_set()
+            message = "3D volume focus"
+        else:
+            if not has_2d:
+                body.insert(0, self.two_d_frame, weight=4)
+            if not has_right:
+                body.add(self.right_panes, weight=4)
+            message = "Split 2D / 3D view"
+
+        self._view_mode.set(mode)
+        self._status_setter(message)
+        self.after_idle(self.redraw)
+
+    def _pressure_cascade_links(self) -> list[tuple[str, str, float | None]]:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") != "project_verification":
+            return []
+        payload = getattr(analysis, "input", None)
+        if not isinstance(payload, dict):
+            return []
+        raw_links = payload.get("pressure_cascade", [])
+        if not isinstance(raw_links, list):
+            return []
+
+        links: list[tuple[str, str, float | None]] = []
+        for raw in raw_links:
+            if not isinstance(raw, dict):
+                continue
+            higher = str(raw.get("higher_pressure_room") or "").strip()
+            lower = str(raw.get("lower_pressure_room") or "").strip()
+            if not higher or not lower:
+                continue
+            delta_raw = raw.get("min_delta_pa")
+            delta = None if delta_raw is None else _finite_number(delta_raw, 0.0)
+            links.append((higher, lower, delta))
+        return links
 
     def _set_grid_from_control(self, event=None) -> None:
         text = self._grid_var.get().strip().lower().replace("m", "").strip()
@@ -843,6 +925,47 @@ class SpatialDesignWorkspace(ttk.Frame):
                 font=("TkDefaultFont", 9, "bold" if selected else "normal"),
                 tags=(f"room:{room['id']}", "room"),
             )
+
+        cascade_links = self._pressure_cascade_links()
+        if cascade_links:
+            rooms_by_name = {room["name"]: room for room in self.layout["rooms"]}
+            for higher_name, lower_name, min_delta_pa in cascade_links:
+                higher = rooms_by_name.get(higher_name)
+                lower = rooms_by_name.get(lower_name)
+                if higher is None or lower is None:
+                    continue
+                hx, hy = self._world_to_canvas(
+                    higher["x_m"] + higher["length_m"] / 2.0,
+                    higher["y_m"] + higher["width_m"] / 2.0,
+                )
+                lx, ly = self._world_to_canvas(
+                    lower["x_m"] + lower["length_m"] / 2.0,
+                    lower["y_m"] + lower["width_m"] / 2.0,
+                )
+                canvas.create_line(
+                    hx,
+                    hy,
+                    lx,
+                    ly,
+                    fill="#f59e0b",
+                    width=2,
+                    dash=(7, 4),
+                    arrow=tk.LAST,
+                    arrowshape=(10, 12, 4),
+                    tags=("pressure-cascade",),
+                )
+                if min_delta_pa is None:
+                    label = "high → low"
+                else:
+                    label = f"ΔP ≥ {min_delta_pa:g} Pa"
+                canvas.create_text(
+                    (hx + lx) / 2.0,
+                    (hy + ly) / 2.0 - 9,
+                    text=label,
+                    fill="#ffd18a",
+                    font=("TkDefaultFont", 9, "bold"),
+                    tags=("pressure-cascade",),
+                )
 
         symbols = {
             "door": "D",

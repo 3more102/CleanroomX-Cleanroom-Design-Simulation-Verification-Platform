@@ -329,6 +329,11 @@ def _fan_curve_supplied_point_residual_audit(
         "evaluated_supplied_point_count": observed_count,
         "complete_supplied_point_coverage": observed_count == expected_count,
         "operating_pressure_tolerance_pa": tolerance,
+        "supplied_fan_curve_airflow_span_m3_h": round(
+            study.fan_curve.points[-1].airflow_m3_h
+            - study.fan_curve.points[0].airflow_m3_h,
+            9,
+        ),
         "tolerance_contact_point_count": len(tolerance_contacts),
         "tolerance_contact_points": tolerance_contacts,
         "strict_sign_change_segment_count": len(strict_sign_change_segments),
@@ -343,6 +348,7 @@ def _fan_curve_supplied_point_residual_audit(
         "selected_candidate_is_only_discrete_feature": None,
         "alternative_candidate_features": None,
         "nearest_alternative_candidate_airflow_interval_gap_m3_h": None,
+        "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span": None,
         "nearest_alternative_candidate_features": None,
         "selected_airflow_overlaps_alternative_candidate_interval": None,
         "selection_policy": (
@@ -369,8 +375,9 @@ def _fan_curve_supplied_point_residual_audit(
             "using the solver's actual selection priority, while selected-"
             "candidate provenance is added only for solved results. For solved "
             "cases with additional candidates, airflow separation is measured "
-            "only to each alternative discrete point or sign-change interval; "
-            "no alternate continuous root location is inferred. Candidate "
+            "only to each alternative discrete point or sign-change interval "
+            "and normalized only by the supplied fan-curve airflow span; no "
+            "alternate continuous root location is inferred. Candidate "
             "crossing features are not a count or proof of continuous physical "
             "intersections, and sampled monotonicity is not a dynamic stability, stall/surge, "
             "manufacturer-region, or equipment-acceptance criterion."
@@ -416,11 +423,15 @@ def _with_selected_crossing_feature(
 
     alternative_features = None
     nearest_alternative_gap = None
+    nearest_alternative_gap_fraction = None
     nearest_alternative_features = None
     selected_overlaps_alternative_interval = None
     if selected_copy is not None:
         alternative_features = []
         airflow = float(selected_airflow_m3_h)
+        supplied_curve_span = float(
+            audit["supplied_fan_curve_airflow_span_m3_h"]
+        )
         for feature in candidates:
             if feature["solver_priority_rank"] == selected_rank:
                 continue
@@ -444,6 +455,10 @@ def _with_selected_crossing_feature(
                     "selected_airflow_to_feature_interval_gap_m3_h": round(
                         gap,
                         9,
+                    ),
+                    "selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span": round(
+                        gap / supplied_curve_span,
+                        12,
                     ),
                 }
             )
@@ -478,6 +493,10 @@ def _with_selected_crossing_feature(
                 rel_tol=0.0,
                 abs_tol=1e-9,
             )
+            nearest_alternative_gap_fraction = round(
+                nearest_alternative_gap / supplied_curve_span,
+                12,
+            )
             nearest_alternative_gap = round(nearest_alternative_gap, 9)
         else:
             nearest_alternative_features = []
@@ -498,6 +517,9 @@ def _with_selected_crossing_feature(
             "alternative_candidate_features": alternative_features,
             "nearest_alternative_candidate_airflow_interval_gap_m3_h": (
                 nearest_alternative_gap
+            ),
+            "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span": (
+                nearest_alternative_gap_fraction
             ),
             "nearest_alternative_candidate_features": (
                 nearest_alternative_features

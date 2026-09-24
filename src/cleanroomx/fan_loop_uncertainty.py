@@ -129,6 +129,7 @@ def _edge_airflow_corner_ranges(
         )
     return rows
 
+
 def analyze_fan_loop_network_uncertainty(
     study: FanLoopNetworkUncertaintyStudy,
 ) -> dict:

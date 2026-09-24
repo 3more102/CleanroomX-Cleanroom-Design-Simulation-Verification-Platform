@@ -24,6 +24,51 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
         f"- Operating iterations: **{diagnostics['operating_iterations']}**",
     ]
 
+    supplied_replay = result.get(
+        "fan_curve_supplied_point_network_state_replay"
+    )
+    if supplied_replay is not None:
+        lines.extend(
+            [
+                "",
+                "## Supplied-point network-state replay audit",
+                "",
+                "- Supplied-point replay applicable: "
+                f"**{supplied_replay['applicable']}**",
+                "- Supplied-point replay available: "
+                f"**{supplied_replay['available']}**",
+                "- Supplied-point replay coverage: "
+                f"**{supplied_replay['evaluated_supplied_point_count']}/"
+                f"{supplied_replay['expected_supplied_point_count']} evaluated; "
+                f"{supplied_replay['independent_replay_success_count']}/"
+                f"{supplied_replay['evaluated_supplied_point_count']} independently replayed**",
+                "- Supplied-point replay complete coverage: "
+                f"**{supplied_replay['complete_replay_coverage']}**",
+                "- Supplied-point replay verdict: "
+                f"**{supplied_replay['replay_verdict']}**",
+                "- All evaluated supplied-point network-state hashes match independent replay: "
+                f"**{supplied_replay['all_evaluated_supplied_point_network_state_hashes_match_independent_replay']}**",
+                "- All evaluated supplied-point network-state projections match independent replay: "
+                f"**{supplied_replay['all_evaluated_supplied_point_network_state_projections_match_independent_replay']}**",
+                "- Supplied-point hash replay violation points: "
+                f"**{supplied_replay['hash_violation_point_indices']}**",
+                "- Supplied-point projection replay violation points: "
+                f"**{supplied_replay['projection_violation_point_indices']}**",
+                "- Supplied-point replay coverage-gap points: "
+                f"**{supplied_replay['coverage_gap_point_indices']}**",
+                "- Supplied-point replay coverage-gap details: "
+                f"**{supplied_replay['coverage_gaps']}**",
+                "- Supplied-point network-state projection mismatch count: "
+                f"**{supplied_replay['network_state_projection_mismatch_count']}**",
+                "- Supplied-point network-state projection mismatch paths: "
+                f"**{supplied_replay['network_state_projection_mismatch_paths']}**",
+                "- Supplied-point network-state projection mismatch details: "
+                f"**{supplied_replay['network_state_projection_mismatches']}**",
+                "- Supplied-point network-state projection maximum numerical replay errors by field: "
+                f"**{supplied_replay['network_state_projection_maximum_numeric_errors']}**",
+            ]
+        )
+
     search = result.get("operating_point_search_evidence")
     if search is not None:
         lines.extend(

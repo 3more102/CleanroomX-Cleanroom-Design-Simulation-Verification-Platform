@@ -2610,6 +2610,24 @@ def _operating_point_search_resolution_summary(
         )
         is not True
     ]
+    trace_endpoint_pressure_component_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_endpoint_pressure_components_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
+    trace_full_bracket_pressure_component_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_bracket_pressure_components_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -3031,6 +3049,30 @@ def _operating_point_search_resolution_summary(
                 "maximum_absolute_trace_pressure_component_replay_error_pa",
                 "Pa",
             )
+        ),
+        "bisection_trace_endpoint_pressure_component_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                trace_endpoint_pressure_component_replay_violation_corner_indices
+            )
+        ),
+        "bisection_trace_endpoint_pressure_component_replay_violation_corner_indices": (
+            trace_endpoint_pressure_component_replay_violation_corner_indices
+        ),
+        "maximum_bisection_trace_endpoint_pressure_component_replay_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_endpoint_pressure_component_replay_error_pa",
+                "Pa",
+            )
+        ),
+        "bisection_trace_full_bracket_pressure_component_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                trace_full_bracket_pressure_component_replay_violation_corner_indices
+            )
+        ),
+        "bisection_trace_full_bracket_pressure_component_replay_violation_corner_indices": (
+            trace_full_bracket_pressure_component_replay_violation_corner_indices
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)

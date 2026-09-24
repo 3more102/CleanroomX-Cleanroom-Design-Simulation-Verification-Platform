@@ -4,6 +4,13 @@ CleanroomX v0.33 couples a supplied fan pressure/airflow curve directly to the e
 
 This workflow is intentionally separate from the v0.26 fixed-resistance fan/loop solver. v0.26 is exact for a network whose edge laws remain fixed quadratic laws. v0.33 is for loop edges whose resistance was derived from explicit duct geometry, absolute roughness, and kinematic viscosity and therefore needs the v0.30 Darcy-friction closure iteration as airflow changes.
 
+
+## Iteration-limit decision-trace replay
+
+v0.75 extends the same bounded-bisection decision trace to searches that exhaust the configured operating-point iteration budget. The unresolved result retains every completed L/H midpoint decision, verifies contiguous iteration numbering and inter-step state replay, then replays the final recorded endpoint replacement into the remaining active signed-residual bracket. The audit explicitly expects no terminal T decision for an iteration-limit outcome, and no operating point is accepted.
+
+The retained path and terminal replay are numerical implementation provenance only. They are not physical airflow uncertainty, interpolation-error bounds, continuous root guarantees, stability or stall/surge evidence, manufacturer operating limits, commissioning/certification evidence, or equipment-acceptance criteria.
+
 ## Model
 
 For each candidate total airflow, CleanroomX:

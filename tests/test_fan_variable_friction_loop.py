@@ -134,6 +134,15 @@ def test_network_state_fingerprint_is_order_invariant_for_named_collections() ->
 
     assert _network_state_sha256(reordered) == baseline
 
+    signed_zero = json.loads(json.dumps(network))
+    signed_zero["nodes"][0]["mass_balance_residual_m3_h"] = -0.0
+    signed_zero["nodes"][1]["specified_pressure_power_w"] = -0.0
+    signed_zero["edges"][0]["pressure_law_residual_pa"] = -0.0
+    signed_zero["max_abs_mass_balance_residual_m3_h"] = -0.0
+    signed_zero["max_abs_pressure_law_residual_pa"] = -0.0
+    signed_zero["pressure_power"]["balance_residual_w"] = -0.0
+    assert _network_state_sha256(signed_zero) == baseline
+
     reordered["edges"][0]["airflow_m3_h"] += 1.0
     assert _network_state_sha256(reordered) != baseline
 

@@ -284,6 +284,27 @@ class CleanroomXApp:
             padding=(9, 5),
         )
         style.configure(
+            "RunStateRunning.TLabel",
+            background="#5a4517",
+            foreground="#fde68a",
+            font=("TkDefaultFont", 9, "bold"),
+            padding=(9, 5),
+        )
+        style.configure(
+            "RunStateSuccess.TLabel",
+            background="#173f35",
+            foreground="#86efac",
+            font=("TkDefaultFont", 9, "bold"),
+            padding=(9, 5),
+        )
+        style.configure(
+            "RunStateFailed.TLabel",
+            background="#5a2631",
+            foreground="#fecdd3",
+            font=("TkDefaultFont", 9, "bold"),
+            padding=(9, 5),
+        )
+        style.configure(
             "TButton",
             padding=(9, 5),
             background=self._colors["surface_alt"],
@@ -1595,13 +1616,28 @@ class CleanroomXApp:
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
 
+    def _set_run_state(self, value: str) -> None:
+        state = str(value).upper()
+        if hasattr(self, "run_state_var"):
+            self.run_state_var.set(state)
+        if not hasattr(self, "run_state_label"):
+            return
+        if state == "RUNNING":
+            style = "RunStateRunning.TLabel"
+        elif any(token in state for token in ("FAIL", "ERROR", "INVALID")):
+            style = "RunStateFailed.TLabel"
+        elif state == "READY":
+            style = "RunState.TLabel"
+        else:
+            style = "RunStateSuccess.TLabel"
+        self.run_state_label.configure(style=style)
+
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.run_button.configure(state="disabled" if running else "normal")
         self.cancel_button.configure(state="normal" if running else "disabled")
         self.input_text.configure(state="disabled" if running else "normal")
-        if hasattr(self, "run_state_var"):
-            self.run_state_var.set("RUNNING" if running else "READY")
+        self._set_run_state("RUNNING" if running else "READY")
 
     def _poll_worker(self) -> None:
         try:
@@ -1616,8 +1652,7 @@ class CleanroomXApp:
                     continue
                 self._set_running(False)
                 if kind == "error":
-                    if hasattr(self, "run_state_var"):
-                        self.run_state_var.set("FAILED")
+                    self._set_run_state("FAILED")
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -1625,8 +1660,7 @@ class CleanroomXApp:
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
-                    if hasattr(self, "run_state_var"):
-                        self.run_state_var.set(str(payload.status).upper())
+                    self._set_run_state(str(payload.status))
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
                     )

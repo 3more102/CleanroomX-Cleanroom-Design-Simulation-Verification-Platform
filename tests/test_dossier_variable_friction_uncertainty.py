@@ -95,6 +95,12 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "bisection_trace_decision_semantic_consistent_corner_count"
     ] == search_summary["bisection_trace_evidence_corner_count"]
     assert search_summary[
+        "bisection_trace_pressure_component_decision_semantic_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "bisection_trace_pressure_component_decision_semantic_consistent_corner_count"
+    ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary[
         "bisection_trace_terminal_outcome_violation_corner_indices"
     ] == []
     assert search_summary[
@@ -104,11 +110,20 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "bisection_trace_origin_replay_corner_count"
     ] == search_summary["bisection_trace_evidence_corner_count"]
     assert search_summary[
+        "bisection_trace_pressure_residual_identity_violation_corner_indices"
+    ] == []
+    assert search_summary[
         "bisection_trace_raw_state_violation_corner_indices"
     ] == []
     assert search_summary[
         "bisection_trace_raw_state_consistent_corner_count"
     ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary[
+        "bisection_trace_pressure_residual_identity_match_corner_count"
+    ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary[
+        "maximum_bisection_trace_pressure_residual_identity_error_pa"
+    ]["value"] <= 2e-9
     assert search_summary[
         "maximum_bisection_trace_midpoint_error_m3_h"
     ]["value"] <= 1e-9
@@ -234,10 +249,14 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         in report
     )
     assert "trace-decision" in report
+    assert "trace-pressure-decision" in report
+    assert "pressure-decision violations 0" in report
     assert "trace geometry violations W/N 0/0" in report
     assert "trace-geometry" in report
     assert "trace-raw-state" in report
     assert "raw-state violations 0" in report
+    assert "pressure-residual identity violations 0" in report
+    assert "max trace pressure-residual identity error" in report
     assert "max trace midpoint error" in report
     assert "max trace width error" in report
     assert "max trace normalized-width error" in report

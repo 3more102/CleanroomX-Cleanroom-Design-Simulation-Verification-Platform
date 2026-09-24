@@ -36,6 +36,8 @@ For v0.91 nonlinear fan/variable-friction-loop uncertainty analyses, the dossier
 
 For v0.92 the dossier also preserves the complete per-bisection low/midpoint/high network-state projection replay layer. It reports trace-projection applicability, any-evidence and complete-coverage counts, corruption and coverage-gap corners, exact corner/iteration/position/path mismatch records, retained/recomputed/type evidence, total mismatch counts, and tied per-field worst numerical witnesses while keeping result-integrity SHA-256, v0.87 full-trace fingerprint replay, terminal replay, and v0.91 selected projection replay distinct. A trace projection corruption or missing applicable check remains visible through dossier JSON and Markdown. This is deterministic numerical/provenance evidence only, not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
 
+For v0.93 the dossier additionally preserves supplied fan-point network-state replay across all nonlinear uncertainty corners. It keeps sampled-point SHA-256 violations, field-level projection violations, incomplete-coverage corners, exact corner/point/path mismatch records, coverage-gap reasons, detailed retained/recomputed/type evidence, mismatch totals, and tied per-field worst numerical witnesses distinct from selected, terminal, and bisection replay. Thus corruption in a sampled candidate anchor or a missing pre-failure point remains visible through dossier JSON and Markdown without changing the underlying engineering outcome.
+
 Example:
 
 ```json

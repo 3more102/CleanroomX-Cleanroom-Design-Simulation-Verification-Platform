@@ -736,8 +736,8 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_evidence_corner_count",
                     0,
                 )
-                bisection_count = search_summary.get(
-                    "bisection_corner_count",
+                trace_outcome_ok = search_summary.get(
+                    "bisection_trace_outcome_consistent_corner_count",
                     0,
                 )
                 trace_length_violations = len(
@@ -746,22 +746,30 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
-                trace_sign_violations = len(
-                    search_summary.get(
-                        "bisection_trace_sign_violation_corner_indices",
-                        [],
+                trace_geometry_violations = (
+                    len(
+                        search_summary.get(
+                            "bisection_trace_sign_violation_corner_indices",
+                            [],
+                        )
                     )
-                )
-                trace_midpoint_violations = len(
-                    search_summary.get(
-                        "bisection_trace_midpoint_violation_corner_indices",
-                        [],
+                    + len(
+                        search_summary.get(
+                            "bisection_trace_midpoint_violation_corner_indices",
+                            [],
+                        )
                     )
-                )
-                trace_terminal_violations = len(
-                    search_summary.get(
-                        "bisection_trace_terminal_violation_corner_indices",
-                        [],
+                    + len(
+                        search_summary.get(
+                            "bisection_trace_binary_width_violation_corner_indices",
+                            [],
+                        )
+                    )
+                    + len(
+                        search_summary.get(
+                            "bisection_trace_chain_violation_corner_indices",
+                            [],
+                        )
                     )
                 )
                 limit_count = search_summary.get(
@@ -787,10 +795,10 @@ def markdown_dossier_report(result: dict) -> str:
                 search_invariants = (
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
-                    f"trace {trace_count}/{bisection_count}; "
-                    f"trace violations L/S/M/T "
-                    f"{trace_length_violations}/{trace_sign_violations}/"
-                    f"{trace_midpoint_violations}/{trace_terminal_violations}; "
+                    f"trace {trace_count}; "
+                    f"trace-outcome {trace_outcome_ok}/{trace_count}; "
+                    f"trace length/geometry violations "
+                    f"{trace_length_violations}/{trace_geometry_violations}; "
                     f"max width-fraction error {max_error}; "
                     f"iteration-limit {limit_count}; "
                     f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "

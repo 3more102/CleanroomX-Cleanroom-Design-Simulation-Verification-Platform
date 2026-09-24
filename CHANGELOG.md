@@ -1,4 +1,16 @@
 # Changelog
+## v0.68 bounded-bisection iteration-trace provenance — 2026-09-24
+
+- Retains every successful bounded-bisection root-search step instead of only the terminal signed-residual bracket.
+- Records the active low/high airflow bracket, endpoint residuals, midpoint airflow, midpoint fan/system pressure, midpoint residual, live pressure-tolerance state, residual sign, and exact endpoint-update action for every iteration.
+- Adds a deterministic per-solve trace audit for contiguous iteration numbering, step-count agreement, strict pre-step sign bracketing, midpoint centering, residual-consistent actions, active-bracket continuity, and terminal pressure-tolerance acceptance.
+- Keeps direct supplied-point tolerance contacts explicitly trace-inapplicable rather than fabricating iteration evidence.
+- Propagates trace evidence through nonlinear uncertainty corners, including complete/violation counts, exact violation corner indices, and tied source-corner provenance for the maximum trace length.
+- Surfaces trace provenance in standalone loop reports, nonlinear uncertainty reports, and engineering-dossier summaries while preserving v0.67 terminal-bracket invariant auditing.
+- Adds direct solver, uncertainty, and dossier regression coverage.
+- Treats the trace strictly as numerical implementation provenance; no physical uncertainty, interpolation-error bound, stability criterion, manufacturer operating region, commissioning/certification criterion, or equipment-acceptance threshold is introduced.
+- Bumped package/runtime metadata to v0.68.0.
+
 ## v0.67 bisection implementation-invariant audit — 2026-09-24
 
 - Audits retained bounded-bisection search geometry directly from the unrounded live solver state without changing the operating-point solve.

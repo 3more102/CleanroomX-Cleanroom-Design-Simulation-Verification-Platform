@@ -817,6 +817,23 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['iteration_limit_search_evidence_corner_count']}**",
                 "- Iteration-limit remaining-bracket invariant evidence: "
                 f"**{search_summary['iteration_limit_invariant_evidence_corner_count']}**",
+                "- Iteration-limit decision-trace evidence: "
+                f"**{search_summary['iteration_limit_bisection_trace_evidence_corner_count']}/"
+                f"{search_summary['iteration_limit_search_evidence_corner_count']}**",
+                "- Iteration-limit trace-length violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_length_violation_corner_indices']}**",
+                "- Iteration-limit trace sign-bracket violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_sign_violation_corner_indices']}**",
+                "- Iteration-limit trace midpoint-geometry violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_midpoint_violation_corner_indices']}**",
+                "- Iteration-limit trace iteration-sequence violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_iteration_sequence_violation_corner_indices']}**",
+                "- Iteration-limit trace state-transition replay violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_state_transition_violation_corner_indices']}**",
+                "- Iteration-limit terminal-outcome violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_terminal_outcome_violation_corner_indices']}**",
+                "- Iteration-limit terminal-bracket replay violations: "
+                f"**{search_summary['iteration_limit_bisection_trace_terminal_replay_violation_corner_indices']}**",
                 "- Iteration-limit strict sign-bracket violations: "
                 f"**{search_summary['iteration_limit_strict_sign_change_violation_corner_indices']}**",
                 f"- Complete-study coverage: **{coverage_label}**",
@@ -861,8 +878,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['step_count']}**",
                         "- Nominal bisection decision sequence (L/H/T): "
                         f"**{nominal_trace_audit['decision_sequence']}**",
-                        "- Nominal trace invariants all satisfied: "
-                        f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['termination_record_is_last'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions']}**",
+                        "- Nominal trace/replay invariants all satisfied: "
+                        f"**{nominal_trace_audit['trace_matches_operating_iterations'] and nominal_trace_audit['iterations_are_contiguous_from_one'] and nominal_trace_audit['all_steps_preserve_strict_sign_change_before_evaluation'] and nominal_trace_audit['all_midpoints_are_arithmetic_bracket_midpoints'] and nominal_trace_audit['all_state_transitions_replay_recorded_decisions'] and nominal_trace_audit['terminal_outcome_consistent'] and nominal_trace_audit['terminal_bracket_matches_replayed_last_decision']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
@@ -952,6 +969,23 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum retained bisection decision-trace steps | "
                 f"{trace_steps['value']} | {trace_steps['unit']} | "
                 f"{' / '.join(trace_sources)} |"
+            )
+        limit_trace_steps = search_summary.get(
+            "maximum_iteration_limit_bisection_trace_step_count"
+        )
+        if limit_trace_steps is not None:
+            limit_trace_sources = []
+            for source in limit_trace_steps["sources"]:
+                audit = source["bisection_trace_audit"]
+                limit_trace_sources.append(
+                    _fmt_extreme_source(source)
+                    + f"; decision-sequence={audit['decision_sequence']}"
+                    + f"; iterations={source['operating_iterations']}"
+                )
+            lines.append(
+                "| Maximum retained iteration-limit decision-trace steps | "
+                f"{limit_trace_steps['value']} | {limit_trace_steps['unit']} | "
+                f"{' / '.join(limit_trace_sources)} |"
             )
         limit_error = search_summary.get(
             "maximum_iteration_limit_absolute_width_fraction_consistency_error"

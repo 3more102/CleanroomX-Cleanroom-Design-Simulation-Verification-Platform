@@ -477,3 +477,176 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+def test_save_project_as_rebases_relative_external_references(tmp_path, monkeypatch):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    source_dir = tmp_path / "source"
+    target_dir = tmp_path / "archive" / "nested"
+    source_dir.mkdir()
+    target_dir.mkdir(parents=True)
+    destination = target_dir / "portable.cleanroomx.json"
+    analysis = AnalysisDocument(
+        id="c",
+        name="Consistency",
+        kind="consistency",
+        input={
+            "verification_project": "inputs/facility.json",
+            "hvac_project": "../shared/hvac.json",
+        },
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(
+        name="Portable", analyses=[analysis], active_analysis_id="c"
+    )
+    app.project_path = source_dir / "source.cleanroomx.json"
+    app._editor_analysis_id = None
+    app.name_var = Value("Portable")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app._capture_saved_state = lambda: None
+    app._update_title = lambda: None
+
+    monkeypatch.setattr(
+        gui_module.filedialog, "asksaveasfilename", lambda **kwargs: str(destination)
+    )
+
+    app.save_project_as()
+
+    saved = load_project_document(destination)
+    saved_input = saved.analysis_by_id("c").input
+    original_input = analysis.input
+    for key in ("verification_project", "hvac_project"):
+        assert (destination.parent / saved_input[key]).resolve() == (
+            source_dir / original_input[key]
+        ).resolve()
+    assert app.project_path == destination
+
+def test_import_input_json_preserves_source_file_reference_context(tmp_path, monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project_dir = tmp_path / "project"
+    import_dir = tmp_path / "import"
+    project_dir.mkdir()
+    import_dir.mkdir()
+    import_path = import_dir / "consistency.json"
+    import_path.write_text(
+        json.dumps({
+            "verification_project": "facility.json",
+            "hvac_project": "hvac.json",
+        }),
+        encoding="utf-8",
+    )
+    analysis = AnalysisDocument(id="c", name="Consistency", kind="consistency", input={})
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project_path = project_dir / "project.cleanroomx.json"
+    app.status_var = Status()
+    app._current_analysis = lambda: analysis
+    app._invalidate_last_run_for = lambda analysis_id: None
+    app._load_analysis_into_editor = lambda item: None
+    app._update_title = lambda: None
+
+    monkeypatch.setattr(
+        gui_module.filedialog, "askopenfilename", lambda **kwargs: str(import_path)
+    )
+
+    app.import_input_json()
+
+    for key, filename in (
+        ("verification_project", "facility.json"),
+        ("hvac_project", "hvac.json"),
+    ):
+        assert (project_dir / analysis.input[key]).resolve() == (import_dir / filename).resolve()
+
+def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Status()
+    target = tmp_path / "result.json"
+    calls = []
+
+    monkeypatch.setattr(
+        gui_module,
+        "atomic_write_text",
+        lambda path, content: calls.append((Path(path), content)),
+    )
+    assert app._write_export_file(str(target), "payload", label="Result") is True
+    assert calls == [(target, "payload")]
+    assert "Exported result" in app.status_var.value
+
+    captured = {}
+    def fail_write(path, content):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(gui_module, "atomic_write_text", fail_write)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+    assert app._write_export_file(str(target), "payload", label="Result") is False
+    assert app.status_var.value == "Result export failed"
+    assert captured["title"] == "Result export failed"
+    assert captured["message"] == "disk full"
+    assert captured["parent"] is app.root
+
+def test_gui_launch_validates_registry_before_creating_tk_root(monkeypatch):
+    root_created = []
+
+    def fail_registry_validation():
+        raise RuntimeError("broken registry")
+
+    monkeypatch.setattr(gui_module, "validate_application_registry", fail_registry_validation)
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root_created.append(True))
+
+    with pytest.raises(RuntimeError, match="broken registry"):
+        main([])
+    assert root_created == []
+
+def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.last_run = run_analysis(
+        "fan_operating_point",
+        json.loads(
+            (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    output = tmp_path / "run-bundle.json"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(output),
+    )
+
+    app.export_run_bundle_json()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["kind"] == "fan_operating_point"
+    provenance = payload["diagnostics"]["application_execution_provenance"]
+    assert provenance["analysis_kind"] == "fan_operating_point"
+    assert len(provenance["input_sha256"]) == 64
+

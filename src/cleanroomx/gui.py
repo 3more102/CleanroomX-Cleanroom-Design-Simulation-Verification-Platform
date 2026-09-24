@@ -182,13 +182,25 @@ def extract_room_visuals(payload: dict) -> list[dict]:
                 number = float(value)
             except (TypeError, ValueError):
                 return fallback, False
-            if number <= 0:
+            if not math.isfinite(number) or number <= 0:
                 return fallback, False
+            return number, True
+
+        def finite_number(key: str) -> tuple[float | None, bool]:
+            value = item.get(key)
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return None, False
+            if not math.isfinite(number):
+                return None, False
             return number, True
 
         length_m, length_real = positive_number("length_m", 4.0)
         width_m, width_real = positive_number("width_m", 4.0)
         height_m, height_real = positive_number("height_m", 3.0)
+        x_m, x_real = finite_number("x_m")
+        y_m, y_real = finite_number("y_m")
         airflow = item.get("supply_airflow_m3_h", item.get("cleanroom_airflow_m3_h"))
         pressure = item.get("observed_pressure_pa", item.get("pressure_pa"))
         rooms.append({
@@ -198,6 +210,9 @@ def extract_room_visuals(payload: dict) -> list[dict]:
             "height_m": height_m,
             "dimensions_real": length_real and width_real,
             "height_real": height_real,
+            "position_real": x_real and y_real,
+            "x_m": x_m,
+            "y_m": y_m,
             "airflow_m3_h": airflow,
             "pressure_pa": pressure,
         })
@@ -304,6 +319,7 @@ class CleanroomXApp:
         self.dashboard_result_var = tk.StringVar(value="")
         self._visual_zoom = 1.0
         self._visual3d_yaw_deg = 0.0
+        self._selected_room_name: str | None = None
 
         self._build_menu()
         self._build_layout()
@@ -384,6 +400,7 @@ class CleanroomXApp:
         view_menu.add_command(label="Overview", accelerator="Ctrl+1", command=lambda: self.notebook.select(self.overview_tab))
         view_menu.add_command(label="2D Workspace", accelerator="Ctrl+2", command=lambda: self.notebook.select(self.visual2d_tab))
         view_menu.add_command(label="3D Preview", accelerator="Ctrl+3", command=lambda: self.notebook.select(self.visual3d_tab))
+        view_menu.add_command(label="Fit Visual Workspace", accelerator="Ctrl+0", command=self._reset_visual_view)
         view_menu.add_checkbutton(
             label="Wrap output text",
             variable=self.wrap_outputs_var,
@@ -403,6 +420,7 @@ class CleanroomXApp:
         self.root.bind("<Control-Key-1>", lambda event: self.notebook.select(self.overview_tab))
         self.root.bind("<Control-Key-2>", lambda event: self.notebook.select(self.visual2d_tab))
         self.root.bind("<Control-Key-3>", lambda event: self.notebook.select(self.visual3d_tab))
+        self.root.bind("<Control-Key-0>", lambda event: self._reset_visual_view())
         self.root.bind("<Control-f>", lambda event: self.analysis_filter_entry.focus_set())
 
     def _build_layout(self) -> None:
@@ -588,7 +606,20 @@ class CleanroomXApp:
 
         json_tab = ttk.Frame(input_notebook)
         input_notebook.add(json_tab, text="JSON editor")
-        self.input_text = tk.Text(json_tab, wrap="none", undo=True)
+        self.input_text = tk.Text(
+            json_tab,
+            wrap="none",
+            undo=True,
+            background="#08111f",
+            foreground="#e2e8f0",
+            insertbackground="#f8fafc",
+            selectbackground="#1d4ed8",
+            selectforeground="#ffffff",
+            relief="flat",
+            borderwidth=0,
+            padx=10,
+            pady=10,
+        )
         input_scroll_y = ttk.Scrollbar(json_tab, orient="vertical", command=self.input_text.yview)
         input_scroll_x = ttk.Scrollbar(json_tab, orient="horizontal", command=self.input_text.xview)
         self.input_text.configure(
@@ -618,7 +649,11 @@ class CleanroomXApp:
         visual2d_toolbar = ttk.Frame(self.visual2d_tab, padding=(10, 8))
         visual2d_toolbar.pack(fill="x")
         ttk.Label(visual2d_toolbar, text="Room layout / pressure cascade", font=("Segoe UI", 10, "bold")).pack(side="left")
-        ttk.Label(visual2d_toolbar, text="Auto-layout is marked when coordinates are unavailable.", style="Muted.TLabel").pack(side="left", padx=12)
+        ttk.Label(
+            visual2d_toolbar,
+            text="Click a room to inspect • mouse wheel zoom • Ctrl+0 fit",
+            style="Muted.TLabel",
+        ).pack(side="left", padx=12)
         ttk.Button(
             visual2d_toolbar,
             text="+",
@@ -648,19 +683,33 @@ class CleanroomXApp:
         self.visual2d_canvas = tk.Canvas(self.visual2d_tab, background="#0b1220", highlightthickness=0)
         self.visual2d_canvas.pack(fill="both", expand=True)
         self.visual2d_canvas.bind("<Configure>", lambda event: self._draw_2d_workspace())
+        self.visual2d_canvas.bind("<MouseWheel>", self._on_visual_mousewheel)
+        self.visual2d_canvas.bind("<Button-4>", lambda event: self._change_visual_zoom(1.12))
+        self.visual2d_canvas.bind("<Button-5>", lambda event: self._change_visual_zoom(1 / 1.12))
+        self.visual2d_canvas.bind("<Double-Button-1>", lambda event: self._reset_visual_view())
 
         self.visual3d_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.visual3d_tab, text="3D Preview")
         visual3d_toolbar = ttk.Frame(self.visual3d_tab, padding=(10, 8))
         visual3d_toolbar.pack(fill="x")
         ttk.Label(visual3d_toolbar, text="Conceptual 3D room massing", font=("Segoe UI", 10, "bold")).pack(side="left")
-        ttk.Label(visual3d_toolbar, text="Visualization only — not CFD or certification geometry.", style="Muted.TLabel").pack(side="left", padx=12)
+        ttk.Label(
+            visual3d_toolbar,
+            text="Click a room to inspect • mouse wheel zoom • visualization only",
+            style="Muted.TLabel",
+        ).pack(side="left", padx=12)
         ttk.Button(
             visual3d_toolbar,
             text="Rotate ↻",
             style="Tool.TButton",
             command=lambda: self._rotate_3d(30.0),
         ).pack(side="right")
+        ttk.Button(
+            visual3d_toolbar,
+            text="↺ Rotate",
+            style="Tool.TButton",
+            command=lambda: self._rotate_3d(-30.0),
+        ).pack(side="right", padx=(0, 4))
         ttk.Button(
             visual3d_toolbar,
             text="+",
@@ -690,6 +739,10 @@ class CleanroomXApp:
         self.visual3d_canvas = tk.Canvas(self.visual3d_tab, background="#08111f", highlightthickness=0)
         self.visual3d_canvas.pack(fill="both", expand=True)
         self.visual3d_canvas.bind("<Configure>", lambda event: self._draw_3d_workspace())
+        self.visual3d_canvas.bind("<MouseWheel>", self._on_visual_mousewheel)
+        self.visual3d_canvas.bind("<Button-4>", lambda event: self._change_visual_zoom(1.12))
+        self.visual3d_canvas.bind("<Button-5>", lambda event: self._change_visual_zoom(1 / 1.12))
+        self.visual3d_canvas.bind("<Double-Button-1>", lambda event: self._reset_visual_view())
 
         status = ttk.Label(
             self.root,
@@ -702,7 +755,20 @@ class CleanroomXApp:
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text=title)
-        text = tk.Text(frame, wrap="none", state="disabled")
+        text = tk.Text(
+            frame,
+            wrap="none",
+            state="disabled",
+            background="#08111f",
+            foreground="#e2e8f0",
+            insertbackground="#f8fafc",
+            selectbackground="#1d4ed8",
+            selectforeground="#ffffff",
+            relief="flat",
+            borderwidth=0,
+            padx=10,
+            pady=10,
+        )
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
         xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
         text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
@@ -940,6 +1006,7 @@ class CleanroomXApp:
 
     def _load_analysis_into_editor(self, analysis: AnalysisDocument) -> None:
         self._editor_analysis_id = analysis.id
+        self._selected_room_name = None
         self.input_text.delete("1.0", "end")
         self.input_text.insert(
             "1.0",
@@ -1483,6 +1550,72 @@ class CleanroomXApp:
         self._visual_zoom = max(0.45, min(3.0, self._visual_zoom * factor))
         self._refresh_visuals()
 
+    def _on_visual_mousewheel(self, event) -> str:
+        delta = getattr(event, "delta", 0)
+        if delta:
+            self._change_visual_zoom(1.12 if delta > 0 else 1 / 1.12)
+        return "break"
+
+    def _select_visual_room(self, room_name: str) -> None:
+        self._selected_room_name = room_name
+        self._refresh_visuals()
+        self.status_var.set(f"Selected room — {room_name}")
+
+    def _draw_room_inspector(
+        self,
+        canvas: tk.Canvas,
+        room: dict | None,
+        width: float,
+        height: float,
+    ) -> None:
+        if room is None:
+            return
+        panel_width = 270
+        x1 = width - 18
+        x0 = max(18, x1 - panel_width)
+        y0 = 54
+        area = room["length_m"] * room["width_m"]
+        volume = area * room["height_m"]
+        lines = [
+            room["name"],
+            f'{room["length_m"]:.2f} × {room["width_m"]:.2f} × {room["height_m"]:.2f} m',
+            f"Area  {area:.2f} m²",
+            f"Volume  {volume:.2f} m³",
+        ]
+        if room.get("position_real"):
+            lines.append(f'Origin  ({room["x_m"]:.2f}, {room["y_m"]:.2f}) m')
+        if room.get("airflow_m3_h") is not None:
+            lines.append(f'Airflow  {room["airflow_m3_h"]} m³/h')
+        if room.get("pressure_pa") is not None:
+            lines.append(f'Pressure  {room["pressure_pa"]} Pa')
+        y1 = min(height - 18, y0 + 34 + 22 * len(lines))
+        canvas.create_rectangle(
+            x0,
+            y0,
+            x1,
+            y1,
+            fill="#0f172a",
+            outline="#334155",
+            width=1,
+        )
+        canvas.create_text(
+            x0 + 14,
+            y0 + 13,
+            anchor="nw",
+            text="ROOM INSPECTOR",
+            fill="#94a3b8",
+            font=("Segoe UI", 8, "bold"),
+        )
+        for index, line in enumerate(lines):
+            canvas.create_text(
+                x0 + 14,
+                y0 + 34 + index * 22,
+                anchor="nw",
+                text=line,
+                fill="#f8fafc" if index == 0 else "#cbd5e1",
+                font=("Segoe UI", 10, "bold" if index == 0 else "normal"),
+            )
+
     def _reset_visual_view(self) -> None:
         self._visual_zoom = 1.0
         self._visual3d_yaw_deg = 0.0
@@ -1509,9 +1642,20 @@ class CleanroomXApp:
             self._draw_3d_workspace()
 
     def _room_layout(self, rooms: list[dict]) -> tuple[list[dict], bool]:
-        """Return deterministic schematic positions; coordinates are intentionally not invented."""
+        """Use declared plan coordinates when complete, otherwise auto-arrange deterministically."""
         if not rooms:
             return [], False
+        if all(room.get("position_real") for room in rooms):
+            placed = [
+                {
+                    **room,
+                    "x": float(room["x_m"]),
+                    "y": float(room["y_m"]),
+                }
+                for room in rooms
+            ]
+            return placed, all(room["dimensions_real"] for room in rooms)
+
         columns = max(1, min(4, int(len(rooms) ** 0.5 + 0.999)))
         max_length = max(room["length_m"] for room in rooms)
         max_width = max(room["width_m"] for room in rooms)
@@ -1539,6 +1683,7 @@ class CleanroomXApp:
             return
 
         placed, fully_scaled = self._room_layout(rooms)
+        declared_positions = all(room.get("position_real") for room in rooms)
         min_x = min(room["x"] for room in placed)
         min_y = min(room["y"] for room in placed)
         max_x = max(room["x"] + room["length_m"] for room in placed)
@@ -1553,11 +1698,15 @@ class CleanroomXApp:
             anchor="nw",
             text=(
                 (
-                    "Dimensions to scale; placement auto-arranged."
-                    if fully_scaled
-                    else "Schematic view: one or more room dimensions are unavailable."
+                    "Coordinates and dimensions to scale."
+                    if fully_scaled and declared_positions
+                    else (
+                        "Dimensions to scale; placement auto-arranged."
+                        if fully_scaled
+                        else "Schematic view: missing geometry uses display defaults."
+                    )
                 )
-                + f"  Zoom {self._visual_zoom:.0%}"
+                + f"  •  Zoom {self._visual_zoom:.0%}"
             ),
             fill="#94a3b8",
             font=("Segoe UI", 9),
@@ -1568,17 +1717,54 @@ class CleanroomXApp:
             y0 = pad + (room["y"] - min_y) * scale
             x1 = x0 + room["length_m"] * scale
             y1 = y0 + room["width_m"] * scale
-            canvas.create_rectangle(x0, y0, x1, y1, fill=palette[index % len(palette)], outline="#93c5fd", width=2)
-            canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2 - 10, text=room["name"], fill="#f8fafc", font=("Segoe UI", 10, "bold"))
+            room_tag = f"room-2d-{index}"
+            selected = room["name"] == self._selected_room_name
+            canvas.create_rectangle(
+                x0,
+                y0,
+                x1,
+                y1,
+                fill=palette[index % len(palette)],
+                outline="#facc15" if selected else "#93c5fd",
+                width=4 if selected else 2,
+                tags=(room_tag,),
+            )
+            canvas.create_text(
+                (x0 + x1) / 2,
+                (y0 + y1) / 2 - 10,
+                text=room["name"],
+                fill="#f8fafc",
+                font=("Segoe UI", 10, "bold"),
+                tags=(room_tag,),
+            )
             dims = f'{room["length_m"]:.2g} × {room["width_m"]:.2g} m' if room["dimensions_real"] else "size not specified"
-            canvas.create_text((x0 + x1) / 2, (y0 + y1) / 2 + 9, text=dims, fill="#dbeafe", font=("Segoe UI", 9))
+            canvas.create_text(
+                (x0 + x1) / 2,
+                (y0 + y1) / 2 + 9,
+                text=dims,
+                fill="#dbeafe",
+                font=("Segoe UI", 9),
+                tags=(room_tag,),
+            )
+            canvas.tag_bind(
+                room_tag,
+                "<Button-1>",
+                lambda event, room_name=room["name"]: self._select_visual_room(room_name),
+            )
             meta = []
             if room["airflow_m3_h"] is not None:
                 meta.append(f'Q {room["airflow_m3_h"]} m³/h')
             if room["pressure_pa"] is not None:
                 meta.append(f'P {room["pressure_pa"]} Pa')
             if meta:
-                canvas.create_text((x0 + x1) / 2, min(y1 - 12, (y0 + y1) / 2 + 28), text="  •  ".join(meta), fill="#bfdbfe", font=("Segoe UI", 8))
+                canvas.create_text(
+                    (x0 + x1) / 2,
+                    min(y1 - 12, (y0 + y1) / 2 + 28),
+                    text="  •  ".join(meta),
+                    fill="#bfdbfe",
+                    font=("Segoe UI", 8),
+                    tags=(room_tag,),
+                )
 
         centers = {
             room["name"]: (
@@ -1616,6 +1802,12 @@ class CleanroomXApp:
                 font=("Segoe UI", 8, "bold"),
             )
 
+        selected_room = next(
+            (room for room in rooms if room["name"] == self._selected_room_name),
+            None,
+        )
+        self._draw_room_inspector(canvas, selected_room, width, height)
+
     def _draw_3d_workspace(self) -> None:
         canvas = self.visual3d_canvas
         canvas.delete("all")
@@ -1628,6 +1820,7 @@ class CleanroomXApp:
             return
 
         placed, fully_scaled = self._room_layout(rooms)
+        declared_positions = all(room.get("position_real") for room in rooms)
         iso_x = 0.74
         iso_y = 0.38
         z_scale = 0.78
@@ -1695,18 +1888,52 @@ class CleanroomXApp:
             p111 = project(x + l, y + w, h)
             p011 = project(x, y + w, h)
             base = palette[index % len(palette)]
-            canvas.create_polygon(*p010, *p110, *p111, *p011, fill="#123047", outline="#60a5fa")
-            canvas.create_polygon(*p100, *p110, *p111, *p101, fill="#102a43", outline="#60a5fa")
-            canvas.create_polygon(*p001, *p101, *p111, *p011, fill=base, outline="#bfdbfe", width=2)
+            room_tag = f"room-3d-{index}"
+            selected = room["name"] == self._selected_room_name
+            outline = "#facc15" if selected else "#60a5fa"
+            top_outline = "#facc15" if selected else "#bfdbfe"
+            side_width = 3 if selected else 1
+            top_width = 4 if selected else 2
+            canvas.create_polygon(
+                *p010, *p110, *p111, *p011,
+                fill="#123047", outline=outline, width=side_width, tags=(room_tag,)
+            )
+            canvas.create_polygon(
+                *p100, *p110, *p111, *p101,
+                fill="#102a43", outline=outline, width=side_width, tags=(room_tag,)
+            )
+            canvas.create_polygon(
+                *p001, *p101, *p111, *p011,
+                fill=base, outline=top_outline, width=top_width, tags=(room_tag,)
+            )
             cx, cy = project(x + l / 2, y + w / 2, h)
-            canvas.create_text(cx, cy - 8, text=room["name"], fill="#ffffff", font=("Segoe UI", 9, "bold"))
+            canvas.create_text(
+                cx, cy - 8, text=room["name"], fill="#ffffff",
+                font=("Segoe UI", 9, "bold"), tags=(room_tag,)
+            )
+            canvas.tag_bind(
+                room_tag,
+                "<Button-1>",
+                lambda event, room_name=room["name"]: self._select_visual_room(room_name),
+            )
             if room["height_real"]:
-                canvas.create_text(cx, cy + 9, text=f'h={h:.2g} m', fill="#dbeafe", font=("Segoe UI", 8))
+                canvas.create_text(
+                    cx,
+                    cy + 9,
+                    text=f'h={h:.2g} m',
+                    fill="#dbeafe",
+                    font=("Segoe UI", 8),
+                    tags=(room_tag,),
+                )
 
         note = (
-            "Scaled room dimensions; auto-arranged for preview."
-            if fully_scaled
-            else "Conceptual preview; missing dimensions use display defaults."
+            "Scaled declared coordinates and room dimensions."
+            if fully_scaled and declared_positions
+            else (
+                "Scaled room dimensions; auto-arranged for preview."
+                if fully_scaled
+                else "Conceptual preview; missing geometry uses display defaults."
+            )
         )
         note += (
             f"  View {self._visual3d_yaw_deg:.0f}°"
@@ -1720,6 +1947,11 @@ class CleanroomXApp:
             fill="#94a3b8",
             font=("Segoe UI", 9),
         )
+        selected_room = next(
+            (room for room in rooms if room["name"] == self._selected_room_name),
+            None,
+        )
+        self._draw_room_inspector(canvas, selected_room, width, height)
 
     def export_result_json(self) -> None:
         if self.last_run is None:

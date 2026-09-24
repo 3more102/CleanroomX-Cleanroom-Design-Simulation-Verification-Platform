@@ -214,6 +214,13 @@ def _solve_network_at_airflow(
 def _network_state_sha256(network: dict) -> str:
     variable_friction = network.get("variable_friction", {})
     canonical_state = {
+        "network": network.get("network"),
+        "status": network.get("status"),
+        "reference_node": network.get("reference_node"),
+        "iterations": network.get("iterations"),
+        "mass_balance_tolerance_m3_h": network.get(
+            "mass_balance_tolerance_m3_h"
+        ),
         "nodes": sorted(
             [
                 {
@@ -271,7 +278,15 @@ def _network_state_sha256(network: dict) -> str:
         ],
         "pressure_power": network["pressure_power"],
         "variable_friction": {
+            "converged": variable_friction.get("converged"),
             "outer_iterations": variable_friction.get("outer_iterations"),
+            "resistance_relative_tolerance": variable_friction.get(
+                "resistance_relative_tolerance"
+            ),
+            "relaxation": variable_friction.get("relaxation"),
+            "near_zero_airflow_m3_h": variable_friction.get(
+                "near_zero_airflow_m3_h"
+            ),
             "automatic_friction_edge_count": variable_friction.get(
                 "automatic_friction_edge_count"
             ),
@@ -280,6 +295,9 @@ def _network_state_sha256(network: dict) -> str:
             ),
             "max_relative_resistance_closure_error": variable_friction.get(
                 "max_relative_resistance_closure_error"
+            ),
+            "iteration_history": variable_friction.get(
+                "iteration_history", []
             ),
             "edge_closure": sorted(
                 variable_friction.get("edge_closure", []),
@@ -1357,7 +1375,7 @@ def _bisection_decision_trace_audit(
                         "iteration": int(step["iteration"]),
                         "algorithm": "sha256",
                         "canonicalization": (
-                            "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
+                            "network-result-projection-sort-named-collections-preserve-iteration-history-json-sort-keys-compact-utf8-v3"
                         ),
                         "low": network_position_checks["low"],
                         "midpoint": network_position_checks["midpoint"],
@@ -1707,7 +1725,7 @@ def _bisection_decision_trace_audit(
             "iteration": int(operating_iterations),
             "algorithm": "sha256",
             "canonicalization": (
-                "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
+                "network-result-projection-sort-named-collections-preserve-iteration-history-json-sort-keys-compact-utf8-v3"
             ),
             "low": terminal_network_position_checks["low"],
             "high": terminal_network_position_checks["high"],
@@ -2371,7 +2389,7 @@ def _bisection_decision_trace_audit(
             "sha256" if residual_replay_available else None
         ),
         "network_state_replay_canonicalization": (
-            "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
+            "network-result-projection-sort-named-collections-preserve-iteration-history-json-sort-keys-compact-utf8-v3"
             if residual_replay_available
             else None
         ),
@@ -2843,7 +2861,7 @@ def _selected_operating_state_replay_audit(
         "network_state_replay_available": True,
         "network_state_replay_algorithm": "sha256",
         "network_state_replay_canonicalization": (
-            "network-state-projection-sort-named-collections-json-sort-keys-compact-utf8-v2"
+            "network-result-projection-sort-named-collections-preserve-iteration-history-json-sort-keys-compact-utf8-v3"
         ),
         "recorded_network_state_sha256": recorded_network_state,
         "recomputed_network_state_sha256": replayed_network_state,

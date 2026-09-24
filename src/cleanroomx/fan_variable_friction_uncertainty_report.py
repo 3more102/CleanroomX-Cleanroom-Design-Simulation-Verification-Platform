@@ -908,6 +908,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_trace_pressure_state_consistent']}**",
                         "- Nominal midpoint pressure-component replay consistent: "
                         f"**{nominal_trace_audit['all_midpoint_pressure_components_match_independent_replay']}**",
+                        "- Nominal full-bracket pressure-component replay consistent: "
+                        f"**{nominal_trace_audit['all_trace_pressure_components_match_independent_replay']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")

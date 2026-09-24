@@ -456,8 +456,8 @@ def rebase_analysis_file_references(
     if kind not in {"consistency", "dossier"}:
         return rebased
 
-    source = Path(source_base)
-    target = None if target_base is None else Path(target_base)
+    source = Path(os.path.abspath(source_base))
+    target = None if target_base is None else Path(os.path.abspath(target_base))
 
     def convert(value: Any) -> Any:
         if not isinstance(value, str) or not value.strip():

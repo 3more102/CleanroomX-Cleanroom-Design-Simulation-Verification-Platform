@@ -80,3 +80,19 @@ def test_dossier_adapter_runs_real_file_referenced_workflow():
     assert run.status == run.result["executive_summary"]["state"]
     assert "CleanroomX Engineering Dossier" in run.markdown
     json.dumps(run.result, allow_nan=False)
+
+
+def test_dossier_validation_rejects_manifest_without_analysis_sources():
+    with pytest.raises(ValueError, match="at least one analysis input file"):
+        validate_analysis_input(
+            "dossier",
+            {"name": "Empty dossier"},
+            base_dir=ROOT / "examples",
+        )
+
+
+def test_dossier_validation_rejects_invalid_consistency_configuration():
+    payload = _example("dossier_variable_friction_uncertainty_demo.json")
+    payload["consistency_checks"] = {"verification_hvac_airflow": []}
+    with pytest.raises(ValueError, match="must be an object"):
+        validate_analysis_input("dossier", payload, base_dir=ROOT / "examples")

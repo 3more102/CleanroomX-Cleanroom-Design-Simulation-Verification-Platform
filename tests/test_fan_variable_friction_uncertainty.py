@@ -2277,6 +2277,87 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     else:
         assert minimum_gap is None
         assert minimum_gap_fraction is None
+    directional_cases = [
+        (index, corner["fan_curve_supplied_point_residual_audit"])
+        for index, corner in enumerate(result["corners"])
+        if corner["status"] == "solved"
+        and corner["fan_curve_supplied_point_residual_audit"] is not None
+        and corner["fan_curve_supplied_point_residual_audit"].get(
+            "nearest_alternative_candidate_airflow_interval_gap_m3_h"
+        )
+        is not None
+    ]
+    below_indices = [
+        index
+        for index, audit in directional_cases
+        if (audit.get("alternative_candidate_below_selected_airflow_count") or 0)
+        > 0
+    ]
+    above_indices = [
+        index
+        for index, audit in directional_cases
+        if (audit.get("alternative_candidate_above_selected_airflow_count") or 0)
+        > 0
+    ]
+    both_indices = [
+        index
+        for index, audit in directional_cases
+        if audit.get(
+            "alternative_candidates_on_both_sides_of_selected_airflow"
+        )
+        is True
+    ]
+    assert summary["selected_airflow_with_below_alternative_corner_indices"] == (
+        below_indices
+    )
+    assert summary["selected_airflow_with_above_alternative_corner_indices"] == (
+        above_indices
+    )
+    assert summary[
+        "selected_airflow_with_bidirectional_alternative_corner_indices"
+    ] == both_indices
+
+    for absolute_key, normalized_key, audit_absolute_key, audit_normalized_key in (
+        (
+            "minimum_selected_to_below_alternative_candidate_interval_gap_m3_h",
+            "minimum_selected_to_below_alternative_candidate_interval_gap_fraction_of_supplied_curve_span",
+            "nearest_below_alternative_candidate_airflow_interval_gap_m3_h",
+            "nearest_below_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span",
+        ),
+        (
+            "minimum_selected_to_above_alternative_candidate_interval_gap_m3_h",
+            "minimum_selected_to_above_alternative_candidate_interval_gap_fraction_of_supplied_curve_span",
+            "nearest_above_alternative_candidate_airflow_interval_gap_m3_h",
+            "nearest_above_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span",
+        ),
+    ):
+        observed_absolute = [
+            audit[audit_absolute_key]
+            for _index, audit in directional_cases
+            if audit.get(audit_absolute_key) is not None
+        ]
+        observed_normalized = [
+            audit[audit_normalized_key]
+            for _index, audit in directional_cases
+            if audit.get(audit_normalized_key) is not None
+        ]
+        absolute_evidence = summary[absolute_key]
+        normalized_evidence = summary[normalized_key]
+        if observed_absolute:
+            assert absolute_evidence is not None
+            assert absolute_evidence["value"] == pytest.approx(
+                min(observed_absolute)
+            )
+            assert absolute_evidence["sources"]
+            assert normalized_evidence is not None
+            assert normalized_evidence["value"] == pytest.approx(
+                min(observed_normalized)
+            )
+            assert normalized_evidence["sources"]
+        else:
+            assert absolute_evidence is None
+            assert normalized_evidence is None
+
     assert summary["residual_increase_corner_count"] == 0
     assert summary["residual_increase_corner_indices"] == []
     assert summary["reverse_strict_sign_change_corner_count"] == 0
@@ -2297,6 +2378,9 @@ def test_supplied_point_residual_topology_propagates_across_corners() -> None:
     assert "Corners monotonic non-increasing within tolerance" in report
     assert "Solved corners with selected-candidate provenance" in report
     assert "alternative-candidate separation evidence" in report
+    assert "alternative candidates below selected airflow" in report
+    assert "alternative candidates above selected airflow" in report
+    assert "alternative candidates on both sides of selected airflow" in report
     assert "reverse strict negative-to-positive sign changes" in report
     if separation_gaps:
         assert "gap / supplied fan-curve span" in report

@@ -2910,6 +2910,12 @@ def _operating_point_search_resolution_summary(
         "bisection_trace_geometry_violation_corner_indices": (
             trace_geometry_violation_corner_indices
         ),
+        "maximum_bisection_trace_midpoint_error_m3_h": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_midpoint_error_m3_h",
+                "m3/h",
+            )
+        ),
         "maximum_bisection_trace_width_error_m3_h": (
             _maximum_trace_geometry_metric_evidence(
                 "maximum_absolute_trace_width_error_m3_h",

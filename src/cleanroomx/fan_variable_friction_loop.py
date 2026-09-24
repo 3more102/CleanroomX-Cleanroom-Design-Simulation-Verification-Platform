@@ -4664,7 +4664,9 @@ def solve_fan_variable_friction_loop(
             recorded_system_pressure_pa=system_pressure,
             recorded_residual_pa=residual,
             recorded_network_state_sha256=selected_network_state_sha256,
-            recorded_network_state_projection=selected_network_state_projection,
+            recorded_network_state_projection=(
+                selected_network_state_projection
+            ),
             segment_left=left,
             segment_right=right,
             selected_supplied_point_index=selected_supplied_point_index,

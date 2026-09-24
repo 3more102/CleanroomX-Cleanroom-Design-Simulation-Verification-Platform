@@ -2132,6 +2132,163 @@ def _scope_note() -> str:
     )
 
 
+
+def _selected_operating_state_replay_audit(
+    study: FanVariableFrictionLoopStudy,
+    *,
+    selected_airflow_m3_h: float,
+    recorded_fan_pressure_pa: float,
+    recorded_loop_network_pressure_pa: float,
+    recorded_system_pressure_pa: float,
+    recorded_residual_pa: float,
+    segment_left: FanCurvePoint,
+    segment_right: FanCurvePoint,
+    selected_supplied_point_index: int | None = None,
+    bisection_trace: list[dict] | None = None,
+) -> dict:
+    pressure_tolerance_pa = 1e-9
+    airflow_tolerance_m3_h = 1e-9
+
+    _replayed_network, replayed_loop_pressure = _solve_network_at_airflow(
+        study,
+        selected_airflow_m3_h,
+    )
+    replayed_fan_pressure = _fan_pressure(
+        segment_left,
+        segment_right,
+        selected_airflow_m3_h,
+    )
+    replayed_system_pressure = (
+        study.fixed_pressure_pa + replayed_loop_pressure
+    )
+    replayed_residual = replayed_fan_pressure - replayed_system_pressure
+
+    recorded_pressures = {
+        "fan": float(recorded_fan_pressure_pa),
+        "loop_network": float(recorded_loop_network_pressure_pa),
+        "system": float(recorded_system_pressure_pa),
+        "residual": float(recorded_residual_pa),
+    }
+    replayed_pressures = {
+        "fan": replayed_fan_pressure,
+        "loop_network": replayed_loop_pressure,
+        "system": replayed_system_pressure,
+        "residual": replayed_residual,
+    }
+    component_checks = {}
+    violations = []
+    for component in ("fan", "loop_network", "system", "residual"):
+        recorded = recorded_pressures[component]
+        recomputed = replayed_pressures[component]
+        absolute_error = abs(recorded - recomputed)
+        matches = math.isclose(
+            recorded,
+            recomputed,
+            rel_tol=0.0,
+            abs_tol=pressure_tolerance_pa,
+        )
+        component_checks[component] = {
+            "recorded_pressure_pa": recorded,
+            "recomputed_pressure_pa": round(recomputed, 9),
+            "absolute_error_pa": absolute_error,
+            "matches_independent_replay": matches,
+        }
+        if not matches:
+            violations.append(
+                {
+                    "component": component,
+                    **component_checks[component],
+                }
+            )
+
+    if selected_supplied_point_index is not None:
+        selection_source = "supplied_fan_curve_point"
+        expected_airflow = float(
+            study.fan_curve.points[selected_supplied_point_index].airflow_m3_h
+        )
+    elif bisection_trace:
+        selection_source = "terminal_bisection_midpoint"
+        expected_airflow = float(
+            bisection_trace[-1]["midpoint_airflow_m3_h"]
+        )
+    else:
+        selection_source = None
+        expected_airflow = None
+
+    selection_airflow_error = (
+        abs(float(selected_airflow_m3_h) - expected_airflow)
+        if expected_airflow is not None
+        else None
+    )
+    selection_origin_matches = (
+        math.isclose(
+            float(selected_airflow_m3_h),
+            expected_airflow,
+            rel_tol=0.0,
+            abs_tol=airflow_tolerance_m3_h,
+        )
+        if expected_airflow is not None
+        else False
+    )
+
+    maximum_error = max(
+        check["absolute_error_pa"]
+        for check in component_checks.values()
+    )
+    maximum_error_witnesses = [
+        {
+            "component": component,
+            **check,
+        }
+        for component, check in component_checks.items()
+        if maximum_error > 0.0
+        and math.isclose(
+            check["absolute_error_pa"],
+            maximum_error,
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        )
+    ]
+
+    return {
+        "available": True,
+        "pressure_replay_absolute_tolerance_pa": pressure_tolerance_pa,
+        "selection_airflow_absolute_tolerance_m3_h": (
+            airflow_tolerance_m3_h
+        ),
+        "selection_source": selection_source,
+        "recorded_selected_airflow_m3_h": round(
+            selected_airflow_m3_h,
+            9,
+        ),
+        "expected_selected_airflow_m3_h": (
+            round(expected_airflow, 9)
+            if expected_airflow is not None
+            else None
+        ),
+        "absolute_selection_airflow_error_m3_h": selection_airflow_error,
+        "selected_airflow_matches_search_origin": selection_origin_matches,
+        "component_checks": component_checks,
+        "all_pressure_components_match_independent_replay": all(
+            check["matches_independent_replay"]
+            for check in component_checks.values()
+        ),
+        "violation_count": len(violations),
+        "violations": violations,
+        "maximum_absolute_pressure_replay_error_pa": maximum_error,
+        "maximum_pressure_replay_error_witnesses": (
+            maximum_error_witnesses
+        ),
+        "all_selected_operating_state_matches_independent_replay": (
+            selection_origin_matches
+            and all(
+                check["matches_independent_replay"]
+                for check in component_checks.values()
+            )
+        ),
+    }
+
+
 def solve_fan_variable_friction_loop(
     study: FanVariableFrictionLoopStudy,
 ) -> dict:
@@ -2644,6 +2801,20 @@ def solve_fan_variable_friction_loop(
         selected_airflow_m3_h=selected_airflow,
         selected_segment_index=selected_segment,
     )
+    selected_operating_state_replay = (
+        _selected_operating_state_replay_audit(
+            study,
+            selected_airflow_m3_h=selected_airflow,
+            recorded_fan_pressure_pa=selected_fan_pressure,
+            recorded_loop_network_pressure_pa=selected_network_pressure,
+            recorded_system_pressure_pa=system_pressure,
+            recorded_residual_pa=residual,
+            segment_left=left,
+            segment_right=right,
+            selected_supplied_point_index=selected_supplied_point_index,
+            bisection_trace=bisection_trace,
+        )
+    )
     operating_point_search_evidence = {
         "method": (
             "supplied_point_tolerance_contact"
@@ -2661,6 +2832,7 @@ def solve_fan_variable_friction_loop(
         ),
         "selected_supplied_point_index": selected_supplied_point_index,
         "operating_iterations": operating_iterations,
+        "selected_operating_state_replay": selected_operating_state_replay,
         "initial_bisection_bracket": initial_bisection_bracket,
         "final_bisection_bracket": final_bisection_bracket,
         "bisection_trace": bisection_trace,

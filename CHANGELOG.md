@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.85 selected operating-state independent replay — 2026-09-24
+
+- Adds a fresh nonlinear replay of every solved selected operating airflow after the bounded search completes, independently recomputing fan pressure, loop-network pressure, total system pressure, and fan-minus-system residual.
+- Anchors the selected airflow to its retained search origin: the terminal bisection midpoint for bounded-bisection solutions or the exact supplied fan-curve point for direct tolerance contacts.
+- Records per-component replay errors, exact violations, maximum error, and tied maximum-error witnesses without changing the existing 1e-9 Pa numerical replay tolerance or any engineering acceptance criterion.
+- Propagates selected-state replay coverage, origin mismatches, violation corners/details, and worst replay-error evidence across nonlinear uncertainty studies and Markdown reports.
+- Adds common-mode pressure-corruption regression coverage and supplied-point origin coverage.
+- Bumped package/runtime metadata to v0.85.0.
+
+
 ## v0.84 exact pressure-component replay violation provenance — 2026-09-24
 
 - Adds deterministic violation records for every independent pressure-component replay mismatch with exact bisection iteration, bracket position (low/midpoint/high), pressure component (fan/loop-network/system), recorded value, independently recomputed value, and absolute error.

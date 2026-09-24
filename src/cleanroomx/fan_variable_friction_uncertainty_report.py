@@ -791,6 +791,21 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_corner_count']}**",
                 "- Supplied-point tolerance-contact corners: "
                 f"**{search_summary['supplied_point_contact_corner_count']}**",
+                "- Solved corners with selected operating-state replay evidence: "
+                f"**{search_summary['selected_operating_state_replay_evidence_corner_count']}/"
+                f"{search_summary['solved_search_evidence_corner_count']}**",
+                "- Selected operating-state replay complete coverage: "
+                f"**{search_summary['selected_operating_state_replay_complete_coverage']}**",
+                "- Selected operating-state replay violation corners: "
+                f"**{search_summary['selected_operating_state_replay_violation_corner_indices']}**",
+                "- Selected operating-state origin violation corners: "
+                f"**{search_summary['selected_operating_state_origin_violation_corner_indices']}**",
+                "- Selected operating-state replay violation records: "
+                f"**{search_summary['selected_operating_state_replay_violation_count']}**",
+                "- Selected operating-state replay violation details: "
+                f"**{search_summary['selected_operating_state_replay_violation_details']}**",
+                "- Maximum selected operating-state pressure replay error: "
+                f"**{search_summary['maximum_selected_operating_state_pressure_replay_error_pa']['value'] if search_summary['maximum_selected_operating_state_pressure_replay_error_pa'] is not None else 'not available'} Pa**",
                 "- Bisection corners with invariant evidence: "
                 f"**{search_summary['bisection_invariant_evidence_corner_count']}/"
                 f"{search_summary['bisection_corner_count']}**",

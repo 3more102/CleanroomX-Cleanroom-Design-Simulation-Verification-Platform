@@ -12,6 +12,7 @@ from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
     _bisection_decision_trace_audit,
     _fan_curve_supplied_point_residual_audit,
+    _selected_operating_state_replay_audit,
     _with_selected_crossing_feature,
     solve_fan_variable_friction_loop,
 )
@@ -1176,6 +1177,78 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     ] is False
 
 
+def test_selected_operating_state_replay_detects_common_mode_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Selected operating-state replay",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    assert evidence["method"] == "bounded_bisection"
+
+    replay = evidence["selected_operating_state_replay"]
+    assert replay["available"] is True
+    assert replay["selection_source"] == "terminal_bisection_midpoint"
+    assert replay["selected_airflow_matches_search_origin"] is True
+    assert replay[
+        "all_pressure_components_match_independent_replay"
+    ] is True
+    assert replay[
+        "all_selected_operating_state_matches_independent_replay"
+    ] is True
+    assert replay["violation_count"] == 0
+    assert replay["violations"] == []
+    assert replay["maximum_absolute_pressure_replay_error_pa"] <= 1e-9
+
+    operating = result["fan_operating_point"]
+    pressure = result["system_pressure_check"]
+    segment_index = evidence["supplied_segment_index"]
+    delta_pa = 1.0
+    corrupted = _selected_operating_state_replay_audit(
+        study,
+        selected_airflow_m3_h=replay["recorded_selected_airflow_m3_h"],
+        recorded_fan_pressure_pa=pressure["fan_pressure_pa"] + delta_pa,
+        recorded_loop_network_pressure_pa=(
+            pressure["loop_network_pressure_pa"] + delta_pa
+        ),
+        recorded_system_pressure_pa=(
+            pressure["total_system_pressure_pa"] + delta_pa
+        ),
+        recorded_residual_pa=pressure["fan_minus_system_pressure_pa"],
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        bisection_trace=evidence["bisection_trace"],
+    )
+    assert corrupted["selected_airflow_matches_search_origin"] is True
+    assert corrupted[
+        "all_pressure_components_match_independent_replay"
+    ] is False
+    assert corrupted[
+        "all_selected_operating_state_matches_independent_replay"
+    ] is False
+    assert corrupted["violation_count"] == 3
+    assert [
+        item["component"] for item in corrupted["violations"]
+    ] == ["fan", "loop_network", "system"]
+    assert corrupted[
+        "component_checks"
+    ]["residual"]["matches_independent_replay"] is True
+    assert corrupted["maximum_absolute_pressure_replay_error_pa"] == (
+        pytest.approx(delta_pa, abs=1e-9)
+    )
+
+
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
     result = solve_fan_variable_friction_loop(
         FanVariableFrictionLoopStudy(
@@ -1198,6 +1271,13 @@ def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
     assert evidence["final_bisection_bracket"] is None
     assert evidence["bisection_trace"] is None
     assert evidence["bisection_trace_audit"] is None
+    replay = evidence["selected_operating_state_replay"]
+    assert replay["selection_source"] == "supplied_fan_curve_point"
+    assert replay["selected_airflow_matches_search_origin"] is True
+    assert replay[
+        "all_selected_operating_state_matches_independent_replay"
+    ] is True
+    assert replay["violation_count"] == 0
 
 
 def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:

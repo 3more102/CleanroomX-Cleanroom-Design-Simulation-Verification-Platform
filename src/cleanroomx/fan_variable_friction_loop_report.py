@@ -42,6 +42,28 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 "- Selected supplied-point index: "
                 f"**{search['selected_supplied_point_index']}**"
             )
+        selected_replay = search.get("selected_operating_state_replay")
+        if selected_replay is not None:
+            lines.extend(
+                [
+                    "- Selected-state replay source: "
+                    f"**{selected_replay['selection_source']}**",
+                    "- Selected airflow matches retained search origin: "
+                    f"**{selected_replay['selected_airflow_matches_search_origin']}**",
+                    "- Selected fan/loop/system/residual state matches independent replay: "
+                    f"**{selected_replay['all_pressure_components_match_independent_replay']}**",
+                    "- Complete selected operating-state replay consistent: "
+                    f"**{selected_replay['all_selected_operating_state_matches_independent_replay']}**",
+                    "- Selected-state replay violation count: "
+                    f"**{selected_replay['violation_count']}**",
+                    "- Maximum selected-state pressure replay error: "
+                    f"**{selected_replay['maximum_absolute_pressure_replay_error_pa']} Pa**",
+                    "- Selected-state replay violations: "
+                    f"**{selected_replay['violations']}**",
+                    "- Tied maximum selected-state replay witnesses: "
+                    f"**{selected_replay['maximum_pressure_replay_error_witnesses']}**",
+                ]
+            )
         bracket = search["final_bisection_bracket"]
         if bracket is None:
             iteration_limit = search.get("iteration_limit_evidence")

@@ -2546,6 +2546,24 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
         "bisection_trace_pressure_state_consistent_corner_count"
     ] == summary["bisection_corner_count"]
     assert summary[
+        "selected_operating_state_replay_evidence_corner_count"
+    ] == summary["solved_search_evidence_corner_count"]
+    assert summary["selected_operating_state_replay_complete_coverage"] is True
+    assert summary[
+        "selected_operating_state_replay_consistent_corner_count"
+    ] == summary["solved_search_evidence_corner_count"]
+    assert summary[
+        "selected_operating_state_replay_violation_corner_indices"
+    ] == []
+    assert summary[
+        "selected_operating_state_origin_violation_corner_indices"
+    ] == []
+    assert summary["selected_operating_state_replay_violation_count"] == 0
+    assert summary["selected_operating_state_replay_violation_details"] == []
+    assert summary[
+        "maximum_selected_operating_state_pressure_replay_error_pa"
+    ]["value"] <= 1e-9
+    assert summary[
         "bisection_trace_residual_replay_violation_corner_indices"
     ] == []
     assert summary[

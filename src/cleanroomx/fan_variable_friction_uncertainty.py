@@ -2587,6 +2587,22 @@ def _operating_point_search_resolution_summary(
         | set(trace_numeric_midpoint_violation_corner_indices)
         | set(trace_midpoint_flag_mismatch_corner_indices)
     )
+    trace_midpoint_residual_recheck_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get(
+            "all_recorded_midpoint_residuals_match_recomputed_model",
+            False,
+        )
+    ]
+    trace_recomputed_decision_semantic_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit.get(
+            "all_decisions_match_recomputed_midpoint_residual_semantics",
+            False,
+        )
+    ]
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2963,6 +2979,28 @@ def _operating_point_search_resolution_summary(
             _maximum_trace_geometry_metric_evidence(
                 "maximum_absolute_trace_midpoint_error_m3_h",
                 "m3/h",
+            )
+        ),
+        "bisection_trace_midpoint_residual_recheck_consistent_corner_count": (
+            len(trace_cases)
+            - len(trace_midpoint_residual_recheck_violation_corner_indices)
+        ),
+        "bisection_trace_midpoint_residual_recheck_violation_corner_indices": (
+            trace_midpoint_residual_recheck_violation_corner_indices
+        ),
+        "bisection_trace_recomputed_decision_semantic_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                trace_recomputed_decision_semantic_violation_corner_indices
+            )
+        ),
+        "bisection_trace_recomputed_decision_semantic_violation_corner_indices": (
+            trace_recomputed_decision_semantic_violation_corner_indices
+        ),
+        "maximum_bisection_trace_midpoint_residual_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_trace_midpoint_residual_error_pa",
+                "Pa",
             )
         ),
         "bisection_trace_width_match_corner_count": (

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.94 canonical solver provenance hardening — 2026-09-24
+
+- Expands the shared canonical nonlinear network-result projection from final node/edge/pressure-power state to include network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and chronological outer-iteration history.
+- Normalizes floating-point signed zero only inside canonical identity/projection representation, so numerically equivalent `-0.0` and `0.0` do not create different deterministic identities while solver outputs and physics remain unchanged.
+- Sorts semantically named node, edge, and variable-friction closure collections before canonical serialization, while deliberately preserving order for chronological iteration history and all solver/search sequences whose order is meaningful.
+- Reuses the single shared deterministic projection comparator for supplied-point, full-bisection, terminal, and selected replay; no parallel recursive comparator was added.
+- Keeps SHA-256 identity distinct from field-level projection equality and preserves exact mismatch paths, values/types/presence, mismatch kinds, numerical errors, complete/incomplete coverage, uncertainty-corner provenance, and dossier propagation.
+- Adds direct regression coverage for signed-zero stability, named-collection order invariance, history-order sensitivity, solver-metadata/configuration corruption localization, uncertainty propagation, dossier propagation, Markdown visibility, and strict `allow_nan=False` JSON serialization.
+- Preserves fan candidate discovery/priority, interpolation and no-extrapolation behavior, root selection, numerical tolerances, nonlinear convergence, power calculations, uncertainty-corner enumeration, engineering statuses, and all v0.85-v0.93 replay semantics.
+- Canonical SHA-256 values are deterministic content identities only; they do not prove source authenticity, cleanroom certification, CFD validity, fan acceptance, commissioning, global-root uniqueness, physical stability, stall/surge limits, manufacturer approval, physical uncertainty, or statistical confidence.
+- Bumped package/runtime metadata to v0.94.0.
+
 ## v0.93 supplied fan-point network-state fingerprint and projection replay — 2026-09-24
 
 - Retains the canonical internal network-state SHA-256 and full canonical projection for every successfully evaluated supplied fan-curve point before operating-point candidate selection.

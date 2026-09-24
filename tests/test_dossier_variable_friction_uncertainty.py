@@ -451,6 +451,93 @@ def test_dossier_preserves_selected_projection_corruption_evidence(
 
 
 
+
+def test_dossier_preserves_solver_configuration_projection_corruption(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2 or result["status"] != "solved":
+            return result
+
+        evidence = result["operating_point_search_evidence"]
+        replay = evidence["selected_operating_state_replay"]
+        pressure = result["system_pressure_check"]
+        projection = json.loads(
+            json.dumps(replay["recorded_network_state_projection"])
+        )
+        projection["variable_friction"]["relaxation"] += 0.1
+        segment_index = evidence["supplied_segment_index"]
+        evidence["selected_operating_state_replay"] = (
+            _selected_operating_state_replay_audit(
+                case_study,
+                selected_airflow_m3_h=replay[
+                    "selected_airflow_replay_input_m3_h"
+                ],
+                recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
+                recorded_loop_network_pressure_pa=pressure[
+                    "loop_network_pressure_pa"
+                ],
+                recorded_system_pressure_pa=pressure[
+                    "total_system_pressure_pa"
+                ],
+                recorded_residual_pa=pressure[
+                    "fan_minus_system_pressure_pa"
+                ],
+                recorded_network_state_sha256=replay[
+                    "recorded_network_state_sha256"
+                ],
+                recorded_network_state_projection=projection,
+                segment_left=case_study.fan_curve.points[segment_index],
+                segment_right=case_study.fan_curve.points[
+                    segment_index + 1
+                ],
+                selected_supplied_point_index=evidence[
+                    "selected_supplied_point_index"
+                ],
+                bisection_trace=evidence["bisection_trace"],
+            )
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    dossier = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = dossier["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "selected_operating_network_state_projection_replay_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "selected_operating_network_state_projection_mismatch_count"
+    ] == 1
+    details = summary[
+        "selected_operating_network_state_projection_replay_violation_details"
+    ]
+    assert details[0]["mismatch_paths"] == [
+        "$.variable_friction.relaxation"
+    ]
+    mismatch = details[0]["mismatches"][0]
+    assert mismatch["mismatch_kind"] == "value_mismatch"
+    assert mismatch["absolute_error"] == pytest.approx(0.1)
+
+    json.dumps(dossier, sort_keys=True, allow_nan=False)
+    report = markdown_dossier_report(dossier)
+    assert "$.variable_friction.relaxation" in report
+    assert "recorded_value" in report
+    assert "recomputed_value" in report
+
+
 def test_dossier_preserves_full_trace_projection_corruption_evidence(
     monkeypatch,
 ) -> None:

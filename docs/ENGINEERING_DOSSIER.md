@@ -2,6 +2,14 @@
 
 The CleanroomX engineering dossier combines existing analysis outputs into one auditable Markdown or JSON package. It is a reporting and traceability layer; it does not create new acceptance limits and it does not convert CleanroomX screening into certification.
 
+## v0.94 canonical solver provenance hardening
+
+For nonlinear fan/variable-friction analyses, the dossier keeps v0.94 canonical solver-result identity separate from source-file fingerprints and the v0.57 top-level nonlinear uncertainty result-integrity digest. The richer canonical replay covers solver/network identity, Newton iteration metadata, configured mass-balance tolerance, final node/edge/pressure-power evidence, variable-friction convergence/configuration, chronological outer-iteration history, and named closure evidence.
+
+Field-level corruption in those newly covered solver-provenance fields remains visible through the existing selected, terminal, full-trace, and supplied-point replay summaries with exact corner/iteration/position/point/path provenance as applicable. Markdown stays concise; complete mismatch records remain in machine-readable JSON.
+
+These digests are deterministic content identities only. They do not prove source authenticity or physical correctness and are not cleanroom/ISO certification, CFD validation, fan acceptance, manufacturer approval, commissioning/TAB evidence, global-root uniqueness, physical stability, stall/surge analysis, physical uncertainty quantification, or statistical confidence analysis.
+
 ## Manifest
 
 A dossier manifest can reference:
@@ -37,6 +45,8 @@ For v0.91 nonlinear fan/variable-friction-loop uncertainty analyses, the dossier
 For v0.92 the dossier also preserves the complete per-bisection low/midpoint/high network-state projection replay layer. It reports trace-projection applicability, any-evidence and complete-coverage counts, corruption and coverage-gap corners, exact corner/iteration/position/path mismatch records, retained/recomputed/type evidence, total mismatch counts, and tied per-field worst numerical witnesses while keeping result-integrity SHA-256, v0.87 full-trace fingerprint replay, terminal replay, and v0.91 selected projection replay distinct. A trace projection corruption or missing applicable check remains visible through dossier JSON and Markdown. This is deterministic numerical/provenance evidence only, not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
 
 For v0.93 the dossier additionally preserves supplied fan-point network-state replay across all nonlinear uncertainty corners. It keeps sampled-point SHA-256 violations, field-level projection violations, incomplete-coverage corners, exact corner/point/path mismatch records, coverage-gap reasons, detailed retained/recomputed/type evidence, mismatch totals, and tied per-field worst numerical witnesses distinct from selected, terminal, and bisection replay. Thus corruption in a sampled candidate anchor or a missing pre-failure point remains visible through dossier JSON and Markdown without changing the underlying engineering outcome.
+
+For v0.94 all of those replay layers use the shared signed-zero-stable, named-collection-order-invariant v3 canonical network-result representation. Dossier-preserved mismatch evidence can therefore identify deterministic solver metadata/configuration/history corruption as well as solved node/edge/pressure-power/closure corruption. Chronological solver history remains order-sensitive, and the stronger canonical identity remains content-integrity evidence rather than proof of source authenticity or engineering certification.
 
 Example:
 

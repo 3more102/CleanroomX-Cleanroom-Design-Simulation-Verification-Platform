@@ -301,7 +301,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._scene_stats_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
-        self._selection_detail_var = tk.StringVar(value="Select a room or device to edit its properties.")
+        self._selection_detail_var = tk.StringVar(
+            value="Select a room or device to edit its properties."
+        )
+        self._device_type_var = tk.StringVar(value="")
+        self._room_assignment_var = tk.StringVar(value="Unassigned")
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -345,10 +349,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=lambda: self.set_view_mode("3d"),
         ).pack(side="left", padx=2)
 
-        toolbar = ttk.Frame(self, style="Surface.TFrame", padding=(10, 5, 10, 8))
-        toolbar.pack(fill="x", padx=6)
+        toolbar_stack = ttk.Frame(
+            self,
+            style="Surface.TFrame",
+            padding=(10, 5, 10, 8),
+        )
+        toolbar_stack.pack(fill="x", padx=6)
 
-        ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
+        object_bar = ttk.Frame(toolbar_stack, style="Surface.TFrame")
+        object_bar.pack(fill="x")
+        ttk.Label(object_bar, text="OBJECTS", style="Muted.TLabel").pack(
+            side="left", padx=(0, 4)
+        )
+        ttk.Button(object_bar, text="+ Room", command=self.add_room).pack(
+            side="left", padx=2
+        )
         for device_type, label in (
             ("door", "+ Door"),
             ("ffu", "+ FFU"),
@@ -359,31 +374,58 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("sensor", "+ Sensor"),
         ):
             ttk.Button(
-                toolbar,
+                object_bar,
                 text=label,
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
-        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        self.undo_button = ttk.Button(toolbar, text="Undo", command=self.undo)
+        ttk.Separator(object_bar, orient="vertical").pack(
+            side="left", fill="y", padx=6
+        )
+        self.undo_button = ttk.Button(object_bar, text="Undo", command=self.undo)
         self.undo_button.pack(side="left", padx=2)
-        self.redo_button = ttk.Button(toolbar, text="Redo", command=self.redo)
+        self.redo_button = ttk.Button(object_bar, text="Redo", command=self.redo)
         self.redo_button.pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Duplicate", command=self.duplicate_selected).pack(
+        ttk.Button(
+            object_bar,
+            text="Duplicate",
+            command=self.duplicate_selected,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            object_bar,
+            text="Delete",
+            style="Danger.TButton",
+            command=self.delete_selected,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            object_bar,
+            text="Center Selected",
+            command=self.center_selected,
+        ).pack(side="left", padx=(8, 2))
+
+        display_bar = ttk.Frame(toolbar_stack, style="Surface.TFrame")
+        display_bar.pack(fill="x", pady=(5, 0))
+        ttk.Label(display_bar, text="VIEW", style="Muted.TLabel").pack(
+            side="left", padx=(0, 4)
+        )
+        ttk.Button(display_bar, text="Fit All", command=self.fit_views).pack(
             side="left", padx=2
         )
-        ttk.Button(toolbar, text="Delete", style="Danger.TButton", command=self.delete_selected).pack(
-            side="left", padx=2
+        ttk.Checkbutton(
+            display_bar,
+            text="Grid",
+            variable=self._show_grid,
+            command=self.redraw,
+        ).pack(side="left", padx=(6, 3))
+        ttk.Checkbutton(
+            display_bar,
+            text="Snap",
+            variable=self._snap_to_grid,
+        ).pack(side="left", padx=(2, 3))
+        ttk.Label(display_bar, text="Spacing", style="Muted.TLabel").pack(
+            side="left", padx=(6, 3)
         )
-        ttk.Button(toolbar, text="Fit All", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=(8, 3)
-        )
-        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(
-            side="left", padx=(2, 3)
-        )
-        ttk.Label(toolbar, text="Spacing", style="Muted.TLabel").pack(side="left", padx=(6, 3))
         grid_box = ttk.Combobox(
-            toolbar,
+            display_bar,
             width=7,
             state="readonly",
             textvariable=self._grid_var,
@@ -391,28 +433,32 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         grid_box.pack(side="left", padx=(0, 6))
         grid_box.bind("<<ComboboxSelected>>", self._set_grid_from_control)
-        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        ttk.Label(toolbar, text="LAYERS", style="Muted.TLabel").pack(side="left", padx=(0, 3))
+        ttk.Separator(display_bar, orient="vertical").pack(
+            side="left", fill="y", padx=6
+        )
+        ttk.Label(display_bar, text="LAYERS", style="Muted.TLabel").pack(
+            side="left", padx=(0, 3)
+        )
         ttk.Checkbutton(
-            toolbar,
+            display_bar,
             text="Pressure",
             variable=self._show_pressure_overlay,
             command=self.redraw,
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
-            toolbar,
+            display_bar,
             text="Cascade",
             variable=self._show_cascade_links,
             command=self.redraw,
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
-            toolbar,
+            display_bar,
             text="Room labels",
             variable=self._show_room_labels,
             command=self.redraw,
         ).pack(side="left", padx=2)
         ttk.Checkbutton(
-            toolbar,
+            display_bar,
             text="Device labels",
             variable=self._show_device_labels,
             command=self.redraw,
@@ -511,6 +557,33 @@ class SpatialDesignWorkspace(ttk.Frame):
             textvariable=self._selection_detail_var,
             style="Muted.TLabel",
         ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(1, 7))
+        ttk.Label(inspector, text="Device type").grid(
+            row=3, column=0, sticky="w", padx=(0, 4), pady=2
+        )
+        self.device_type_box = ttk.Combobox(
+            inspector,
+            textvariable=self._device_type_var,
+            values=DEVICE_TYPES,
+            state="disabled",
+            width=18,
+        )
+        self.device_type_box.grid(
+            row=3, column=1, sticky="ew", padx=(0, 8), pady=2
+        )
+        ttk.Label(inspector, text="Assigned room").grid(
+            row=3, column=2, sticky="w", padx=(0, 4), pady=2
+        )
+        self.room_assignment_box = ttk.Combobox(
+            inspector,
+            textvariable=self._room_assignment_var,
+            values=("Unassigned",),
+            state="disabled",
+            width=18,
+        )
+        self.room_assignment_box.grid(
+            row=3, column=3, sticky="ew", padx=(0, 8), pady=2
+        )
+
         fields = (
             ("name", "Name"),
             ("x_m", "X (m)"),
@@ -522,15 +595,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("pressure_pa", "Pressure (Pa)"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 3 + index // 2
+            row = 4 + index // 2
             column = (index % 2) * 2
-            ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
+            ttk.Label(inspector, text=label).grid(
+                row=row,
+                column=column,
+                sticky="w",
+                padx=(0, 4),
+                pady=2,
+            )
             var = tk.StringVar()
             self._property_vars[key] = var
             ttk.Entry(inspector, textvariable=var, width=18).grid(
-                row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
+                row=row,
+                column=column + 1,
+                sticky="ew",
+                padx=(0, 8),
+                pady=2,
             )
-        button_row = 3 + (len(fields) + 1) // 2
+        button_row = 4 + (len(fields) + 1) // 2
+        ttk.Button(
+            inspector,
+            text="Center Selected",
+            command=self.center_selected,
+        ).grid(row=button_row, column=2, sticky="e", pady=(8, 0), padx=(0, 6))
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -566,6 +654,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-0>", lambda event: self.fit_views())
             canvas.bind("<Control-z>", lambda event: self.undo())
             canvas.bind("<Control-y>", lambda event: self.redo())
+            canvas.bind("<Key-f>", lambda event: self.center_selected())
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -756,22 +845,81 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _selected_object(self) -> dict | None:
         if self.selected is None:
             return None
-        collection = self.layout["rooms"] if self.selected.kind == "room" else self.layout["devices"]
-        return next((item for item in collection if item["id"] == self.selected.item_id), None)
+        collection = (
+            self.layout["rooms"]
+            if self.selected.kind == "room"
+            else self.layout["devices"]
+        )
+        return next(
+            (item for item in collection if item["id"] == self.selected.item_id),
+            None,
+        )
+
+    def _room_assignment_options(self) -> list[tuple[str, str | None]]:
+        rooms = self.layout.get("rooms", [])
+        counts: dict[str, int] = {}
+        for room in rooms:
+            name = str(room.get("name") or "Room")
+            counts[name] = counts.get(name, 0) + 1
+
+        options: list[tuple[str, str | None]] = [("Unassigned", None)]
+        for room in rooms:
+            name = str(room.get("name") or "Room")
+            room_id = str(room.get("id") or "")
+            display = name
+            if counts.get(name, 0) > 1:
+                display = f"{name} · {room_id[-6:]}"
+            options.append((display, room_id))
+        return options
+
+    def _room_assignment_display(self, room_id: Any) -> str:
+        for display, candidate_id in self._room_assignment_options():
+            if candidate_id == room_id:
+                return display
+        return "Unassigned"
+
+    def _room_id_from_assignment(self, display: str) -> str | None:
+        for option, room_id in self._room_assignment_options():
+            if option == display:
+                return room_id
+        return None
 
     def _load_property_panel(self) -> None:
         item = self._selected_object()
+        assignment_options = self._room_assignment_options()
+        if hasattr(self, "room_assignment_box"):
+            self.room_assignment_box.configure(
+                values=tuple(display for display, _ in assignment_options)
+            )
+
         if item is None:
             self._selection_var.set("No selection")
             self._selection_detail_var.set(
                 "Select a room or device to edit it. Delete removes; Ctrl+D duplicates."
             )
+            self._device_type_var.set("")
+            self._room_assignment_var.set("Unassigned")
+            if hasattr(self, "device_type_box"):
+                self.device_type_box.configure(state="disabled")
+            if hasattr(self, "room_assignment_box"):
+                self.room_assignment_box.configure(state="disabled")
             for var in self._property_vars.values():
                 var.set("")
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+
+        prefix = (
+            "Room"
+            if self.selected and self.selected.kind == "room"
+            else item.get("type", "Device").title()
+        )
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
         if self.selected and self.selected.kind == "room":
+            self._device_type_var.set("")
+            self._room_assignment_var.set("Unassigned")
+            if hasattr(self, "device_type_box"):
+                self.device_type_box.configure(state="disabled")
+            if hasattr(self, "room_assignment_box"):
+                self.room_assignment_box.configure(state="disabled")
             area = item.get("length_m", 0.0) * item.get("width_m", 0.0)
             volume = area * item.get("height_m", 0.0)
             pressure = item.get("pressure_pa")
@@ -780,6 +928,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                 f"{area:.2f} m² floor · {volume:.2f} m³ volume · {pressure_text}"
             )
         else:
+            self._device_type_var.set(str(item.get("type") or "equipment"))
+            self._room_assignment_var.set(
+                self._room_assignment_display(item.get("room_id"))
+            )
+            if hasattr(self, "device_type_box"):
+                self.device_type_box.configure(state="readonly")
+            if hasattr(self, "room_assignment_box"):
+                self.room_assignment_box.configure(state="readonly")
             room = next(
                 (
                     candidate
@@ -809,6 +965,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             if text:
                 item[key] = _finite_number(text, item.get(key, 0.0))
         if self.selected and self.selected.kind == "device":
+            device_type = self._device_type_var.get().strip().lower()
+            if device_type in DEVICE_TYPES:
+                item["type"] = device_type
+            item["room_id"] = self._room_id_from_assignment(
+                self._room_assignment_var.get()
+            )
             text = self._property_vars["z_m"].get().strip()
             if text:
                 item["z_m"] = _finite_number(text, item.get("z_m", 0.0))
@@ -824,6 +986,37 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item.pop("pressure_pa", None)
         self._load_property_panel()
         self._persist("Spatial properties updated")
+
+    def center_selected(self) -> None:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            self._status_setter("Select a room or device to center")
+            return
+
+        if self.selected.kind == "room":
+            x = item["x_m"] + item["length_m"] / 2.0
+            y = item["y_m"] + item["width_m"] / 2.0
+            z = item["height_m"] / 2.0
+        else:
+            x = item.get("x_m", 0.0)
+            y = item.get("y_m", 0.0)
+            z = item.get("z_m", 0.0)
+
+        scale = self._scale_2d()
+        self.layout["view"]["pan_x"] = -x * scale
+        self.layout["view"]["pan_y"] = -y * scale
+
+        min_x, min_y, max_x, max_y = self._bounds()
+        cx = (min_x + max_x) / 2.0
+        cy = (min_y + max_y) / 2.0
+        projected_x, projected_y = self._project_3d(x - cx, y - cy, z)
+        target_x = max(1, self.canvas_3d.winfo_width()) / 2.0
+        target_y = max(1, self.canvas_3d.winfo_height()) / 2.0
+        self.layout["view"]["pan_3d_x"] += target_x - projected_x
+        self.layout["view"]["pan_3d_y"] += target_y - projected_y
+
+        self._status_setter(f"Centered {item.get('name', self.selected.kind)}")
+        self.redraw()
 
     def add_room(self) -> None:
         x = max(

@@ -323,6 +323,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                         f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span']}**",
                         "- Nearest alternative candidate gap / minimum supplied-point spacing: "
                         f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing']}**",
+                        "- Nearest alternative candidate supplied-point index-interval gap: "
+                        f"**{audit['nearest_alternative_candidate_feature_index_interval_gap']} index step(s)**",
                         "- Selected airflow overlaps an alternative candidate interval: "
                         f"**{audit['selected_airflow_overlaps_alternative_candidate_interval']}**",
                     ]
@@ -332,8 +334,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     lines.extend(
                         [
                             "",
-                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span | Gap / min supplied spacing |",
-                            "|---:|---|---|---:|---:|---:|",
+                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span | Gap / min supplied spacing | Supplied-point index-interval gap |",
+                            "|---:|---|---|---:|---:|---:|---:|",
                         ]
                     )
                     for feature in alternatives:
@@ -357,7 +359,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                             f"{feature['airflow_interval_high_m3_h']} | "
                             f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} | "
                             f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_supplied_curve_span']} | "
-                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing']} |"
+                            f"{feature['selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing']} | "
+                            f"{feature['selected_feature_to_candidate_feature_index_interval_gap']} |"
                         )
         reverse_segments = audit.get("reverse_strict_sign_change_segments") or []
         if reverse_segments:

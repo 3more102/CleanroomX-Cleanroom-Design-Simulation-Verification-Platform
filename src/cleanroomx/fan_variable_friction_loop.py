@@ -323,6 +323,8 @@ def _fan_curve_supplied_point_residual_audit(
         {
             "feature_kind": "supplied_point_tolerance_contact",
             "point_index": contact["point_index"],
+            "supplied_point_index_interval_low": contact["point_index"],
+            "supplied_point_index_interval_high": contact["point_index"],
             "airflow_m3_h": contact["airflow_m3_h"],
             "fan_minus_system_pressure_pa": contact[
                 "fan_minus_system_pressure_pa"
@@ -334,6 +336,8 @@ def _fan_curve_supplied_point_residual_audit(
         {
             "feature_kind": "strict_sign_change_segment",
             **segment,
+            "supplied_point_index_interval_low": segment["low_point_index"],
+            "supplied_point_index_interval_high": segment["high_point_index"],
         }
         for segment in strict_sign_change_segments
     )
@@ -396,6 +400,8 @@ def _fan_curve_supplied_point_residual_audit(
         "nearest_alternative_candidate_airflow_interval_gap_m3_h": None,
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span": None,
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing": None,
+        "nearest_alternative_candidate_feature_index_interval_gap": None,
+        "nearest_alternative_candidate_features_by_index_interval_gap": None,
         "nearest_alternative_candidate_features": None,
         "selected_airflow_overlaps_alternative_candidate_interval": None,
         "selection_policy": (
@@ -426,8 +432,10 @@ def _fan_curve_supplied_point_residual_audit(
             "cases with additional candidates, airflow separation is measured "
             "only to each alternative discrete point or sign-change interval "
             "and normalized by both the supplied fan-curve airflow span and "
-            "the minimum adjacent supplied-point airflow spacing; no alternate "
-            "continuous root location is inferred. Candidate "
+            "the minimum adjacent supplied-point airflow spacing. Candidate "
+            "separation is also measured between exact supplied-point index "
+            "intervals; that value is discrete sample-grid topology only, and "
+            "no alternate continuous root location is inferred. Candidate "
             "crossing features are not a count or proof of continuous physical "
             "intersections, and sampled monotonicity is not a dynamic stability, stall/surge, "
             "manufacturer-region, or equipment-acceptance criterion."
@@ -475,6 +483,8 @@ def _with_selected_crossing_feature(
     nearest_alternative_gap = None
     nearest_alternative_gap_fraction = None
     nearest_alternative_gap_fraction_of_minimum_spacing = None
+    nearest_alternative_index_gap = None
+    nearest_alternative_features_by_index_gap = None
     nearest_alternative_features = None
     selected_overlaps_alternative_interval = None
     if selected_copy is not None:
@@ -486,6 +496,12 @@ def _with_selected_crossing_feature(
         minimum_supplied_point_spacing = float(
             audit["minimum_supplied_point_airflow_spacing_m3_h"]
         )
+        selected_index_low = int(
+            selected_copy["supplied_point_index_interval_low"]
+        )
+        selected_index_high = int(
+            selected_copy["supplied_point_index_interval_high"]
+        )
         for feature in candidates:
             if feature["solver_priority_rank"] == selected_rank:
                 continue
@@ -496,6 +512,18 @@ def _with_selected_crossing_feature(
             else:
                 low_airflow = float(feature["low_airflow_m3_h"])
                 high_airflow = float(feature["high_airflow_m3_h"])
+            alternative_index_low = int(
+                feature["supplied_point_index_interval_low"]
+            )
+            alternative_index_high = int(
+                feature["supplied_point_index_interval_high"]
+            )
+            if selected_index_high < alternative_index_low:
+                index_gap = alternative_index_low - selected_index_high
+            elif selected_index_low > alternative_index_high:
+                index_gap = selected_index_low - alternative_index_high
+            else:
+                index_gap = 0
             if airflow < low_airflow:
                 gap = low_airflow - airflow
             elif airflow > high_airflow:
@@ -517,6 +545,9 @@ def _with_selected_crossing_feature(
                     "selected_airflow_to_feature_interval_gap_fraction_of_minimum_supplied_point_spacing": round(
                         gap / minimum_supplied_point_spacing,
                         12,
+                    ),
+                    "selected_feature_to_candidate_feature_index_interval_gap": (
+                        index_gap
                     ),
                 }
             )
@@ -545,6 +576,24 @@ def _with_selected_crossing_feature(
                     abs_tol=1e-9,
                 )
             ]
+            nearest_alternative_index_gap = min(
+                int(
+                    feature[
+                        "selected_feature_to_candidate_feature_index_interval_gap"
+                    ]
+                )
+                for feature in alternative_features
+            )
+            nearest_alternative_features_by_index_gap = [
+                dict(feature)
+                for feature in alternative_features
+                if int(
+                    feature[
+                        "selected_feature_to_candidate_feature_index_interval_gap"
+                    ]
+                )
+                == nearest_alternative_index_gap
+            ]
             selected_overlaps_alternative_interval = math.isclose(
                 nearest_alternative_gap,
                 0.0,
@@ -562,6 +611,7 @@ def _with_selected_crossing_feature(
             nearest_alternative_gap = round(nearest_alternative_gap, 9)
         else:
             nearest_alternative_features = []
+            nearest_alternative_features_by_index_gap = []
             selected_overlaps_alternative_interval = False
 
     enriched.update(
@@ -585,6 +635,12 @@ def _with_selected_crossing_feature(
             ),
             "nearest_alternative_candidate_airflow_interval_gap_fraction_of_minimum_supplied_point_spacing": (
                 nearest_alternative_gap_fraction_of_minimum_spacing
+            ),
+            "nearest_alternative_candidate_feature_index_interval_gap": (
+                nearest_alternative_index_gap
+            ),
+            "nearest_alternative_candidate_features_by_index_interval_gap": (
+                nearest_alternative_features_by_index_gap
             ),
             "nearest_alternative_candidate_features": (
                 nearest_alternative_features

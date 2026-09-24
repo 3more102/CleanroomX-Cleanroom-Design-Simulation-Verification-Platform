@@ -1725,6 +1725,13 @@ def _fan_curve_supplied_point_residual_summary(
             "selected_airflow_overlaps_alternative_candidate_interval"
         ) is True
     ]
+    alternative_index_separation_cases = [
+        (corner_index, corner, audit)
+        for corner_index, corner, audit in solved_cases
+        if audit.get(
+            "nearest_alternative_candidate_feature_index_interval_gap"
+        ) is not None
+    ]
     monotonic_count = sum(
         audit["residual_monotonic_non_increasing_with_tolerance"]
         for _corner_index, _corner, audit in cases
@@ -1799,6 +1806,7 @@ def _fan_curve_supplied_point_residual_summary(
     minimum_alternative_candidate_gap = None
     minimum_alternative_candidate_gap_fraction = None
     minimum_alternative_candidate_gap_fraction_of_minimum_spacing = None
+    minimum_alternative_candidate_index_gap = None
     if alternative_separation_cases:
         minimum_gap = min(
             float(
@@ -1941,6 +1949,51 @@ def _fan_curve_supplied_point_residual_summary(
             "sources": spacing_normalized_sources,
         }
 
+    if alternative_index_separation_cases:
+        minimum_index_gap = min(
+            int(
+                audit[
+                    "nearest_alternative_candidate_feature_index_interval_gap"
+                ]
+            )
+            for _corner_index, _corner, audit in alternative_index_separation_cases
+        )
+        index_sources = []
+        for corner_index, corner, audit in alternative_index_separation_cases:
+            observed_index_gap = int(
+                audit[
+                    "nearest_alternative_candidate_feature_index_interval_gap"
+                ]
+            )
+            if observed_index_gap != minimum_index_gap:
+                continue
+            source = _critical_case_summary(corner_index, corner)
+            source.update(
+                {
+                    "candidate_crossing_feature_count": audit[
+                        "candidate_crossing_feature_count"
+                    ],
+                    "expected_supplied_point_count": audit[
+                        "expected_supplied_point_count"
+                    ],
+                    "selected_candidate_feature": audit.get(
+                        "selected_candidate_feature"
+                    ),
+                    "nearest_alternative_candidate_features_by_index_interval_gap": (
+                        audit.get(
+                            "nearest_alternative_candidate_features_by_index_interval_gap"
+                        )
+                        or []
+                    ),
+                }
+            )
+            index_sources.append(source)
+        minimum_alternative_candidate_index_gap = {
+            "value": minimum_index_gap,
+            "unit": "supplied_point_index_steps",
+            "sources": index_sources,
+        }
+
     return {
         "corner_count": len(corners),
         "audit_evidence_corner_count": len(cases),
@@ -1961,6 +2014,9 @@ def _fan_curve_supplied_point_residual_summary(
         "alternative_candidate_separation_evidence_corner_count": len(
             alternative_separation_cases
         ),
+        "alternative_candidate_index_separation_evidence_corner_count": len(
+            alternative_index_separation_cases
+        ),
         "selected_airflow_overlap_alternative_interval_corner_count": len(
             selected_overlap_alternative_interval_indices
         ),
@@ -1975,6 +2031,9 @@ def _fan_curve_supplied_point_residual_summary(
         ),
         "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_minimum_supplied_point_spacing": (
             minimum_alternative_candidate_gap_fraction_of_minimum_spacing
+        ),
+        "minimum_selected_to_alternative_candidate_feature_index_interval_gap": (
+            minimum_alternative_candidate_index_gap
         ),
         "monotonic_non_increasing_corner_count": monotonic_count,
         "residual_increase_corner_count": len(residual_increase_indices),
@@ -2005,9 +2064,12 @@ def _fan_curve_supplied_point_residual_summary(
             "aggregate can retain the smallest airflow gap from the selected "
             "solution to an alternative discrete point or sign-change interval "
             "in absolute airflow, as a fraction of that corner's supplied "
-            "fan-curve airflow span, and in units of that corner's minimum "
-            "adjacent supplied-point airflow spacing; this does not infer a second continuous "
-            "root. Reverse negative-to-positive strict sign-change segments are "
+            "fan-curve airflow span, in units of that corner's minimum "
+            "adjacent supplied-point airflow spacing, and as the minimum "
+            "separation between exact supplied-point index intervals. The "
+            "index-space value is discrete sample-grid topology only and does "
+            "not infer a second continuous root. Reverse negative-to-positive "
+            "strict sign-change segments are "
             "retained separately as audit-only sampled topology and are never "
             "promoted into solver candidates. Sampled monotonicity and candidate "
             "crossing features do not prove continuous uniqueness or dynamic "

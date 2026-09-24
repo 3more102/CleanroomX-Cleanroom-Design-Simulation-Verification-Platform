@@ -503,10 +503,72 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     )
 
 
-def application_info() -> dict:
+_CUSTOM_APPLICATION_ADAPTERS = frozenset({"consistency", "dossier"})
+
+
+def validate_application_registry() -> dict:
+    keys = [spec.key for spec in _ANALYSES]
+    duplicate_keys = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicate_keys:
+        raise RuntimeError(
+            "duplicate application analysis keys: " + ", ".join(duplicate_keys)
+        )
+
+    callable_target_count = 0
+    fallback_reporter_count = 0
+    for spec in _ANALYSES:
+        if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
+            if spec.parser is not None or spec.runner is not None:
+                raise RuntimeError(
+                    f"{spec.key} must use its registered custom application adapter"
+                )
+        elif spec.parser is None or spec.runner is None:
+            raise RuntimeError(
+                f"{spec.key} must define both parser and runner targets"
+            )
+
+        if spec.reporter is None:
+            fallback_reporter_count += 1
+
+        for role, target in (
+            ("parser", spec.parser),
+            ("runner", spec.runner),
+            ("reporter", spec.reporter),
+        ):
+            if target is None:
+                continue
+            module_name, function_name = target
+            try:
+                bound = _load_callable(target)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"{spec.key} {role} target failed to load: "
+                    f"{module_name}.{function_name}"
+                ) from exc
+            if not callable(bound):
+                raise RuntimeError(
+                    f"{spec.key} {role} target is not callable: "
+                    f"{module_name}.{function_name}"
+                )
+            callable_target_count += 1
+
     return {
+        "status": "ok",
+        "analysis_count": len(_ANALYSES),
+        "callable_target_count": callable_target_count,
+        "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
+        "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),
+        "fallback_reporter_count": fallback_reporter_count,
+    }
+
+
+def application_info(*, validate_registry: bool = False) -> dict:
+    info = {
         "name": "CleanroomX",
         "version": __version__,
         "analysis_count": len(_ANALYSES),
         "analyses": analysis_catalog(),
     }
+    if validate_registry:
+        info["registry_validation"] = validate_application_registry()
+    return info

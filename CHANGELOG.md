@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.80 bisection trace pressure-component audit — 2026-09-24
+
+- Retains midpoint fan pressure and total system pressure for every bounded-bisection trace step.
+- Explicitly audits complete pressure-component coverage instead of assuming those operands exist.
+- Independently recomputes each midpoint fan-minus-system residual from retained pressure operands and reports exact identity-violation iterations plus maximum absolute identity error.
+- Audits every L/H/T decision against the independently recomputed pressure-component residual while preserving the v0.78 recorded-residual decision-semantics check as a separate layer.
+- Propagates pressure-component coverage gaps, residual-identity violations, pressure-component decision-semantic violations, and worst-error witnesses through nonlinear uncertainty summaries, standalone Markdown, and engineering dossiers.
+- Adds solved, iteration-limit, missing-component, and corrupted-pressure regression coverage while preserving v0.79 raw-state checks, v0.77 origin replay, candidate priority, iteration budgets, and fan-curve no-extrapolation behavior.
+- Treats these checks strictly as numerical implementation provenance; they do not establish physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.

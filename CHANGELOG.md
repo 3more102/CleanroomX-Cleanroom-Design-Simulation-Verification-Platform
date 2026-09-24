@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.75 iteration-limit bisection trace/replay provenance — 2026-09-24
+
+- Retains every completed bounded-bisection midpoint decision when the operating-point search exhausts `max_operating_iterations` without accepting a root.
+- Reuses the v0.73 trace audit for iteration numbering, strict-sign bracketing, arithmetic midpoint geometry, and inter-step L/H state-transition replay.
+- Replays the final recorded L/H decision into the retained post-budget terminal bracket and verifies both airflow and signed-residual endpoints.
+- Distinguishes solved pressure-tolerance termination from iteration-limit termination so absence of a terminal T decision is audited as expected rather than treated as missing evidence.
+- Aggregates iteration-limit trace coverage, exact violation-corner indices, maximum retained trace length, and terminal replay consistency across nonlinear uncertainty corners and engineering dossiers.
+- Preserves unresolved `non_converged` status, accepts no operating point, performs no fan-curve extrapolation, and introduces no physical acceptance limits.
+- Treats all new trace and replay fields strictly as numerical implementation provenance; they are not physical airflow uncertainty, interpolation-error bounds, continuous root guarantees, stability/stall/surge evidence, commissioning/certification evidence, or equipment-acceptance criteria.
+- Bumped package/runtime metadata to v0.75.0.
+
 ## v0.74 supplied-point candidate index-separation audit — 2026-09-24
 
 - Retains exact supplied-point index intervals for solver-eligible tolerance-contact points and positive-to-negative sign-change segments.

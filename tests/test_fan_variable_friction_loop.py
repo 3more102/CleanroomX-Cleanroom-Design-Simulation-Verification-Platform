@@ -222,10 +222,14 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         assert step["iteration"] == index
         assert step["strict_sign_change_before_evaluation"] is True
         assert step["midpoint_is_arithmetic_bracket_midpoint"] is True
+        assert step["binary_width_fraction_matches_iteration"] is True
         assert step["width_fraction_of_supplied_segment"] == pytest.approx(
             0.5 ** (index - 1),
             abs=1e-12,
         )
+        assert step[
+            "expected_width_fraction_of_supplied_segment"
+        ] == pytest.approx(0.5 ** (index - 1), abs=1e-15)
     assert trace_audit["step_count"] == len(trace)
     assert trace_audit["trace_matches_operating_iterations"] is True
     assert trace_audit[
@@ -234,8 +238,14 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
     assert trace_audit[
         "all_midpoints_are_arithmetic_bracket_midpoints"
     ] is True
+    assert trace_audit[
+        "all_width_fractions_match_binary_contraction"
+    ] is True
+    assert trace_audit["transition_chain_preserved"] is True
     assert trace_audit["termination_record_count"] == 1
     assert trace_audit["termination_record_is_last"] is True
+    assert trace_audit["accept_pressure_tolerance_count"] == 1
+    assert trace_audit["terminal_outcome_consistent"] is True
     assert trace_audit["decision_sequence"].endswith("T")
     assert len(trace_audit["decision_sequence"]) == len(trace)
 
@@ -307,11 +317,33 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
         "absolute_width_fraction_consistency_error"
     ] == pytest.approx(0.0, abs=1e-18)
 
+    trace = evidence["bisection_trace"]
+    trace_audit = evidence["bisection_trace_audit"]
+    assert trace is not None
+    assert trace_audit is not None
+    assert len(trace) == diagnostics["operating_iterations"] == 1
+    assert trace[0]["decision"] in {
+        "replace_low_endpoint",
+        "replace_high_endpoint",
+    }
+    assert trace[0]["binary_width_fraction_matches_iteration"] is True
+    assert trace_audit["trace_matches_operating_iterations"] is True
+    assert trace_audit[
+        "all_width_fractions_match_binary_contraction"
+    ] is True
+    assert trace_audit["transition_chain_preserved"] is True
+    assert trace_audit["accept_pressure_tolerance_count"] == 0
+    assert trace_audit["terminal_outcome_consistent"] is True
+    assert "T" not in trace_audit["decision_sequence"]
+
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Accepted operating point: **none (iteration limit)**" in report
     assert "Remaining active bisection bracket" in report
     assert "Remaining bracket strict sign change preserved" in report
     assert "Remaining-bracket binary-width consistency error" in report
+    assert "Bisection decision-trace steps" in report
+    assert "Trace bracket-transition chain preserved" in report
+    assert "Trace terminal outcome consistent" in report
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

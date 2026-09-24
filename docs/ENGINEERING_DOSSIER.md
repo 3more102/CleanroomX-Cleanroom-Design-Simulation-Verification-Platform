@@ -1,5 +1,11 @@
 # Engineering dossier workflow
 
+## v0.95 solver-result integrity linkage
+
+For each nonlinear fan/variable-friction uncertainty analysis, the dossier now preserves the nominal/corner solver-result integrity linkage in addition to the existing uncertainty-result digest and network-state replay evidence. Dossier summaries report complete integrity coverage, inconsistent-corner counts, and coverage-gap counts; detailed JSON retains the exact violating and missing-evidence corner indices.
+
+Missing solver-result integrity evidence is therefore distinguishable from a recomputed digest mismatch. This remains deterministic software-content provenance and does not create a new cleanroom, equipment, commissioning, certification, or regulatory acceptance criterion.
+
 The CleanroomX engineering dossier combines existing analysis outputs into one auditable Markdown or JSON package. It is a reporting and traceability layer; it does not create new acceptance limits and it does not convert CleanroomX screening into certification.
 
 ## v0.94 canonical solver provenance hardening

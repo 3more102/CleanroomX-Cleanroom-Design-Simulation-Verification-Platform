@@ -1,5 +1,13 @@
 # Fan / variable-friction loop coupling
 
+## v0.95 solver-result integrity
+
+The complete standalone solver result now carries a separate `result_integrity` block containing the SHA-256 algorithm, canonicalization identifier, scope identifier, and digest. The digest is computed from the entire solver-result payload before that integrity block is attached.
+
+The canonical representation normalizes floating-point signed zero and sorts only semantically named node, edge, and edge-closure collections. Chronological iteration history, supplied-point order, candidate priority, and bounded-search traces remain order-sensitive. The independent integrity audit recomputes the digest and reports missing evidence separately from metadata or digest inconsistency.
+
+This layer detects retained result-object corruption; it does not alter solver physics, root selection, interpolation/no-extrapolation behavior, tolerances, convergence criteria, power calculations, or engineering status. The hash is deterministic software-content identity only, not proof of source authenticity, physical correctness, certification, commissioning/TAB acceptance, manufacturer approval, or stall/surge safety.
+
 CleanroomX v0.33 couples a supplied fan pressure/airflow curve directly to the existing two-terminal loop-network solver while re-evaluating automatic Darcy friction at every airflow used during the operating-point search.
 
 This workflow is intentionally separate from the v0.26 fixed-resistance fan/loop solver. v0.26 is exact for a network whose edge laws remain fixed quadratic laws. v0.33 is for loop edges whose resistance was derived from explicit duct geometry, absolute roughness, and kinematic viscosity and therefore needs the v0.30 Darcy-friction closure iteration as airflow changes.

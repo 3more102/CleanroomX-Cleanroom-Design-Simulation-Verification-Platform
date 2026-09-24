@@ -4,9 +4,9 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current clean provenance/replay release line is `codex/cleanroomx-v094-canonical-solver-provenance-v093-line`, package/runtime version **0.94.0**. It is a direct descendant of merged v0.93 integration commit `fd4598c0598f2eb421c69fa45ad3691f84f748e1`, which contains the verified v0.91 → v0.92 → v0.93 lineage. The default `main` branch remains older than this provenance line and must not be used as its implementation baseline.
+The current clean provenance/replay release line is `codex/cleanroomx-v095-solver-result-integrity-linkage-v094-line`, package/runtime version **0.95.0**. It is a direct descendant of integrated v0.94 commit `b2601a7dc8b583c9c84e6f00558c786a59cb355e`, preserving the verified v0.91 → v0.92 → v0.93 → v0.94 lineage. The default `main` branch remains older than this provenance line and must not be used as its implementation baseline until repository integration is completed.
 
-The CI workflow runs a dedicated v0.94 canonical-provenance gate, then the v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection compatibility gates, followed by the complete test suite and representative nonlinear loop/uncertainty/dossier JSON and Markdown smoke checks on Python **3.11, 3.12, and 3.13**.
+The CI workflow runs a dedicated v0.95 solver-result-integrity gate, then the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection compatibility gates, followed by the complete test suite and representative nonlinear loop/uncertainty/dossier JSON and Markdown smoke checks on Python **3.11, 3.12, and 3.13**.
 
 ### Network-state replay provenance ladder
 
@@ -21,6 +21,15 @@ The CI workflow runs a dedicated v0.94 canonical-provenance gate, then the v0.93
 | v0.92 | full per-bisection low/midpoint/high canonical projection replay with exact mismatch localization |
 | v0.93 | supplied fan-point canonical SHA-256 and field-level projection replay |
 | v0.94 | signed-zero-stable canonical network-result identity with named-collection order invariance and solver metadata/configuration/history provenance |
+| v0.95 | complete standalone solver-result identity/self-audit with uncertainty-corner and dossier linkage |
+
+### v0.95 solver-result integrity linkage
+
+v0.95 adds a separate deterministic identity for the complete standalone nonlinear fan/variable-friction solver result. The digest excludes only its own `result_integrity` block, normalizes signed zero, sorts semantically named node/edge/closure collections, and preserves solver/search order where ordering is meaningful.
+
+An independent audit recomputes that identity and reports availability, metadata agreement, SHA-256 agreement, and overall consistency. Nonlinear uncertainty analyses retain the audit for the nominal result and every evaluated corner, explicitly separating missing integrity coverage from actual corruption. Engineering dossiers preserve the same corner-level linkage and aggregate coverage evidence.
+
+This identity is intentionally separate from the top-level nonlinear uncertainty result digest and from the network-state fingerprint/projection replay ladder. It is deterministic software-content evidence only and is not proof of source authenticity, physical correctness, cleanroom certification, CFD validation, fan acceptance, commissioning/TAB acceptance, manufacturer approval, stall/surge safety, physical uncertainty, or statistical confidence.
 
 ### v0.94 canonical solver provenance hardening
 
@@ -42,7 +51,7 @@ The same evidence propagates through nonlinear uncertainty aggregation, standalo
 
 This replay is deterministic numerical/provenance verification only. It is **not** cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
 
-## v0.94 engineering core
+## v0.95 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.

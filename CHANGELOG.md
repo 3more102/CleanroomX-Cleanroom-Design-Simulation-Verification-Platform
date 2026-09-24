@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.95 solver-result integrity linkage — 2026-09-24
+
+- Adds a deterministic SHA-256 identity to the complete standalone nonlinear fan/variable-friction solver result while excluding only its own integrity block.
+- Canonicalizes signed zero and semantically named node/edge/closure collections for solver-result identity while preserving chronological and search ordering.
+- Adds an independent self-audit that distinguishes missing integrity evidence from digest/metadata inconsistency and detects post-solve result-object corruption.
+- Propagates solver-result integrity through nominal plus every evaluated nonlinear uncertainty corner, with explicit expected/evidence coverage, consistent/inconsistent/incomplete counts, exact corner indices, and separate coverage-gap versus corruption details.
+- Preserves the same linkage in engineering dossiers and surfaces concise integrity coverage in standalone uncertainty and dossier Markdown.
+- Keeps this solver-result identity distinct from the v0.57 top-level uncertainty-result digest and from v0.85-v0.94 replay/projection evidence.
+- Preserves fan candidate discovery, no-extrapolation policy, root selection, numerical tolerances, nonlinear convergence, power calculations, uncertainty-corner enumeration, and engineering-status semantics.
+- Adds regression coverage for recomputation, corruption detection, signed-zero/named-collection canonicalization, complete corner linkage, corrupted/missing corner evidence, unresolved statuses, dossier propagation, and aggregate dossier counts.
+- Solver-result hashes are deterministic software-content identity evidence only; they do not establish source authenticity, cleanroom/ISO certification, CFD validity, fan acceptance, commissioning/TAB acceptance, manufacturer approval, stall/surge safety, physical uncertainty, or statistical confidence.
+- Bumped package/runtime metadata to v0.95.0.
+
 ## v0.94 canonical solver provenance hardening — 2026-09-24
 
 - Expands the shared canonical nonlinear network-result projection from final node/edge/pressure-power state to include network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and chronological outer-iteration history.

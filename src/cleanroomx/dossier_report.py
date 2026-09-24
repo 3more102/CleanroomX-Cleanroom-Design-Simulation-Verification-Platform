@@ -531,7 +531,7 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Min alternative candidate gap / min supplied spacing | Residual topology | Provenance complete |",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant / trace audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Min alternative candidate gap / min supplied spacing | Residual topology | Provenance complete |",
                 "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
             ]
         )
@@ -752,13 +752,45 @@ def markdown_dossier_report(result: dict) -> str:
                     if limit_error is None
                     else limit_error["value"]
                 )
+                trace_count = search_summary.get(
+                    "bisection_trace_evidence_corner_count",
+                    0,
+                )
+                trace_outcome_ok = search_summary.get(
+                    "bisection_trace_outcome_consistent_corner_count",
+                    0,
+                )
+                trace_length_violations = len(
+                    search_summary.get(
+                        "bisection_trace_length_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_geometry_violations = (
+                    len(
+                        search_summary.get(
+                            "bisection_trace_sign_violation_corner_indices",
+                            [],
+                        )
+                    )
+                    + len(
+                        search_summary.get(
+                            "bisection_trace_midpoint_violation_corner_indices",
+                            [],
+                        )
+                    )
+                )
                 search_invariants = (
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
                     f"max width-fraction error {max_error}; "
                     f"iteration-limit {limit_count}; "
                     f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "
-                    f"remaining max width-fraction error {max_limit_error}"
+                    f"remaining max width-fraction error {max_limit_error}; "
+                    f"trace {trace_count}; "
+                    f"trace-outcome {trace_outcome_ok}/{trace_count}; "
+                    f"trace length/geometry violations "
+                    f"{trace_length_violations}/{trace_geometry_violations}"
                 )
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"

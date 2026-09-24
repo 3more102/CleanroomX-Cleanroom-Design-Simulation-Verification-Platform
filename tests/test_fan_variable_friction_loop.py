@@ -492,6 +492,11 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
     if audit["additional_candidate_feature_count"]:
         assert "Nearest alternative candidate interval gap" in report
         assert "gap / supplied fan-curve span" in report
+        assert (
+            "Alternative candidate intervals below / overlapping / above selected airflow"
+            in report
+        )
+        assert "Relative to selected airflow" in report
     assert "not a count or proof of continuous physical intersections" in report
 
 def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candidates() -> None:
@@ -564,9 +569,89 @@ def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candid
         "nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
     ] == pytest.approx(1500.0 / supplied_span)
     assert len(selected["nearest_alternative_candidate_features"]) == 1
+    assert alternatives[0]["relative_to_selected_airflow"] == (
+        "above_selected_airflow"
+    )
+    assert selected["alternative_candidate_below_selected_airflow_count"] == 0
+    assert selected["alternative_candidate_overlap_selected_airflow_count"] == 0
+    assert selected["alternative_candidate_above_selected_airflow_count"] == 1
+    assert selected[
+        "nearest_below_alternative_candidate_airflow_interval_gap_m3_h"
+    ] is None
+    assert selected[
+        "nearest_below_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+    ] is None
+    assert selected[
+        "nearest_above_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert selected[
+        "nearest_above_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+    ] == pytest.approx(1500.0 / supplied_span)
+    assert len(selected["nearest_above_alternative_candidate_features"]) == 1
     assert (
         selected["selected_airflow_overlaps_alternative_candidate_interval"]
         is False
+    )
+    assert (
+        selected["alternative_candidates_on_both_sides_of_selected_airflow"]
+        is False
+    )
+
+
+def test_directional_candidate_topology_retains_alternatives_on_both_sides() -> None:
+    study = load_fan_variable_friction_loop_study(
+        "examples/fan_variable_friction_loop_demo.json"
+    )
+    checks = [
+        {"airflow_m3_h": 0.0, "pressure_margin_pa": 10.0},
+        {"airflow_m3_h": 1000.0, "pressure_margin_pa": -10.0},
+        {"airflow_m3_h": 2000.0, "pressure_margin_pa": 10.0},
+        {"airflow_m3_h": 3000.0, "pressure_margin_pa": -10.0},
+        {"airflow_m3_h": 4000.0, "pressure_margin_pa": 10.0},
+        {"airflow_m3_h": 5000.0, "pressure_margin_pa": -10.0},
+    ]
+    audit = _fan_curve_supplied_point_residual_audit(study, checks)
+    assert audit["candidate_crossing_feature_count"] == 3
+    assert audit["reverse_strict_sign_change_segment_count"] == 2
+
+    selected = _with_selected_crossing_feature(
+        audit,
+        termination_reason="pressure_residual",
+        selected_airflow_m3_h=2500.0,
+        selected_segment_index=2,
+    )
+    alternatives = selected["alternative_candidate_features"]
+    assert alternatives is not None
+    assert selected["selected_candidate_feature_rank"] == 1
+    assert selected["alternative_candidate_below_selected_airflow_count"] == 1
+    assert selected["alternative_candidate_overlap_selected_airflow_count"] == 0
+    assert selected["alternative_candidate_above_selected_airflow_count"] == 1
+    assert alternatives[0]["relative_to_selected_airflow"] == (
+        "below_selected_airflow"
+    )
+    assert alternatives[1]["relative_to_selected_airflow"] == (
+        "above_selected_airflow"
+    )
+    supplied_span = selected["supplied_fan_curve_airflow_span_m3_h"]
+    assert selected[
+        "nearest_below_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert selected[
+        "nearest_below_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+    ] == pytest.approx(1500.0 / supplied_span)
+    assert selected[
+        "nearest_above_alternative_candidate_airflow_interval_gap_m3_h"
+    ] == pytest.approx(1500.0)
+    assert selected[
+        "nearest_above_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+    ] == pytest.approx(1500.0 / supplied_span)
+    assert (
+        selected["alternative_candidates_on_both_sides_of_selected_airflow"]
+        is True
+    )
+    assert all(
+        feature["feature_kind"] == "strict_sign_change_segment"
+        for feature in alternatives
     )
 
 

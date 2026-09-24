@@ -118,6 +118,33 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                         f"**{invariant['absolute_width_fraction_consistency_error']}**",
                     ]
                 )
+        trace_audit = search.get("bisection_trace_audit")
+        if trace_audit is not None:
+            lines.extend(
+                [
+                    "- Bisection decision-trace steps: "
+                    f"**{trace_audit['step_count']}**",
+                    "- Bisection decision sequence (L/H/T): "
+                    f"**{trace_audit['decision_sequence']}**",
+                    "- Trace length matches operating iterations: "
+                    f"**{trace_audit['trace_matches_operating_iterations']}**",
+                    "- Every trace step preserves strict sign change: "
+                    f"**{trace_audit['all_steps_preserve_strict_sign_change_before_evaluation']}**",
+                    "- Every trace midpoint is arithmetic bracket midpoint: "
+                    f"**{trace_audit['all_midpoints_are_arithmetic_bracket_midpoints']}**",
+                    "- Every trace width matches binary contraction: "
+                    f"**{trace_audit['all_width_fractions_match_binary_contraction']}**",
+                    "- Trace bracket-transition chain preserved: "
+                    f"**{trace_audit['transition_chain_preserved']}**",
+                    "- Trace terminal outcome consistent: "
+                    f"**{trace_audit['terminal_outcome_consistent']}**",
+                    "- Trace endpoint replacements (low/high): "
+                    f"**{trace_audit['replace_low_endpoint_count']}/"
+                    f"{trace_audit['replace_high_endpoint_count']}**",
+                    "- Trace tolerance-accept records: "
+                    f"**{trace_audit['accept_pressure_tolerance_count']}**",
+                ]
+            )
         lines.extend(["", search["scope_note"]])
 
     point = result["fan_operating_point"]

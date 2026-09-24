@@ -344,11 +344,16 @@ def build_plot_model(payload: dict, result: dict) -> dict | None:
 
     system_points = _find_system_curve_points(result)
     if system_points is not None:
-        series.append({
-            "name": "System curve",
-            "x": [float(point["airflow_m3_h"]) for point in system_points],
-            "y": [float(point["system_pressure_pa"]) for point in system_points],
-        })
+        system_xs = [float(point["airflow_m3_h"]) for point in system_points]
+        if len(system_xs) == len(xs) and all(
+            abs(system_x - fan_x) <= 1e-9
+            for system_x, fan_x in zip(system_xs, xs)
+        ):
+            series.append({
+                "name": "System curve",
+                "x": system_xs,
+                "y": [float(point["system_pressure_pa"]) for point in system_points],
+            })
 
     marker = _find_operating_point(result)
     markers: list[dict] = []

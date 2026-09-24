@@ -560,6 +560,36 @@ def test_bisection_trace_geometry_audit_detects_corrupted_fields() -> None:
     ] is False
     assert flag_audit["all_trace_raw_state_consistent"] is False
     assert flag_audit["all_decisions_match_midpoint_residual_semantics"] is True
+    assert flag_audit["all_trace_residuals_match_pressure_components"] is True
+
+    residual_corrupted = [dict(step) for step in trace]
+    residual_corrupted[0]["midpoint_fan_minus_system_pressure_pa"] = -1.0
+    residual_corrupted[0]["decision"] = "replace_high_endpoint"
+    residual_audit = _bisection_decision_trace_audit(
+        residual_corrupted,
+        operating_iterations=2,
+        termination_reason="pressure_residual",
+        operating_pressure_tolerance_pa=0.1,
+        initial_bisection_bracket=initial_bracket,
+        solved_terminal_bracket=solved_terminal_bracket,
+    )
+    assert residual_audit is not None
+    assert residual_audit[
+        "all_decisions_match_midpoint_residual_semantics"
+    ] is True
+    assert residual_audit[
+        "all_trace_residuals_match_pressure_components"
+    ] is False
+    assert residual_audit["residual_component_violation_iterations"] == [1]
+    assert residual_audit[
+        "maximum_absolute_trace_residual_component_error_pa"
+    ] == pytest.approx(2.0, abs=1e-18)
+    assert residual_audit[
+        "all_decisions_match_pressure_component_residual_semantics"
+    ] is False
+    assert residual_audit[
+        "pressure_component_decision_semantic_violation_iterations"
+    ] == [1]
 
     midpoint_corrupted = [dict(step) for step in trace]
     midpoint_corrupted[0]["midpoint_airflow_m3_h"] = 4.25

@@ -425,6 +425,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="Live synchronized preview",
             style="Muted.TLabel",
         ).pack(side="left", padx=(12, 0))
+        ttk.Button(
+            header3,
+            text="+",
+            width=3,
+            command=lambda: self._zoom_3d(1.15),
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            header3,
+            text="−",
+            width=3,
+            command=lambda: self._zoom_3d(1 / 1.15),
+        ).pack(side="right", padx=2)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(
                 header3,
@@ -493,7 +505,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         for index, (key, label) in enumerate(fields):
             row = 2 + index // 2
             column = (index % 2) * 2
-            ttk.Label(inspector, text=label).grid(
+            ttk.Label(inspector, text=label, style="Panel.TLabel").grid(
                 row=row,
                 column=column,
                 sticky="w",
@@ -926,6 +938,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return None
 
     def _on_left_down(self, event: tk.Event) -> None:
+        self.canvas_2d.focus_set()
         current = self.canvas_2d.find_withtag("current")
         hit = None
         if current:
@@ -1030,6 +1043,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         if not current:
             return

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.100.0 desktop execution integrity — 2026-09-24
+
+- Continues directly from the integrated v0.99.1 `main` release; no divergent release branch is used as the implementation baseline.
+- Adds canonical SHA-256 identity for every submitted application input and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies.
+- Exposes application execution provenance in Diagnostics and adds strict-JSON **Export Run Bundle JSON**.
+- Enforces exact catalog/public-mapping parity and validates the application registry before normal Tk window creation.
+- Allows unsaved dossier execution when every referenced file is absolute; relative references still require a saved project/base directory.
+- Preserves consistency/dossier file referents when input JSON is imported or **Save Project As** relocates a project, and clears cached results when the base directory changes.
+- Centralizes same-directory atomic UTF-8 project/export writes with flush/fsync and user-visible export errors.
+- Plots backend-computed system-pressure evidence alongside supplied fan curves and labels distinct plot series.
+- Retains the v0.99.1 packaged demo, clean-wheel installation checks, and real installed Tk/Xvfb smoke.
+- Preserves all validated solver equations, numerical tolerances, uncertainty semantics, no-extrapolation behavior, and engineering acceptance rules.
+
 ## v0.99.1 installed desktop hardening — 2026-09-24
 
 - Continues directly from integrated v0.99.0 `main`; no divergent release branch is used as the baseline.

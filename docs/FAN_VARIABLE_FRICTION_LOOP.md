@@ -38,6 +38,8 @@ v0.89 applies the same canonical network-state identity to the accepted selected
 
 v0.90 hardens that fingerprint canonicalization against harmless collection-order changes. Solved node rows, solved edge rows, and variable-friction edge-closure rows are sorted by their unique names before compact JSON serialization and SHA-256 hashing. Trace, terminal-bracket, and selected operating-state replay therefore compare semantic solved-state content rather than incidental enumeration order while retaining sensitivity to the same numeric state.
 
+v0.91 expands that canonical identity to the complete deterministic solver provenance needed to reproduce the retained network result: network/status/reference-node identity, inner Newton iteration count, mass-balance tolerance, variable-friction convergence/configuration, and the ordered outer-iteration history. Named node/edge/closure collections remain sorted by name, but outer-iteration history is intentionally preserved in chronological order. A replay therefore detects solver-path/configuration corruption that could previously leave all final solved node/edge values unchanged.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.100 file-reference path-context provenance — 2026-09-24
+
+- Continues directly from the integrated v0.99.0 application-registry release on the verified clean v0.91 ancestry.
+- Makes engineering-dossier validation and execution agree for unsaved desktop projects: dossiers whose referenced inputs are all absolute paths can execute without a saved project directory, while relative references still require explicit base-path context.
+- Clears all in-memory analysis results when **Save Project As** changes the project directory so stale dossier/consistency outputs cannot be exported after relative-path resolution context changes.
+- Adds regressions for unsaved absolute-reference dossier execution, unsaved relative-reference rejection, and Save As result-cache invalidation.
+- Bumps package/runtime/demo metadata and CI assertions to v0.100.0 while preserving the v0.99 registry-integrity gate, the v0.91-v0.95 provenance compatibility gates, the complete Python 3.11/3.12/3.13 suite, CLI smokes, and real Tk/Xvfb desktop smoke.
+
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.

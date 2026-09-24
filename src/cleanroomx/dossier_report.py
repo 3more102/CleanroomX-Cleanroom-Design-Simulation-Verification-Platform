@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Residual topology | Provenance complete |",
-                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Residual topology | Provenance complete |",
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -756,6 +756,7 @@ def markdown_dossier_report(result: dict) -> str:
                 "fan_curve_supplied_point_residual_summary"
             )
             alternative_candidate_gap = "—"
+            alternative_candidate_gap_fraction = "—"
             residual_topology = "—"
             if residual_summary is not None:
                 alternative_gap_evidence = residual_summary.get(
@@ -765,6 +766,13 @@ def markdown_dossier_report(result: dict) -> str:
                     alternative_candidate_gap = alternative_gap_evidence[
                         "value"
                     ]
+                normalized_alternative_gap_evidence = residual_summary.get(
+                    "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
+                )
+                if normalized_alternative_gap_evidence is not None:
+                    alternative_candidate_gap_fraction = (
+                        normalized_alternative_gap_evidence["value"]
+                    )
                 residual_topology = (
                     "coverage "
                     f"{residual_summary['complete_supplied_point_coverage_corner_count']}/"
@@ -796,6 +804,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{search_invariants} | "
                 f"{segment_clearance} | {segment_coverage} | "
                 f"{alternative_candidate_gap} | "
+                f"{alternative_candidate_gap_fraction} | "
                 f"{residual_topology} | "
                 f"{item['traceability']['complete']} |"
             )

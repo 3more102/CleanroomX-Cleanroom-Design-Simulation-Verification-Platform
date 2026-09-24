@@ -773,6 +773,38 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                trace_width_violations = len(
+                    search_summary.get(
+                        "bisection_trace_width_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_width_fraction_violations = len(
+                    search_summary.get(
+                        "bisection_trace_width_fraction_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_geometry_count = search_summary.get(
+                    "bisection_trace_geometry_consistent_corner_count",
+                    0,
+                )
+                trace_width_error = search_summary.get(
+                    "maximum_bisection_trace_width_error_m3_h"
+                )
+                max_trace_width_error = (
+                    "—"
+                    if trace_width_error is None
+                    else trace_width_error["value"]
+                )
+                trace_width_fraction_error = search_summary.get(
+                    "maximum_bisection_trace_width_fraction_error"
+                )
+                max_trace_width_fraction_error = (
+                    "—"
+                    if trace_width_fraction_error is None
+                    else trace_width_fraction_error["value"]
+                )
                 trace_terminal_violations = len(
                     search_summary.get(
                         "bisection_trace_terminal_violation_corner_indices",
@@ -833,6 +865,12 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{trace_iteration_violations}/{trace_replay_violations}/"
                     f"{trace_outcome_violations}/"
                     f"{limit_terminal_replay_violations}; "
+                    f"trace geometry violations W/N "
+                    f"{trace_width_violations}/{trace_width_fraction_violations}; "
+                    f"trace-geometry {trace_geometry_count}/{trace_count}; "
+                    f"max trace width error {max_trace_width_error} m3/h; "
+                    f"max trace normalized-width error "
+                    f"{max_trace_width_fraction_error}; "
                     f"trace-outcome {trace_outcome_count}/{trace_count}; "
                     f"limit-final-replay {limit_terminal_replay_count}/"
                     f"{limit_count}; "

@@ -57,6 +57,21 @@ def unit_hint(path: str) -> str:
     return ""
 
 
+def parse_analysis_input_text(text: str) -> dict:
+    def reject_constant(value: str):
+        raise ValueError(f"non-finite JSON value is not allowed: {value}")
+
+    try:
+        payload = json.loads(text, parse_constant=reject_constant)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"input JSON is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ValueError("analysis input must be a JSON object")
+    return payload
+
+
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
     if isinstance(value, dict):
@@ -156,6 +171,9 @@ class CleanroomXApp:
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
         self._running = False
+        self._loaded_analysis_id: str | None = None
+        self._selection_guard = False
+        self._saved_signature: str | None = None
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -165,6 +183,12 @@ class CleanroomXApp:
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
+        self._saved_signature = self._state_signature()
+        self._update_title()
+        self.name_var.trace_add("write", lambda *_: self._update_title())
+        self.description_var.trace_add("write", lambda *_: self._update_title())
+        self.input_text.bind("<<Modified>>", self._on_editor_modified, add="+")
+        self.input_text.edit_modified(False)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
 
@@ -357,21 +381,83 @@ class CleanroomXApp:
         except KeyError:
             return None
 
+    def _loaded_analysis(self) -> AnalysisDocument | None:
+        if self._loaded_analysis_id is None:
+            return None
+        try:
+            return self.project.analysis_by_id(self._loaded_analysis_id)
+        except KeyError:
+            return None
+
+    def _commit_loaded_editor(self, *, sync_metadata: bool = True) -> AnalysisDocument:
+        analysis = self._loaded_analysis()
+        if analysis is None:
+            raise ValueError("select or add an analysis first")
+        payload = parse_analysis_input_text(self.input_text.get("1.0", "end-1c"))
+        analysis.input = payload
+        if sync_metadata:
+            self._sync_metadata()
+        return analysis
+
     def _commit_editor(self) -> AnalysisDocument:
         analysis = self._current_analysis()
         if analysis is None:
             raise ValueError("select or add an analysis first")
-        try:
-            payload = json.loads(self.input_text.get("1.0", "end-1c"))
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"input JSON is invalid at line {exc.lineno}, column {exc.colno}: {exc.msg}"
-            ) from exc
-        if not isinstance(payload, dict):
-            raise ValueError("analysis input must be a JSON object")
-        analysis.input = payload
-        self._sync_metadata()
-        return analysis
+        if self._loaded_analysis_id != analysis.id:
+            raise RuntimeError("selected analysis is not loaded in the editor")
+        return self._commit_loaded_editor(sync_metadata=True)
+
+    def _state_signature(self) -> str:
+        data = copy.deepcopy(self.project.to_dict())
+        data["active_analysis_id"] = None
+        project_data = data["project"]
+        project_data["name"] = self.name_var.get()
+        project_data["description"] = self.description_var.get()
+
+        if self._loaded_analysis_id is not None:
+            raw = self.input_text.get("1.0", "end-1c")
+            try:
+                live_payload = parse_analysis_input_text(raw)
+            except ValueError:
+                data["_gui_invalid_editor"] = {
+                    "analysis_id": self._loaded_analysis_id,
+                    "text": raw,
+                }
+            else:
+                for item in data["analyses"]:
+                    if item["id"] == self._loaded_analysis_id:
+                        item["input"] = live_payload
+                        break
+        return json.dumps(data, sort_keys=True, ensure_ascii=False, allow_nan=True)
+
+    def _has_unsaved_changes(self) -> bool:
+        return (
+            self._saved_signature is not None
+            and self._state_signature() != self._saved_signature
+        )
+
+    def _mark_saved_state(self) -> None:
+        self._saved_signature = self._state_signature()
+        self._update_title()
+
+    def _on_editor_modified(self, event=None) -> None:
+        if self.input_text.edit_modified():
+            self.input_text.edit_modified(False)
+            self._update_title()
+
+    def _confirm_unsaved_changes(self, action: str) -> bool:
+        if not self._has_unsaved_changes():
+            return True
+        choice = messagebox.askyesnocancel(
+            "Unsaved changes",
+            f"Save changes before {action}?",
+            parent=self.root,
+        )
+        if choice is None:
+            return False
+        if choice:
+            return self.save_project()
+        return True
 
     def _sync_metadata(self) -> None:
         name = self.name_var.get().strip()
@@ -384,44 +470,82 @@ class CleanroomXApp:
         return None if self.project_path is None else self.project_path.parent
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
-        for item in self.analysis_tree.get_children():
-            self.analysis_tree.delete(item)
-        for analysis in self.project.analyses:
-            self.analysis_tree.insert(
-                "",
-                "end",
-                iid=analysis.id,
-                text=analysis.name,
-                values=(analysis.kind,),
-            )
-        target = select_id or self.project.active_analysis_id
-        if target and self.analysis_tree.exists(target):
-            self.analysis_tree.selection_set(target)
-            self.analysis_tree.focus(target)
-            self.analysis_tree.see(target)
-            self._load_analysis_into_editor(self.project.analysis_by_id(target))
-        elif self.project.analyses:
-            first = self.project.analyses[0].id
-            self.analysis_tree.selection_set(first)
-            self.analysis_tree.focus(first)
-            self._load_analysis_into_editor(self.project.analyses[0])
-        else:
-            self.input_text.delete("1.0", "end")
-            self.refresh_structure(silent=True)
+        self._selection_guard = True
+        self._loaded_analysis_id = None
+        try:
+            for item in self.analysis_tree.get_children():
+                self.analysis_tree.delete(item)
+            for analysis in self.project.analyses:
+                self.analysis_tree.insert(
+                    "",
+                    "end",
+                    iid=analysis.id,
+                    text=analysis.name,
+                    values=(analysis.kind,),
+                )
+            target = select_id or self.project.active_analysis_id
+            if target and self.analysis_tree.exists(target):
+                self.analysis_tree.selection_set(target)
+                self.analysis_tree.focus(target)
+                self.analysis_tree.see(target)
+                self._load_analysis_into_editor(self.project.analysis_by_id(target))
+            elif self.project.analyses:
+                first = self.project.analyses[0].id
+                self.analysis_tree.selection_set(first)
+                self.analysis_tree.focus(first)
+                self.project.active_analysis_id = first
+                self._load_analysis_into_editor(self.project.analyses[0])
+            else:
+                self.input_text.delete("1.0", "end")
+                self.input_text.edit_modified(False)
+                self.refresh_structure(silent=True)
+        finally:
+            self._selection_guard = False
+
+    def _restore_analysis_selection(self, analysis_id: str) -> None:
+        self._selection_guard = True
+        try:
+            if self.analysis_tree.exists(analysis_id):
+                self.analysis_tree.selection_set(analysis_id)
+                self.analysis_tree.focus(analysis_id)
+                self.analysis_tree.see(analysis_id)
+        finally:
+            self._selection_guard = False
 
     def _on_analysis_selected(self, event=None) -> None:
+        if self._selection_guard:
+            return
         analysis = self._current_analysis()
         if analysis is None:
             return
+        if (
+            self._loaded_analysis_id is not None
+            and analysis.id != self._loaded_analysis_id
+        ):
+            previous_id = self._loaded_analysis_id
+            try:
+                self._commit_loaded_editor(sync_metadata=False)
+            except Exception as exc:
+                self.status_var.set("Cannot switch analysis — fix the current input JSON")
+                messagebox.showerror(
+                    "Cannot switch analysis",
+                    f"{exc}\n\nThe current editor contents were preserved.",
+                    parent=self.root,
+                )
+                self._restore_analysis_selection(previous_id)
+                return
         self.project.active_analysis_id = analysis.id
         self._load_analysis_into_editor(analysis)
+        self._update_title()
 
     def _load_analysis_into_editor(self, analysis: AnalysisDocument) -> None:
+        self._loaded_analysis_id = analysis.id
         self.input_text.delete("1.0", "end")
         self.input_text.insert(
             "1.0",
             json.dumps(analysis.input, indent=2, ensure_ascii=False, sort_keys=False),
         )
+        self.input_text.edit_modified(False)
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         if self.last_run_analysis_id != analysis.id:
@@ -457,6 +581,8 @@ class CleanroomXApp:
         if self._running:
             messagebox.showwarning("Analysis running", "Abandon the current run first.")
             return
+        if not self._confirm_unsaved_changes("creating a new project"):
+            return
         self.project = new_project()
         self.project_path = None
         self.name_var.set(self.project.name)
@@ -465,8 +591,12 @@ class CleanroomXApp:
         self.last_run_analysis_id = None
         self._refresh_analysis_list()
         self.status_var.set("New project")
+        self._mark_saved_state()
 
     def open_project(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
         path = filedialog.askopenfilename(
             parent=self.root,
             title="Open CleanroomX project",
@@ -476,8 +606,14 @@ class CleanroomXApp:
                 ("All files", "*.*"),
             ],
         )
-        if path:
+        if not path:
+            return
+        if not self._confirm_unsaved_changes("opening another project"):
+            return
+        try:
             self.load_project_path(path)
+        except Exception as exc:
+            messagebox.showerror("Open failed", str(exc), parent=self.root)
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
@@ -490,40 +626,42 @@ class CleanroomXApp:
         self.last_run_analysis_id = None
         self._refresh_analysis_list()
         self.status_var.set(f"Opened {project_path.name}")
-        self._update_title()
+        self._mark_saved_state()
 
     def _update_title(self) -> None:
         suffix = "" if self.project_path is None else f" — {self.project_path.name}"
-        self.root.title(f"CleanroomX {__version__}{suffix}")
+        dirty = " *" if self._has_unsaved_changes() else ""
+        self.root.title(f"CleanroomX {__version__}{suffix}{dirty}")
 
-    def save_project(self) -> None:
+    def save_project(self) -> bool:
         try:
-            if self.project.analyses and self._current_analysis() is not None:
-                self._commit_editor()
+            if self.project.analyses and self._loaded_analysis() is not None:
+                self._commit_loaded_editor(sync_metadata=True)
             else:
                 self._sync_metadata()
         except Exception as exc:
             messagebox.showerror("Cannot save", str(exc), parent=self.root)
-            return
+            return False
         if self.project_path is None:
-            self.save_project_as()
-            return
+            return self.save_project_as()
         try:
             save_project_document(self.project_path, self.project)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
-            return
+            return False
         self.status_var.set(f"Saved {self.project_path.name}")
+        self._mark_saved_state()
+        return True
 
-    def save_project_as(self) -> None:
+    def save_project_as(self) -> bool:
         try:
-            if self.project.analyses and self._current_analysis() is not None:
-                self._commit_editor()
+            if self.project.analyses and self._loaded_analysis() is not None:
+                self._commit_loaded_editor(sync_metadata=True)
             else:
                 self._sync_metadata()
         except Exception as exc:
             messagebox.showerror("Cannot save", str(exc), parent=self.root)
-            return
+            return False
         path = filedialog.asksaveasfilename(
             parent=self.root,
             title="Save CleanroomX project",
@@ -531,16 +669,27 @@ class CleanroomXApp:
             filetypes=[("CleanroomX project", "*.cleanroomx.json"), ("JSON files", "*.json")],
         )
         if not path:
-            return
+            return False
         try:
             self.project_path = save_project_document(path, self.project)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
-            return
+            return False
         self.status_var.set(f"Saved {self.project_path.name}")
-        self._update_title()
+        self._mark_saved_state()
+        return True
 
     def add_analysis(self) -> None:
+        if self._loaded_analysis() is not None:
+            try:
+                self._commit_loaded_editor(sync_metadata=False)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot add analysis",
+                    f"Fix the current input JSON first.\n\n{exc}",
+                    parent=self.root,
+                )
+                return
         picker = AnalysisPicker(self.root)
         self.root.wait_window(picker)
         if picker.result is None:
@@ -558,6 +707,7 @@ class CleanroomXApp:
         self.project.analyses.append(analysis)
         self.project.active_analysis_id = analysis_id
         self._refresh_analysis_list(select_id=analysis_id)
+        self._update_title()
 
     def rename_analysis(self) -> None:
         analysis = self._current_analysis()
@@ -569,6 +719,7 @@ class CleanroomXApp:
         if value and value.strip():
             analysis.name = value.strip()
             self.analysis_tree.item(analysis.id, text=analysis.name)
+            self._update_title()
 
     def remove_analysis(self) -> None:
         analysis = self._current_analysis()
@@ -585,6 +736,7 @@ class CleanroomXApp:
             self.project.analyses[0].id if self.project.analyses else None
         )
         self._refresh_analysis_list()
+        self._update_title()
 
     def import_input_json(self) -> None:
         analysis = self._current_analysis()
@@ -608,6 +760,7 @@ class CleanroomXApp:
         analysis.input = payload
         self._load_analysis_into_editor(analysis)
         self.status_var.set(f"Imported {Path(path).name}")
+        self._update_title()
 
     def export_input_json(self) -> None:
         try:
@@ -816,6 +969,34 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def smoke_check_editor_transition(self) -> None:
+        if len(self.project.analyses) < 2:
+            return
+        source = self._current_analysis()
+        if source is None:
+            raise ValueError("smoke project has no active analysis")
+        target = next(item for item in self.project.analyses if item.id != source.id)
+        original = copy.deepcopy(source.input)
+        probe = copy.deepcopy(original)
+        probe["__cleanroomx_gui_smoke_probe__"] = "preserve-on-switch"
+        self.input_text.delete("1.0", "end")
+        self.input_text.insert("1.0", json.dumps(probe, indent=2, ensure_ascii=False))
+        self.input_text.edit_modified(False)
+
+        self.analysis_tree.selection_set(target.id)
+        self.analysis_tree.focus(target.id)
+        self.root.update_idletasks()
+        self.root.update()
+        committed = self.project.analysis_by_id(source.id).input
+        if committed.get("__cleanroomx_gui_smoke_probe__") != "preserve-on-switch":
+            raise RuntimeError("GUI editor transition lost unsaved analysis input")
+
+        self.project.analysis_by_id(source.id).input = original
+        self.analysis_tree.selection_set(source.id)
+        self.analysis_tree.focus(source.id)
+        self.root.update_idletasks()
+        self.root.update()
+
     def smoke_run_active(self) -> AnalysisRun:
         analysis = self._current_analysis()
         if analysis is None:
@@ -827,6 +1008,17 @@ class CleanroomXApp:
         return run
 
     def _on_close(self) -> None:
+        if self._running:
+            if not messagebox.askyesno(
+                "Analysis running",
+                "An analysis is still running. Abandon it and exit?",
+                parent=self.root,
+            ):
+                return
+            self._run_generation += 1
+            self._set_running(False)
+        if not self._confirm_unsaved_changes("exiting"):
+            return
         self.root.destroy()
 
 
@@ -862,6 +1054,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.smoke:
         if args.project and app.project.analyses:
+            app.smoke_check_editor_transition()
             run = app.smoke_run_active()
             json.dumps(run.to_dict(), allow_nan=False)
         root.update_idletasks()

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.78 bisection decision-predicate audit — 2026-09-24
+
+- Audits every retained bounded-bisection L/H/T decision against the recorded midpoint fan-minus-system residual and the configured operating-pressure tolerance.
+- Requires T only when the midpoint residual magnitude is within tolerance, L only for a positive out-of-tolerance residual, and H only for a negative out-of-tolerance residual.
+- Adds per-step expected-versus-recorded decision evidence plus aggregate exact uncertainty-corner violation indices.
+- Surfaces decision-predicate consistency in standalone fan-loop, nonlinear uncertainty, and engineering-dossier Markdown.
+- Adds a corruption regression showing that a self-consistent replayed trace with a false tolerance acceptance is rejected by the new predicate audit.
+- Preserves v0.77 origin-to-terminal replay, v0.76 geometry auditing, candidate priority, iteration budgets, and no-extrapolation behavior.
+- Treats the audit strictly as numerical implementation provenance; it is not physical airflow uncertainty, interpolation error, root uniqueness/stability evidence, a stall/surge criterion, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.78.0.
+
 ## v0.77 bisection trace origin-to-terminal replay — 2026-09-24
 
 - Anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points.

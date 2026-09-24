@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.77 engineering core
+## v0.78 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -54,6 +54,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Iteration-limit decision-trace terminal replay for v0.75, retaining every completed bounded-bisection L/H decision on non-converged iteration-limit searches and verifying that the final decision exactly reproduces the remaining signed-residual bracket without accepting a root.
 - Bisection decision-trace geometry consistency for v0.76, verifying every retained trace width against its airflow endpoints and every normalized width against the binary contraction implied by the recorded iteration, with exact uncertainty-corner violation provenance.
 - Bisection trace origin-to-terminal replay for v0.77, anchoring the first retained bracket to the selected supplied fan-curve segment and reconstructing every L/H/T decision through the solved or iteration-limit terminal bracket while preserving v0.76 trace-geometry checks.
+- Bisection trace decision-semantics auditing for v0.78, independently checking every retained L/H/T choice against its midpoint residual and configured operating-pressure tolerance with exact violating-iteration and uncertainty-corner provenance.
 - Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
 - Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.

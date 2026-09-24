@@ -90,6 +90,15 @@ jobs:
         run: |
           cleanroomx-gui --check
           xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
+          xvfb-run -a cleanroomx-gui --demo --smoke
+      - name: Verify v0.99 wheel includes and runs bundled demo
+        if: matrix.python-version == '3.13'
+        run: |
+          python -m pip wheel . --no-deps -w /tmp/cleanroomx-wheel
+          python -m venv /tmp/cleanroomx-wheel-venv
+          /tmp/cleanroomx-wheel-venv/bin/python -m pip install /tmp/cleanroomx-wheel/*.whl
+          /tmp/cleanroomx-wheel-venv/bin/cleanroomx-gui --check
+          xvfb-run -a /tmp/cleanroomx-wheel-venv/bin/cleanroomx-gui --demo --smoke
       - name: Run representative v0.99 CLI smoke checks
         run: |
           python -m cleanroomx.fan_variable_friction_loop_cli examples/fan_variable_friction_loop_demo.json --format json --output /tmp/cleanroomx-loop.json

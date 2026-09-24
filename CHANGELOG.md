@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.91 signed-zero-stable network-state canonicalization — 2026-09-24
+
+- Normalizes every retained floating-point zero in the canonical internal network-state projection to positive `0.0` before JSON serialization and SHA-256 hashing.
+- Prevents false replay mismatches caused only by IEEE-754 signed-zero representation differences such as `-0.0` versus `0.0`, while preserving sensitivity to nonzero numeric changes.
+- Applies normalization recursively across retained node, edge, solver-residual, pressure-power, and variable-friction closure evidence after v0.90 named-collection sorting.
+- Centralizes the network-state canonicalization identifier and advances it to `network-state-projection-sort-named-collections-normalize-signed-zero-json-sort-keys-compact-utf8-v3` so trace, terminal-bracket, and selected-state replay report one synchronized scheme.
+- Extends regression coverage to prove signed-zero-equivalent states hash identically while a real edge-airflow mutation still changes the fingerprint.
+- Preserves solver equations, root selection, pressure/residual replay, iteration budgets, no-extrapolation behavior, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.91.0.
+
 ## v0.90 order-invariant network-state fingerprint canonicalization — 2026-09-24
 
 - Canonicalizes semantically unordered named network-state collections before SHA-256 hashing by sorting solved nodes, solved edges, and variable-friction edge-closure rows by name.

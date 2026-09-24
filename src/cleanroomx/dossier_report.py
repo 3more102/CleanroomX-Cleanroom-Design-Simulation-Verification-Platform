@@ -793,6 +793,14 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_geometry_consistent_corner_count",
                     0,
                 )
+                trace_midpoint_error = search_summary.get(
+                    "maximum_bisection_trace_midpoint_error_m3_h"
+                )
+                max_trace_midpoint_error = (
+                    "—"
+                    if trace_midpoint_error is None
+                    else trace_midpoint_error["value"]
+                )
                 trace_width_error = search_summary.get(
                     "maximum_bisection_trace_width_error_m3_h"
                 )
@@ -879,6 +887,7 @@ def markdown_dossier_report(result: dict) -> str:
                     f"trace geometry violations W/N "
                     f"{trace_width_violations}/{trace_width_fraction_violations}; "
                     f"trace-geometry {trace_geometry_count}/{trace_count}; "
+                    f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "
                     f"max trace normalized-width error "
                     f"{max_trace_width_fraction_error}; "

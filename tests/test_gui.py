@@ -238,6 +238,8 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert payload["version"] == "0.98.1"
     assert payload["analysis_count"] >= 20
     assert payload["bindings_valid"] is True
+    assert payload["registry_validation"]["status"] == "ok"
+    assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
 
 
 def test_gui_demo_project_round_trips_and_active_analysis_runs():

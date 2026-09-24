@@ -17,12 +17,14 @@ from .application import (
     AnalysisRun,
     analysis_catalog,
     application_info,
+    rebase_analysis_file_references,
     run_analysis,
     validate_analysis_input,
 )
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    atomic_write_text,
     load_project_document,
     new_project,
     save_project_document,
@@ -168,6 +170,7 @@ class CleanroomXApp:
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
         self._running = False
+        self._abandon_requested = False
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -701,11 +704,36 @@ class CleanroomXApp:
         )
         if not path:
             return
+
+        destination = Path(path)
+        previous_base = self._base_dir()
+        editor_id = self._editor_analysis_id
+        candidate = copy.deepcopy(self.project)
+        if (
+            previous_base is not None
+            and previous_base.resolve() != destination.parent.resolve()
+        ):
+            for analysis in candidate.analyses:
+                analysis.input = rebase_analysis_file_references(
+                    analysis.kind,
+                    analysis.input,
+                    source_base=previous_base,
+                    target_base=destination.parent,
+                )
+
         try:
-            self.project_path = save_project_document(path, self.project)
+            saved_path = save_project_document(destination, candidate)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+
+        self.project = candidate
+        self.project_path = saved_path
+        if editor_id is not None:
+            try:
+                self._load_analysis_into_editor(self.project.analysis_by_id(editor_id))
+            except KeyError:
+                self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
@@ -795,18 +823,40 @@ class CleanroomXApp:
         )
         if not path:
             return
+        source_path = Path(path)
         try:
-            payload = _strict_json_loads(Path(path).read_text(encoding="utf-8"))
+            payload = _strict_json_loads(source_path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("input file must contain a JSON object")
+            payload = rebase_analysis_file_references(
+                analysis.kind,
+                payload,
+                source_base=source_path.parent,
+                target_base=self._base_dir(),
+            )
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
         analysis.input = payload
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
-        self.status_var.set(f"Imported {Path(path).name}")
+        self.status_var.set(f"Imported {source_path.name}")
         self._update_title()
+
+    def _write_export_file(self, path: str, content: str, *, label: str) -> bool:
+        target = Path(path)
+        try:
+            atomic_write_text(target, content)
+        except Exception as exc:
+            self.status_var.set(f"{label} export failed")
+            messagebox.showerror(
+                f"{label} export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        self.status_var.set(f"Exported {label.lower()} — {target.name}")
+        return True
 
     def export_input_json(self) -> None:
         try:
@@ -819,9 +869,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
-                json.dumps(analysis.input, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-                encoding="utf-8",
+            self._write_export_file(
+                path,
+                json.dumps(
+                    analysis.input, indent=2, ensure_ascii=False, allow_nan=False
+                ) + "\n",
+                label="Input",
             )
 
     def validate_current(self) -> None:
@@ -853,6 +906,7 @@ class CleanroomXApp:
         kind = analysis.kind
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
+        self._abandon_requested = False
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
 
@@ -866,12 +920,12 @@ class CleanroomXApp:
         threading.Thread(target=worker, daemon=True).start()
 
     def cancel_run(self) -> None:
-        if not self._running:
+        if not self._running or self._abandon_requested:
             return
-        self._run_generation += 1
-        self._set_running(False)
+        self._abandon_requested = True
+        self.cancel_button.configure(state="disabled")
         self.status_var.set(
-            "Run abandoned in the UI; backend computation may finish in its worker thread."
+            "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
 
     def _set_running(self, running: bool) -> None:
@@ -885,6 +939,11 @@ class CleanroomXApp:
             while True:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
                 if generation != self._run_generation:
+                    continue
+                if self._abandon_requested:
+                    self._abandon_requested = False
+                    self._set_running(False)
+                    self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
@@ -987,11 +1046,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
+            self._write_export_file(
+                path,
                 json.dumps(
                     self.last_run.result, indent=2, ensure_ascii=False, allow_nan=False
                 ) + "\n",
-                encoding="utf-8",
+                label="Result",
             )
 
     def export_report_markdown(self) -> None:
@@ -1003,7 +1063,7 @@ class CleanroomXApp:
             filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt")],
         )
         if path:
-            Path(path).write_text(self.last_run.markdown, encoding="utf-8")
+            self._write_export_file(path, self.last_run.markdown, label="Report")
 
     def show_about(self) -> None:
         messagebox.showinfo(

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.80 bisection trace residual-component audit — 2026-09-24
+
+- Retains low/high/midpoint fan pressure and system pressure components for every bounded-bisection trace step.
+- Independently recomputes each retained fan-minus-system residual as fan pressure minus system pressure and records exact per-step mismatch evidence plus the maximum absolute component-consistency error.
+- Re-evaluates every retained L/H/T decision against the component-recomputed midpoint residual, separately from the v0.78 audit against the recorded residual.
+- Propagates residual-component coverage, exact violating corner indices, decision-semantic violations, and worst-error provenance through nonlinear uncertainty reports and engineering dossiers.
+- Adds regression coverage for a self-consistent corrupted recorded residual/decision pair that the recorded-residual semantic audit alone would accept.
+- Preserves candidate priority, root selection, iteration budgets, no-extrapolation behavior, v0.76 geometry, v0.77 origin replay, v0.78 decision semantics, and v0.79 raw-state checks.
+- Treats this strictly as numerical implementation provenance; it does not establish physical airflow uncertainty, interpolation-error bounds, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from every retained bounded-bisection trace record instead of trusting stored audit booleans.

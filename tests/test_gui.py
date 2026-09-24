@@ -293,6 +293,24 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
 
 
+def test_bundled_demo_project_is_self_contained_and_active_analysis_runs():
+    path = gui_module.bundled_demo_project_path()
+    assert path.is_file()
+    for dependency in (
+        "facility_project.json",
+        "consistency_hvac_demo.json",
+        "fan_variable_friction_uncertainty_demo.json",
+    ):
+        assert (path.parent / dependency).is_file()
+
+    project = load_project_document(path)
+    assert len(project.analyses) >= 5
+    active = project.analysis_by_id(project.active_analysis_id)
+    run = run_analysis(active.kind, active.input, base_dir=path.parent)
+    assert run.result
+    json.dumps(run.to_dict(), allow_nan=False)
+
+
 def test_gui_demo_project_round_trips_and_active_analysis_runs():
     path = ROOT / "examples" / "gui_demo.cleanroomx.json"
     project = load_project_document(path)

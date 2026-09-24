@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import CleanroomXApp, flatten_json, main, unit_hint
+from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
 
 
@@ -16,6 +18,11 @@ def test_unit_hint_recognizes_engineering_units():
     assert unit_hint("$.pressure_pa") == "Pa"
     assert unit_hint("$.temperature_c") == "°C"
     assert unit_hint("$.value") == ""
+
+
+def test_gui_json_parser_rejects_non_finite_constants():
+    with pytest.raises(ValueError, match="non-finite"):
+        _strict_json_loads('{"value": NaN}')
 
 
 def test_flatten_json_preserves_paths_and_units():

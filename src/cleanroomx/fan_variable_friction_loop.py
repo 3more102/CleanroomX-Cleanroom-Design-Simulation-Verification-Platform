@@ -3155,9 +3155,6 @@ def solve_fan_variable_friction_loop(
                             "low_network_state_sha256": (
                                 low_network_state_sha256
                             ),
-                            "low_network_state_projection": (
-                                low_network_state_projection
-                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
                                 9,
@@ -3240,6 +3237,9 @@ def solve_fan_variable_friction_loop(
                             ),
                             "low_network_state_sha256": (
                                 low_network_state_sha256
+                            ),
+                            "low_network_state_projection": (
+                                low_network_state_projection
                             ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,

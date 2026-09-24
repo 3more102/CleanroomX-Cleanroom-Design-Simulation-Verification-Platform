@@ -89,6 +89,8 @@ v0.65 preserves the actual bounded root-search geometry. When a bisection midpoi
 
 v0.67 audits the retained bisection geometry against implementation invariants using the unrounded live search state. It records whether the active interval still has a strict positive/negative residual sign change, whether the accepted airflow is the active interval midpoint, the number of completed binary contraction steps, the expected width fraction from that iteration count, the actual width fraction, and their absolute floating-point discrepancy. This is solver self-verification evidence only and does not add an engineering acceptance threshold.
 
+v0.68 closes the corresponding non-convergence evidence gap. If bounded bisection exhausts `max_operating_iterations` before the pressure residual reaches tolerance, CleanroomX retains the signed terminal bracket after the final allowed contraction, the last evaluated airflow/residual and which terminal endpoint it became, the completed contraction count, and the expected-versus-actual terminal width fraction. The case remains `non_converged`; this evidence does not promote it to a solved operating point.
+
 ## CLI
 
 ```text

@@ -182,14 +182,22 @@ class CleanroomXApp:
         self.analysis_filter_var = tk.StringVar(value="")
         self.analysis_count_var = tk.StringVar(value="0 analyses")
         self.analysis_context_var = tk.StringVar(value="No active analysis")
+        self.overview_counts_var = tk.StringVar(value="0 analyses")
+        self.overview_active_var = tk.StringVar(value="No active workflow")
+        self.overview_spatial_var = tk.StringVar(value="0 rooms · 0 devices")
+        self.overview_result_var = tk.StringVar(value="No cached results")
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
         self._build_menu()
         self._build_layout()
         self._refresh_analysis_list()
         self._capture_saved_state()
-        self.name_var.trace_add("write", lambda *_: self._update_title())
-        self.description_var.trace_add("write", lambda *_: self._update_title())
+        self.name_var.trace_add(
+            "write", lambda *_: (self._update_title(), self._update_overview())
+        )
+        self.description_var.trace_add(
+            "write", lambda *_: (self._update_title(), self._update_overview())
+        )
         self.analysis_filter_var.trace_add("write", lambda *_: self._apply_analysis_filter())
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -227,6 +235,19 @@ class CleanroomXApp:
         style.configure("App.TFrame", background=self._colors["bg"])
         style.configure("Surface.TFrame", background=self._colors["surface"])
         style.configure("Header.TFrame", background=self._colors["surface_alt"])
+        style.configure("Card.TFrame", background=self._colors["surface_alt"])
+        style.configure(
+            "Metric.TLabel",
+            background=self._colors["surface_alt"],
+            foreground="#ffffff",
+            font=("TkDefaultFont", 13, "bold"),
+        )
+        style.configure(
+            "MetricCaption.TLabel",
+            background=self._colors["surface_alt"],
+            foreground=self._colors["muted"],
+            font=("TkDefaultFont", 9),
+        )
         style.configure(
             "Brand.TLabel",
             background=self._colors["surface_alt"],
@@ -396,6 +417,11 @@ class CleanroomXApp:
             accelerator="Ctrl+3",
             command=lambda: self._show_spatial_view("split"),
         )
+        view_menu.add_command(
+            label="Project Overview",
+            accelerator="Ctrl+4",
+            command=self._show_overview,
+        )
         view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Wrap output text",
@@ -417,6 +443,7 @@ class CleanroomXApp:
         self.root.bind("<Control-KeyPress-1>", lambda event: self._show_spatial_view("2d"))
         self.root.bind("<Control-KeyPress-2>", lambda event: self._show_spatial_view("3d"))
         self.root.bind("<Control-KeyPress-3>", lambda event: self._show_spatial_view("split"))
+        self.root.bind("<Control-KeyPress-4>", lambda event: self._show_overview())
         self.root.bind("<F5>", lambda event: self.run_current())
 
     def _build_layout(self) -> None:
@@ -545,7 +572,7 @@ class CleanroomXApp:
         ).pack(side="left")
         ttk.Label(
             context_bar,
-            text="Ctrl+1 2D · Ctrl+2 3D · Ctrl+3 split · Ctrl+F search · F5 run",
+            text="Ctrl+1 2D · Ctrl+2 3D · Ctrl+3 split · Ctrl+4 overview · F5 run",
             style="Muted.TLabel",
         ).pack(side="right")
 
@@ -561,6 +588,96 @@ class CleanroomXApp:
             status_setter=self.status_var.set,
         )
         self.notebook.add(self.spatial_workspace, text="Spatial Studio · 2D / 3D")
+
+        self.overview_tab = ttk.Frame(self.notebook, style="App.TFrame")
+        self.notebook.add(self.overview_tab, text="Overview")
+        overview_header = ttk.Frame(
+            self.overview_tab, style="Surface.TFrame", padding=(14, 12)
+        )
+        overview_header.pack(fill="x", padx=6, pady=(6, 4))
+        overview_title = ttk.Frame(overview_header, style="Surface.TFrame")
+        overview_title.pack(side="left")
+        ttk.Label(
+            overview_title, text="PROJECT OVERVIEW", style="Section.TLabel"
+        ).pack(anchor="w")
+        ttk.Label(
+            overview_title,
+            text="Project scale, active workflow, spatial model, and session result status.",
+            style="Muted.TLabel",
+        ).pack(anchor="w")
+        overview_actions = ttk.Frame(overview_header, style="Surface.TFrame")
+        overview_actions.pack(side="right")
+        ttk.Button(
+            overview_actions,
+            text="Open Spatial Studio",
+            command=lambda: self._show_spatial_view("split"),
+        ).pack(side="left", padx=3)
+        ttk.Button(
+            overview_actions, text="Validate", command=self.validate_current
+        ).pack(side="left", padx=3)
+        ttk.Button(
+            overview_actions,
+            text="Run Analysis",
+            style="Accent.TButton",
+            command=self.run_current,
+        ).pack(side="left", padx=3)
+
+        metrics = ttk.Frame(self.overview_tab, style="App.TFrame")
+        metrics.pack(fill="x", padx=6, pady=4)
+        metric_items = (
+            ("ANALYSES", self.overview_counts_var),
+            ("ACTIVE WORKFLOW", self.overview_active_var),
+            ("SPATIAL MODEL", self.overview_spatial_var),
+            ("SESSION RESULTS", self.overview_result_var),
+        )
+        for index, (caption, variable) in enumerate(metric_items):
+            card = ttk.Frame(metrics, style="Card.TFrame", padding=(12, 10))
+            card.grid(row=0, column=index, sticky="nsew", padx=(0 if index == 0 else 4, 0))
+            ttk.Label(card, text=caption, style="MetricCaption.TLabel").pack(anchor="w")
+            ttk.Label(
+                card,
+                textvariable=variable,
+                style="Metric.TLabel",
+                wraplength=250,
+                justify="left",
+            ).pack(anchor="w", pady=(4, 0))
+            metrics.columnconfigure(index, weight=1)
+
+        workflow_frame = ttk.Frame(
+            self.overview_tab, style="Surface.TFrame", padding=(10, 8)
+        )
+        workflow_frame.pack(fill="both", expand=True, padx=6, pady=(4, 6))
+        workflow_header = ttk.Frame(workflow_frame, style="Surface.TFrame")
+        workflow_header.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            workflow_header, text="WORKFLOW STATUS", style="Section.TLabel"
+        ).pack(side="left")
+        ttk.Label(
+            workflow_header,
+            text="Double-click an analysis to make it active.",
+            style="Muted.TLabel",
+        ).pack(side="right")
+        self.overview_tree = ttk.Treeview(
+            workflow_frame,
+            columns=("category", "workflow", "status"),
+            show="tree headings",
+            selectmode="browse",
+        )
+        self.overview_tree.heading("#0", text="Analysis")
+        self.overview_tree.heading("category", text="Category")
+        self.overview_tree.heading("workflow", text="Workflow")
+        self.overview_tree.heading("status", text="Session result")
+        self.overview_tree.column("#0", width=240)
+        self.overview_tree.column("category", width=130, stretch=False)
+        self.overview_tree.column("workflow", width=320)
+        self.overview_tree.column("status", width=130, stretch=False)
+        overview_scroll = ttk.Scrollbar(
+            workflow_frame, orient="vertical", command=self.overview_tree.yview
+        )
+        self.overview_tree.configure(yscrollcommand=overview_scroll.set)
+        self.overview_tree.pack(side="left", fill="both", expand=True)
+        overview_scroll.pack(side="right", fill="y")
+        self.overview_tree.bind("<Double-1>", self._activate_overview_analysis)
 
         input_tab = ttk.Frame(self.notebook)
         self.notebook.add(input_tab, text="Input")
@@ -652,6 +769,105 @@ class CleanroomXApp:
             self.spatial_workspace.set_view_mode(mode)
         return "break"
 
+    def _show_overview(self) -> str:
+        self._update_overview()
+        if hasattr(self, "notebook") and hasattr(self, "overview_tab"):
+            self.notebook.select(self.overview_tab)
+        return "break"
+
+    def _overview_snapshot(self) -> dict:
+        analyses = list(getattr(self.project, "analyses", []))
+        categories = {
+            ANALYSIS_SPECS[analysis.kind].category
+            for analysis in analyses
+            if analysis.kind in ANALYSIS_SPECS
+        }
+        metadata = getattr(self.project, "metadata", {})
+        spatial = (
+            metadata.get("spatial_layout", {})
+            if isinstance(metadata, dict)
+            else {}
+        )
+        rooms = spatial.get("rooms", []) if isinstance(spatial, dict) else []
+        devices = spatial.get("devices", []) if isinstance(spatial, dict) else []
+        room_count = len(rooms) if isinstance(rooms, list) else 0
+        device_count = len(devices) if isinstance(devices, list) else 0
+        runs = getattr(self, "_runs_by_analysis", {})
+        run_count = len(runs) if isinstance(runs, dict) else 0
+
+        active = self._editor_analysis()
+        if active is None and getattr(self.project, "active_analysis_id", None):
+            try:
+                active = self.project.analysis_by_id(self.project.active_analysis_id)
+            except KeyError:
+                active = None
+
+        active_title = "No active workflow"
+        active_status = "Not run"
+        if active is not None:
+            spec = ANALYSIS_SPECS.get(active.kind)
+            active_title = spec.title if spec is not None else active.kind
+            run = runs.get(active.id) if isinstance(runs, dict) else None
+            if run is not None:
+                active_status = str(getattr(run, "status", "complete"))
+
+        return {
+            "analysis_count": len(analyses),
+            "category_count": len(categories),
+            "run_count": run_count,
+            "room_count": room_count,
+            "device_count": device_count,
+            "active_title": active_title,
+            "active_status": active_status,
+        }
+
+    def _update_overview(self) -> None:
+        if not hasattr(self, "overview_counts_var"):
+            return
+        snapshot = self._overview_snapshot()
+        self.overview_counts_var.set(
+            f"{snapshot['analysis_count']} analyses · {snapshot['category_count']} categories"
+        )
+        self.overview_active_var.set(snapshot["active_title"])
+        self.overview_spatial_var.set(
+            f"{snapshot['room_count']} rooms · {snapshot['device_count']} devices"
+        )
+        self.overview_result_var.set(
+            f"{snapshot['run_count']} cached · active {snapshot['active_status']}"
+        )
+
+        if not hasattr(self, "overview_tree"):
+            return
+        for item in self.overview_tree.get_children():
+            self.overview_tree.delete(item)
+        runs = getattr(self, "_runs_by_analysis", {})
+        for analysis in self.project.analyses:
+            spec = ANALYSIS_SPECS[analysis.kind]
+            run = runs.get(analysis.id) if isinstance(runs, dict) else None
+            status = "Not run" if run is None else str(getattr(run, "status", "complete"))
+            self.overview_tree.insert(
+                "",
+                "end",
+                iid=analysis.id,
+                text=analysis.name,
+                values=(spec.category, spec.title, status),
+            )
+
+    def _activate_overview_analysis(self, event=None) -> None:
+        if not hasattr(self, "overview_tree"):
+            return
+        selection = self.overview_tree.selection()
+        if not selection:
+            return
+        analysis_id = selection[0]
+        if hasattr(self, "analysis_filter_var"):
+            self.analysis_filter_var.set("")
+        if self.analysis_tree.exists(analysis_id):
+            self.analysis_tree.selection_set(analysis_id)
+            self.analysis_tree.focus(analysis_id)
+            self.analysis_tree.see(analysis_id)
+            self._on_analysis_selected()
+
     def _add_text_tab(self, title: str, actions=()) -> tk.Text:
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text=title)
@@ -716,6 +932,7 @@ class CleanroomXApp:
     def _clear_run_cache(self) -> None:
         self._runs_by_analysis.clear()
         self._clear_rendered_run()
+        self._update_overview()
 
     def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
         if analysis_id is None:
@@ -723,6 +940,7 @@ class CleanroomXApp:
         self._runs_by_analysis.pop(analysis_id, None)
         if self.last_run_analysis_id == analysis_id:
             self._clear_rendered_run()
+        self._update_overview()
 
     def _restore_run_for(self, analysis_id: str) -> bool:
         run = self._runs_by_analysis.get(analysis_id)
@@ -921,6 +1139,7 @@ class CleanroomXApp:
             self.refresh_structure(silent=True)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+        self._update_overview()
 
     def _on_analysis_selected(self, event=None) -> None:
         if self._selection_guard:
@@ -981,9 +1200,11 @@ class CleanroomXApp:
         self._restore_run_for(analysis.id)
         if hasattr(self, "spatial_workspace"):
             self.spatial_workspace.refresh()
+        self._update_overview()
 
     def _on_spatial_changed(self) -> None:
         self._update_title()
+        self._update_overview()
 
     def _sync_spatial_to_current_analysis(self) -> None:
         if self._running:
@@ -1409,6 +1630,7 @@ class CleanroomXApp:
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
                     )
+                self._update_overview()
         except queue.Empty:
             pass
         self.root.after(100, self._poll_worker)

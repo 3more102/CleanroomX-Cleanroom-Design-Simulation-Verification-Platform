@@ -228,6 +228,7 @@ def test_remove_analysis_invalidates_matching_result(monkeypatch):
     assert app.project.active_analysis_id is None
     assert app.last_run is None
     assert app.last_run_analysis_id is None
+    assert app._runs_by_analysis == {}
 
 
 def test_gui_check_mode_needs_no_display(capsys):

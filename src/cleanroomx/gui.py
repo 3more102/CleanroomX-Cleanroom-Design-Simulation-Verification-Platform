@@ -473,10 +473,11 @@ class CleanroomXApp:
         )
 
     def _has_unsaved_changes(self) -> bool:
-        if self._baseline_state is None:
+        baseline = getattr(self, "_baseline_state", None)
+        if baseline is None:
             return False
         try:
-            return self._project_state_signature() != self._baseline_state
+            return self._project_state_signature() != baseline
         except Exception:
             return True
 
@@ -656,9 +657,12 @@ class CleanroomXApp:
         self._update_title()
 
     def _update_title(self) -> None:
+        title_method = getattr(self.root, "title", None)
+        if not callable(title_method):
+            return
         suffix = "" if self.project_path is None else f" — {self.project_path.name}"
         dirty = " *" if self._has_unsaved_changes() else ""
-        self.root.title(f"CleanroomX {__version__}{suffix}{dirty}")
+        title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
     def save_project(self) -> None:
         try:

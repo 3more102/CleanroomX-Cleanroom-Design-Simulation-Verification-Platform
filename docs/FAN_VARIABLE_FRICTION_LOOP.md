@@ -22,6 +22,8 @@ For bounded-bisection traces, v0.81 independently replays the supplied-segment l
 
 v0.82 independently replays the retained midpoint pressure components themselves. For each bounded-bisection step, CleanroomX reconstructs the midpoint from the selected supplied fan segment and decision chain, freshly interpolates fan pressure, re-solves the variable-friction loop, and compares the resulting fan, loop-network, and total system pressures with the retained values. This closes the common-mode corruption gap where fan and system pressure can shift together while the residual and retained-state arithmetic identities still agree. The 1e-9 Pa comparison is numerical implementation tolerance only, not an engineering acceptance band.
 
+v0.83 extends that independent component replay across the full retained bracket. Each bisection record now carries low- and high-endpoint fan, nonlinear loop-network, and total system pressures; the audit reconstructs both endpoints from the selected supplied segment and decision chain and independently re-solves the nonlinear network at each endpoint. Midpoint replay remains separate, and a full-bracket result is consistent only when low, high, and midpoint component replays all agree within the same 1e-9 Pa numerical implementation tolerance.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

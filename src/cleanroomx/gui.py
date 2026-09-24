@@ -1029,7 +1029,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.check:
-        print(json.dumps(application_info(), indent=2, ensure_ascii=False))
+        print(json.dumps(application_info(validate_registry=True), indent=2, ensure_ascii=False))
         return 0
 
     root = tk.Tk()

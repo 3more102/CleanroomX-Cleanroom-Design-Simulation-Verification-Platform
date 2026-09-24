@@ -354,6 +354,10 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     remaining = limit["remaining_bisection_bracket"]
     assert remaining["low_fan_minus_system_pressure_pa"] > 0.0
     assert remaining["high_fan_minus_system_pressure_pa"] < 0.0
+    for position in ("low", "high"):
+        assert f"{position}_fan_pressure_pa" in remaining
+        assert f"{position}_loop_network_pressure_pa" in remaining
+        assert f"{position}_system_pressure_pa" in remaining
     assert remaining["width_m3_h"] == pytest.approx(
         remaining["high_airflow_m3_h"] - remaining["low_airflow_m3_h"],
         abs=1e-9,
@@ -419,6 +423,20 @@ def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
     ] is True
     assert terminal_replay[
         "terminal_bracket_replays_recorded_decision"
+    ] is True
+    assert trace_audit["terminal_pressure_component_replay_available"] is True
+    assert trace_audit[
+        "all_terminal_pressure_components_match_independent_replay"
+    ] is True
+    assert trace_audit[
+        "maximum_absolute_terminal_pressure_component_replay_error_pa"
+    ] <= 1e-9
+    terminal_component_replay = trace_audit[
+        "terminal_pressure_component_replay"
+    ]
+    assert terminal_component_replay is not None
+    assert terminal_component_replay[
+        "all_terminal_pressure_components_match_independent_replay"
     ] is True
     assert "T" not in trace_audit["decision_sequence"]
 
@@ -1139,6 +1157,83 @@ def test_full_bracket_component_replay_detects_endpoint_corruption() -> None:
     assert first_check["low"][
         "fan_pressure_matches_independent_replay"
     ] is False
+
+
+def test_terminal_bracket_component_replay_detects_iteration_limit_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Terminal bracket pressure-component replay corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+        operating_pressure_tolerance_pa=1e-15,
+        max_operating_iterations=1,
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "non_converged"
+    evidence = result["operating_point_search_evidence"]
+    assert evidence is not None
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    terminal = dict(
+        evidence["iteration_limit_evidence"]["remaining_bisection_bracket"]
+    )
+    audit = evidence["bisection_trace_audit"]
+    assert audit["all_trace_pressure_components_match_independent_replay"] is True
+    assert audit["terminal_pressure_component_replay_available"] is True
+    assert audit[
+        "all_terminal_pressure_components_match_independent_replay"
+    ] is True
+
+    delta_pa = 1.0
+    terminal["low_fan_pressure_pa"] = (
+        float(terminal["low_fan_pressure_pa"]) + delta_pa
+    )
+    terminal["low_loop_network_pressure_pa"] = (
+        float(terminal["low_loop_network_pressure_pa"]) + delta_pa
+    )
+    terminal["low_system_pressure_pa"] = (
+        float(terminal["low_system_pressure_pa"]) + delta_pa
+    )
+
+    segment_index = evidence["supplied_segment_index"]
+    corrupted_audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="bisection_iteration_limit",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        iteration_limit_terminal_bracket=terminal,
+    )
+    assert corrupted_audit is not None
+    assert corrupted_audit[
+        "all_trace_pressure_components_match_independent_replay"
+    ] is True
+    assert corrupted_audit["terminal_pressure_component_replay_available"] is True
+    assert corrupted_audit[
+        "all_terminal_pressure_components_match_independent_replay"
+    ] is False
+    assert corrupted_audit[
+        "maximum_absolute_terminal_pressure_component_replay_error_pa"
+    ] == pytest.approx(delta_pa, abs=1e-9)
+    terminal_check = corrupted_audit["terminal_pressure_component_replay"]
+    assert terminal_check is not None
+    assert terminal_check["low"][
+        "all_pressure_components_match_independent_replay"
+    ] is False
+    assert terminal_check["high"][
+        "all_pressure_components_match_independent_replay"
+    ] is True
 
 
 def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:

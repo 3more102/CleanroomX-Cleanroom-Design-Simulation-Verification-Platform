@@ -781,7 +781,9 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{residual_summary['corner_count']}; selected "
                     f"{residual_summary['selected_candidate_feature_corner_count']}/"
                     f"{residual_summary['solved_corner_count']}; multi "
-                    f"{residual_summary['multiple_candidate_feature_corner_count']}"
+                    f"{residual_summary['multiple_candidate_feature_corner_count']}; "
+                    "reverse "
+                    f"{residual_summary['reverse_strict_sign_change_corner_count']}"
                 )
             lines.append(
                 f"| {item['analysis']} | {item['status']} | "

@@ -277,7 +277,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_device_labels = tk.BooleanVar(value=True)
+        self._undo_stack: list[dict] = []
+        self._redo_stack: list[dict] = []
+        self._history_current: dict | None = None
         self._grid_var = tk.StringVar(value="0.5 m")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
@@ -326,6 +330,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        self.undo_button = ttk.Button(toolbar, text="Undo", command=self.undo)
+        self.undo_button.pack(side="left", padx=2)
+        self.redo_button = ttk.Button(toolbar, text="Redo", command=self.redo)
+        self.redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Duplicate", command=self.duplicate_selected).pack(
             side="left", padx=2
         )
@@ -335,6 +343,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Fit All", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=(8, 3)
+        )
+        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(
+            side="left", padx=(2, 3)
         )
         ttk.Label(toolbar, text="Spacing", style="Muted.TLabel").pack(side="left", padx=(6, 3))
         grid_box = ttk.Combobox(
@@ -374,7 +385,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         ttk.Label(
             header2,
-            text="Drag: move · Right/middle: pan · Wheel: zoom",
+            text="Drag: move · Right/middle: pan · Wheel: zoom · Ctrl+Z/Y: undo/redo",
             style="Muted.TLabel",
         ).pack(side="right", padx=6)
         self.canvas_2d = tk.Canvas(
@@ -483,11 +494,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Delete>", lambda event: self.delete_selected())
             canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
             canvas.bind("<Control-0>", lambda event: self.fit_views())
+            canvas.bind("<Control-z>", lambda event: self.undo())
+            canvas.bind("<Control-y>", lambda event: self.redo())
 
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        self._history_current = copy.deepcopy(normalize_layout(self.layout))
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._update_history_buttons()
         self._grid_var.set(f"{self.layout['grid_m']:g} m")
         if self.selected and not self._selected_object():
             self.selected = None
@@ -500,12 +517,64 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["grid_m"] = value
         self._persist(f"Grid spacing set to {value:g} m")
 
+    def _update_history_buttons(self) -> None:
+        if hasattr(self, "undo_button"):
+            self.undo_button.configure(state="normal" if self._undo_stack else "disabled")
+        if hasattr(self, "redo_button"):
+            self.redo_button.configure(state="normal" if self._redo_stack else "disabled")
+
     def _persist(self, message: str) -> None:
         project = self._project_getter()
-        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        normalized = normalize_layout(self.layout)
+        if self._history_current is not None and normalized != self._history_current:
+            self._undo_stack.append(copy.deepcopy(self._history_current))
+            if len(self._undo_stack) > 50:
+                self._undo_stack.pop(0)
+            self._redo_stack.clear()
+        project.metadata[SPATIAL_METADATA_KEY] = normalized
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._history_current = copy.deepcopy(self.layout)
+        self._update_history_buttons()
         self._on_change()
         self._status_setter(message)
+        self.redraw()
+
+    def undo(self) -> None:
+        if not self._undo_stack:
+            return
+        current = copy.deepcopy(normalize_layout(self.layout))
+        previous = self._undo_stack.pop()
+        self._redo_stack.append(current)
+        self.layout = copy.deepcopy(previous)
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = self.layout
+        self._history_current = copy.deepcopy(self.layout)
+        if self.selected and not self._selected_object():
+            self.selected = None
+        self._grid_var.set(f"{self.layout['grid_m']:g} m")
+        self._load_property_panel()
+        self._update_history_buttons()
+        self._on_change()
+        self._status_setter("Undid spatial edit")
+        self.redraw()
+
+    def redo(self) -> None:
+        if not self._redo_stack:
+            return
+        current = copy.deepcopy(normalize_layout(self.layout))
+        next_layout = self._redo_stack.pop()
+        self._undo_stack.append(current)
+        self.layout = copy.deepcopy(next_layout)
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = self.layout
+        self._history_current = copy.deepcopy(self.layout)
+        if self.selected and not self._selected_object():
+            self.selected = None
+        self._grid_var.set(f"{self.layout['grid_m']:g} m")
+        self._load_property_panel()
+        self._update_history_buttons()
+        self._on_change()
+        self._status_setter("Redid spatial edit")
         self.redraw()
 
     def _selected_object(self) -> dict | None:
@@ -962,8 +1031,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
         grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self._snap_to_grid.get():
+            item["x_m"] = round((item["x_m"] + dx) / grid) * grid
+            item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        else:
+            item["x_m"] += dx
+            item["y_m"] += dy
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()

@@ -705,7 +705,7 @@ def markdown_dossier_report(result: dict) -> str:
             if search_summary is not None:
                 search_coverage = (
                     f"{search_summary['search_evidence_corner_count']}/"
-                    f"{search_summary['solved_corner_count']}"
+                    f"{search_summary['corner_count']}"
                 )
                 search_evidence = search_summary.get(
                     "maximum_final_bisection_half_width_m3_h"
@@ -732,10 +732,33 @@ def markdown_dossier_report(result: dict) -> str:
                     if invariant_error is None
                     else invariant_error["value"]
                 )
+                limit_count = search_summary.get(
+                    "iteration_limit_search_evidence_corner_count",
+                    0,
+                )
+                limit_invariant_count = search_summary.get(
+                    "iteration_limit_invariant_evidence_corner_count",
+                    0,
+                )
+                limit_sign_count = search_summary.get(
+                    "iteration_limit_strict_sign_change_preserved_corner_count",
+                    0,
+                )
+                limit_error = search_summary.get(
+                    "maximum_iteration_limit_absolute_width_fraction_consistency_error"
+                )
+                max_limit_error = (
+                    "—"
+                    if limit_error is None
+                    else limit_error["value"]
+                )
                 search_invariants = (
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
-                    f"max width-fraction error {max_error}"
+                    f"max width-fraction error {max_error}; "
+                    f"iteration-limit {limit_count}; "
+                    f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "
+                    f"remaining max width-fraction error {max_limit_error}"
                 )
             segment_summary = item.get(
                 "fan_curve_segment_position_summary"

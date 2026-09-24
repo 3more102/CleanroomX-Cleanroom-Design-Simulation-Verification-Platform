@@ -2670,6 +2670,15 @@ def _operating_point_search_resolution_summary(
         )
         is not True
     ]
+    trace_network_state_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_trace_network_states_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
     trace_pressure_component_replay_violation_details = []
     for corner_index, corner, evidence, audit in trace_cases:
         violations = audit.get("pressure_component_replay_violations", [])
@@ -3244,6 +3253,13 @@ def _operating_point_search_resolution_summary(
         ),
         "maximum_bisection_trace_pressure_component_replay_error_witnesses": (
             _maximum_trace_pressure_component_replay_witnesses()
+        ),
+        "bisection_trace_network_state_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(trace_network_state_replay_violation_corner_indices)
+        ),
+        "bisection_trace_network_state_replay_violation_corner_indices": (
+            trace_network_state_replay_violation_corner_indices
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)

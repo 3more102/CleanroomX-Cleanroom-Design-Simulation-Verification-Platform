@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import copy
 import json
 import os
 from pathlib import Path
@@ -9,9 +10,10 @@ from typing import Any
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .layout import LayoutFormatError, SpatialLayout, validate_layout
 
 PROJECT_SCHEMA = "cleanroomx.project"
-PROJECT_SCHEMA_VERSION = 1
+PROJECT_SCHEMA_VERSION = 2
 
 
 class ProjectFormatError(ValueError):
@@ -36,6 +38,7 @@ class ProjectDocument:
     analyses: list[AnalysisDocument] = field(default_factory=list)
     active_analysis_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    layout: SpatialLayout = field(default_factory=SpatialLayout.empty)
 
     def to_dict(self) -> dict:
         return {
@@ -49,6 +52,7 @@ class ProjectDocument:
             },
             "analyses": [item.to_dict() for item in self.analyses],
             "active_analysis_id": self.active_analysis_id,
+            "layout": self.layout.to_dict(),
         }
 
     def analysis_by_id(self, analysis_id: str) -> AnalysisDocument:
@@ -83,6 +87,12 @@ def _analysis_from_dict(data: dict) -> AnalysisDocument:
 
 
 def _migrate_legacy(data: dict) -> dict:
+    if data.get("schema") == PROJECT_SCHEMA and data.get("schema_version") == 1:
+        migrated = copy.deepcopy(data)
+        migrated["schema_version"] = PROJECT_SCHEMA_VERSION
+        migrated.setdefault("layout", SpatialLayout.empty().to_dict())
+        return migrated
+
     if data.get("schema") == PROJECT_SCHEMA and data.get("schema_version") == 0:
         analysis = data.get("analysis", {})
         if not isinstance(analysis, dict):
@@ -104,6 +114,7 @@ def _migrate_legacy(data: dict) -> dict:
                 "input": analysis.get("input", {}),
             }],
             "active_analysis_id": analysis_id,
+            "layout": SpatialLayout.empty().to_dict(),
         }
 
     if "schema" not in data and "analysis_type" in data and "input" in data:
@@ -123,6 +134,7 @@ def _migrate_legacy(data: dict) -> dict:
                 "input": data["input"],
             }],
             "active_analysis_id": "analysis-1",
+            "layout": SpatialLayout.empty().to_dict(),
         }
     return data
 
@@ -160,6 +172,15 @@ def project_from_dict(data: dict) -> ProjectDocument:
     if not isinstance(metadata, dict):
         raise ProjectFormatError("project.metadata must be an object")
 
+    try:
+        layout = SpatialLayout.from_dict(data.get("layout"))
+    except LayoutFormatError as exc:
+        raise ProjectFormatError(f"invalid spatial layout: {exc}") from exc
+    layout_errors = [issue for issue in validate_layout(layout) if issue.severity == "ERROR"]
+    if layout_errors:
+        detail = "; ".join(issue.message for issue in layout_errors[:5])
+        raise ProjectFormatError(f"invalid spatial layout: {detail}")
+
     raw_analyses = data.get("analyses", [])
     if not isinstance(raw_analyses, list):
         raise ProjectFormatError("analyses must be an array")
@@ -183,6 +204,7 @@ def project_from_dict(data: dict) -> ProjectDocument:
         analyses=analyses,
         active_analysis_id=active,
         metadata=metadata,
+        layout=layout,
     )
 
 

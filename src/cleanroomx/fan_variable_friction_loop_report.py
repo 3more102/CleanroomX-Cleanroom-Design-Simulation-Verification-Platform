@@ -44,7 +44,45 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
             )
         bracket = search["final_bisection_bracket"]
         if bracket is None:
-            lines.append("- Final bisection bracket: **not applicable**")
+            iteration_limit = search.get("iteration_limit_evidence")
+            if iteration_limit is None:
+                lines.append("- Final bisection bracket: **not applicable**")
+            else:
+                remaining = iteration_limit["remaining_bisection_bracket"]
+                invariant = remaining.get("invariant_audit")
+                lines.extend(
+                    [
+                        "- Accepted operating point: **none (iteration limit)**",
+                        "- Last evaluated midpoint airflow: "
+                        f"**{iteration_limit['last_evaluated_midpoint_airflow_m3_h']} m³/h**",
+                        "- Last evaluated fan-system pressure residual: "
+                        f"**{iteration_limit['last_evaluated_fan_minus_system_pressure_pa']} Pa**",
+                        "- Pressure tolerance satisfied: "
+                        f"**{iteration_limit['pressure_tolerance_satisfied']}**",
+                        "- Remaining active bisection bracket: "
+                        f"**{remaining['low_airflow_m3_h']}–"
+                        f"{remaining['high_airflow_m3_h']} m³/h**",
+                        "- Remaining bisection bracket width: "
+                        f"**{remaining['width_m3_h']} m³/h**",
+                        "- Remaining bracket width / supplied-segment span: "
+                        f"**{remaining['width_fraction_of_supplied_segment']}**",
+                    ]
+                )
+                if invariant is not None:
+                    lines.extend(
+                        [
+                            "- Remaining bracket strict sign change preserved: "
+                            f"**{invariant['strict_sign_change_preserved']}**",
+                            "- Completed binary contraction steps: "
+                            f"**{invariant['binary_contraction_step_count']}**",
+                            "- Expected remaining width / supplied-segment span: "
+                            f"**{invariant['expected_width_fraction_of_supplied_segment']}**",
+                            "- Actual remaining width / supplied-segment span: "
+                            f"**{invariant['actual_width_fraction_of_supplied_segment']}**",
+                            "- Remaining-bracket binary-width consistency error: "
+                            f"**{invariant['absolute_width_fraction_consistency_error']}**",
+                        ]
+                    )
         else:
             lines.extend(
                 [

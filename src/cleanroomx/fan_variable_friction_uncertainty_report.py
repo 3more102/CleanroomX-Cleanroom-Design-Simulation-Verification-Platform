@@ -816,6 +816,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_midpoint_flag_mismatch_corner_indices']}**",
                 "- Trace raw-state audit violation corners: "
                 f"**{search_summary['bisection_trace_raw_state_violation_corner_indices']}**",
+                "- Trace residual-component audit incomplete corners: "
+                f"**{search_summary['bisection_trace_residual_component_incomplete_corner_indices']}**",
+                "- Trace residual-component mismatch corners: "
+                f"**{search_summary['bisection_trace_residual_component_violation_corner_indices']}**",
+                "- Trace pressure-component decision-semantic violations: "
+                f"**{search_summary['bisection_trace_pressure_component_decision_semantic_violation_corner_indices']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -894,6 +900,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_recorded_widths_match_airflow_brackets']}**",
                         "- Nominal trace width fractions match binary iteration contraction: "
                         f"**{nominal_trace_audit['all_recorded_width_fractions_match_iteration_sequence']}**",
+                        "- Nominal trace residuals match retained fan/system pressure components: "
+                        f"**{nominal_trace_audit['all_trace_residuals_match_pressure_components']}**",
+                        "- Nominal trace decisions match pressure-component residual semantics: "
+                        f"**{nominal_trace_audit['all_decisions_match_pressure_component_residual_semantics']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")
@@ -982,6 +992,21 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum trace midpoint-centering error | "
                 f"{trace_midpoint_error['value']} | "
                 f"{trace_midpoint_error['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+        trace_residual_component_error = search_summary.get(
+            "maximum_bisection_trace_residual_component_error_pa"
+        )
+        if trace_residual_component_error is not None:
+            source_texts = [
+                _fmt_extreme_source(source)
+                + f"; iterations={source['operating_iterations']}"
+                for source in trace_residual_component_error["sources"]
+            ]
+            lines.append(
+                "| Maximum trace residual-component consistency error | "
+                f"{trace_residual_component_error['value']} | "
+                f"{trace_residual_component_error['unit']} | "
                 f"{' / '.join(source_texts)} |"
             )
         trace_width_error = search_summary.get(

@@ -1048,12 +1048,25 @@ class CleanroomXApp:
         self.root.destroy()
 
 
+def bundled_demo_project_path() -> Path:
+    """Return the self-contained demonstration project shipped in the package."""
+    path = Path(__file__).resolve().parent / "demo" / "gui_demo.cleanroomx.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"bundled CleanroomX demo is missing: {path}")
+    return path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cleanroomx-gui",
         description="CleanroomX desktop engineering application",
     )
     parser.add_argument("project", nargs="?", help="Optional CleanroomX project file to open")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Open the self-contained demonstration project bundled with CleanroomX",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -1068,16 +1081,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.demo and args.project:
+        parser.error("project path and --demo cannot be used together")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
+    project_path = bundled_demo_project_path() if args.demo else args.project
+
     root = tk.Tk()
     app = CleanroomXApp(root)
-    if args.project:
+    if project_path:
         try:
-            app.load_project_path(args.project)
+            app.load_project_path(project_path)
         except Exception as exc:
             if args.smoke:
                 root.destroy()
@@ -1086,7 +1104,7 @@ def main(argv: list[str] | None = None) -> int:
             messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.smoke:
-        if args.project and app.project.analyses:
+        if project_path and app.project.analyses:
             run = app.smoke_run_active()
             json.dumps(run.to_dict(), allow_nan=False)
         root.update_idletasks()

@@ -1,52 +1,43 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.99.0
+Release: CleanroomX v0.100.0
 Validation date: 2026-09-24
+Canonical branch: codex/cleanroomx-v0100-final-mainline
 
-VERIFIED RELEASE BASELINE
-main commit:
-1f035d08f893573868610d35296e3947445318e6
+EXACT-HEAD GATES REQUIRED BEFORE MERGE
+--------------------------------------
+PASS required - v0.91 compatibility regressions
+PASS required - v0.92 compatibility regressions
+PASS required - v0.93 compatibility regressions
+PASS required - v0.94 compatibility regressions
+PASS required - v0.95 solver-result-integrity compatibility regressions
+PASS required - focused v0.100 application/project/GUI regressions
+PASS required - complete Python 3.11 suite
+PASS required - complete Python 3.12 suite
+PASS required - complete Python 3.13 suite
+PASS required - representative CLI JSON/Markdown smoke checks
+PASS required - clean-wheel build/install and headless GUI readiness
+PASS required - packaged-demo resource validation
+PASS required - Python 3.13 installed-wheel real Tk/Xvfb demo smoke
 
-GitHub Actions:
-run #790
-run id 36045911650
-status COMPLETED
-conclusion SUCCESS
-
-FULL TEST MATRIX
-Python 3.11: 558 passed
-Python 3.12: 558 passed
-Python 3.13: 558 passed
-
-ADDITIONAL VERIFIED GATES
-PASS - v0.91 compatibility regressions
-PASS - v0.92 compatibility regressions
-PASS - v0.93 compatibility regressions
-PASS - v0.94 compatibility regressions
-PASS - v0.95 solver-result-integrity compatibility regressions
-PASS - package/runtime/demo/CI version synchronization at 0.99.0
-PASS - structural application-registry integrity
-PASS - Python 3.13 cleanroomx-gui --check
-PASS - Python 3.13 real Tk GUI smoke under Xvfb
-PASS - representative CLI JSON/Markdown smoke checks
-
-RELEASE-DOCUMENT CLOSURE
-Added:
-ARCHITECTURE.md
-MIGRATIONS.md
-SECURITY.md
-DEPLOYMENT.md
-ROLLBACK.md
-TEST_EVIDENCE.md
-VALIDATION.txt
-
-The documentation closure changes no runtime source or validated
-engineering/numerical behavior. Its pull request and resulting main
-push must both complete CI successfully.
+V0.100 RELEASE CONTROLS
+-----------------------
+- canonical application input SHA-256 identity
+- external dependency SHA-256 and byte-size stability evidence
+- strict run-bundle export
+- catalog/public-mapping parity and pre-window registry fail-fast
+- absolute/relative dossier path-context enforcement
+- file-reference rebasing across input import and Save As relocation
+- result-cache invalidation when project base directory changes
+- abandoned-worker exclusivity until backend exit
+- same-directory flush/fsync atomic project/export writes
+- user-visible export failure handling
+- fan plus backend system-curve plot evidence
+- retained self-contained installed demo
 
 ENGINEERING BOUNDARY
-This validation is software regression evidence. It does not establish
-ISO cleanroom certification, CFD validation, commissioning/TAB
-acceptance, manufacturer approval, physical/statistical uncertainty,
-or regulatory compliance.
+--------------------
+No validated solver equations, numerical tolerances, uncertainty enumeration,
+root-selection/no-extrapolation behavior, or engineering acceptance criteria are
+changed by this release consolidation.

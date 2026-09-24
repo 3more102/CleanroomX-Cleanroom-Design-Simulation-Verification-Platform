@@ -2626,6 +2626,41 @@ def _operating_point_search_resolution_summary(
             }
         )
         trace_pressure_component_replay_violation_details.append(detail)
+
+    terminal_pressure_component_replay_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if audit.get(
+            "all_terminal_pressure_components_match_independent_replay",
+            False,
+        )
+        is not True
+    ]
+    terminal_pressure_component_replay_violation_details = []
+    for corner_index, corner, evidence, audit in trace_cases:
+        violations = audit.get(
+            "terminal_pressure_component_replay_violations",
+            [],
+        )
+        if not violations:
+            continue
+        detail = _critical_case_summary(corner_index, corner)
+        terminal_replay = audit.get("terminal_pressure_component_replay")
+        detail.update(
+            {
+                "search_method": evidence["method"],
+                "supplied_segment_index": evidence["supplied_segment_index"],
+                "operating_iterations": evidence["operating_iterations"],
+                "terminal_kind": (
+                    terminal_replay.get("terminal_kind")
+                    if terminal_replay is not None
+                    else None
+                ),
+                "violation_count": len(violations),
+                "violations": violations,
+            }
+        )
+        terminal_pressure_component_replay_violation_details.append(detail)
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2912,6 +2947,71 @@ def _operating_point_search_resolution_summary(
                 witnesses.append(source)
         return witnesses
 
+    def _maximum_terminal_pressure_component_replay_witnesses() -> list[dict]:
+        if not trace_cases:
+            return []
+        values = [
+            float(
+                audit[
+                    "maximum_absolute_terminal_pressure_component_replay_error_pa"
+                ]
+            )
+            for _corner_index, _corner, _evidence, audit in trace_cases
+            if audit.get(
+                "maximum_absolute_terminal_pressure_component_replay_error_pa"
+            )
+            is not None
+        ]
+        if not values:
+            return []
+        maximum = max(values)
+        witnesses = []
+        for corner_index, corner, evidence, audit in trace_cases:
+            audit_maximum = audit.get(
+                "maximum_absolute_terminal_pressure_component_replay_error_pa"
+            )
+            if audit_maximum is None or not math.isclose(
+                float(audit_maximum),
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            for witness in audit.get(
+                "maximum_terminal_pressure_component_replay_error_witnesses",
+                [],
+            ):
+                if not math.isclose(
+                    float(witness["absolute_error_pa"]),
+                    maximum,
+                    rel_tol=1e-12,
+                    abs_tol=1e-18,
+                ):
+                    continue
+                source = _critical_case_summary(corner_index, corner)
+                terminal_replay = audit.get(
+                    "terminal_pressure_component_replay"
+                )
+                source.update(
+                    {
+                        "search_method": evidence["method"],
+                        "supplied_segment_index": evidence[
+                            "supplied_segment_index"
+                        ],
+                        "operating_iterations": evidence[
+                            "operating_iterations"
+                        ],
+                        "terminal_kind": (
+                            terminal_replay.get("terminal_kind")
+                            if terminal_replay is not None
+                            else None
+                        ),
+                        "witness": witness,
+                    }
+                )
+                witnesses.append(source)
+        return witnesses
+
     def _maximum_iteration_limit_invariant_error_evidence() -> dict | None:
         if not iteration_limit_invariant_cases:
             return None
@@ -3109,6 +3209,37 @@ def _operating_point_search_resolution_summary(
         ),
         "maximum_bisection_trace_pressure_component_replay_error_witnesses": (
             _maximum_trace_pressure_component_replay_witnesses()
+        ),
+        "terminal_pressure_component_replay_consistent_corner_count": (
+            len(trace_cases)
+            - len(
+                terminal_pressure_component_replay_violation_corner_indices
+            )
+        ),
+        "terminal_pressure_component_replay_violation_corner_indices": (
+            terminal_pressure_component_replay_violation_corner_indices
+        ),
+        "terminal_pressure_component_replay_violation_count": sum(
+            int(
+                audit.get(
+                    "terminal_pressure_component_replay_violation_count",
+                    0,
+                )
+                or 0
+            )
+            for _corner_index, _corner, _evidence, audit in trace_cases
+        ),
+        "terminal_pressure_component_replay_violation_details": (
+            terminal_pressure_component_replay_violation_details
+        ),
+        "maximum_terminal_pressure_component_replay_error_pa": (
+            _maximum_trace_geometry_metric_evidence(
+                "maximum_absolute_terminal_pressure_component_replay_error_pa",
+                "Pa",
+            )
+        ),
+        "maximum_terminal_pressure_component_replay_error_witnesses": (
+            _maximum_terminal_pressure_component_replay_witnesses()
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)

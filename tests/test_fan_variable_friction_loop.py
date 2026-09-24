@@ -425,6 +425,7 @@ def test_supplied_point_residual_topology_audit_is_explicit() -> None:
     assert "Selection policy" in report
     if audit["additional_candidate_feature_count"]:
         assert "Nearest alternative candidate interval gap" in report
+        assert "gap / supplied fan-curve span" in report
     assert "not a count or proof of continuous physical intersections" in report
 
 def test_crossing_feature_selection_policy_is_deterministic_with_multiple_candidates() -> None:

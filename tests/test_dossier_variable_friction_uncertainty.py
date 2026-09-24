@@ -7,6 +7,7 @@ from cleanroomx.consistency import analyze_hvac_fan_airflow_consistency
 from cleanroomx.dossier import build_dossier, summarize_dossier_components
 from cleanroomx.dossier_report import markdown_dossier_report
 from cleanroomx.fan_variable_friction_loop import (
+    _bisection_decision_trace_audit,
     _selected_operating_state_replay_audit,
     solve_fan_variable_friction_loop,
 )
@@ -426,6 +427,86 @@ def test_dossier_preserves_selected_projection_corruption_evidence(
     json.dumps(dossier, sort_keys=True, allow_nan=False)
     report = markdown_dossier_report(dossier)
     assert "selected-network-state-projection-replay coverage" in report
+    assert "$.edges[0].airflow_m3_h" in report
+    assert "recorded_value" in report
+    assert "recomputed_value" in report
+
+
+
+def test_dossier_preserves_full_trace_projection_corruption_evidence(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2 or result["status"] != "solved":
+            return result
+
+        evidence = result["operating_point_search_evidence"]
+        trace = json.loads(json.dumps(evidence["bisection_trace"]))
+        trace[0]["low_network_state_projection"]["edges"][0][
+            "airflow_m3_h"
+        ] += 2.5
+        segment_index = evidence["supplied_segment_index"]
+        evidence["bisection_trace"] = trace
+        evidence["bisection_trace_audit"] = _bisection_decision_trace_audit(
+            trace,
+            operating_iterations=evidence["operating_iterations"],
+            termination_reason=result["solver_diagnostics"][
+                "termination_reason"
+            ],
+            operating_pressure_tolerance_pa=(
+                case_study.operating_pressure_tolerance_pa
+            ),
+            expected_fixed_pressure_pa=case_study.fixed_pressure_pa,
+            study=case_study,
+            segment_left=case_study.fan_curve.points[segment_index],
+            segment_right=case_study.fan_curve.points[segment_index + 1],
+            initial_bisection_bracket=evidence[
+                "initial_bisection_bracket"
+            ],
+            solved_terminal_bracket=evidence["final_bisection_bracket"],
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    dossier = build_dossier(
+        "examples/dossier_variable_friction_uncertainty_demo.json"
+    )
+    analysis = dossier["fan_variable_friction_uncertainty_analyses"][0]
+    summary = analysis["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "bisection_trace_network_state_projection_replay_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "bisection_trace_network_state_projection_replay_mismatch_count"
+    ] == 1
+    details = summary[
+        "bisection_trace_network_state_projection_replay_violation_details"
+    ]
+    assert len(details) == 1
+    assert details[0]["corner_index"] == 0
+    assert details[0]["violation_iteration_positions"] == [
+        {"iteration": 1, "position": "low"}
+    ]
+    mismatch = details[0]["mismatches"][0]
+    assert mismatch["path"] == "$.edges[0].airflow_m3_h"
+    assert mismatch["recorded_value"] - mismatch["recomputed_value"] == (
+        pytest.approx(2.5)
+    )
+    assert mismatch["absolute_error"] == pytest.approx(2.5)
+
+    json.dumps(dossier, sort_keys=True, allow_nan=False)
+    report = markdown_dossier_report(dossier)
+    assert "full-trace-network-state-projection coverage" in report
     assert "$.edges[0].airflow_m3_h" in report
     assert "recorded_value" in report
     assert "recomputed_value" in report

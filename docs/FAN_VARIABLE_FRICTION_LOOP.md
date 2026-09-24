@@ -24,6 +24,8 @@ v0.82 independently replays the retained midpoint pressure components themselves
 
 v0.83 extends that replay to the complete active bracket at every retained bisection step. Low and high endpoint fan, loop-network, and total system pressures are retained alongside the midpoint state, then independently reconstructed and compared against fresh fan interpolation and nonlinear network solves. This detects endpoint pressure-state corruption even when low/high residuals, all midpoint pressure evidence, decision semantics, and the recorded bracket geometry remain unchanged.
 
+v0.84 makes any pressure-component replay failure directly traceable. Each mismatch records its exact bisection iteration, low/midpoint/high bracket position, fan/loop-network/system component, recorded pressure, independently recomputed pressure, and absolute error. Tied maximum-error witnesses are preserved without changing the existing 1e-9 Pa implementation-replay tolerance or any engineering acceptance criterion.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

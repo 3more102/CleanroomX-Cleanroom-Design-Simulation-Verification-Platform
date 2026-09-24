@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.100.0 consolidated desktop release — 2026-09-24
+
+- Continues from current v0.99.1 `main`, including installed-wheel verification and the self-contained `cleanroomx-gui --demo` package resources.
+- Adds canonical application-input SHA-256 identity and before/after hash/size evidence for external consistency/dossier dependencies; Diagnostics and run-bundle export preserve the evidence.
+- Preserves external-file referents when consistency/dossier JSON is imported or a project is relocated with **Save Project As**; absolute-only dossier inputs can run before a project is saved.
+- Uses durable same-directory atomic writes for project files and GUI exports, with user-visible export failures.
+- Plots backend-computed system-pressure samples beside supplied fan curves with labeled series.
+- Keeps abandoned analyses exclusive until their backend worker exits, preserves registry fail-fast validation before Tk startup, and invalidates cached results when project path context changes.
+- CI keeps the v0.91-v0.95 compatibility gates, adds focused v0.100 application/desktop regressions, runs the complete suite on Python 3.11/3.12/3.13, builds/installs a clean wheel in every job, and executes the installed Tk/Xvfb demo smoke on Python 3.13.
+- No validated solver equations, numerical tolerances, no-extrapolation rules, uncertainty semantics, or engineering acceptance criteria are changed.
+
 ## v0.99.1 installed desktop hardening — 2026-09-24
 
 - Continues directly from integrated v0.99.0 `main`; no divergent release branch is used as the baseline.

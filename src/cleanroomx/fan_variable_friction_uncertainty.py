@@ -2528,8 +2528,16 @@ def _operating_point_search_resolution_summary(
             evidence,
             evidence.get("bisection_trace_audit"),
         )
-        for corner_index, corner, evidence in bisection_cases
+        for corner_index, corner, evidence in cases
         if evidence.get("bisection_trace_audit") is not None
+    ]
+    solved_trace_cases = [
+        case for case in trace_cases if case[1]["status"] == "solved"
+    ]
+    iteration_limit_trace_cases = [
+        case
+        for case in trace_cases
+        if case[2].get("iteration_limit_evidence") is not None
     ]
     trace_length_violation_corner_indices = [
         corner_index
@@ -2550,8 +2558,13 @@ def _operating_point_search_resolution_summary(
     ]
     trace_termination_violation_corner_indices = [
         corner_index
-        for corner_index, _corner, _evidence, audit in trace_cases
+        for corner_index, _corner, _evidence, audit in solved_trace_cases
         if not audit["termination_record_is_last"]
+    ]
+    trace_outcome_violation_corner_indices = [
+        corner_index
+        for corner_index, _corner, _evidence, audit in trace_cases
+        if not audit["terminal_outcome_consistent"]
     ]
     trace_iteration_sequence_violation_corner_indices = [
         corner_index
@@ -2775,8 +2788,17 @@ def _operating_point_search_resolution_summary(
             midpoint_violation_corner_indices
         ),
         "bisection_trace_evidence_corner_count": len(trace_cases),
+        "solved_bisection_trace_evidence_corner_count": (
+            len(solved_trace_cases)
+        ),
+        "iteration_limit_bisection_trace_evidence_corner_count": (
+            len(iteration_limit_trace_cases)
+        ),
         "bisection_trace_complete_coverage": (
-            len(trace_cases) == len(bisection_cases)
+            len(solved_trace_cases) == len(bisection_cases)
+        ),
+        "iteration_limit_bisection_trace_complete_coverage": (
+            len(iteration_limit_trace_cases) == len(iteration_limit_cases)
         ),
         "bisection_trace_length_match_corner_count": (
             len(trace_cases) - len(trace_length_violation_corner_indices)
@@ -2797,10 +2819,17 @@ def _operating_point_search_resolution_summary(
             trace_midpoint_violation_corner_indices
         ),
         "bisection_trace_terminal_last_corner_count": (
-            len(trace_cases) - len(trace_termination_violation_corner_indices)
+            len(solved_trace_cases)
+            - len(trace_termination_violation_corner_indices)
         ),
         "bisection_trace_terminal_violation_corner_indices": (
             trace_termination_violation_corner_indices
+        ),
+        "bisection_trace_outcome_consistent_corner_count": (
+            len(trace_cases) - len(trace_outcome_violation_corner_indices)
+        ),
+        "bisection_trace_outcome_violation_corner_indices": (
+            trace_outcome_violation_corner_indices
         ),
         "bisection_trace_iteration_sequence_match_corner_count": (
             len(trace_cases)
@@ -2879,9 +2908,11 @@ def _operating_point_search_resolution_summary(
             "including its completed-step contraction audit, without "
             "accepting or fabricating an operating point. v0.72 retains the "
             "complete bounded-bisection decision trace for solved bisection "
-            "corners and audits trace length, per-step sign bracketing, "
-            "midpoint geometry, and terminal decision placement without "
-            "adding any physical acceptance limit."
+            "corners and v0.73 replays every recorded L/H state transition. "
+            "v0.75 extends the same replay-audited trace evidence to "
+            "iteration-limit non-converged corners, with outcome-aware "
+            "terminal checks and no fabricated tolerance acceptance, "
+            "without adding any physical acceptance limit."
         ),
     }
 

@@ -97,6 +97,8 @@ v0.69 completes the sampled sign-topology record by retaining strict negative-to
 
 v0.70 retains bounded-bisection evidence when the operating-point search reaches `max_operating_iterations` without satisfying the configured pressure residual tolerance. The result remains `non_converged` and carries no accepted operating point, but records the last evaluated midpoint and the remaining active positive/negative-residual bracket, including width, half-width, normalized width, completed binary contraction steps, strict-sign preservation, and contraction-consistency error. This is numerical search/implementation provenance only, not physical airflow uncertainty, interpolation error, a continuous root interval guarantee, stability/stall/surge evidence, or equipment acceptance.
 
+v0.72 retains every midpoint evaluation performed by a successful bounded-bisection solve. Each trace record contains the live low/high airflow bracket, midpoint, bracket width and supplied-segment-normalized width, signed endpoint/midpoint residuals, and the exact decision to replace the low endpoint, replace the high endpoint, or accept the midpoint within the configured pressure tolerance. A compact L/H/T sequence plus trace audit checks step-count/iteration agreement, strict sign bracketing before every evaluation, arithmetic midpoint geometry, and terminal acceptance placement. Direct supplied-point tolerance contacts keep the trace unset. This is deterministic numerical implementation provenance only; it does not represent physical airflow uncertainty, interpolation error, continuous-root uniqueness, dynamic stability, or equipment acceptance.
+
 ## CLI
 
 ```text

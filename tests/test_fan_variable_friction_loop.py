@@ -1496,7 +1496,7 @@ def test_selected_operating_state_replay_detects_common_mode_corruption() -> Non
     pressure = result["system_pressure_check"]
     segment_index = evidence["supplied_segment_index"]
     delta_pa = 1.0
-    replayed_airflow = replay["recorded_selected_airflow_m3_h"]
+    replayed_airflow = replay["selected_airflow_replay_input_m3_h"]
     replayed_network, _ = _solve_network_at_airflow(
         study,
         replayed_airflow,
@@ -1562,7 +1562,7 @@ def test_selected_operating_state_replay_detects_internal_network_state_corrupti
 
     corrupted = _selected_operating_state_replay_audit(
         study,
-        selected_airflow_m3_h=replay["recorded_selected_airflow_m3_h"],
+        selected_airflow_m3_h=replay["selected_airflow_replay_input_m3_h"],
         recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
         recorded_loop_network_pressure_pa=pressure[
             "loop_network_pressure_pa"

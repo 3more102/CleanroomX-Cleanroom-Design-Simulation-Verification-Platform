@@ -1449,6 +1449,91 @@ def test_terminal_network_state_replay_detects_iteration_limit_corruption() -> N
     ] is True
 
 
+def test_terminal_network_state_projection_replay_localizes_internal_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Terminal network-state projection corruption",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+        operating_pressure_tolerance_pa=1e-15,
+        max_operating_iterations=1,
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "non_converged"
+    evidence = result["operating_point_search_evidence"]
+    assert evidence is not None
+    trace = [dict(step) for step in evidence["bisection_trace"]]
+    terminal = dict(
+        evidence["iteration_limit_evidence"]["remaining_bisection_bracket"]
+    )
+    audit = evidence["bisection_trace_audit"]
+    assert audit["terminal_network_state_projection_replay_available"] is True
+    assert audit[
+        "all_terminal_network_state_projections_match_independent_replay"
+    ] is True
+    assert audit["terminal_network_state_projection_mismatch_count"] == 0
+
+    recorded_hash = terminal["low_network_state_sha256"]
+    projection = terminal["low_network_state_projection"]
+    projection["nodes"][0]["relative_pressure_pa"] += 1.0
+
+    segment_index = evidence["supplied_segment_index"]
+    corrupted_audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason="bisection_iteration_limit",
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        iteration_limit_terminal_bracket=terminal,
+    )
+    assert corrupted_audit is not None
+    assert corrupted_audit[
+        "all_terminal_network_states_match_independent_replay"
+    ] is True
+    assert terminal["low_network_state_sha256"] == recorded_hash
+    assert corrupted_audit[
+        "all_terminal_network_state_projections_match_independent_replay"
+    ] is False
+    assert corrupted_audit[
+        "terminal_network_state_projection_mismatch_count"
+    ] == 1
+    assert corrupted_audit[
+        "terminal_network_state_projection_mismatch_positions"
+    ] == ["low"]
+    mismatches = corrupted_audit[
+        "terminal_network_state_projection_mismatches"
+    ]
+    assert mismatches == [
+        {
+            "iteration": 1,
+            "position": "low",
+            "mismatch_paths": [
+                "$.nodes[0].relative_pressure_pa",
+            ],
+        }
+    ]
+    terminal_replay = corrupted_audit["terminal_network_state_replay"]
+    assert terminal_replay is not None
+    assert terminal_replay["low"][
+        "network_state_projection_matches_independent_replay"
+    ] is False
+    assert terminal_replay["high"][
+        "network_state_projection_matches_independent_replay"
+    ] is True
+
+
 def test_selected_operating_state_replay_detects_common_mode_corruption() -> None:
     study = FanVariableFrictionLoopStudy(
         name="Selected operating-state replay",

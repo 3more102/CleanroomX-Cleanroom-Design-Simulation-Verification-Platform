@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.73 supplied-point candidate index-separation audit — 2026-09-24
+
+- Retains exact supplied-point index intervals for solver-eligible tolerance-contact points and positive-to-negative sign-change segments.
+- Measures selected-to-alternative discrete candidate separation directly in supplied-point index steps, independently of nonuniform airflow spacing.
+- Retains tied nearest alternative candidates in index space and aggregates the minimum index-interval separation across uncertainty corners with exact source-corner provenance.
+- Surfaces index-space separation in standalone nonlinear fan-loop, uncertainty, and engineering-dossier Markdown alongside absolute-airflow, full-curve-span, and minimum-supplied-spacing separation evidence.
+- Adds direct solver, uncertainty, and dossier regression coverage without changing candidate priority, bounded root solving, or no-extrapolation behavior.
+- Treats supplied-point index separation strictly as discrete sample-grid topology; it is not physical uncertainty, an interpolation-error estimate, a continuous root-separation guarantee, stability/stall/surge evidence, a manufacturer operating region, commissioning/certification evidence, or an equipment-acceptance threshold.
+- Bumped package/runtime metadata to v0.73.0.
+
 ## v0.72 bounded-bisection decision-trace provenance — 2026-09-24
 
 - Retains every midpoint evaluation used by a successful bounded fan/system bisection solve, including the active signed-residual bracket, midpoint residual, normalized bracket width, and exact endpoint-replacement or tolerance-acceptance decision.

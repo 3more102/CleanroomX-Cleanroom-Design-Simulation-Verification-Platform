@@ -861,6 +861,12 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['terminal_pressure_component_replay_violation_details']}**",
                 "- Tied maximum terminal pressure-component replay witnesses across corners: "
                 f"**{search_summary['maximum_terminal_pressure_component_replay_error_witnesses']}**",
+                "- Terminal network-state replay violation corners: "
+                f"**{search_summary['terminal_network_state_replay_violation_corner_indices']}**",
+                "- Terminal network-state replay consistent corners: "
+                f"**{search_summary['terminal_network_state_replay_consistent_corner_count']}**",
+                "- Exact terminal network-state replay violation details: "
+                f"**{search_summary['terminal_network_state_replay_violation_details']}**",
                 "- Trace recorded-width violations: "
                 f"**{search_summary['bisection_trace_width_violation_corner_indices']}**",
                 "- Trace binary width-fraction violations: "
@@ -951,6 +957,10 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                         f"**{nominal_trace_audit['all_terminal_pressure_components_match_independent_replay']}**",
                         "- Nominal terminal pressure-component replay violations: "
                         f"**{nominal_trace_audit['terminal_pressure_component_replay_violations']}**",
+                        "- Nominal terminal network-state fingerprint replay consistent: "
+                        f"**{nominal_trace_audit['all_terminal_network_states_match_independent_replay']}**",
+                        "- Nominal terminal network-state replay violating positions: "
+                        f"**{nominal_trace_audit['terminal_network_state_replay_violation_positions']}**",
                     ]
                 )
             nominal_limit = nominal_search.get("iteration_limit_evidence")

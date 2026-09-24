@@ -207,12 +207,46 @@ def test_bounded_bisection_search_evidence_is_explicit() -> None:
         abs=1e-12,
     )
 
+    trace = evidence["bisection_trace"]
+    trace_audit = evidence["bisection_trace_audit"]
+    assert trace is not None
+    assert trace_audit is not None
+    assert len(trace) == diagnostics["operating_iterations"]
+    assert trace[-1]["decision"] == "accept_pressure_tolerance"
+    assert trace[-1]["iteration"] == diagnostics["operating_iterations"]
+    assert trace[-1]["midpoint_airflow_m3_h"] == pytest.approx(
+        point["airflow_m3_h"],
+        abs=1e-6,
+    )
+    for index, step in enumerate(trace, start=1):
+        assert step["iteration"] == index
+        assert step["strict_sign_change_before_evaluation"] is True
+        assert step["midpoint_is_arithmetic_bracket_midpoint"] is True
+        assert step["width_fraction_of_supplied_segment"] == pytest.approx(
+            0.5 ** (index - 1),
+            abs=1e-12,
+        )
+    assert trace_audit["step_count"] == len(trace)
+    assert trace_audit["trace_matches_operating_iterations"] is True
+    assert trace_audit[
+        "all_steps_preserve_strict_sign_change_before_evaluation"
+    ] is True
+    assert trace_audit[
+        "all_midpoints_are_arithmetic_bracket_midpoints"
+    ] is True
+    assert trace_audit["termination_record_count"] == 1
+    assert trace_audit["termination_record_is_last"] is True
+    assert trace_audit["decision_sequence"].endswith("T")
+    assert len(trace_audit["decision_sequence"]) == len(trace)
+
     report = markdown_fan_variable_friction_loop_report(result)
     assert "Operating-point search evidence" in report
     assert "Final bisection bracket width" in report
     assert "Strict sign-change bracket preserved" in report
     assert "Absolute binary-width consistency error" in report
-    assert "numerical search-geometry evidence only" in report
+    assert "Bisection decision-trace steps" in report
+    assert "Bisection decision sequence (L/H/T)" in report
+    assert "numerical search" in report
 
 
 def test_iteration_limit_retains_terminal_bisection_evidence() -> None:
@@ -300,6 +334,8 @@ def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
     assert evidence["selected_supplied_point_index"] == 1
     assert evidence["operating_iterations"] == 0
     assert evidence["final_bisection_bracket"] is None
+    assert evidence["bisection_trace"] is None
+    assert evidence["bisection_trace_audit"] is None
 
 
 def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:

@@ -1,6 +1,6 @@
 # CleanroomX Desktop Application
 
-CleanroomX v0.98 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
+CleanroomX v0.98.1 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
 
 ## Install and launch
 
@@ -22,7 +22,7 @@ Open the bundled demonstration project:
 cleanroomx-gui examples/gui_demo.cleanroomx.json
 ```
 
-Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
+Check that the application layer and GUI imports are usable, workflow keys are unique, direct parser/runner contracts are complete, custom adapters are correctly registered, and every declared parser/runner/reporter binding resolves without opening a window:
 
 ```bash
 cleanroomx-gui --check
@@ -50,7 +50,7 @@ Project saves are validated before writing and use an atomic temporary-file repl
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export result JSON or report Markdown and save the project.
 
-The **Abandon** action invalidates the UI generation token so a completed worker result is ignored; Python threads are not force-terminated. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot. The status line explicitly reports abandonment behavior.
+The **Abandon** action discards the eventual worker result without attempting unsafe force-termination of a Python thread. CleanroomX remains busy until that worker actually exits, so a second backend analysis cannot overlap an abandoned computation. Abandoned results and errors are suppressed, then the UI becomes runnable again. While an analysis is active, CleanroomX prevents analysis mutation/switching and temporarily disables input editing so the displayed result cannot be associated with a different or modified input snapshot. The status line explicitly reports abandonment progress.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
@@ -68,7 +68,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, registry-binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, duplicate-key/custom-adapter contract checks, registry-binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates, runs the complete suite on Python 3.11/3.12/3.13, and on Python 3.13 additionally installs a virtual display, runs the installed `cleanroomx-gui --check` entry point, launches the real Tk GUI under Xvfb, loads the demonstration project, executes its active analysis, updates the UI, and exits successfully.
 

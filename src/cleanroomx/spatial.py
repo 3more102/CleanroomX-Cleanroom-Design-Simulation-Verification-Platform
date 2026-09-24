@@ -277,6 +277,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._show_device_labels = tk.BooleanVar(value=True)
+        self._grid_var = tk.StringVar(value="0.5 m")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._property_vars: dict[str, tk.StringVar] = {}
@@ -285,8 +287,27 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(6, 6, 6, 3))
-        toolbar.pack(fill="x")
+        self.configure(style="App.TFrame")
+
+        studio_header = ttk.Frame(self, style="Surface.TFrame", padding=(10, 8, 10, 6))
+        studio_header.pack(fill="x", padx=6, pady=(6, 0))
+        title_group = ttk.Frame(studio_header, style="Surface.TFrame")
+        title_group.pack(side="left")
+        ttk.Label(title_group, text="SPATIAL STUDIO", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(
+            title_group,
+            text="Plan rooms in 2D, inspect volume in 3D, then synchronize geometry into verification inputs.",
+            style="Muted.TLabel",
+        ).pack(anchor="w")
+        ttk.Button(
+            studio_header,
+            text="Sync Geometry → Analysis",
+            style="Accent.TButton",
+            command=self._on_sync_requested,
+        ).pack(side="right")
+
+        toolbar = ttk.Frame(self, style="Surface.TFrame", padding=(10, 5, 10, 8))
+        toolbar.pack(fill="x", padx=6)
 
         ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
         for device_type, label in (
@@ -304,26 +325,51 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+        ttk.Button(toolbar, text="Delete", style="Danger.TButton", command=self.delete_selected).pack(
+            side="left", padx=2
         )
-        ttk.Button(
+        ttk.Button(toolbar, text="Fit All", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
+            side="left", padx=(8, 3)
+        )
+        ttk.Label(toolbar, text="Spacing", style="Muted.TLabel").pack(side="left", padx=(6, 3))
+        grid_box = ttk.Combobox(
             toolbar,
-            text="Sync dimensions to active analysis",
-            command=self._on_sync_requested,
-        ).pack(side="right", padx=2)
+            width=7,
+            state="readonly",
+            textvariable=self._grid_var,
+            values=("0.25 m", "0.5 m", "1 m", "2 m"),
+        )
+        grid_box.pack(side="left", padx=(0, 6))
+        grid_box.bind("<<ComboboxSelected>>", self._set_grid_from_control)
+        ttk.Checkbutton(
+            toolbar,
+            text="Device labels",
+            variable=self._show_device_labels,
+            command=self.redraw,
+        ).pack(side="left", padx=4)
 
         body = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
 
         two_d = ttk.Frame(body)
         body.add(two_d, weight=4)
-        ttk.Label(two_d, text="2D Layout", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", padx=4, pady=(2, 4)
+        header2 = ttk.Frame(two_d, style="Surface.TFrame")
+        header2.pack(fill="x")
+        ttk.Label(header2, text="2D PLAN", style="Section.TLabel").pack(
+            side="left", padx=6, pady=(4, 5)
         )
-        self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
+        ttk.Label(
+            header2,
+            text="Left: select / drag   ·   Right or middle: pan   ·   Wheel: zoom",
+            style="Muted.TLabel",
+        ).pack(side="right", padx=6)
+        self.canvas_2d = tk.Canvas(
+            two_d,
+            background="#0b1525",
+            highlightthickness=1,
+            highlightbackground="#24364d",
+        )
         self.canvas_2d.pack(fill="both", expand=True)
         ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=2)
 
@@ -334,9 +380,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         right.add(three_d, weight=3)
         header3 = ttk.Frame(three_d)
         header3.pack(fill="x")
-        ttk.Label(header3, text="3D View", font=("TkDefaultFont", 10, "bold")).pack(
-            side="left", padx=4, pady=(2, 4)
+        ttk.Label(header3, text="3D VOLUME", style="Section.TLabel").pack(
+            side="left", padx=6, pady=(4, 5)
         )
+        ttk.Label(
+            header3,
+            text="Click object to select · Wheel to zoom",
+            style="Muted.TLabel",
+        ).pack(side="left", padx=8)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
                 side="right", padx=2
@@ -349,7 +400,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         inspector = ttk.Frame(right, padding=6)
         right.add(inspector, weight=2)
-        ttk.Label(inspector, text="Properties", font=("TkDefaultFont", 10, "bold")).grid(
+        ttk.Label(inspector, text="PROPERTIES", style="Section.TLabel").grid(
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
@@ -406,10 +457,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        self._grid_var.set(f"{self.layout['grid_m']:g} m")
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
         self.redraw()
+
+    def _set_grid_from_control(self, event=None) -> None:
+        text = self._grid_var.get().strip().lower().replace("m", "").strip()
+        value = _positive(text, self.layout.get("grid_m", 0.5))
+        self.layout["grid_m"] = value
+        self._persist(f"Grid spacing set to {value:g} m")
 
     def _persist(self, message: str) -> None:
         project = self._project_getter()
@@ -587,13 +645,28 @@ class SpatialDesignWorkspace(ttk.Frame):
                 x = start_x
                 while x <= end_x + 1e-9:
                     cx, _ = self._world_to_canvas(x, 0)
-                    canvas.create_line(cx, 0, cx, h, fill="#e7ecf1", tags=("grid",))
+                    canvas.create_line(cx, 0, cx, h, fill="#1a2a3f", tags=("grid",))
                     x += grid
                 y = start_y
                 while y <= end_y + 1e-9:
                     _, cy = self._world_to_canvas(0, y)
-                    canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
+                    canvas.create_line(0, cy, w, cy, fill="#1a2a3f", tags=("grid",))
                     y += grid
+
+        origin_x, origin_y = self._world_to_canvas(0.0, 0.0)
+        if 0 <= origin_y <= h:
+            canvas.create_line(0, origin_y, w, origin_y, fill="#31506f", width=2, tags=("axis",))
+        if 0 <= origin_x <= w:
+            canvas.create_line(origin_x, 0, origin_x, h, fill="#31506f", width=2, tags=("axis",))
+        canvas.create_text(
+            10,
+            10,
+            anchor="nw",
+            text=f"Grid {self.layout['grid_m']:g} m  ·  {len(self.layout['rooms'])} rooms  ·  {len(self.layout['devices'])} devices",
+            fill="#8fa4bc",
+            font=("TkDefaultFont", 9),
+            tags=("hud",),
+        )
 
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
@@ -603,7 +676,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#1d4ed8" if selected else "#34495e"
+            outline = "#38bdf8" if selected else "#607a96"
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             canvas.create_rectangle(
                 x0, y0, x1, y1,
@@ -616,6 +689,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 (y0 + y1) / 2,
                 text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
                 justify="center",
+                fill="#0b1726",
+                font=("TkDefaultFont", 9, "bold" if selected else "normal"),
                 tags=(f"room:{room['id']}", "room"),
             )
 
@@ -634,14 +709,27 @@ class SpatialDesignWorkspace(ttk.Frame):
             radius = 9 if selected else 7
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
+                fill="#eaf2fb", outline="#fb7185" if selected else "#334e68",
                 width=3 if selected else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
             canvas.create_text(
-                x, y, text=symbols.get(device["type"], "?"),
+                x,
+                y,
+                text=symbols.get(device["type"], "?"),
+                fill="#0b1726",
+                font=("TkDefaultFont", 8, "bold"),
                 tags=(f"device:{device['id']}", "device"),
             )
+            if self._show_device_labels.get():
+                canvas.create_text(
+                    x,
+                    y + 15,
+                    text=device.get("name", device["type"]),
+                    fill="#d5e2ef",
+                    font=("TkDefaultFont", 8),
+                    tags=(f"device:{device['id']}", "device"),
+                )
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -649,7 +737,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 h / 2,
                 text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
                 justify="center",
-                fill="#667788",
+                fill="#8fa4bc",
             )
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
@@ -682,6 +770,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+
+        # Ground grid improves depth perception and makes the 3D view read like a CAD viewport.
+        grid_step = max(1.0, self.layout.get("grid_m", 0.5))
+        gx = math.floor(min_x / grid_step) * grid_step
+        while gx <= max_x + 1e-9:
+            p0 = self._project_3d(gx - cx, min_y - cy, 0.0)
+            p1 = self._project_3d(gx - cx, max_y - cy, 0.0)
+            canvas.create_line(*p0, *p1, fill="#1c3043", tags=("floor-grid",))
+            gx += grid_step
+        gy = math.floor(min_y / grid_step) * grid_step
+        while gy <= max_y + 1e-9:
+            p0 = self._project_3d(min_x - cx, gy - cy, 0.0)
+            p1 = self._project_3d(max_x - cx, gy - cy, 0.0)
+            canvas.create_line(*p0, *p1, fill="#1c3043", tags=("floor-grid",))
+            gy += grid_step
+        canvas.create_text(
+            10,
+            10,
+            anchor="nw",
+            text=(
+                f"Az {self.layout['view']['azimuth_deg']:.0f}°  ·  "
+                f"El {self.layout['view']['elevation_deg']:.0f}°  ·  "
+                f"Zoom {self.layout['view']['zoom_3d']:.2f}×"
+            ),
+            fill="#90a9c1",
+            font=("TkDefaultFont", 9),
+            tags=("hud",),
+        )
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -720,10 +836,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                 *sum((base[2], base[3], top[3], top[2]), ()),
                 fill="#53687c", outline=outline, tags=(tag, "room3d")
             )
+            label = room["name"]
+            if room.get("pressure_pa") is not None:
+                label += f"  ·  {room['pressure_pa']:g} Pa"
             canvas.create_text(
                 *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=room["name"],
+                text=label,
                 fill="#f0f6fc",
+                font=("TkDefaultFont", 9, "bold" if selected else "normal"),
                 tags=(tag, "room3d"),
             )
 
@@ -737,6 +857,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
                 width=2, tags=(tag, "device3d"),
             )
+            if self._show_device_labels.get():
+                canvas.create_text(
+                    x + 7,
+                    y - 7,
+                    anchor="sw",
+                    text=device.get("name", device["type"]),
+                    fill="#d9e7f5",
+                    font=("TkDefaultFont", 8),
+                    tags=(tag, "device3d"),
+                )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:

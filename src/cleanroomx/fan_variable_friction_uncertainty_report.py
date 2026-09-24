@@ -996,8 +996,14 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{residual_summary['solved_with_additional_candidate_feature_corner_count']}**",
                 "- Solved corners with alternative-candidate separation evidence: "
                 f"**{residual_summary['alternative_candidate_separation_evidence_corner_count']}**",
+                "- Solved corners with alternative candidates below selected airflow: "
+                f"**{residual_summary['selected_airflow_with_below_alternative_corner_count']}**",
                 "- Solved corners whose selected airflow overlaps an alternative candidate interval: "
                 f"**{residual_summary['selected_airflow_overlap_alternative_interval_corner_count']}**",
+                "- Solved corners with alternative candidates above selected airflow: "
+                f"**{residual_summary['selected_airflow_with_above_alternative_corner_count']}**",
+                "- Solved corners with alternative candidates on both sides of selected airflow: "
+                f"**{residual_summary['selected_airflow_with_bidirectional_alternative_corner_count']}**",
                 "- Corners with residual-increase transitions: "
                 f"**{residual_summary['residual_increase_corner_count']}**",
                 "- Corners with multiple discrete candidate crossing features: "
@@ -1031,6 +1037,25 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     ]
                 )
             )
+        for indices_key, label in (
+            (
+                "selected_airflow_with_below_alternative_corner_indices",
+                "Selected-airflow corners with below alternatives",
+            ),
+            (
+                "selected_airflow_with_above_alternative_corner_indices",
+                "Selected-airflow corners with above alternatives",
+            ),
+            (
+                "selected_airflow_with_bidirectional_alternative_corner_indices",
+                "Selected-airflow corners with alternatives on both sides",
+            ),
+        ):
+            indices = residual_summary.get(indices_key) or []
+            if indices:
+                lines.append(
+                    f"- {label}: " + ", ".join(str(index) for index in indices)
+                )
         if residual_summary[
             "selected_airflow_overlap_alternative_interval_corner_indices"
         ]:
@@ -1070,6 +1095,41 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{normalized_alternative_gap['value']}** "
                 f"({' / '.join(source_texts)})"
             )
+        for absolute_key, normalized_key, label in (
+            (
+                "minimum_selected_to_below_alternative_candidate_interval_gap_m3_h",
+                "minimum_selected_to_below_alternative_candidate_interval_gap_fraction_of_supplied_curve_span",
+                "below-selected",
+            ),
+            (
+                "minimum_selected_to_above_alternative_candidate_interval_gap_m3_h",
+                "minimum_selected_to_above_alternative_candidate_interval_gap_fraction_of_supplied_curve_span",
+                "above-selected",
+            ),
+        ):
+            directional_gap = residual_summary.get(absolute_key)
+            if directional_gap is not None:
+                source_texts = [
+                    _fmt_extreme_source(source)
+                    for source in directional_gap["sources"]
+                ]
+                lines.append(
+                    f"- Minimum selected-to-{label} alternative candidate interval gap: "
+                    f"**{directional_gap['value']} {directional_gap['unit']}** "
+                    f"({' / '.join(source_texts)})"
+                )
+            normalized_directional_gap = residual_summary.get(normalized_key)
+            if normalized_directional_gap is not None:
+                source_texts = [
+                    _fmt_extreme_source(source)
+                    + f"; supplied-span={source['supplied_fan_curve_airflow_span_m3_h']} m³/h"
+                    for source in normalized_directional_gap["sources"]
+                ]
+                lines.append(
+                    f"- Minimum selected-to-{label} alternative gap / supplied fan-curve span: "
+                    f"**{normalized_directional_gap['value']}** "
+                    f"({' / '.join(source_texts)})"
+                )
         if residual_summary["residual_increase_corner_indices"]:
             lines.append(
                 "- Residual-increase corner indices: "

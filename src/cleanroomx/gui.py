@@ -380,6 +380,23 @@ class CleanroomXApp:
             label="Fit Spatial Views",
             command=lambda: self.spatial_workspace.fit_views(),
         )
+        view_menu.add_separator()
+        view_menu.add_command(
+            label="Focus 2D Plan",
+            accelerator="Ctrl+1",
+            command=lambda: self._show_spatial_view("2d"),
+        )
+        view_menu.add_command(
+            label="Focus 3D Model",
+            accelerator="Ctrl+2",
+            command=lambda: self._show_spatial_view("3d"),
+        )
+        view_menu.add_command(
+            label="Split 2D / 3D",
+            accelerator="Ctrl+3",
+            command=lambda: self._show_spatial_view("split"),
+        )
+        view_menu.add_separator()
         view_menu.add_checkbutton(
             label="Wrap output text",
             variable=self.wrap_outputs_var,
@@ -397,6 +414,9 @@ class CleanroomXApp:
         self.root.bind("<Control-s>", lambda event: self.save_project())
         self.root.bind("<Control-f>", lambda event: self._focus_analysis_filter())
         self.root.bind("<Escape>", lambda event: self._clear_analysis_filter())
+        self.root.bind("<Control-KeyPress-1>", lambda event: self._show_spatial_view("2d"))
+        self.root.bind("<Control-KeyPress-2>", lambda event: self._show_spatial_view("3d"))
+        self.root.bind("<Control-KeyPress-3>", lambda event: self._show_spatial_view("split"))
         self.root.bind("<F5>", lambda event: self.run_current())
 
     def _build_layout(self) -> None:
@@ -525,7 +545,7 @@ class CleanroomXApp:
         ).pack(side="left")
         ttk.Label(
             context_bar,
-            text="Ctrl+F search analyses · F5 run",
+            text="Ctrl+1 2D · Ctrl+2 3D · Ctrl+3 split · Ctrl+F search · F5 run",
             style="Muted.TLabel",
         ).pack(side="right")
 
@@ -625,6 +645,12 @@ class CleanroomXApp:
             style="Status.TLabel",
         )
         status.pack(fill="x", side="bottom")
+
+    def _show_spatial_view(self, mode: str) -> str:
+        if hasattr(self, "notebook") and hasattr(self, "spatial_workspace"):
+            self.notebook.select(self.spatial_workspace)
+            self.spatial_workspace.set_view_mode(mode)
+        return "break"
 
     def _add_text_tab(self, title: str, actions=()) -> tk.Text:
         frame = ttk.Frame(self.notebook)

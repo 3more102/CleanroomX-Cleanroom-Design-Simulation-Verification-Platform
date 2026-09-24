@@ -104,6 +104,15 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "bisection_trace_origin_replay_corner_count"
     ] == search_summary["bisection_trace_evidence_corner_count"]
     assert search_summary[
+        "bisection_trace_pressure_arithmetic_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "bisection_trace_pressure_arithmetic_consistent_corner_count"
+    ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary[
+        "maximum_bisection_trace_midpoint_residual_arithmetic_error_pa"
+    ]["value"] <= 2e-9
+    assert search_summary[
         "bisection_trace_raw_state_violation_corner_indices"
     ] == []
     assert search_summary[
@@ -236,9 +245,12 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "trace-decision" in report
     assert "trace geometry violations W/N 0/0" in report
     assert "trace-geometry" in report
+    assert "trace-pressure-arithmetic" in report
+    assert "pressure-arithmetic violations 0" in report
     assert "trace-raw-state" in report
     assert "raw-state violations 0" in report
     assert "max trace midpoint error" in report
+    assert "max trace residual arithmetic error" in report
     assert "max trace width error" in report
     assert "max trace normalized-width error" in report
     assert "trace-outcome" in report

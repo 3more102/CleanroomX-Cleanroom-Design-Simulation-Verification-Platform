@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.91 complete nonlinear solver-provenance fingerprint replay — 2026-09-24
+
+- Extends the canonical nonlinear network fingerprint beyond final node/edge values to include solver-result identity and convergence provenance: network name/status/reference node, Newton iteration count, configured mass-balance tolerance, variable-friction convergence/configuration, and the ordered outer-iteration history.
+- Preserves semantic order-invariance for named node, edge, and edge-closure collections while deliberately preserving chronological outer-iteration history order.
+- Advances the replay canonicalization identifier to `network-result-projection-sort-named-collections-preserve-iteration-history-json-sort-keys-compact-utf8-v3`.
+- Applies the expanded v3 fingerprint consistently to per-step trace replay, terminal-bracket replay, and selected operating-state replay.
+- Adds regression coverage proving harmless named-collection reordering remains hash-stable while Newton iteration metadata, variable-friction configuration, outer-iteration history, and numeric edge-state mutations remain hash-sensitive.
+- Preserves root selection, pressure/residual replay, no-extrapolation behavior, numerical tolerances, iteration budgets, and engineering acceptance semantics.
+- Bumped package/runtime metadata to v0.91.0.
+
 ## v0.90 order-invariant network-state fingerprint canonicalization — 2026-09-24
 
 - Canonicalizes semantically unordered named network-state collections before SHA-256 hashing by sorting solved nodes, solved edges, and variable-friction edge-closure rows by name.

@@ -819,9 +819,19 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_residual_replay_consistent_corner_count",
                     0,
                 )
+                trace_independent_residual_decision_count = search_summary.get(
+                    "bisection_trace_independent_residual_decision_consistent_corner_count",
+                    0,
+                )
                 trace_residual_replay_violations = len(
                     search_summary.get(
                         "bisection_trace_residual_replay_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_independent_residual_decision_violations = len(
+                    search_summary.get(
+                        "bisection_trace_independent_residual_decision_violation_corner_indices",
                         [],
                     )
                 )
@@ -930,6 +940,10 @@ def markdown_dossier_report(result: dict) -> str:
                     f"raw-state violations {trace_raw_state_violations}; "
                     f"residual-replay {trace_residual_replay_count}/{trace_count}; "
                     f"residual-replay violations {trace_residual_replay_violations}; "
+                    f"independent-residual decision "
+                    f"{trace_independent_residual_decision_count}/{trace_count}; "
+                    f"independent-residual decision violations "
+                    f"{trace_independent_residual_decision_violations}; "
                     f"max residual-replay error {max_trace_residual_replay_error} Pa; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "
                     f"max trace width error {max_trace_width_error} m3/h; "

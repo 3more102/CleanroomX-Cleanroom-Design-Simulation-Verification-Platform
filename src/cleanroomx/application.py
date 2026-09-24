@@ -174,7 +174,7 @@ def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
 
 
 def validate_application_registry() -> None:
-    """Resolve every declared backend binding used by the desktop application."""
+    """Resolve every declared backend binding used by the application catalog."""
     for spec in _ANALYSES:
         for role, target in (
             ("parser", spec.parser),

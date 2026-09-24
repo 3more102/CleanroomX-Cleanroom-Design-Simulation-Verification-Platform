@@ -6,9 +6,10 @@
 - Adds a stable versioned `cleanroomx.project` document with strict JSON serialization, atomic save/open, active-analysis tracking, unique analysis identifiers, and supported legacy single-analysis migration.
 - Adds a real Tkinter desktop application for project and analysis management, structured JSON editing/inspection, validation, background execution, results, diagnostics, Markdown reports, fan-curve plotting, and JSON/Markdown export.
 - Adds the installed `cleanroomx-gui` console entry point plus `--check` headless capability validation and `--smoke` real-window smoke execution; the headless check resolves every declared parser/runner/reporter binding so catalog wiring failures cannot hide behind unexercised GUI entries.
-- Hardens structured-input engineering-unit hints so specific density/viscosity suffixes take precedence over generic area/volume suffixes.
 - Adds an end-to-end demonstration project spanning facility verification, HVAC, fan operating point, nonlinear fan/variable-friction loop analysis, bounded uncertainty, consistency, and dossier workflows.
 - Adds application/project/GUI regression tests and a Python 3.13 Xvfb CI smoke that launches the installed desktop command and executes the active demo analysis.
+- Hardens project persistence to strict JSON, preserves uncommitted editor state across analysis switching, prompts before destructive project replacement/exit, and blocks conflicting analysis mutation/input changes while a run is active.
+- Adds an application-level end-to-end regression matrix covering every workflow exposed by the desktop catalog.
 - Preserves the v0.95 solver-result integrity linkage and the complete v0.91-v0.94 replay/provenance compatibility gates.
 - Bumps package/runtime/demo metadata to v0.96.0.
 - The GUI exposes engineering screening and numerical/provenance evidence; it does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
@@ -624,7 +625,8 @@
 ## v0.38 dossier-integrated nonlinear fan / loop uncertainty — 2026-09-23
 
 - Integrated v0.37 fan/variable-friction loop uncertainty analyses into engineering dossier manifests.
-- Added SHA-256 source fingerprints, executive-summary analysis/corner counts, full JSON evidence retention, and Markdown corner-envelope reporting.\n- Extended HVAC-to-fan operating-airflow consistency to every evaluated nonlinear uncertainty corner; unresolved corners remain `not_comparable` and never receive fabricated airflow values.
+- Added SHA-256 source fingerprints, executive-summary analysis/corner counts, full JSON evidence retention, and Markdown corner-envelope reporting.
+- Extended HVAC-to-fan operating-airflow consistency to every evaluated nonlinear uncertainty corner; unresolved corners remain `not_comparable` and never receive fabricated airflow values.
 - Propagates indeterminate nonlinear uncertainty analyses into dossier attention while tracking missing uncertainty provenance separately as unresolved traceability.
 - Extends optional HVAC/fan operating-airflow consistency to every evaluated nonlinear uncertainty corner; unresolved or non-converged corners remain not comparable.
 - Preserves the v0.37 numerical boundary: every corner still uses the complete nonlinear Darcy-friction fan/loop solver, and unresolved corners never produce a complete envelope.

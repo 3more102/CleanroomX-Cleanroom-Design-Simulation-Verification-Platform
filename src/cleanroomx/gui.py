@@ -30,9 +30,9 @@ from .project import (
 
 
 _UNIT_SUFFIXES = (
-    ("_kg_m3", "kg/m³"),
     ("_m3_h", "m³/h"),
     ("_m3_s", "m³/s"),
+    ("_kg_m3", "kg/m³"),
     ("_m2_s", "m²/s"),
     ("_m2", "m²"),
     ("_m3", "m³"),
@@ -566,13 +566,14 @@ class CleanroomXApp:
             return
         try:
             payload = _strict_json_loads(text)
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, ValueError) as exc:
             if not silent:
-                messagebox.showerror(
-                    "Invalid JSON",
-                    f"Line {exc.lineno}, column {exc.colno}: {exc.msg}",
-                    parent=self.root,
+                detail = (
+                    f"Line {exc.lineno}, column {exc.colno}: {exc.msg}"
+                    if isinstance(exc, json.JSONDecodeError)
+                    else str(exc)
                 )
+                messagebox.showerror("Invalid JSON", detail, parent=self.root)
             return
         for index, (path, value, unit) in enumerate(flatten_json(payload)):
             display = value if len(value) <= 160 else value[:157] + "..."
@@ -1033,7 +1034,14 @@ def main(argv: list[str] | None = None) -> int:
     root = tk.Tk()
     app = CleanroomXApp(root)
     if args.project:
-        app.load_project_path(args.project)
+        try:
+            app.load_project_path(args.project)
+        except Exception as exc:
+            if args.smoke:
+                root.destroy()
+                print(f"CleanroomX GUI smoke: FAIL — {exc}")
+                return 2
+            messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.smoke:
         if args.project and app.project.analyses:

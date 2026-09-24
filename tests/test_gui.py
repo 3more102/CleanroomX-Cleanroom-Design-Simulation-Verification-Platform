@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
@@ -15,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_unit_hint_recognizes_engineering_units():
     assert unit_hint("$.fan_curve.points[0].airflow_m3_h") == "m³/h"
-    assert unit_hint("$.pressure_pa") == "Pa"
-    assert unit_hint("$.temperature_c") == "°C"
     assert unit_hint("$.air_density_kg_m3") == "kg/m³"
     assert unit_hint("$.kinematic_viscosity_m2_s") == "m²/s"
+    assert unit_hint("$.pressure_pa") == "Pa"
+    assert unit_hint("$.temperature_c") == "°C"
     assert unit_hint("$.value") == ""
 
 
@@ -168,3 +169,62 @@ def test_gui_demo_project_round_trips_and_active_analysis_runs():
     run = run_analysis(active.kind, active.input, base_dir=path.parent)
     assert run.result
     json.dumps(run.to_dict(), allow_nan=False)
+
+
+def test_stale_result_is_invalidated_when_matching_analysis_input_changes():
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.last_run = object()
+    app.last_run_analysis_id = "analysis-a"
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+
+    cleared = []
+    app._set_text = lambda widget, value: cleared.append((widget, value))
+    app._draw_plot = lambda: cleared.append(("plot", None))
+
+    app._invalidate_last_run_for("analysis-b")
+    assert app.last_run is not None
+    assert app.last_run_analysis_id == "analysis-a"
+    assert cleared == []
+
+    app._invalidate_last_run_for("analysis-a")
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+    assert cleared[:-1] == [
+        (app.result_text, ""),
+        (app.report_text, ""),
+        (app.diagnostics_text, ""),
+    ]
+    assert cleared[-1] == ("plot", None)
+
+
+def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app.root = object()
+    app._confirm_project_replacement = lambda: True
+
+    def fail_load(path):
+        raise ValueError("invalid project")
+
+    app.load_project_path = fail_load
+    captured = {}
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: "broken.cleanroomx.json",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.open_project()
+
+    assert captured["title"] == "Open failed"
+    assert captured["message"] == "invalid project"
+    assert captured["parent"] is app.root

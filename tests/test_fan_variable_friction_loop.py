@@ -1525,15 +1525,26 @@ def test_terminal_network_state_projection_replay_localizes_internal_corruption(
     mismatches = corrupted_audit[
         "terminal_network_state_projection_mismatches"
     ]
-    assert mismatches == [
-        {
-            "iteration": 1,
-            "position": "low",
-            "mismatch_paths": [
-                "$.nodes[0].relative_pressure_pa",
-            ],
-        }
+    assert len(mismatches) == 1
+    mismatch = mismatches[0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == "low"
+    assert mismatch["mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
     ]
+    assert len(mismatch["mismatches"]) == 1
+    leaf = mismatch["mismatches"][0]
+    assert leaf["path"] == "$.nodes[0].relative_pressure_pa"
+    assert leaf["mismatch_kind"] == "value_mismatch"
+    assert leaf["absolute_error"] == pytest.approx(1.0)
+    assert leaf["numeric_error_field"] == "relative_pressure_pa"
+    assert len(mismatch["maximum_numeric_errors"]) == 1
+    assert mismatch["maximum_numeric_errors"][0]["field"] == (
+        "relative_pressure_pa"
+    )
+    assert mismatch["maximum_numeric_errors"][0][
+        "maximum_absolute_error"
+    ] == pytest.approx(1.0)
     terminal_replay = corrupted_audit["terminal_network_state_replay"]
     assert terminal_replay is not None
     assert terminal_replay["low"][

@@ -2610,6 +2610,22 @@ def _operating_point_search_resolution_summary(
         )
         is not True
     ]
+    trace_pressure_component_replay_violation_details = []
+    for corner_index, corner, evidence, audit in trace_cases:
+        violations = audit.get("pressure_component_replay_violations", [])
+        if not violations:
+            continue
+        detail = _critical_case_summary(corner_index, corner)
+        detail.update(
+            {
+                "search_method": evidence["method"],
+                "supplied_segment_index": evidence["supplied_segment_index"],
+                "operating_iterations": evidence["operating_iterations"],
+                "violation_count": len(violations),
+                "violations": violations,
+            }
+        )
+        trace_pressure_component_replay_violation_details.append(detail)
     trace_width_violation_corner_indices = [
         corner_index
         for corner_index, _corner, _evidence, audit in trace_cases
@@ -2844,6 +2860,58 @@ def _operating_point_search_resolution_summary(
             "sources": sources,
         }
 
+    def _maximum_trace_pressure_component_replay_witnesses() -> list[dict]:
+        if not trace_cases:
+            return []
+        maximum = max(
+            float(
+                audit[
+                    "maximum_absolute_trace_pressure_component_replay_error_pa"
+                ]
+            )
+            for _corner_index, _corner, _evidence, audit in trace_cases
+        )
+        witnesses = []
+        for corner_index, corner, evidence, audit in trace_cases:
+            audit_maximum = float(
+                audit[
+                    "maximum_absolute_trace_pressure_component_replay_error_pa"
+                ]
+            )
+            if not math.isclose(
+                audit_maximum,
+                maximum,
+                rel_tol=1e-12,
+                abs_tol=1e-18,
+            ):
+                continue
+            for witness in audit.get(
+                "maximum_trace_pressure_component_replay_error_witnesses",
+                [],
+            ):
+                if not math.isclose(
+                    float(witness["absolute_error_pa"]),
+                    maximum,
+                    rel_tol=1e-12,
+                    abs_tol=1e-18,
+                ):
+                    continue
+                source = _critical_case_summary(corner_index, corner)
+                source.update(
+                    {
+                        "search_method": evidence["method"],
+                        "supplied_segment_index": evidence[
+                            "supplied_segment_index"
+                        ],
+                        "operating_iterations": evidence[
+                            "operating_iterations"
+                        ],
+                        "witness": witness,
+                    }
+                )
+                witnesses.append(source)
+        return witnesses
+
     def _maximum_iteration_limit_invariant_error_evidence() -> dict | None:
         if not iteration_limit_invariant_cases:
             return None
@@ -3026,11 +3094,21 @@ def _operating_point_search_resolution_summary(
         "bisection_trace_pressure_component_replay_violation_corner_indices": (
             trace_pressure_component_replay_violation_corner_indices
         ),
+        "bisection_trace_pressure_component_replay_violation_count": sum(
+            int(audit.get("pressure_component_replay_violation_count", 0))
+            for _corner_index, _corner, _evidence, audit in trace_cases
+        ),
+        "bisection_trace_pressure_component_replay_violation_details": (
+            trace_pressure_component_replay_violation_details
+        ),
         "maximum_bisection_trace_pressure_component_replay_error_pa": (
             _maximum_trace_geometry_metric_evidence(
                 "maximum_absolute_trace_pressure_component_replay_error_pa",
                 "Pa",
             )
+        ),
+        "maximum_bisection_trace_pressure_component_replay_error_witnesses": (
+            _maximum_trace_pressure_component_replay_witnesses()
         ),
         "bisection_trace_width_match_corner_count": (
             len(trace_cases) - len(trace_width_violation_corner_indices)
@@ -3185,7 +3263,9 @@ def _operating_point_search_resolution_summary(
             "signed-residual bracket without accepting an operating point. "
             "v0.76 audits every retained trace step's recorded bracket width "
             "against its airflow endpoints and its normalized width against "
-            "the binary contraction implied by the iteration number."
+            "the binary contraction implied by the iteration number. v0.84 "
+            "propagates exact pressure-component replay violation records and "
+            "tied maximum-error witnesses across evaluated uncertainty corners."
         ),
     }
 

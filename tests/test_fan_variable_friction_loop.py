@@ -59,6 +59,85 @@ def _fixed_curve() -> FanCurve:
     )
 
 
+def test_network_state_fingerprint_is_order_invariant_for_named_collections() -> None:
+    network = {
+        "nodes": [
+            {
+                "name": "Supply",
+                "relative_pressure_pa": 10.0,
+                "specified_injection_m3_h": 100.0,
+                "net_edge_outflow_m3_h": 100.0,
+                "mass_balance_residual_m3_h": 0.0,
+                "specified_pressure_power_w": 1.0,
+            },
+            {
+                "name": "Return",
+                "relative_pressure_pa": 0.0,
+                "specified_injection_m3_h": -100.0,
+                "net_edge_outflow_m3_h": -100.0,
+                "mass_balance_residual_m3_h": 0.0,
+                "specified_pressure_power_w": 0.0,
+            },
+        ],
+        "edges": [
+            {
+                "name": "A",
+                "start_node": "Supply",
+                "end_node": "Return",
+                "resistance_pa_per_m3_s_squared": 100.0,
+                "airflow_m3_s": 0.02,
+                "airflow_m3_h": 72.0,
+                "flow_direction": "Supply -> Return",
+                "pressure_difference_pa": 10.0,
+                "constitutive_pressure_difference_pa": 10.0,
+                "pressure_law_residual_pa": 0.0,
+                "dissipated_pressure_power_w": 0.2,
+            },
+            {
+                "name": "B",
+                "start_node": "Supply",
+                "end_node": "Return",
+                "resistance_pa_per_m3_s_squared": 200.0,
+                "airflow_m3_s": 0.01,
+                "airflow_m3_h": 36.0,
+                "flow_direction": "Supply -> Return",
+                "pressure_difference_pa": 10.0,
+                "constitutive_pressure_difference_pa": 10.0,
+                "pressure_law_residual_pa": 0.0,
+                "dissipated_pressure_power_w": 0.1,
+            },
+        ],
+        "max_abs_mass_balance_residual_m3_h": 0.0,
+        "max_abs_pressure_law_residual_pa": 0.0,
+        "pressure_power": {
+            "net_node_injection_power_w": 0.3,
+            "total_edge_dissipation_w": 0.3,
+            "balance_residual_w": 0.0,
+        },
+        "variable_friction": {
+            "outer_iterations": 2,
+            "automatic_friction_edge_count": 2,
+            "near_zero_frozen_edge_count": 0,
+            "max_relative_resistance_closure_error": 1e-8,
+            "edge_closure": [
+                {"name": "A", "state": "automatic"},
+                {"name": "B", "state": "automatic"},
+            ],
+        },
+    }
+
+    baseline = _network_state_sha256(network)
+    reordered = json.loads(json.dumps(network))
+    reordered["nodes"].reverse()
+    reordered["edges"].reverse()
+    reordered["variable_friction"]["edge_closure"].reverse()
+
+    assert _network_state_sha256(reordered) == baseline
+
+    reordered["edges"][0]["airflow_m3_h"] += 1.0
+    assert _network_state_sha256(reordered) != baseline
+
+
 def test_fixed_resistance_case_matches_existing_fan_loop_solver() -> None:
     network = _fixed_network()
     curve = _fixed_curve()

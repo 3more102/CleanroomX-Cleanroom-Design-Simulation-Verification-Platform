@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.80 bisection trace midpoint pressure-arithmetic audit — 2026-09-24
+
+- Retains rounded midpoint fan pressure and total system pressure alongside every bounded-bisection midpoint residual.
+- Independently recomputes each midpoint fan-minus-system residual from those retained pressure operands and checks the recorded residual within explicit rounding tolerance.
+- Retains exact violating iteration numbers and the maximum absolute midpoint residual arithmetic error for each trace.
+- Propagates pressure-arithmetic consistency counts, violating uncertainty-corner indices, worst-error witnesses, standalone report evidence, and dossier summaries.
+- Adds regression coverage proving corrupted midpoint pressure operands are detected even when bracket geometry, L/H/T decision semantics, and state-transition replay remain self-consistent.
+- Preserves v0.79 numeric sign/midpoint raw-state checks, v0.78 decision semantics, v0.77 origin replay, root selection, iteration budgets, and fan-curve no-extrapolation behavior.
+- Treats this strictly as numerical implementation provenance; it does not establish physical airflow uncertainty, root uniqueness/stability, stall/surge limits, manufacturer operating regions, commissioning/certification evidence, or equipment acceptance.
+- Bumped package/runtime metadata to v0.80.0.
+
 ## v0.79 independent bisection trace raw-state audit — 2026-09-24
 
 - Independently recomputes strict sign-change from retained low/high fan-minus-system residuals for every bounded-bisection trace step.

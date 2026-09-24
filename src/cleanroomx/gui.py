@@ -701,11 +701,14 @@ class CleanroomXApp:
         )
         if not path:
             return
+        old_base_dir = self._base_dir()
         try:
             self.project_path = save_project_document(path, self.project)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        if self._base_dir() != old_base_dir:
+            self._clear_run_cache()
         self._capture_saved_state()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()

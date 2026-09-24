@@ -109,6 +109,8 @@ v0.76 additionally audits the geometry fields stored in every solved or iteratio
 
 v0.77 anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points, then reconstructs the complete L/H/T chain from that origin through the solved final bracket or retained iteration-limit bracket. Every recorded airflow and residual bracket state must agree with the replayed chain, independently of the v0.76 stored-width geometry audit. This is end-to-end numerical implementation provenance only; it does not add physical uncertainty, interpolation-error, root-uniqueness, stability/stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
 
+v0.78 independently recomputes the strict signed-residual bracket and arithmetic midpoint geometry from each trace record's numeric fields, checks the stored sign/midpoint audit flags against those recomputed facts, and retains the maximum absolute midpoint-centering error. This hardens the trace against self-consistent but incorrect stored booleans; it remains numerical implementation provenance only.
+
 ## CLI
 
 ```text

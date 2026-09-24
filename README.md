@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.99 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
 
 ## Verified development status
 
-The current integrated release is **CleanroomX v0.99.0** on `main`. It is a verified direct descendant of clean v0.91 head `cefcbc0b1c83ce041c5ab3da999173e281ddddfb`, continues the integrated solver/provenance line through v0.95, and advances the merged v0.98 desktop application without replacing validated backend workflows. v0.99 hardens the application registry contract and headless readiness evidence on top of the completed v0.98 GUI release.
+CleanroomX **v0.100.0** continues directly from the verified v0.99 application-registry-integrity release on `main` at `1f035d08f893573868610d35296e3947445318e6`. It preserves the validated solver/provenance and registry contracts while hardening desktop plot evidence and export behavior without duplicating backend engineering calculations.
 
-CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.99 additionally validates application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, every declared callable binding, and the installed desktop entry point under Xvfb on Python 3.13.
+CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the v0.94 canonical-provenance, v0.93 supplied-point replay, v0.92 full-bisection projection replay, and v0.91 selected-projection gates, then runs the complete test suite and representative nonlinear loop/uncertainty/dossier smoke checks on Python **3.11, 3.12, and 3.13**. v0.100 retains the v0.99 application-catalog uniqueness, parser/runner contract completeness, custom adapter registration, and callable-binding checks, and extends the Python 3.13 Xvfb smoke to execute the active fan/system workflow with real multi-series plot rendering.
 
 ### Network-state replay provenance ladder
 
@@ -26,6 +26,11 @@ CI preserves the dedicated v0.95 solver-result-integrity compatibility gate, the
 | v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
 | v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
+| v0.100 | backend-evidence fan/system plotting, labeled multi-series rendering, guarded GUI exports, and plotted Xvfb smoke |
+
+### v0.100 desktop plot and export hardening
+
+v0.100 keeps the v0.99 registry-integrity contract and improves the desktop release surface. Fan/system plots reuse the solver's retained `curve_point_checks` system-pressure evidence at the supplied fan airflow samples, render the fan and system series distinctly, and preserve the solved operating-point marker. Input/result/report exports now catch filesystem failures and report them through the GUI status/error surface instead of leaking write exceptions. The bundled GUI smoke opens the fan operating-point analysis so the real Tk/Xvfb path exercises the plotted result.
 
 ### v0.99 application registry integrity
 

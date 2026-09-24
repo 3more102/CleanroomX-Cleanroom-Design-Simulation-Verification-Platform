@@ -99,6 +99,51 @@ def analysis_matches_filter(analysis: AnalysisDocument, query: str) -> bool:
     return needle in haystack
 
 
+def extract_pressure_cascade(payload: dict) -> list[dict]:
+    """Extract declared high-to-low room pressure relationships from an analysis input."""
+    if not isinstance(payload, dict):
+        return []
+
+    candidates: list[list] = []
+
+    def visit(value) -> None:
+        if isinstance(value, dict):
+            cascade = value.get("pressure_cascade")
+            if isinstance(cascade, list):
+                candidates.append(cascade)
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    if not candidates:
+        return []
+
+    links: list[dict] = []
+    for item in candidates[0]:
+        if not isinstance(item, dict):
+            continue
+        higher = item.get("higher_pressure_room")
+        lower = item.get("lower_pressure_room")
+        if not isinstance(higher, str) or not higher.strip():
+            continue
+        if not isinstance(lower, str) or not lower.strip():
+            continue
+        minimum = item.get("min_delta_pa")
+        try:
+            minimum_value = None if minimum is None else float(minimum)
+        except (TypeError, ValueError):
+            minimum_value = None
+        links.append({
+            "higher_pressure_room": higher.strip(),
+            "lower_pressure_room": lower.strip(),
+            "min_delta_pa": minimum_value,
+        })
+    return links
+
+
 def extract_room_visuals(payload: dict) -> list[dict]:
     """Extract room-like records for the lightweight 2D/3D engineering workspace."""
     if not isinstance(payload, dict):
@@ -572,7 +617,7 @@ class CleanroomXApp:
         self.notebook.add(self.visual2d_tab, text="2D Workspace")
         visual2d_toolbar = ttk.Frame(self.visual2d_tab, padding=(10, 8))
         visual2d_toolbar.pack(fill="x")
-        ttk.Label(visual2d_toolbar, text="Room layout / engineering schematic", font=("Segoe UI", 10, "bold")).pack(side="left")
+        ttk.Label(visual2d_toolbar, text="Room layout / pressure cascade", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(visual2d_toolbar, text="Auto-layout is marked when coordinates are unavailable.", style="Muted.TLabel").pack(side="left", padx=12)
         ttk.Button(
             visual2d_toolbar,
@@ -1405,6 +1450,7 @@ class CleanroomXApp:
         active = self._editor_analysis() or self._current_analysis()
         payload = self._visual_payload() if hasattr(self, "input_text") else {}
         rooms = extract_room_visuals(payload)
+        pressure_links = extract_pressure_cascade(payload)
         self.dashboard_rooms_var.set(str(len(rooms)))
         if active is None:
             self.dashboard_active_var.set("None")
@@ -1424,8 +1470,13 @@ class CleanroomXApp:
             if rooms
             else "No room geometry detected in this analysis input."
         )
+        cascade_line = (
+            f"Declared pressure-cascade links: {len(pressure_links)}."
+            if pressure_links
+            else "No declared pressure-cascade links in this input."
+        )
         self.dashboard_result_var.set(
-            f"{active.name}\nWorkflow: {title}\n{run_line}\n{room_line}"
+            f"{active.name}\nWorkflow: {title}\n{run_line}\n{room_line}\n{cascade_line}"
         )
 
     def _change_visual_zoom(self, factor: float) -> None:
@@ -1528,6 +1579,42 @@ class CleanroomXApp:
                 meta.append(f'P {room["pressure_pa"]} Pa')
             if meta:
                 canvas.create_text((x0 + x1) / 2, min(y1 - 12, (y0 + y1) / 2 + 28), text="  •  ".join(meta), fill="#bfdbfe", font=("Segoe UI", 8))
+
+        centers = {
+            room["name"]: (
+                pad + (room["x"] - min_x + room["length_m"] / 2) * scale,
+                pad + (room["y"] - min_y + room["width_m"] / 2) * scale,
+            )
+            for room in placed
+        }
+        pressure_links = extract_pressure_cascade(self._visual_payload())
+        for link in pressure_links:
+            start = centers.get(link["higher_pressure_room"])
+            end = centers.get(link["lower_pressure_room"])
+            if start is None or end is None:
+                continue
+            sx, sy = start
+            ex, ey = end
+            canvas.create_line(
+                sx,
+                sy,
+                ex,
+                ey,
+                fill="#facc15",
+                width=2,
+                dash=(6, 4),
+                arrow="last",
+                arrowshape=(10, 12, 4),
+            )
+            minimum = link["min_delta_pa"]
+            label = "pressure cascade" if minimum is None else f"Δ ≥ {minimum:g} Pa"
+            canvas.create_text(
+                (sx + ex) / 2,
+                (sy + ey) / 2 - 10,
+                text=label,
+                fill="#fde68a",
+                font=("Segoe UI", 8, "bold"),
+            )
 
     def _draw_3d_workspace(self) -> None:
         canvas = self.visual3d_canvas

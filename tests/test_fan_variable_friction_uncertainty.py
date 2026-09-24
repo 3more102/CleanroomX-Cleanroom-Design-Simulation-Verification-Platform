@@ -2563,6 +2563,18 @@ def test_bisection_invariant_audit_propagates_across_uncertainty_corners() -> No
     assert summary[
         "maximum_bisection_trace_pressure_component_replay_error_pa"
     ]["value"] <= 1e-9
+    assert summary[
+        "bisection_trace_pressure_component_replay_violation_count"
+    ] == 0
+    assert summary[
+        "bisection_trace_pressure_component_replay_violation_details"
+    ] == []
+    assert isinstance(
+        summary[
+            "maximum_bisection_trace_pressure_component_replay_error_witnesses"
+        ],
+        list,
+    )
     system_pressure_error = summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"
     ]
@@ -2853,6 +2865,18 @@ def test_iteration_limit_search_evidence_is_aggregated_across_corners() -> None:
     assert summary[
         "maximum_bisection_trace_pressure_component_replay_error_pa"
     ]["value"] <= 1e-9
+    assert summary[
+        "bisection_trace_pressure_component_replay_violation_count"
+    ] == 0
+    assert summary[
+        "bisection_trace_pressure_component_replay_violation_details"
+    ] == []
+    assert isinstance(
+        summary[
+            "maximum_bisection_trace_pressure_component_replay_error_witnesses"
+        ],
+        list,
+    )
     assert summary[
         "maximum_bisection_trace_system_pressure_balance_error_pa"
     ]["value"] <= 2e-9

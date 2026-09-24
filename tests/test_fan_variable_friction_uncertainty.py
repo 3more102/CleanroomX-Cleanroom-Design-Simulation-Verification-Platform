@@ -5,6 +5,7 @@ import sys
 import pytest
 
 from cleanroomx.fan_variable_friction_loop import (
+    _selected_operating_state_replay_audit,
     solve_fan_variable_friction_loop,
 )
 from cleanroomx.fan_variable_friction_loop_io import (
@@ -680,6 +681,128 @@ def test_fan_curve_airflow_uncertainty_rejects_repeated_nominal() -> None:
     with pytest.raises(ValueError, match="must not repeat the nominal"):
         fan_variable_friction_loop_uncertainty_from_dict(data)
 
+
+
+
+def test_selected_projection_replay_corruption_aggregates_exact_corner_evidence(
+    monkeypatch,
+) -> None:
+    call_count = 0
+
+    def corrupt_one_corner(case_study):
+        nonlocal call_count
+        call_count += 1
+        result = solve_fan_variable_friction_loop(case_study)
+        if call_count != 2 or result["status"] != "solved":
+            return result
+
+        evidence = result["operating_point_search_evidence"]
+        replay = evidence["selected_operating_state_replay"]
+        pressure = result["system_pressure_check"]
+        projection = json.loads(
+            json.dumps(replay["recorded_network_state_projection"])
+        )
+        projection["nodes"][0]["relative_pressure_pa"] += 1.0
+        segment_index = evidence["supplied_segment_index"]
+        evidence["selected_operating_state_replay"] = (
+            _selected_operating_state_replay_audit(
+                case_study,
+                selected_airflow_m3_h=replay[
+                    "selected_airflow_replay_input_m3_h"
+                ],
+                recorded_fan_pressure_pa=pressure["fan_pressure_pa"],
+                recorded_loop_network_pressure_pa=pressure[
+                    "loop_network_pressure_pa"
+                ],
+                recorded_system_pressure_pa=pressure[
+                    "total_system_pressure_pa"
+                ],
+                recorded_residual_pa=pressure[
+                    "fan_minus_system_pressure_pa"
+                ],
+                recorded_network_state_sha256=replay[
+                    "recorded_network_state_sha256"
+                ],
+                recorded_network_state_projection=projection,
+                segment_left=case_study.fan_curve.points[segment_index],
+                segment_right=case_study.fan_curve.points[
+                    segment_index + 1
+                ],
+                selected_supplied_point_index=evidence[
+                    "selected_supplied_point_index"
+                ],
+                bisection_trace=evidence["bisection_trace"],
+            )
+        )
+        return result
+
+    monkeypatch.setattr(
+        "cleanroomx.fan_variable_friction_uncertainty."
+        "solve_fan_variable_friction_loop",
+        corrupt_one_corner,
+    )
+    result = analyze_fan_variable_friction_loop_uncertainty(
+        load_fan_variable_friction_loop_uncertainty(
+            "examples/fan_variable_friction_uncertainty_demo.json"
+        )
+    )
+    summary = result["operating_point_search_resolution_summary"]
+
+    assert summary[
+        "selected_operating_network_state_projection_replay_applicable"
+    ] is True
+    assert summary[
+        "selected_operating_network_state_projection_replay_applicable_corner_count"
+    ] == result["solved_corner_count"]
+    assert summary[
+        "selected_operating_network_state_projection_replay_evidence_corner_count"
+    ] == result["solved_corner_count"]
+    assert summary[
+        "selected_operating_network_state_projection_replay_complete_coverage"
+    ] is True
+    assert summary[
+        "selected_operating_network_state_projection_replay_consistent_corner_count"
+    ] == result["solved_corner_count"] - 1
+    assert summary[
+        "selected_operating_network_state_projection_replay_inconsistent_corner_count"
+    ] == 1
+    assert summary[
+        "selected_operating_network_state_projection_replay_violation_corner_indices"
+    ] == [0]
+    assert summary[
+        "selected_operating_network_state_projection_mismatch_count"
+    ] == 1
+
+    details = summary[
+        "selected_operating_network_state_projection_replay_violation_details"
+    ]
+    assert len(details) == 1
+    assert details[0]["corner_index"] == 0
+    assert details[0]["mismatch_paths"] == [
+        "$.nodes[0].relative_pressure_pa"
+    ]
+    mismatch = details[0]["mismatches"][0]
+    assert mismatch["recorded_value"] - mismatch["recomputed_value"] == (
+        pytest.approx(1.0)
+    )
+    assert mismatch["absolute_error"] == pytest.approx(1.0)
+
+    maxima = summary[
+        "maximum_selected_operating_network_state_projection_numeric_errors"
+    ]
+    assert len(maxima) == 1
+    assert maxima[0]["field"] == "relative_pressure_pa"
+    assert maxima[0]["maximum_absolute_error"] == pytest.approx(1.0)
+    assert [witness["corner_index"] for witness in maxima[0]["witnesses"]] == [
+        0
+    ]
+
+    json.dumps(result, sort_keys=True, allow_nan=False)
+    report = markdown_fan_variable_friction_loop_uncertainty_report(result)
+    assert "projection replay coverage" in report
+    assert "$.nodes[0].relative_pressure_pa" in report
+    assert "recorded_value" in report
+    assert "recomputed_value" in report
 
 
 def test_corner_limit_rejects_before_cartesian_product_materialization(

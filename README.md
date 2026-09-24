@@ -41,11 +41,13 @@ After installation, launch the application with:
 cleanroomx-gui
 ```
 
-Open the bundled end-to-end demonstration directly:
+Open the self-contained demonstration bundled with the installed package:
 
 ```bash
-cleanroomx-gui examples/gui_demo.cleanroomx.json
+cleanroomx-gui --demo
 ```
+
+From a repository checkout, the source example remains available at `examples/gui_demo.cleanroomx.json`.
 
 For automated installation checks without a display:
 

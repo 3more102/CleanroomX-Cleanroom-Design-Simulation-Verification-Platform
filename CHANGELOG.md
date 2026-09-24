@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased GUI workspace enhancement — 2026-09-24
+
+- Refreshes the Tkinter desktop shell with a modern dark engineering workspace, stronger visual hierarchy, larger responsive layout, project header, inline workflow actions, and clearer status shortcuts.
+- Adds live 2D plan and dependency-free 3D isometric geometry previews derived from positive `length_m`, `width_m`, and `height_m` input fields, including nominal values inside uncertainty objects.
+- Adds F6/F7 navigation for the geometry workspaces and keeps previews synchronized with editor/analysis state, including stale-preview clearing.
+- Improves dark-canvas result plotting while preserving backend-computed plot data and all validated solver behavior.
+- Adds regression coverage for geometry extraction. The new 2D/3D views are visualization aids only and do not claim CFD or certification capability.
+
 ## Unreleased performance optimization — 2026-09-24
 
 - Reuses an already canonicalized network-state projection when computing its SHA-256 fingerprint, removing duplicate sorting/normalization work from supplied-point checks, bisection trace capture/replay, and selected-state replay without changing canonical bytes or audit semantics.

@@ -231,11 +231,25 @@ def test_remove_analysis_invalidates_matching_result(monkeypatch):
     assert app._runs_by_analysis == {}
 
 
+def test_gui_launch_validates_registry_before_creating_tk_root(monkeypatch):
+    root_created = []
+
+    def fail_registry_validation():
+        raise RuntimeError("broken registry")
+
+    monkeypatch.setattr(gui_module, "validate_application_registry", fail_registry_validation)
+    monkeypatch.setattr(gui_module.tk, "Tk", lambda: root_created.append(True))
+
+    with pytest.raises(RuntimeError, match="broken registry"):
+        main([])
+    assert root_created == []
+
+
 def test_gui_check_mode_needs_no_display(capsys):
     assert main(["--check"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "CleanroomX"
-    assert payload["version"] == "0.98.0"
+    assert payload["version"] == "0.99.0"
     assert payload["analysis_count"] >= 20
     assert payload["bindings_valid"] is True
     assert payload["registry_validation"]["status"] == "ok"

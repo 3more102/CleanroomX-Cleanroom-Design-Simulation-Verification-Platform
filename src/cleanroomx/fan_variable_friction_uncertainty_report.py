@@ -818,6 +818,8 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['bisection_trace_iteration_sequence_violation_corner_indices']}**",
                 "- Trace state-transition replay violations: "
                 f"**{search_summary['bisection_trace_state_transition_violation_corner_indices']}**",
+                "- Trace decision-semantic violations: "
+                f"**{search_summary['bisection_trace_decision_semantic_violation_corner_indices']}**",
                 "- Trace origin-to-terminal replay violations: "
                 f"**{search_summary['bisection_trace_origin_replay_violation_corner_indices']}**",
                 "- Trace terminal-outcome violations: "

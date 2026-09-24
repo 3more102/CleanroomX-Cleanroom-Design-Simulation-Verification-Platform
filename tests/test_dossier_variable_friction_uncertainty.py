@@ -151,6 +151,10 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert search_summary[
         "terminal_network_state_replay_consistent_corner_count"
     ] == search_summary["bisection_trace_evidence_corner_count"]
+    assert search_summary["terminal_network_state_replay_violation_count"] == 0
+    assert search_summary[
+        "terminal_network_state_replay_violation_details"
+    ] == []
     assert search_summary[
         "maximum_bisection_trace_midpoint_error_m3_h"
     ]["value"] <= 1e-9

@@ -314,6 +314,8 @@ class CleanroomXApp:
         json_tab.rowconfigure(0, weight=1)
         json_tab.columnconfigure(0, weight=1)
         self.input_text.bind("<FocusOut>", lambda event: self.refresh_structure(silent=True))
+        self.input_text.bind("<<Modified>>", self._on_input_modified)
+        self.input_text.edit_modified(False)
 
         self.result_text = self._add_text_tab("Results")
         self.report_text = self._add_text_tab("Report")
@@ -358,6 +360,22 @@ class CleanroomXApp:
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
         widget.configure(state="disabled")
+
+    def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
+        if analysis_id is None or self.last_run_analysis_id != analysis_id:
+            return
+        self.last_run = None
+        self.last_run_analysis_id = None
+        self._set_text(self.result_text, "")
+        self._set_text(self.report_text, "")
+        self._set_text(self.diagnostics_text, "")
+        self._draw_plot()
+
+    def _on_input_modified(self, event=None) -> None:
+        if not self.input_text.edit_modified():
+            return
+        self.input_text.edit_modified(False)
+        self._invalidate_last_run_for(self._editor_analysis_id)
 
     def _current_analysis(self) -> AnalysisDocument | None:
         selection = self.analysis_tree.selection()
@@ -479,6 +497,7 @@ class CleanroomXApp:
         else:
             self._editor_analysis_id = None
             self.input_text.delete("1.0", "end")
+            self.input_text.edit_modified(False)
             self.refresh_structure(silent=True)
 
     def _on_analysis_selected(self, event=None) -> None:
@@ -529,6 +548,7 @@ class CleanroomXApp:
             "1.0",
             json.dumps(analysis.input, indent=2, ensure_ascii=False, sort_keys=False),
         )
+        self.input_text.edit_modified(False)
         self.status_var.set(f"{analysis.name} — {ANALYSIS_SPECS[analysis.kind].title}")
         self.refresh_structure(silent=True)
         if self.last_run_analysis_id != analysis.id:
@@ -593,7 +613,10 @@ class CleanroomXApp:
         if path:
             if not self._confirm_project_replacement():
                 return
-            self.load_project_path(path)
+            try:
+                self.load_project_path(path)
+            except Exception as exc:
+                messagebox.showerror("Open failed", str(exc), parent=self.root)
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
@@ -748,6 +771,7 @@ class CleanroomXApp:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
         analysis.input = payload
+        self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
         self.status_var.set(f"Imported {Path(path).name}")
 

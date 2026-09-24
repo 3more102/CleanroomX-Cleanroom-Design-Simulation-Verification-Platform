@@ -10,6 +10,7 @@ from cleanroomx.application import run_analysis
 from cleanroomx.gui import (
     CleanroomXApp,
     _strict_json_loads,
+    analysis_matches_filter,
     extract_room_visuals,
     flatten_json,
     main,
@@ -85,6 +86,101 @@ def test_extract_room_visuals_marks_display_defaults_when_geometry_is_missing():
     assert rooms[0]["width_m"] == 4.0
     assert rooms[0]["height_m"] == 3.0
     assert rooms[0]["airflow_m3_h"] == 900.0
+
+
+def test_analysis_filter_matches_name_kind_and_catalog_title():
+    analysis = AnalysisDocument(
+        id="a",
+        name="Primary Process Check",
+        kind="room_verification",
+        input={},
+    )
+
+    assert analysis_matches_filter(analysis, "") is True
+    assert analysis_matches_filter(analysis, "process") is True
+    assert analysis_matches_filter(analysis, "ROOM_VERIFICATION") is True
+    assert analysis_matches_filter(analysis, "verification") is True
+    assert analysis_matches_filter(analysis, "fan curve") is False
+
+
+def test_sidebar_filter_does_not_switch_away_from_hidden_active_editor():
+    class Value:
+        def get(self):
+            return "second"
+
+    class Tree:
+        def __init__(self):
+            self.items = {}
+
+        def get_children(self):
+            return tuple(self.items)
+
+        def delete(self, item):
+            self.items.pop(item, None)
+
+        def insert(self, parent, index, iid, text, values):
+            self.items[iid] = (text, values)
+
+        def exists(self, iid):
+            return iid in self.items
+
+        def selection_set(self, iid):
+            raise AssertionError("filtering should not select another analysis")
+
+        def focus(self, iid):
+            raise AssertionError("filtering should not move focus")
+
+        def see(self, iid):
+            raise AssertionError("filtering should not scroll to another analysis")
+
+    first = AnalysisDocument(
+        id="a",
+        name="First",
+        kind="room_verification",
+        input={"value": 1},
+    )
+    second = AnalysisDocument(
+        id="b",
+        name="Second",
+        kind="room_verification",
+        input={"value": 2},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[first, second],
+        active_analysis_id="a",
+    )
+    app.analysis_tree = Tree()
+    app.analysis_filter_var = Value()
+    app._editor_analysis_id = "a"
+    app._refresh_dashboard = lambda: None
+    app._load_analysis_into_editor = lambda analysis: (_ for _ in ()).throw(
+        AssertionError("filtering should preserve the active editor")
+    )
+
+    app._refresh_analysis_list()
+
+    assert app.project.active_analysis_id == "a"
+    assert tuple(app.analysis_tree.items) == ("b",)
+
+
+def test_visual_zoom_is_bounded_and_3d_rotation_wraps():
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._visual_zoom = 1.0
+    app._visual3d_yaw_deg = 350.0
+    refreshes = []
+    app._refresh_visuals = lambda: refreshes.append("refresh")
+    app._draw_3d_workspace = lambda: refreshes.append("3d")
+
+    app._change_visual_zoom(100.0)
+    assert app._visual_zoom == 3.0
+    app._change_visual_zoom(0.001)
+    assert app._visual_zoom == 0.45
+
+    app._rotate_3d(30.0)
+    assert app._visual3d_yaw_deg == 20.0
+    assert refreshes[-1] == "3d"
 
 
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():

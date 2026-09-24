@@ -17,6 +17,7 @@ from .application import (
     AnalysisRun,
     analysis_catalog,
     application_info,
+    rebase_analysis_file_references,
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
@@ -24,6 +25,7 @@ from .application import (
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    atomic_write_text,
     load_project_document,
     new_project,
     save_project_document,
@@ -704,14 +706,37 @@ class CleanroomXApp:
         )
         if not path:
             return
-        old_base_dir = self._base_dir()
+        destination = Path(path)
+        previous_base = self._base_dir()
+        editor_id = self._editor_analysis_id
+        candidate = copy.deepcopy(self.project)
+        if (
+            previous_base is not None
+            and previous_base.resolve() != destination.parent.resolve()
+        ):
+            for analysis in candidate.analyses:
+                analysis.input = rebase_analysis_file_references(
+                    analysis.kind,
+                    analysis.input,
+                    source_base=previous_base,
+                    target_base=destination.parent,
+                )
+
         try:
-            self.project_path = save_project_document(path, self.project)
+            saved_path = save_project_document(destination, candidate)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
-        if self._base_dir() != old_base_dir:
+
+        self.project = candidate
+        self.project_path = saved_path
+        if previous_base != self._base_dir():
             self._clear_run_cache()
+        if editor_id is not None:
+            try:
+                self._load_analysis_into_editor(self.project.analysis_by_id(editor_id))
+            except KeyError:
+                self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
@@ -801,18 +826,40 @@ class CleanroomXApp:
         )
         if not path:
             return
+        source_path = Path(path)
         try:
-            payload = _strict_json_loads(Path(path).read_text(encoding="utf-8"))
+            payload = _strict_json_loads(source_path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("input file must contain a JSON object")
+            payload = rebase_analysis_file_references(
+                analysis.kind,
+                payload,
+                source_base=source_path.parent,
+                target_base=self._base_dir(),
+            )
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
         analysis.input = payload
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
-        self.status_var.set(f"Imported {Path(path).name}")
+        self.status_var.set(f"Imported {source_path.name}")
         self._update_title()
+
+    def _write_export_file(self, path: str, content: str, *, label: str) -> bool:
+        target = Path(path)
+        try:
+            atomic_write_text(target, content)
+        except Exception as exc:
+            self.status_var.set(f"{label} export failed")
+            messagebox.showerror(
+                f"{label} export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        self.status_var.set(f"Exported {label.lower()} — {target.name}")
+        return True
 
     def export_input_json(self) -> None:
         try:
@@ -825,9 +872,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
-                json.dumps(analysis.input, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-                encoding="utf-8",
+            self._write_export_file(
+                path,
+                json.dumps(
+                    analysis.input, indent=2, ensure_ascii=False, allow_nan=False
+                ) + "\n",
+                label="Input",
             )
 
     def validate_current(self) -> None:
@@ -999,11 +1049,12 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
+            self._write_export_file(
+                path,
                 json.dumps(
                     self.last_run.result, indent=2, ensure_ascii=False, allow_nan=False
                 ) + "\n",
-                encoding="utf-8",
+                label="Result",
             )
 
     def export_run_bundle_json(self) -> None:
@@ -1015,14 +1066,15 @@ class CleanroomXApp:
             filetypes=[("JSON files", "*.json")],
         )
         if path:
-            Path(path).write_text(
+            self._write_export_file(
+                path,
                 json.dumps(
                     self.last_run.to_dict(),
                     indent=2,
                     ensure_ascii=False,
                     allow_nan=False,
                 ) + "\n",
-                encoding="utf-8",
+                label="Run bundle",
             )
 
     def export_report_markdown(self) -> None:
@@ -1034,7 +1086,7 @@ class CleanroomXApp:
             filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt")],
         )
         if path:
-            Path(path).write_text(self.last_run.markdown, encoding="utf-8")
+            self._write_export_file(path, self.last_run.markdown, label="Report")
 
     def show_about(self) -> None:
         messagebox.showinfo(
@@ -1072,12 +1124,25 @@ class CleanroomXApp:
         self.root.destroy()
 
 
+def bundled_demo_project_path() -> Path:
+    """Return the self-contained demonstration project shipped in the package."""
+    path = Path(__file__).resolve().parent / "demo" / "gui_demo.cleanroomx.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"bundled CleanroomX demo is missing: {path}")
+    return path
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cleanroomx-gui",
         description="CleanroomX desktop engineering application",
     )
     parser.add_argument("project", nargs="?", help="Optional CleanroomX project file to open")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Open the self-contained demonstration project bundled with CleanroomX",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -1092,17 +1157,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.demo and args.project:
+        parser.error("project path and --demo cannot be used together")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
+    project_path = bundled_demo_project_path() if args.demo else args.project
+
     validate_application_registry()
     root = tk.Tk()
     app = CleanroomXApp(root)
-    if args.project:
+    if project_path:
         try:
-            app.load_project_path(args.project)
+            app.load_project_path(project_path)
         except Exception as exc:
             if args.smoke:
                 root.destroy()
@@ -1111,7 +1181,7 @@ def main(argv: list[str] | None = None) -> int:
             messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.smoke:
-        if args.project and app.project.analyses:
+        if project_path and app.project.analyses:
             run = app.smoke_run_active()
             json.dumps(run.to_dict(), allow_nan=False)
         root.update_idletasks()

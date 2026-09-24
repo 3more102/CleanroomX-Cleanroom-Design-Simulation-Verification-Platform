@@ -208,6 +208,7 @@ def test_remove_analysis_invalidates_matching_result(monkeypatch):
     )
     app.last_run = object()
     app.last_run_analysis_id = "a"
+    app._runs_by_analysis = {"a": app.last_run}
     app.result_text = object()
     app.report_text = object()
     app.diagnostics_text = object()

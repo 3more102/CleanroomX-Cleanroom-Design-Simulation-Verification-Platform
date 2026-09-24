@@ -13,6 +13,15 @@ from tkinter import ttk
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+DEVICE_VISUALS = {
+    "door": ("D", "#d97706", "#92400e"),
+    "supply": ("S", "#0284c7", "#075985"),
+    "return": ("R", "#0f766e", "#115e59"),
+    "exhaust": ("E", "#be123c", "#881337"),
+    "ffu": ("F", "#7c3aed", "#5b21b6"),
+    "equipment": ("Q", "#475569", "#334155"),
+    "sensor": ("●", "#4f46e5", "#3730a3"),
+}
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -285,76 +294,145 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(6, 6, 6, 3))
-        toolbar.pack(fill="x")
+        heading = ttk.Frame(self, padding=(8, 7, 8, 2))
+        heading.pack(fill="x")
+        title_box = ttk.Frame(heading)
+        title_box.pack(side="left")
+        ttk.Label(
+            title_box,
+            text="Spatial Design Workspace",
+            font=("TkDefaultFont", 12, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            title_box,
+            text="Synchronized floor plan + 3D geometry • wheel: zoom • middle/right drag: pan",
+            foreground="#617286",
+        ).pack(anchor="w", pady=(1, 0))
 
-        ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
-        for device_type, label in (
-            ("door", "+ Door"),
-            ("ffu", "+ FFU"),
-            ("supply", "+ Supply"),
-            ("return", "+ Return"),
-            ("exhaust", "+ Exhaust"),
-            ("equipment", "+ Equipment"),
-            ("sensor", "+ Sensor"),
-        ):
-            ttk.Button(
-                toolbar,
-                text=label,
-                command=lambda t=device_type: self.add_device(t),
-            ).pack(side="left", padx=2)
-        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+        toolbar = ttk.Frame(self, padding=(8, 4, 8, 6))
+        toolbar.pack(fill="x")
+        ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(
+            side="left", padx=(0, 3)
         )
+        add_device_menu = ttk.Menubutton(toolbar, text="+ Device")
+        device_menu = tk.Menu(add_device_menu, tearoff=False)
+        for device_type, label in (
+            ("door", "Door"),
+            ("ffu", "FFU"),
+            ("supply", "Supply"),
+            ("return", "Return"),
+            ("exhaust", "Exhaust"),
+            ("equipment", "Equipment"),
+            ("sensor", "Sensor"),
+        ):
+            device_menu.add_command(
+                label=label,
+                command=lambda t=device_type: self.add_device(t),
+            )
+        add_device_menu.configure(menu=device_menu)
+        add_device_menu.pack(side="left", padx=3)
+
+        ttk.Separator(toolbar, orient="vertical").pack(
+            side="left", fill="y", padx=7
+        )
+        ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(
+            side="left", padx=3
+        )
+        ttk.Button(toolbar, text="Fit All", command=self.fit_views).pack(
+            side="left", padx=3
+        )
+        ttk.Checkbutton(
+            toolbar,
+            text="Grid",
+            variable=self._show_grid,
+            command=self.redraw,
+        ).pack(side="left", padx=7)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Sync dimensions → active analysis",
             command=self._on_sync_requested,
-        ).pack(side="right", padx=2)
+        ).pack(side="right", padx=(8, 0))
 
         body = ttk.Panedwindow(self, orient="horizontal")
-        body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
+        body.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
         two_d = ttk.Frame(body)
-        body.add(two_d, weight=4)
-        ttk.Label(two_d, text="2D Layout", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", padx=4, pady=(2, 4)
+        body.add(two_d, weight=5)
+        header2 = ttk.Frame(two_d, padding=(6, 4))
+        header2.pack(fill="x")
+        ttk.Label(
+            header2,
+            text="2D FLOOR PLAN",
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(side="left")
+        ttk.Label(
+            header2,
+            textvariable=self._coord_var,
+            foreground="#617286",
+        ).pack(side="right")
+
+        self.canvas_2d = tk.Canvas(
+            two_d,
+            background="#f8fafc",
+            highlightthickness=1,
+            highlightbackground="#cbd5e1",
         )
-        self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
         self.canvas_2d.pack(fill="both", expand=True)
-        ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=2)
 
         right = ttk.Panedwindow(body, orient="vertical")
-        body.add(right, weight=4)
+        body.add(right, weight=5)
 
         three_d = ttk.Frame(right)
-        right.add(three_d, weight=3)
-        header3 = ttk.Frame(three_d)
+        right.add(three_d, weight=4)
+        header3 = ttk.Frame(three_d, padding=(6, 4))
         header3.pack(fill="x")
-        ttk.Label(header3, text="3D View", font=("TkDefaultFont", 10, "bold")).pack(
-            side="left", padx=4, pady=(2, 4)
-        )
+        ttk.Label(
+            header3,
+            text="3D MODEL",
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(side="left")
+        ttk.Label(
+            header3,
+            text="drag right/middle to pan",
+            foreground="#617286",
+        ).pack(side="left", padx=(10, 0))
         for label, delta in (("↺", -15), ("↻", 15)):
-            ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
-                side="right", padx=2
-            )
-        ttk.Button(header3, text="↓", width=3, command=lambda: self.tilt_3d(-5)).pack(side="right", padx=2)
-        ttk.Button(header3, text="↑", width=3, command=lambda: self.tilt_3d(5)).pack(side="right", padx=2)
-        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(side="right", padx=2)
-        self.canvas_3d = tk.Canvas(three_d, background="#111820", highlightthickness=1)
+            ttk.Button(
+                header3,
+                text=label,
+                width=3,
+                command=lambda d=delta: self.rotate_3d(d),
+            ).pack(side="right", padx=2)
+        ttk.Button(
+            header3,
+            text="↓",
+            width=3,
+            command=lambda: self.tilt_3d(-5),
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            header3,
+            text="↑",
+            width=3,
+            command=lambda: self.tilt_3d(5),
+        ).pack(side="right", padx=2)
+        ttk.Button(header3, text="Reset", command=self.reset_3d).pack(
+            side="right", padx=2
+        )
+        self.canvas_3d = tk.Canvas(
+            three_d,
+            background="#101923",
+            highlightthickness=1,
+            highlightbackground="#344454",
+        )
         self.canvas_3d.pack(fill="both", expand=True)
 
-        inspector = ttk.Frame(right, padding=6)
+        inspector = ttk.LabelFrame(right, text="Selection Properties", padding=8)
         right.add(inspector, weight=2)
-        ttk.Label(inspector, text="Properties", font=("TkDefaultFont", 10, "bold")).grid(
-            row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
-        )
-        ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
-        )
+        ttk.Label(
+            inspector,
+            textvariable=self._selection_var,
+            font=("TkDefaultFont", 9, "bold"),
+        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 7))
         fields = (
             ("name", "Name"),
             ("x_m", "X (m)"),
@@ -365,17 +443,53 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("pressure_pa", "Pressure (Pa)"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 1 + index // 2
             column = (index % 2) * 2
-            ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
+            ttk.Label(inspector, text=label).grid(
+                row=row,
+                column=column,
+                sticky="w",
+                padx=(0, 4),
+                pady=2,
+            )
             var = tk.StringVar()
             self._property_vars[key] = var
             ttk.Entry(inspector, textvariable=var, width=18).grid(
-                row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
+                row=row,
+                column=column + 1,
+                sticky="ew",
+                padx=(0, 8),
+                pady=2,
             )
-        button_row = 2 + (len(fields) + 1) // 2
-        ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
-            row=button_row, column=3, sticky="e", pady=(8, 0)
+
+        button_row = 1 + (len(fields) + 1) // 2
+        ttk.Button(
+            inspector,
+            text="Apply Changes",
+            command=self.apply_properties,
+        ).grid(row=button_row, column=3, sticky="e", pady=(8, 0))
+
+        legend_row = button_row + 1
+        ttk.Separator(inspector, orient="horizontal").grid(
+            row=legend_row,
+            column=0,
+            columnspan=4,
+            sticky="ew",
+            pady=(9, 6),
+        )
+        legend = "  ".join(
+            f"{symbol} {kind.title()}"
+            for kind, (symbol, _fill, _outline) in DEVICE_VISUALS.items()
+        )
+        ttk.Label(
+            inspector,
+            text=f"Device legend:  {legend}",
+            foreground="#617286",
+        ).grid(
+            row=legend_row + 1,
+            column=0,
+            columnspan=4,
+            sticky="w",
         )
         inspector.columnconfigure(1, weight=1)
         inspector.columnconfigure(3, weight=1)
@@ -391,8 +505,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Button-3>", self._on_pan_down)
         self.canvas_2d.bind("<B3-Motion>", self._on_pan_drag)
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
-        self.canvas_2d.bind("<Button-4>", lambda event: self._zoom_at(1.1, event.x, event.y))
-        self.canvas_2d.bind("<Button-5>", lambda event: self._zoom_at(1 / 1.1, event.x, event.y))
+        self.canvas_2d.bind(
+            "<Button-4>",
+            lambda event: self._zoom_at(1.1, event.x, event.y),
+        )
+        self.canvas_2d.bind(
+            "<Button-5>",
+            lambda event: self._zoom_at(1 / 1.1, event.x, event.y),
+        )
         self.canvas_3d.bind("<MouseWheel>", self._on_wheel_3d)
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
@@ -595,6 +715,13 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
+        # Emphasize the world origin so panning/zooming retains spatial orientation.
+        ox, oy = self._world_to_canvas(0.0, 0.0)
+        if 0 <= ox <= w:
+            canvas.create_line(ox, 0, ox, h, fill="#b6c2cf", width=2, tags=("axis",))
+        if 0 <= oy <= h:
+            canvas.create_line(0, oy, w, oy, fill="#b6c2cf", width=2, tags=("axis",))
+
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
@@ -619,37 +746,68 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
 
-        symbols = {
-            "door": "D",
-            "supply": "S",
-            "return": "R",
-            "exhaust": "E",
-            "ffu": "F",
-            "equipment": "Q",
-            "sensor": "●",
-        }
         for device in self.layout["devices"]:
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
-            radius = 9 if selected else 7
+            symbol, fill_color, outline_color = DEVICE_VISUALS.get(
+                device["type"], ("?", "#475569", "#334155")
+            )
+            radius = 10 if selected else 8
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
+                fill=fill_color,
+                outline="#111827" if selected else outline_color,
                 width=3 if selected else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
             canvas.create_text(
-                x, y, text=symbols.get(device["type"], "?"),
+                x,
+                y,
+                text=symbol,
+                fill="#ffffff",
+                font=("TkDefaultFont", 8, "bold"),
                 tags=(f"device:{device['id']}", "device"),
             )
+
+        if pressures:
+            canvas.create_rectangle(
+                w - 190, 12, w - 12, 38,
+                fill="#ffffff",
+                outline="#d7e0e8",
+            )
+            canvas.create_text(
+                w - 101,
+                25,
+                text=f"Pressure  {pmin:g} → {pmax:g} Pa",
+                fill="#475569",
+                font=("TkDefaultFont", 8, "bold"),
+            )
+
+        scale_px = self._scale_2d()
+        scale_m = 1.0 if scale_px >= 70 else (2.0 if scale_px >= 30 else 5.0)
+        bar_px = scale_m * scale_px
+        bar_x1 = max(18.0, w - 30.0 - bar_px)
+        bar_x2 = w - 30.0
+        bar_y = h - 24.0
+        canvas.create_line(bar_x1, bar_y, bar_x2, bar_y, fill="#334155", width=3)
+        canvas.create_line(bar_x1, bar_y - 4, bar_x1, bar_y + 4, fill="#334155", width=2)
+        canvas.create_line(bar_x2, bar_y - 4, bar_x2, bar_y + 4, fill="#334155", width=2)
+        canvas.create_text(
+            (bar_x1 + bar_x2) / 2,
+            bar_y - 10,
+            text=f"{scale_m:g} m",
+            fill="#475569",
+            font=("TkDefaultFont", 8),
+        )
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
                 w / 2,
                 h / 2,
-                text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
+                text="Start the spatial model\n\nAdd a room, or open a verification project with room geometry.",
                 justify="center",
-                fill="#667788",
+                fill="#64748b",
+                font=("TkDefaultFont", 11, "bold"),
             )
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
@@ -679,6 +837,25 @@ class SpatialDesignWorkspace(ttk.Frame):
         min_x, min_y, max_x, max_y = self._bounds()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
+        span = max(max_x - min_x, max_y - min_y, 1.0)
+        grid_step = max(self.layout["grid_m"], span / 10.0)
+        grid_min_x = min_x - grid_step
+        grid_max_x = max_x + grid_step
+        grid_min_y = min_y - grid_step
+        grid_max_y = max_y + grid_step
+        gx = grid_min_x
+        while gx <= grid_max_x + 1e-9:
+            p0 = self._project_3d(gx - cx, grid_min_y - cy, 0.0)
+            p1 = self._project_3d(gx - cx, grid_max_y - cy, 0.0)
+            canvas.create_line(*p0, *p1, fill="#243443", width=1, tags=("ground-grid",))
+            gx += grid_step
+        gy = grid_min_y
+        while gy <= grid_max_y + 1e-9:
+            p0 = self._project_3d(grid_min_x - cx, gy - cy, 0.0)
+            p1 = self._project_3d(grid_max_x - cx, gy - cy, 0.0)
+            canvas.create_line(*p0, *p1, fill="#243443", width=1, tags=("ground-grid",))
+            gy += grid_step
+
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
@@ -731,12 +908,38 @@ class SpatialDesignWorkspace(ttk.Frame):
             x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
-            radius = 5 if selected else 4
-            canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
-                width=2, tags=(tag, "device3d"),
+            symbol, fill_color, outline_color = DEVICE_VISUALS.get(
+                device["type"], ("?", "#475569", "#334155")
             )
+            radius = 6 if selected else 5
+            canvas.create_oval(
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+                fill=fill_color,
+                outline="#ffffff" if selected else outline_color,
+                width=2,
+                tags=(tag, "device3d"),
+            )
+            canvas.create_text(
+                x,
+                y - 11,
+                text=symbol,
+                fill="#dce8f4",
+                font=("TkDefaultFont", 7, "bold"),
+                tags=(tag, "device3d"),
+            )
+
+        # Fixed on-screen axis triad keeps 3D orientation obvious.
+        h = max(1, canvas.winfo_height())
+        origin_x, origin_y = 36, h - 34
+        canvas.create_line(origin_x, origin_y, origin_x + 30, origin_y, fill="#ef4444", width=2)
+        canvas.create_text(origin_x + 36, origin_y, text="X", fill="#fca5a5")
+        canvas.create_line(origin_x, origin_y, origin_x + 18, origin_y - 22, fill="#22c55e", width=2)
+        canvas.create_text(origin_x + 23, origin_y - 27, text="Y", fill="#86efac")
+        canvas.create_line(origin_x, origin_y, origin_x, origin_y - 34, fill="#38bdf8", width=2)
+        canvas.create_text(origin_x, origin_y - 42, text="Z", fill="#7dd3fc")
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:

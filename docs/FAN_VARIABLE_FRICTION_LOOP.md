@@ -109,6 +109,8 @@ v0.76 additionally audits the geometry fields stored in every solved or iteratio
 
 v0.77 anchors every retained bounded-bisection decision trace to the exact initial signed-residual bracket selected from adjacent supplied fan-curve points, then reconstructs the complete L/H/T chain from that origin through the solved final bracket or retained iteration-limit bracket. Every recorded airflow and residual bracket state must agree with the replayed chain, independently of the v0.76 stored-width geometry audit. This is end-to-end numerical implementation provenance only; it does not add physical uncertainty, interpolation-error, root-uniqueness, stability/stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
 
+v0.78 independently audits the meaning of every retained decision. A midpoint inside the configured operating-pressure tolerance must record `T`; a positive midpoint residual outside tolerance must record `L`; and a negative midpoint residual outside tolerance must record `H`. The audit retains per-step recorded/expected decisions and exact violating iterations, so a self-consistent replay cannot hide an incorrectly labeled endpoint replacement. This remains numerical implementation provenance only and does not create physical uncertainty, stability, manufacturer-region, commissioning, certification, or equipment-acceptance evidence.
+
 ## CLI
 
 ```text

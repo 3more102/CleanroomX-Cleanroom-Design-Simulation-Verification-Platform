@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.99.1 desktop worker lifecycle hardening — 2026-09-24
+
+- Keeps **Abandon** non-blocking without unsafe Python thread termination, but no longer marks the application idle while the abandoned backend worker is still executing.
+- Suppresses the eventual result/error from an abandoned run and re-enables execution only after that worker actually exits, preventing overlapping backend analyses.
+- Adds direct GUI regression coverage for worker exclusivity and abandonment completion.
+- Synchronizes package/runtime/demo metadata at v0.99.1 and adds a focused application/GUI lifecycle CI gate ahead of the complete suite.
+- Preserves the v0.99 registry-integrity contract and all validated engineering solver/provenance semantics.
+
 ## v0.99 application registry integrity — 2026-09-24
 
 - Continues from the current integrated v0.98 `main` descendant of the verified clean v0.91 → v0.95 lineage; the divergent older version-named branches remain excluded.

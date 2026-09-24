@@ -57,6 +57,10 @@ class ProjectDocument:
         raise KeyError(analysis_id)
 
 
+def _reject_json_constant(value: str):
+    raise ProjectFormatError(f"non-finite JSON constant is not allowed: {value}")
+
+
 def _validated_string(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ProjectFormatError(f"{field_name} must be a non-empty string")
@@ -125,6 +129,10 @@ def _migrate_legacy(data: dict) -> dict:
 def project_from_dict(data: dict) -> ProjectDocument:
     if not isinstance(data, dict):
         raise ProjectFormatError("project file must contain a JSON object")
+    try:
+        json.dumps(data, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ProjectFormatError("project must contain only strict JSON values") from exc
     data = _migrate_legacy(data)
 
     if data.get("schema") != PROJECT_SCHEMA:
@@ -184,7 +192,10 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
 def load_project_document(path: str | Path) -> ProjectDocument:
     source = Path(path)
     try:
-        data = json.loads(source.read_text(encoding="utf-8"))
+        data = json.loads(
+            source.read_text(encoding="utf-8"),
+            parse_constant=_reject_json_constant,
+        )
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"

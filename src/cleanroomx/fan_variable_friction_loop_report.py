@@ -246,12 +246,38 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     "**not available (no additional discrete candidate)**"
                 )
             else:
+                nearest_below_gap = audit.get(
+                    "nearest_below_alternative_candidate_airflow_interval_gap_m3_h"
+                )
+                nearest_below_fraction = audit.get(
+                    "nearest_below_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+                )
+                nearest_above_gap = audit.get(
+                    "nearest_above_alternative_candidate_airflow_interval_gap_m3_h"
+                )
+                nearest_above_fraction = audit.get(
+                    "nearest_above_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span"
+                )
                 lines.extend(
                     [
                         "- Nearest alternative candidate interval gap: "
                         f"**{alternative_gap} m³/h**",
                         "- Nearest alternative candidate gap / supplied fan-curve span: "
                         f"**{audit['nearest_alternative_candidate_airflow_interval_gap_fraction_of_supplied_curve_span']}**",
+                        "- Alternative candidate intervals below / overlapping / above selected airflow: "
+                        f"**{audit['alternative_candidate_below_selected_airflow_count']} / "
+                        f"{audit['alternative_candidate_overlap_selected_airflow_count']} / "
+                        f"{audit['alternative_candidate_above_selected_airflow_count']}**",
+                        "- Alternative candidates on both sides of selected airflow: "
+                        f"**{audit['alternative_candidates_on_both_sides_of_selected_airflow']}**",
+                        "- Nearest below-selected alternative interval gap: "
+                        f"**{'not available' if nearest_below_gap is None else str(nearest_below_gap) + ' m³/h'}**",
+                        "- Nearest below-selected alternative gap / supplied fan-curve span: "
+                        f"**{'not available' if nearest_below_fraction is None else nearest_below_fraction}**",
+                        "- Nearest above-selected alternative interval gap: "
+                        f"**{'not available' if nearest_above_gap is None else str(nearest_above_gap) + ' m³/h'}**",
+                        "- Nearest above-selected alternative gap / supplied fan-curve span: "
+                        f"**{'not available' if nearest_above_fraction is None else nearest_above_fraction}**",
                         "- Selected airflow overlaps an alternative candidate interval: "
                         f"**{audit['selected_airflow_overlaps_alternative_candidate_interval']}**",
                     ]
@@ -261,8 +287,8 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                     lines.extend(
                         [
                             "",
-                            "| Priority rank | Alternative feature | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span |",
-                            "|---:|---|---|---:|---:|",
+                            "| Priority rank | Alternative feature | Relative to selected airflow | Airflow interval (m³/h) | Gap from selected airflow (m³/h) | Gap / supplied curve span |",
+                            "|---:|---|---|---|---:|---:|",
                         ]
                     )
                     for feature in alternatives:
@@ -282,6 +308,7 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                         lines.append(
                             f"| {feature['solver_priority_rank']} | "
                             f"{feature_text} | "
+                            f"{feature['relative_to_selected_airflow']} | "
                             f"{feature['airflow_interval_low_m3_h']}–"
                             f"{feature['airflow_interval_high_m3_h']} | "
                             f"{feature['selected_airflow_to_feature_interval_gap_m3_h']} | "

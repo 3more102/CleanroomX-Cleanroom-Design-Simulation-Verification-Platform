@@ -77,6 +77,9 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     alternative_gap_fraction = residual_summary[
         "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_supplied_curve_span"
     ]
+    alternative_gap_fraction_of_minimum_spacing = residual_summary[
+        "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_minimum_supplied_point_spacing"
+    ]
     if separation_count:
         assert alternative_gap is not None
         assert alternative_gap["value"] >= 0.0
@@ -84,9 +87,13 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         assert alternative_gap_fraction is not None
         assert alternative_gap_fraction["value"] >= 0.0
         assert alternative_gap_fraction["sources"]
+        assert alternative_gap_fraction_of_minimum_spacing is not None
+        assert alternative_gap_fraction_of_minimum_spacing["value"] >= 0.0
+        assert alternative_gap_fraction_of_minimum_spacing["sources"]
     else:
         assert alternative_gap is None
         assert alternative_gap_fraction is None
+        assert alternative_gap_fraction_of_minimum_spacing is None
     assert residual_summary["residual_increase_corner_count"] == 0
     assert residual_summary["reverse_strict_sign_change_corner_count"] == 0
     assert residual_summary["reverse_strict_sign_change_corner_indices"] == []
@@ -154,6 +161,7 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
     assert "Segment evidence" in report
     assert "Min alternative candidate gap m³/h" in report
     assert "Min alternative candidate gap / supplied curve span" in report
+    assert "Min alternative candidate gap / min supplied spacing" in report
     assert "Residual topology" in report
     assert "reverse 0" in report
     assert "No-intersection boundary cases" in report

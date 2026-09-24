@@ -531,8 +531,8 @@ def markdown_dossier_report(result: dict) -> str:
                 "",
                 "## Fan / variable-friction loop uncertainty analyses",
                 "",
-                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Residual topology | Provenance complete |",
-                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+                "| Analysis | Status | Corners | Solved | Unresolved | No-intersection boundary cases | Whole fan-curve scenarios | Operating airflow envelope m³/h | Airflow excursion from nominal % | Air-power envelope kW | Electrical-input corner range kW | Electrical coverage | SFP corner range W/(m³/s) | SFP coverage | Nominal state | Solver tolerance audit | Iteration budget audit | Fan-curve min headroom m³/h | Boundary evidence | Min endpoint bracket gap Pa | Bracket evidence | Min crossing gradient Pa/(m³/h) | Crossing evidence | Max pressure-tolerance airflow equiv m³/h | Max solved-residual airflow equiv m³/h | Pressure→airflow evidence | Max final bisection half-width m³/h | Search evidence | Bisection invariant audit | Min segment-point clearance m³/h | Segment evidence | Min alternative candidate gap m³/h | Min alternative candidate gap / supplied curve span | Min alternative candidate gap / min supplied spacing | Residual topology | Provenance complete |",
+                "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
             ]
         )
         for item in result[
@@ -780,6 +780,7 @@ def markdown_dossier_report(result: dict) -> str:
             )
             alternative_candidate_gap = "—"
             alternative_candidate_gap_fraction = "—"
+            alternative_candidate_gap_fraction_of_minimum_spacing = "—"
             residual_topology = "—"
             if residual_summary is not None:
                 alternative_gap_evidence = residual_summary.get(
@@ -795,6 +796,13 @@ def markdown_dossier_report(result: dict) -> str:
                 if normalized_alternative_gap_evidence is not None:
                     alternative_candidate_gap_fraction = (
                         normalized_alternative_gap_evidence["value"]
+                    )
+                spacing_normalized_alternative_gap_evidence = residual_summary.get(
+                    "minimum_selected_to_alternative_candidate_interval_gap_fraction_of_minimum_supplied_point_spacing"
+                )
+                if spacing_normalized_alternative_gap_evidence is not None:
+                    alternative_candidate_gap_fraction_of_minimum_spacing = (
+                        spacing_normalized_alternative_gap_evidence["value"]
                     )
                 residual_topology = (
                     "coverage "
@@ -830,6 +838,7 @@ def markdown_dossier_report(result: dict) -> str:
                 f"{segment_clearance} | {segment_coverage} | "
                 f"{alternative_candidate_gap} | "
                 f"{alternative_candidate_gap_fraction} | "
+                f"{alternative_candidate_gap_fraction_of_minimum_spacing} | "
                 f"{residual_topology} | "
                 f"{item['traceability']['complete']} |"
             )

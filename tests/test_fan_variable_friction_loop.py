@@ -325,6 +325,7 @@ def test_supplied_point_network_state_replay_is_complete_and_reported() -> None:
     assert replay["replay_verdict"] == (
         "supplied_point_network_state_replay_consistent"
     )
+    assert _solver_result_integrity_audit(result)["consistent"] is True
     for check in checks:
         assert len(check["network_state_sha256"]) == 64
         assert check["network_state_projection"]
@@ -3030,6 +3031,7 @@ def test_network_nonconvergence_is_reported_without_fake_operating_point() -> No
     assert audit["evaluated_supplied_point_count"] < (
         audit["expected_supplied_point_count"]
     )
+    assert _solver_result_integrity_audit(result)["consistent"] is True
 
 
 def test_unknown_solver_option_is_rejected() -> None:

@@ -797,6 +797,36 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_geometry_consistent_corner_count",
                     0,
                 )
+                trace_pressure_component_complete_count = search_summary.get(
+                    "bisection_trace_pressure_component_complete_corner_count",
+                    0,
+                )
+                trace_pressure_component_gaps = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_component_incomplete_corner_indices",
+                        [],
+                    )
+                )
+                trace_pressure_identity_count = search_summary.get(
+                    "bisection_trace_pressure_residual_identity_match_corner_count",
+                    0,
+                )
+                trace_pressure_identity_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_residual_identity_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_pressure_decision_count = search_summary.get(
+                    "bisection_trace_pressure_component_decision_semantic_consistent_corner_count",
+                    0,
+                )
+                trace_pressure_decision_violations = len(
+                    search_summary.get(
+                        "bisection_trace_pressure_component_decision_semantic_violation_corner_indices",
+                        [],
+                    )
+                )
                 trace_raw_state_count = search_summary.get(
                     "bisection_trace_raw_state_consistent_corner_count",
                     0,
@@ -814,6 +844,14 @@ def markdown_dossier_report(result: dict) -> str:
                     "—"
                     if trace_midpoint_error is None
                     else trace_midpoint_error["value"]
+                )
+                trace_pressure_identity_error = search_summary.get(
+                    "maximum_bisection_trace_pressure_residual_identity_error_pa"
+                )
+                max_trace_pressure_identity_error = (
+                    "—"
+                    if trace_pressure_identity_error is None
+                    else trace_pressure_identity_error["value"]
                 )
                 trace_width_error = search_summary.get(
                     "maximum_bisection_trace_width_error_m3_h"
@@ -908,6 +946,19 @@ def markdown_dossier_report(result: dict) -> str:
                     f"trace geometry violations W/N "
                     f"{trace_width_violations}/{trace_width_fraction_violations}; "
                     f"trace-geometry {trace_geometry_count}/{trace_count}; "
+                    f"trace-pressure-components "
+                    f"{trace_pressure_component_complete_count}/{trace_count}; "
+                    f"pressure-component gaps {trace_pressure_component_gaps}; "
+                    f"trace-pressure-identity "
+                    f"{trace_pressure_identity_count}/{trace_count}; "
+                    f"pressure-identity violations "
+                    f"{trace_pressure_identity_violations}; "
+                    f"trace-pressure-decision "
+                    f"{trace_pressure_decision_count}/{trace_count}; "
+                    f"pressure-decision violations "
+                    f"{trace_pressure_decision_violations}; "
+                    f"max trace pressure identity error "
+                    f"{max_trace_pressure_identity_error} Pa; "
                     f"trace-raw-state {trace_raw_state_count}/{trace_count}; "
                     f"raw-state violations {trace_raw_state_violations}; "
                     f"max trace midpoint error {max_trace_midpoint_error} m3/h; "

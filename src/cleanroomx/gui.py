@@ -981,15 +981,33 @@ class CleanroomXApp:
         canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e")
         canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e")
 
-        for series in plot["series"]:
+        for index, series in enumerate(plot["series"]):
             coords = []
             for x, y in zip(series["x"], series["y"]):
                 coords.extend(point(x, y))
+            dash = () if index % 2 == 0 else (6, 4)
             if len(coords) >= 4:
-                canvas.create_line(*coords, width=2)
+                canvas.create_line(*coords, width=2, dash=dash)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
                 canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill="black")
+
+            legend_x = max(left + 20, width - right - 170)
+            legend_y = top + index * 18
+            canvas.create_line(
+                legend_x,
+                legend_y,
+                legend_x + 28,
+                legend_y,
+                width=2,
+                dash=dash,
+            )
+            canvas.create_text(
+                legend_x + 34,
+                legend_y,
+                text=series.get("name", f"Series {index + 1}"),
+                anchor="w",
+            )
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])

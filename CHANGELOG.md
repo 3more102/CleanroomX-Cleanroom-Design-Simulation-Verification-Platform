@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.99.0 final desktop hardening — 2026-09-24
+
+- Integrates application-registry identity and contract validation on the verified clean-line desktop ancestry.
+- Rejects duplicate workflow keys, incomplete direct parser/runner contracts, malformed custom-adapter registrations, and unresolved/non-callable backend bindings.
+- Keeps **Abandon** exclusive until its active backend worker exits, suppressing the abandoned result/error and preventing overlapping backend analyses.
+- Adds direct regression coverage for abandoned-worker lifecycle safety while preserving complete end-to-end execution coverage for all 25 application workflows.
+- Synchronizes package, runtime, GUI demo, documentation, and CI release metadata at v0.99.0.
+- Preserves validated engineering solver semantics and the v0.91-v0.95 provenance/replay compatibility gates.
+
 ## v0.98 release completion — 2026-09-24
 
 - Continues from live v0.97 application-completeness head `9338acd2a4cca5d903ecf01c5ec0996a82f522e8` on the verified clean v0.91 ancestry; divergent version-named branches were not used as the implementation baseline.

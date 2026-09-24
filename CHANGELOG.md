@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.83 full-bracket pressure-component replay — 2026-09-24
+
+- Retains fan, nonlinear loop-network, and total system pressure for both low and high bisection endpoints on every bounded-search trace record.
+- Independently reconstructs and re-solves low/high endpoint states from the selected supplied fan segment and recorded L/H/T chain, complementing the v0.82 midpoint component replay.
+- Adds separate low-endpoint, high-endpoint, endpoint-complete, and full-bracket consistency evidence plus maximum endpoint replay error.
+- Detects endpoint common-mode pressure corruption that leaves residuals, midpoint component replay, decision semantics, and origin-to-terminal geometry unchanged.
+- Propagates endpoint/full-bracket replay evidence through standalone reports, nonlinear uncertainty summaries, engineering dossiers, and solved/iteration-limit regressions.
+- Preserves the 1e-9 Pa implementation-only replay tolerance and all existing solver selection, no-extrapolation, and engineering-boundary semantics.
+- Bumped package/runtime metadata to v0.83.0.
+
 ## v0.82 independent pressure-component replay — 2026-09-24
 
 - Independently replays each retained bisection midpoint's fan pressure, nonlinear loop-network pressure, and total system pressure from the selected supplied fan segment and a fresh variable-friction network solve.

@@ -12,6 +12,7 @@ from cleanroomx.fan_variable_friction_loop import (
     FanVariableFrictionLoopStudy,
     _bisection_decision_trace_audit,
     _fan_curve_supplied_point_residual_audit,
+    _operating_point_state_replay,
     _with_selected_crossing_feature,
     solve_fan_variable_friction_loop,
 )
@@ -1163,6 +1164,96 @@ def test_supplied_point_contact_does_not_fabricate_bisection_bracket() -> None:
     assert evidence["final_bisection_bracket"] is None
     assert evidence["bisection_trace"] is None
     assert evidence["bisection_trace_audit"] is None
+    replay = evidence["final_operating_point_state_replay"]
+    assert replay["available"] is True
+    assert replay["replay_converged"] is True
+    assert replay["search_method"] == "supplied_point_tolerance_contact"
+    assert replay[
+        "all_final_operating_point_state_matches_independent_replay"
+    ] is True
+    assert replay["maximum_absolute_pressure_state_replay_error_pa"] <= 1e-9
+
+
+def test_final_operating_point_state_replay_covers_bisection_solution() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Final bisection replay",
+        fan_curve=FanCurve(
+            "Bisection curve",
+            (
+                FanCurvePoint(0.0, 500.0),
+                FanCurvePoint(3600.0, 200.0),
+                FanCurvePoint(7200.0, 0.0),
+            ),
+        ),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    assert result["solver_diagnostics"]["termination_reason"] == (
+        "pressure_residual"
+    )
+    evidence = result["operating_point_search_evidence"]
+    assert evidence["method"] == "bounded_bisection"
+    replay = evidence["final_operating_point_state_replay"]
+    assert replay["available"] is True
+    assert replay["replay_converged"] is True
+    assert replay["search_method"] == "bounded_bisection"
+    assert replay[
+        "all_final_operating_point_state_matches_independent_replay"
+    ] is True
+    assert replay["maximum_absolute_pressure_state_replay_error_pa"] <= 1e-9
+
+
+def test_final_operating_point_state_replay_detects_common_mode_corruption() -> None:
+    study = FanVariableFrictionLoopStudy(
+        name="Final point replay corruption",
+        fan_curve=_fixed_curve(),
+        loop_network=_fixed_network(),
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    assert evidence["method"] == "supplied_point_tolerance_contact"
+    point = result["fan_operating_point"]
+    pressure = result["system_pressure_check"]
+    segment_index = evidence["supplied_segment_index"]
+    delta_pa = 2.0
+
+    replay = _operating_point_state_replay(
+        study,
+        airflow_m3_h=point["airflow_m3_h"],
+        retained_fan_pressure_pa=(
+            float(point["fan_pressure_pa"]) + delta_pa
+        ),
+        retained_loop_network_pressure_pa=(
+            float(pressure["loop_network_pressure_pa"]) + delta_pa
+        ),
+        retained_system_pressure_pa=(
+            float(point["system_pressure_pa"]) + delta_pa
+        ),
+        retained_residual_pa=point["pressure_residual_pa"],
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        search_method=evidence["method"],
+    )
+    assert replay["replay_converged"] is True
+    assert replay["fan_pressure_matches_independent_replay"] is False
+    assert replay["loop_pressure_matches_independent_replay"] is False
+    assert replay["system_pressure_matches_independent_replay"] is False
+    assert replay["residual_matches_independent_replay"] is True
+    assert replay[
+        "all_pressure_components_match_independent_replay"
+    ] is False
+    assert replay[
+        "all_final_operating_point_state_matches_independent_replay"
+    ] is False
+    assert replay[
+        "maximum_absolute_pressure_state_replay_error_pa"
+    ] == pytest.approx(delta_pa, abs=1e-9)
 
 
 def test_high_fixed_pressure_preserves_no_extrapolation_state() -> None:

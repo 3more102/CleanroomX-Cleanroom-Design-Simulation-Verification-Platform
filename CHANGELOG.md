@@ -1,4 +1,15 @@
 # Changelog
+## v0.68 scale-aware alternative crossing-candidate separation — 2026-09-24
+
+- Normalizes each v0.66 selected-to-alternative discrete candidate airflow gap by the exact supplied fan-curve airflow span used for that nonlinear solve.
+- Retains the normalized fraction on every alternative candidate feature and on the nearest tied alternative evidence without evaluating or extrapolating any additional fan-curve point.
+- Aggregates the minimum normalized separation across solved uncertainty corners with exact tied source-corner provenance and the corresponding supplied-curve airflow span.
+- Surfaces absolute and normalized candidate separation in standalone fan-loop, nonlinear uncertainty, and engineering-dossier Markdown.
+- Adds direct multi-candidate arithmetic tests plus uncertainty and dossier regression coverage.
+- Preserves v0.67 bisection implementation-invariant auditing and all existing no-extrapolation and unresolved-case withholding rules.
+- Treats normalized separation as sampled-data numerical topology evidence only; it is not a physical robustness margin, continuous root-separation guarantee, stability/stall/surge criterion, manufacturer operating region, commissioning/certification result, or equipment-acceptance limit.
+- Bumped package/runtime metadata to v0.68.0.
+
 ## v0.67 bisection implementation-invariant audit — 2026-09-24
 
 - Audits retained bounded-bisection search geometry directly from the unrounded live solver state without changing the operating-point solve.

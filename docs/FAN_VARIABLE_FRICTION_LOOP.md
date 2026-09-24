@@ -36,6 +36,8 @@ v0.88 extends the same canonical network-state identity to the terminal bisectio
 
 v0.89 applies the same canonical network-state identity to the accepted selected operating solution itself. The selected-state replay now retains the selected network SHA-256 and independently re-solves the selected airflow before comparing the canonical node/edge/pressure-power/variable-friction state. This closes the remaining selected-state provenance gap where final scalar fan, loop-network, total-system, and residual pressures could still agree while the internal selected network state differs. The fingerprint remains deterministic implementation provenance only.
 
+v0.90 retains the canonical low/high terminal network-state projections themselves in addition to the fingerprints. Each endpoint projection is independently reconstructed from a fresh nonlinear solve and compared field-by-field, with exact deterministic JSON-style mismatch paths for node, edge, pressure-power, or variable-friction closure differences. This makes terminal-state corruption directly localizable and also detects retained projection corruption when the stored hash is left unchanged. The projection is implementation provenance only and does not create a physical uncertainty or acceptance criterion.
+
 For automatic geometry edges, the existing CleanroomX Darcy-Weisbach resistance model is reused:
 
 `R = 0.5 rho (f L / Dh + K) / A^2`

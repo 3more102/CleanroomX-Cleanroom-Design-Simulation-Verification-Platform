@@ -169,6 +169,7 @@ class CleanroomXApp:
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
         self._running = False
+        self._abandon_requested = False
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -702,11 +703,14 @@ class CleanroomXApp:
         )
         if not path:
             return
+        old_base_dir = self._base_dir()
         try:
             self.project_path = save_project_document(path, self.project)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        if self._base_dir() != old_base_dir:
+            self._clear_run_cache()
         self._capture_saved_state()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
@@ -854,6 +858,7 @@ class CleanroomXApp:
         kind = analysis.kind
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
+        self._abandon_requested = False
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
 
@@ -867,12 +872,12 @@ class CleanroomXApp:
         threading.Thread(target=worker, daemon=True).start()
 
     def cancel_run(self) -> None:
-        if not self._running:
+        if not self._running or self._abandon_requested:
             return
-        self._run_generation += 1
-        self._set_running(False)
+        self._abandon_requested = True
+        self.cancel_button.configure(state="disabled")
         self.status_var.set(
-            "Run abandoned in the UI; backend computation may finish in its worker thread."
+            "Run abandoned in the UI; waiting for the backend worker to finish before another run."
         )
 
     def _set_running(self, running: bool) -> None:
@@ -886,6 +891,11 @@ class CleanroomXApp:
             while True:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
                 if generation != self._run_generation:
+                    continue
+                if self._abandon_requested:
+                    self._abandon_requested = False
+                    self._set_running(False)
+                    self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":

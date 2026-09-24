@@ -736,6 +736,14 @@ def markdown_dossier_report(result: dict) -> str:
                     "bisection_trace_evidence_corner_count",
                     0,
                 )
+                solved_trace_count = search_summary.get(
+                    "solved_bisection_trace_evidence_corner_count",
+                    0,
+                )
+                limit_trace_count = search_summary.get(
+                    "iteration_limit_bisection_trace_evidence_corner_count",
+                    0,
+                )
                 bisection_count = search_summary.get(
                     "bisection_corner_count",
                     0,
@@ -761,6 +769,12 @@ def markdown_dossier_report(result: dict) -> str:
                 trace_terminal_violations = len(
                     search_summary.get(
                         "bisection_trace_terminal_violation_corner_indices",
+                        [],
+                    )
+                )
+                trace_outcome_violations = len(
+                    search_summary.get(
+                        "bisection_trace_outcome_violation_corner_indices",
                         [],
                     )
                 )
@@ -799,11 +813,14 @@ def markdown_dossier_report(result: dict) -> str:
                 search_invariants = (
                     f"sign {sign_count}/{invariant_count}; "
                     f"midpoint {midpoint_count}/{invariant_count}; "
-                    f"trace {trace_count}/{bisection_count}; "
-                    f"trace violations L/S/M/T/I/R "
+                    f"trace total {trace_count}; "
+                    f"trace solved {solved_trace_count}/{bisection_count}; "
+                    f"trace iteration-limit {limit_trace_count}/{limit_count}; "
+                    f"trace violations L/S/M/T/O/I/R "
                     f"{trace_length_violations}/{trace_sign_violations}/"
                     f"{trace_midpoint_violations}/{trace_terminal_violations}/"
-                    f"{trace_iteration_violations}/{trace_replay_violations}; "
+                    f"{trace_outcome_violations}/{trace_iteration_violations}/"
+                    f"{trace_replay_violations}; "
                     f"max width-fraction error {max_error}; "
                     f"iteration-limit {limit_count}; "
                     f"remaining-sign {limit_sign_count}/{limit_invariant_count}; "

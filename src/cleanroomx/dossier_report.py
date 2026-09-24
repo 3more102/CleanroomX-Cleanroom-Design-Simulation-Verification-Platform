@@ -905,6 +905,18 @@ def markdown_dossier_report(result: dict) -> str:
                         [],
                     )
                 )
+                selected_network_state_projection_replay_count = (
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_consistent_corner_count",
+                        0,
+                    )
+                )
+                selected_network_state_projection_replay_violations = len(
+                    search_summary.get(
+                        "selected_operating_network_state_projection_replay_violation_corner_indices",
+                        [],
+                    )
+                )
                 trace_network_state_replay_count = search_summary.get(
                     "bisection_trace_network_state_replay_consistent_corner_count",
                     0,
@@ -1067,6 +1079,11 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{solved_search_evidence_count}; "
                     f"selected-network-state violations "
                     f"{selected_network_state_replay_violations}; "
+                    f"selected-network-state-projection-replay "
+                    f"{selected_network_state_projection_replay_count}/"
+                    f"{solved_search_evidence_count}; "
+                    f"selected-network-state-projection-replay violations "
+                    f"{selected_network_state_projection_replay_violations}; "
                     f"network-state-replay "
                     f"{trace_network_state_replay_count}/{trace_count}; "
                     f"network-state-replay violations "

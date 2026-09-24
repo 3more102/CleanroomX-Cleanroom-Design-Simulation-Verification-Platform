@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.93 engineering core
+## v0.94 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -70,6 +70,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Terminal network-state projection replay diagnostics for v0.91, retaining the same order-invariant canonical low/high terminal node/edge/pressure-power/closure projections and independently comparing them with fresh endpoint solves to report exact JSON-style mismatch paths without changing solver decisions or engineering acceptance semantics.
 - Signed-zero-stable complete solver-provenance canonical replay for v0.92, extending the shared projection/hash to network/reference identity, inner Newton iteration metadata, mass-balance tolerance, variable-friction convergence/configuration, and chronological outer-iteration history while keeping named result collections order-invariant.
 - Supplied-point network-state fingerprint and projection replay for v0.93, retaining the v0.92 canonical network-result SHA-256 and full projection at every successfully evaluated supplied fan point and independently re-solving those anchors so solved, no-intersection, and partial pre-failure coverage have explicit mismatch-localizable internal solver provenance.
+- Selected operating network-state projection replay for v0.94, retaining the same canonical projection for the accepted operating solution and independently re-solving the selected airflow with structured field-level mismatch evidence, finite numeric error magnitudes, and field-local maximum-error witnesses while preserving the separate SHA-256 and scalar pressure/residual replay checks.
 - Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
 - Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
 - Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.94 selected operating network-state projection replay — 2026-09-24
+
+- Retains the signed-zero-stable canonical selected operating network-result projection alongside its SHA-256 fingerprint and independently re-solves the exact accepted airflow for field-by-field replay.
+- Localizes selected-state corruption with deterministic structured mismatch records carrying exact paths, mismatch kinds, recorded/recomputed presence and types, values, finite numeric absolute errors, and field-local maximum-error witnesses.
+- Enriches the existing terminal network-state projection replay with the same structured mismatch records while preserving its exact mismatch-path compatibility surface.
+- Propagates selected projection replay coverage, consistency, mismatch counts, exact violation details, and numeric-error evidence through nonlinear uncertainty summaries, standalone reports, and engineering dossiers.
+- Adds regressions for selected-projection corruption with an unchanged SHA-256, richer terminal mismatch evidence, uncertainty aggregation, and dossier propagation.
+- Preserves v0.93 supplied-point network-state hash/projection replay, v0.92 canonicalization, root selection, nonlinear solver equations and tolerances, iteration budgets, no-extrapolation behavior, and engineering acceptance boundaries.
+- Bumped package/runtime metadata to v0.94.0.
+
 ## v0.93 supplied-point network-state fingerprint and projection replay — 2026-09-24
 
 - Retains the v0.92 signed-zero-stable canonical network-result SHA-256 and full canonical projection for every successfully evaluated supplied fan-curve point before operating-point candidate selection.

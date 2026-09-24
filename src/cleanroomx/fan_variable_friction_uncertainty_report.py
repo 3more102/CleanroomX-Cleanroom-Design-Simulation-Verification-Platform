@@ -1002,14 +1002,22 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{residual_summary['residual_increase_corner_count']}**",
                 "- Corners with multiple discrete candidate crossing features: "
                 f"**{residual_summary['multiple_candidate_feature_corner_count']}**",
+                "- Corners with reverse strict negative-to-positive sign changes: "
+                f"**{residual_summary['reverse_strict_sign_change_corner_count']}**",
+                "- Reverse strict negative-to-positive segments across corners: "
+                f"**{residual_summary['reverse_strict_sign_change_segment_count_total']}**",
                 "- Complete study audit coverage: "
                 f"**{residual_summary['complete_study_coverage']}**",
             ]
         )
         if nominal_residual_audit is not None:
-            lines.append(
-                "- Nominal discrete candidate crossing features: "
-                f"**{nominal_residual_audit['candidate_crossing_feature_count']}**"
+            lines.extend(
+                [
+                    "- Nominal discrete candidate crossing features: "
+                    f"**{nominal_residual_audit['candidate_crossing_feature_count']}**",
+                    "- Nominal reverse strict negative-to-positive sign changes: "
+                    f"**{nominal_residual_audit.get('reverse_strict_sign_change_segment_count', 0)}**",
+                ]
             )
         if residual_summary[
             "solved_with_additional_candidate_feature_corner_indices"
@@ -1079,6 +1087,16 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     str(index)
                     for index in residual_summary[
                         "multiple_candidate_feature_corner_indices"
+                    ]
+                )
+            )
+        if residual_summary["reverse_strict_sign_change_corner_indices"]:
+            lines.append(
+                "- Reverse-sign-change corner indices: "
+                + ", ".join(
+                    str(index)
+                    for index in residual_summary[
+                        "reverse_strict_sign_change_corner_indices"
                     ]
                 )
             )

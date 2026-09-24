@@ -156,6 +156,18 @@ def test_repository_nonlinear_uncertainty_dossier_builds_end_to_end() -> None:
         "terminal_network_state_replay_violation_details"
     ] == []
     assert search_summary[
+        "selected_operating_network_state_projection_replay_evidence_corner_count"
+    ] == search_summary["solved_search_evidence_corner_count"]
+    assert search_summary[
+        "selected_operating_network_state_projection_replay_consistent_corner_count"
+    ] == search_summary["solved_search_evidence_corner_count"]
+    assert search_summary[
+        "selected_operating_network_state_projection_replay_violation_corner_indices"
+    ] == []
+    assert search_summary[
+        "selected_operating_network_state_projection_mismatch_count"
+    ] == 0
+    assert search_summary[
         "terminal_network_state_projection_replay_violation_corner_indices"
     ] == []
     assert search_summary[

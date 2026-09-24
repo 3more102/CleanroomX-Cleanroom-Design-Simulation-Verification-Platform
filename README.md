@@ -2,7 +2,7 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The project keeps calculations auditable and requirement-driven rather than hiding them behind a GUI.
 
-## v0.68 engineering core
+## v0.70 engineering core
 
 - Room volume and nominal supply-air ACH calculations.
 - Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
@@ -41,8 +41,10 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 - Pressure-residual→airflow numerical-equivalence auditing for solved nonlinear uncertainty corners, mapping the configured pressure tolerance and actual solved residual through the local fan-minus-system secant gradient into absolute/signed first-order airflow equivalents, with bracket-normalized evidence and exact source-corner provenance; these are numerical solver diagnostics, not uncertainty or acceptance limits.
 - Bounded operating-point root-search geometry for nonlinear fan/variable-friction solves, distinguishing direct supplied-point tolerance contacts from true bisection and retaining the final signed-residual bracket width, half-width, normalized span, iteration, and uncertainty-corner provenance without treating search width as physical airflow uncertainty or acceptance margin.
 - Bisection implementation-invariant auditing for retained root-search geometry, checking the live strict residual-sign bracket, selected-midpoint centering, and iteration-implied binary width contraction with raw consistency-error provenance across uncertainty corners.
+- Full bounded-bisection decision-trace provenance for solved nonlinear cases, retaining every midpoint bracket/residual evaluation and exact replace-low / replace-high / accept decision, with compact L/H/T sequences and cross-corner audits of trace length, sign bracketing, midpoint geometry, and terminal placement.
 - Fan-curve interpolation segment-position evidence for solved nonlinear uncertainty corners, reporting local supplied-point clearances, normalized position inside the active piecewise-linear segment, and tied source-corner provenance without treating point spacing as interpolation error or an equipment margin.
 - Supplied-point fan-minus-system residual-topology auditing for the nonlinear solver and every uncertainty corner, exposing complete/partial point coverage, tolerance contacts, strict sign-change segments, sampled residual monotonicity, residual-increase transitions, and multiple discrete candidate-crossing features without treating them as proof of continuous intersection uniqueness.
+- Bidirectional sampled residual-topology evidence from v0.69, retaining strict negative-to-positive sign-change segments as audit-only evidence while leaving the solver candidate policy unchanged.
 - Explicit selected-crossing-candidate provenance for solved nonlinear cases: discrete candidates are stored in the solver's actual priority order and results retain the selected feature, zero-based priority rank, additional-candidate count, and whether the selected sampled feature was unique.
 - Alternative crossing-candidate separation evidence for solved cases with multiple discrete supplied-point candidates, retaining each alternative tolerance-contact point or sign-change interval, its solver-priority rank, the selected airflow's gap to that interval, tied nearest alternatives, and explicit zero-gap overlap without estimating another continuous root.
 - Scale-aware alternative-candidate separation for v0.68, normalizing each discrete candidate interval gap by that case's supplied fan-curve airflow span and aggregating the minimum normalized separation with exact source-corner provenance.
@@ -159,6 +161,10 @@ v0.66 measures how far the solved airflow lies from every additional discrete cr
 v0.67 self-audits retained bisection geometry against the solver implementation: strict endpoint residual signs, midpoint centering, binary contraction step count, expected width fraction, actual width fraction, and floating-point consistency error. Direct supplied-point tolerance contacts remain outside this bisection-only audit.
 
 v0.68 makes v0.66 candidate separation scale-aware by dividing each selected-to-alternative interval gap by the exact supplied fan-curve airflow span used for that solve. The aggregate retains the minimum normalized separation and tied source corners. This normalization is a dimensionless sampled-data diagnostic only; it is not a physical robustness, stability, stall/surge, manufacturer, commissioning, certification, or equipment-acceptance margin.
+
+v0.69 extends the supplied-point residual audit with strict negative-to-positive sign-change segments as bidirectional sampled topology evidence. These reverse sampled crossings remain audit-only and do not enter the solver candidate list or establish another continuous root, stability boundary, or equipment criterion.
+
+v0.70 retains the full bounded-bisection decision trace for solved bisection cases. Every midpoint evaluation preserves the active bracket, signed endpoint and midpoint residuals, normalized bracket width, and the exact endpoint-replacement or tolerance-accept decision. The aggregate audits trace length, sign bracketing, midpoint geometry, and terminal placement with exact corner provenance. Direct supplied-point contacts remain trace-free. This is numerical implementation provenance only; it is not physical uncertainty, an interpolation-error bound, a stability margin, or an equipment-acceptance criterion.
 
 v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersection_in_supplied_range`. Each such corner records whether the lower or upper supplied airflow endpoint bounds the case, the endpoint fan and system pressures, the signed fan-minus-system pressure mismatch, and the absolute boundary pressure gap. Aggregate evidence counts lower/upper boundary cases and retains the largest evaluated gap with source-corner provenance. No fan-curve extrapolation or missing operating-point estimate is performed.
 

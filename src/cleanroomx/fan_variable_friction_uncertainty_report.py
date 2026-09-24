@@ -770,6 +770,9 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         "operating_point_search_resolution_summary"
     )
     nominal_search = result.get("nominal_operating_point_search_evidence")
+    nominal_terminal_failure = result.get(
+        "nominal_terminal_bisection_failure_evidence"
+    )
     if search_summary:
         coverage_label = (
             "complete"
@@ -795,6 +798,13 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"**{search_summary['strict_sign_change_violation_corner_indices']}**",
                 "- Midpoint-centering violations: "
                 f"**{search_summary['selected_midpoint_violation_corner_indices']}**",
+                "- Bisection iteration-limit corners: "
+                f"**{search_summary['bisection_iteration_limit_corner_count']}** "
+                f"{search_summary['bisection_iteration_limit_corner_indices']}",
+                "- Iteration-limit strict sign-bracket violations: "
+                f"**{search_summary['bisection_iteration_limit_strict_sign_change_violation_corner_indices']}**",
+                "- Iteration-limit endpoint-state violations: "
+                f"**{search_summary['bisection_iteration_limit_endpoint_violation_corner_indices']}**",
                 f"- Complete-study coverage: **{coverage_label}**",
             ]
         )
@@ -827,6 +837,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                             f"**{nominal_invariant['absolute_width_fraction_consistency_error']}**",
                         ]
                     )
+
+        if nominal_terminal_failure is not None:
+            terminal_bracket = nominal_terminal_failure[
+                "terminal_bisection_bracket"
+            ]
+            lines.extend(
+                [
+                    "- Nominal terminal iteration-limit bracket: "
+                    f"**{terminal_bracket['low_airflow_m3_h']}–"
+                    f"{terminal_bracket['high_airflow_m3_h']} m³/h**",
+                    "- Nominal terminal bracket half-width: "
+                    f"**{terminal_bracket['half_width_m3_h']} m³/h**",
+                ]
+            )
 
         lines.extend(
             [
@@ -869,6 +893,39 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 f"| {label} | {evidence['value']} | {evidence['unit']} | "
                 f"{' / '.join(source_texts)} |"
             )
+        terminal_rows = (
+            (
+                "maximum_iteration_limit_terminal_bracket_width_m3_h",
+                "Iteration-limit terminal bracket width",
+            ),
+            (
+                "maximum_iteration_limit_terminal_bracket_half_width_m3_h",
+                "Iteration-limit terminal bracket half-width",
+            ),
+            (
+                "maximum_iteration_limit_terminal_bracket_width_fraction_of_supplied_segment",
+                "Iteration-limit terminal bracket width / supplied-segment span",
+            ),
+        )
+        for key, label in terminal_rows:
+            evidence = search_summary.get(key)
+            if evidence is None:
+                lines.append(f"| {label} | — | — | — |")
+                continue
+            source_texts = []
+            for source in evidence["sources"]:
+                bracket = source["terminal_bisection_bracket"]
+                source_texts.append(
+                    _fmt_extreme_source(source)
+                    + f"; final-terminal-bracket={bracket['low_airflow_m3_h']}"
+                    + f"–{bracket['high_airflow_m3_h']} m³/h"
+                    + f"; iterations={source['operating_iterations']}"
+                )
+            lines.append(
+                f"| {label} | {evidence['value']} | {evidence['unit']} | "
+                f"{' / '.join(source_texts)} |"
+            )
+
         invariant_error = search_summary.get(
             "maximum_absolute_width_fraction_consistency_error"
         )
@@ -886,6 +943,20 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 "| Maximum absolute binary-width consistency error | "
                 f"{invariant_error['value']} | {invariant_error['unit']} | "
                 f"{' / '.join(invariant_sources)} |"
+            )
+        terminal_invariant_error = search_summary.get(
+            "maximum_iteration_limit_absolute_width_fraction_consistency_error"
+        )
+        if terminal_invariant_error is not None:
+            lines.append(
+                "| Maximum iteration-limit binary-width consistency error | "
+                f"{terminal_invariant_error['value']} | "
+                f"{terminal_invariant_error['unit']} | "
+                + " / ".join(
+                    _fmt_extreme_source(source)
+                    for source in terminal_invariant_error["sources"]
+                )
+                + " |"
             )
         lines.extend(["", search_summary["scope_note"]])
 

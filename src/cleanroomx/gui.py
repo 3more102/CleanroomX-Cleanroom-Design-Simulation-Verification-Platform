@@ -1326,28 +1326,66 @@ class CleanroomXApp:
             py = height - bottom - (y - ymin) / (ymax - ymin) * (height - top - bottom)
             return px, py
 
-        canvas.create_line(left, height - bottom, width - right, height - bottom)
-        canvas.create_line(left, top, left, height - bottom)
-        canvas.create_text(width / 2, 18, text=plot["title"], font=("TkDefaultFont", 11, "bold"))
-        canvas.create_text(width / 2, height - 20, text=plot["x_label"])
-        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90)
-        canvas.create_text(left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n")
-        canvas.create_text(width - right, height - bottom + 18, text=f"{xmax:.3g}", anchor="n")
-        canvas.create_text(left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e")
-        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e")
+        axis_color = self._colors.get("muted", "#93a4ba")
+        text_color = self._colors.get("text", "#e6edf7")
+        grid_color = self._colors.get("border", "#23364d")
+        series_colors = ("#38bdf8", "#fbbf24", "#34d399", "#f472b6", "#a78bfa", "#fb7185")
+
+        for step in range(1, 5):
+            ratio = step / 5
+            gx = left + ratio * (width - left - right)
+            gy = top + ratio * (height - top - bottom)
+            canvas.create_line(gx, top, gx, height - bottom, fill=grid_color, dash=(2, 6))
+            canvas.create_line(left, gy, width - right, gy, fill=grid_color, dash=(2, 6))
+
+        canvas.create_line(
+            left, height - bottom, width - right, height - bottom, fill=axis_color, width=2
+        )
+        canvas.create_line(left, top, left, height - bottom, fill=axis_color, width=2)
+        canvas.create_text(
+            width / 2,
+            18,
+            text=plot["title"],
+            fill=text_color,
+            font=("TkDefaultFont", 11, "bold"),
+        )
+        canvas.create_text(width / 2, height - 20, text=plot["x_label"], fill=axis_color)
+        canvas.create_text(18, height / 2, text=plot["y_label"], angle=90, fill=axis_color)
+        canvas.create_text(
+            left, height - bottom + 18, text=f"{xmin:.3g}", anchor="n", fill=axis_color
+        )
+        canvas.create_text(
+            width - right,
+            height - bottom + 18,
+            text=f"{xmax:.3g}",
+            anchor="n",
+            fill=axis_color,
+        )
+        canvas.create_text(
+            left - 8, height - bottom, text=f"{ymin:.3g}", anchor="e", fill=axis_color
+        )
+        canvas.create_text(left - 8, top, text=f"{ymax:.3g}", anchor="e", fill=axis_color)
 
         for index, series in enumerate(plot["series"]):
             coords = []
             for x, y in zip(series["x"], series["y"]):
                 coords.extend(point(x, y))
-            line_options = {"width": 2}
+            series_color = series_colors[index % len(series_colors)]
+            line_options = {"width": 2, "fill": series_color}
             if index % 2:
                 line_options["dash"] = (6, 4)
             if len(coords) >= 4:
                 canvas.create_line(*coords, **line_options)
             for x, y in zip(series["x"], series["y"]):
                 px, py = point(x, y)
-                canvas.create_oval(px - 2, py - 2, px + 2, py + 2, fill="black")
+                canvas.create_oval(
+                    px - 2,
+                    py - 2,
+                    px + 2,
+                    py + 2,
+                    fill=series_color,
+                    outline=series_color,
+                )
 
             legend_x = max(left + 20, width - right - 170)
             legend_y = top + index * 18
@@ -1363,12 +1401,27 @@ class CleanroomXApp:
                 legend_y,
                 text=series.get("name", f"Series {index + 1}"),
                 anchor="w",
+                fill=text_color,
             )
 
         for marker in plot.get("markers", []):
             px, py = point(marker["x"], marker["y"])
-            canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2)
-            canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
+            canvas.create_oval(
+                px - 6,
+                py - 6,
+                px + 6,
+                py + 6,
+                width=2,
+                outline="#ffffff",
+                fill=self._colors.get("accent", "#16a3d6"),
+            )
+            canvas.create_text(
+                px + 8,
+                py - 8,
+                text=marker["name"],
+                anchor="sw",
+                fill=text_color,
+            )
 
     def export_result_json(self) -> None:
         if self.last_run is None:

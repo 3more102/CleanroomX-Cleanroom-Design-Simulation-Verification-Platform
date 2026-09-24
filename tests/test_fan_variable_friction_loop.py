@@ -1945,6 +1945,292 @@ def test_selected_projection_replay_records_type_mismatch_evidence() -> None:
     assert mismatch["absolute_error"] is None
 
 
+
+def _trace_projection_replay_with_mutation(
+    mutator,
+    *,
+    variable_friction: bool = False,
+):
+    study = (
+        load_fan_variable_friction_loop_study(
+            "examples/fan_variable_friction_loop_demo.json"
+        )
+        if variable_friction
+        else FanVariableFrictionLoopStudy(
+            name="Full trace projection replay fixture",
+            fan_curve=FanCurve(
+                "Bisection curve",
+                (
+                    FanCurvePoint(0.0, 500.0),
+                    FanCurvePoint(3600.0, 200.0),
+                    FanCurvePoint(7200.0, 0.0),
+                ),
+            ),
+            loop_network=_fixed_network(),
+            fan_discharge_node="Supply",
+            fan_suction_node="Return",
+        )
+    )
+    result = solve_fan_variable_friction_loop(study)
+    assert result["status"] == "solved"
+    evidence = result["operating_point_search_evidence"]
+    assert evidence["method"] == "bounded_bisection"
+    trace = json.loads(json.dumps(evidence["bisection_trace"]))
+    mutator(trace)
+    segment_index = evidence["supplied_segment_index"]
+    audit = _bisection_decision_trace_audit(
+        trace,
+        operating_iterations=evidence["operating_iterations"],
+        termination_reason=result["solver_diagnostics"]["termination_reason"],
+        operating_pressure_tolerance_pa=study.operating_pressure_tolerance_pa,
+        expected_fixed_pressure_pa=study.fixed_pressure_pa,
+        study=study,
+        segment_left=study.fan_curve.points[segment_index],
+        segment_right=study.fan_curve.points[segment_index + 1],
+        initial_bisection_bracket=evidence["initial_bisection_bracket"],
+        solved_terminal_bracket=evidence["final_bisection_bracket"],
+    )
+    assert audit is not None
+    return study, result, trace, audit
+
+
+def test_full_bisection_network_state_projection_replay_is_complete() -> None:
+    _study, result, trace, audit = _trace_projection_replay_with_mutation(
+        lambda _trace: None
+    )
+
+    assert audit["network_state_replay_evidence_complete"] is True
+    assert audit["all_trace_network_states_match_independent_replay"] is True
+    assert audit["network_state_projection_replay_applicable"] is True
+    assert audit["network_state_projection_replay_available"] is True
+    assert audit["network_state_projection_replay_expected_iteration_count"] == (
+        len(trace)
+    )
+    assert audit["network_state_projection_replay_checked_iteration_count"] == (
+        len(trace)
+    )
+    assert audit[
+        "network_state_projection_replay_expected_state_position_count"
+    ] == 3 * len(trace)
+    assert audit[
+        "network_state_projection_replay_checked_state_position_count"
+    ] == 3 * len(trace)
+    assert audit["network_state_projection_replay_complete_coverage"] is True
+    assert audit[
+        "network_state_projection_replay_consistent_iteration_count"
+    ] == len(trace)
+    assert audit[
+        "network_state_projection_replay_inconsistent_iteration_count"
+    ] == 0
+    assert audit[
+        "network_state_projection_replay_consistent_state_position_count"
+    ] == 3 * len(trace)
+    assert audit[
+        "network_state_projection_replay_inconsistent_state_position_count"
+    ] == 0
+    assert audit["network_state_projection_replay_mismatch_count"] == 0
+    assert audit["network_state_projection_replay_mismatches"] == []
+    assert audit["network_state_projection_replay_coverage_gaps"] == []
+    assert audit["network_state_projection_replay_verdict"] == (
+        "bisection_network_state_projection_replay_consistent"
+    )
+    assert audit[
+        "all_trace_network_state_projections_match_independent_replay"
+    ] is True
+    assert audit[
+        "all_terminal_network_state_projections_match_independent_replay"
+    ] is True
+    selected = result["operating_point_search_evidence"][
+        "selected_operating_state_replay"
+    ]
+    assert selected["network_state_matches_independent_replay"] is True
+    assert selected[
+        "network_state_projection_matches_independent_replay"
+    ] is True
+
+
+@pytest.mark.parametrize("position", ["low", "midpoint", "high"])
+def test_full_bisection_projection_replay_localizes_each_position(
+    position,
+) -> None:
+    def mutate(trace):
+        trace[0][f"{position}_network_state_projection"]["nodes"][0][
+            "relative_pressure_pa"
+        ] += 1.0
+
+    _study, _result, trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    assert audit["all_trace_network_states_match_independent_replay"] is True
+    assert audit[
+        "all_trace_network_state_projections_match_independent_replay"
+    ] is False
+    assert audit["network_state_projection_replay_complete_coverage"] is True
+    assert audit["network_state_projection_replay_violation_iterations"] == [1]
+    assert audit[
+        "network_state_projection_replay_violation_iteration_positions"
+    ] == [{"iteration": 1, "position": position}]
+    assert audit["network_state_projection_replay_mismatch_count"] == 1
+    mismatch = audit["network_state_projection_replay_mismatches"][0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == position
+    assert mismatch["path"] == "$.nodes[0].relative_pressure_pa"
+    assert mismatch["mismatch_kind"] == "value_mismatch"
+    assert mismatch["recorded_value"] - mismatch["recomputed_value"] == (
+        pytest.approx(1.0)
+    )
+    assert mismatch["absolute_error"] == pytest.approx(1.0)
+    assert trace[0][f"{position}_network_state_sha256"] == (
+        _result["operating_point_search_evidence"]["bisection_trace"][0][
+            f"{position}_network_state_sha256"
+        ]
+    )
+
+
+def test_full_bisection_projection_replay_localizes_friction_evidence() -> None:
+    def mutate(trace):
+        closure = trace[0]["midpoint_network_state_projection"][
+            "variable_friction"
+        ]["edge_closure"]
+        automatic = next(
+            row
+            for row in closure
+            if row["target_friction_factor"] is not None
+        )
+        automatic["target_friction_factor"] += 0.001
+
+    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+        mutate,
+        variable_friction=True,
+    )
+
+    mismatch = audit["network_state_projection_replay_mismatches"][0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == "midpoint"
+    assert ".variable_friction.edge_closure[" in mismatch["path"]
+    assert mismatch["path"].endswith(".target_friction_factor")
+    assert mismatch["absolute_error"] == pytest.approx(0.001)
+
+
+def test_full_bisection_projection_replay_localizes_power_evidence() -> None:
+    def mutate(trace):
+        trace[0]["high_network_state_projection"]["pressure_power"][
+            "balance_residual_w"
+        ] += 0.125
+
+    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    mismatch = audit["network_state_projection_replay_mismatches"][0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == "high"
+    assert mismatch["path"] == "$.pressure_power.balance_residual_w"
+    assert mismatch["absolute_error"] == pytest.approx(0.125)
+
+
+def test_full_bisection_projection_replay_orders_multiple_positions() -> None:
+    def mutate(trace):
+        trace[0]["low_network_state_projection"]["nodes"][0][
+            "relative_pressure_pa"
+        ] += 1.0
+        trace[0]["midpoint_network_state_projection"]["edges"][0][
+            "airflow_m3_h"
+        ] += 2.0
+        trace[0]["high_network_state_projection"]["pressure_power"][
+            "balance_residual_w"
+        ] += 0.125
+
+    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    assert audit[
+        "network_state_projection_replay_violation_iteration_positions"
+    ] == [
+        {"iteration": 1, "position": "low"},
+        {"iteration": 1, "position": "midpoint"},
+        {"iteration": 1, "position": "high"},
+    ]
+    assert [
+        (item["iteration"], item["position"], item["path"])
+        for item in audit["network_state_projection_replay_mismatches"]
+    ] == [
+        (1, "low", "$.nodes[0].relative_pressure_pa"),
+        (1, "midpoint", "$.edges[0].airflow_m3_h"),
+        (1, "high", "$.pressure_power.balance_residual_w"),
+    ]
+
+
+def test_full_bisection_projection_replay_orders_multiple_iterations() -> None:
+    def mutate(trace):
+        assert len(trace) >= 2
+        trace[0]["high_network_state_projection"]["nodes"][0][
+            "relative_pressure_pa"
+        ] += 1.0
+        trace[1]["low_network_state_projection"]["edges"][0][
+            "airflow_m3_h"
+        ] += 2.0
+
+    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    assert audit["network_state_projection_replay_violation_iterations"] == [1, 2]
+    assert [
+        (item["iteration"], item["position"], item["path"])
+        for item in audit["network_state_projection_replay_mismatches"]
+    ] == [
+        (1, "high", "$.nodes[0].relative_pressure_pa"),
+        (2, "low", "$.edges[0].airflow_m3_h"),
+    ]
+
+
+def test_full_bisection_projection_replay_records_structure_mismatch() -> None:
+    def mutate(trace):
+        del trace[0]["low_network_state_projection"]["edges"][0][
+            "airflow_m3_h"
+        ]
+
+    _study, _result, _trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    mismatch = audit["network_state_projection_replay_mismatches"][0]
+    assert mismatch["iteration"] == 1
+    assert mismatch["position"] == "low"
+    assert mismatch["path"] == "$.edges[0].airflow_m3_h"
+    assert mismatch["mismatch_kind"] == "missing_recorded_key"
+    assert mismatch["recorded_present"] is False
+    assert mismatch["recomputed_present"] is True
+
+
+def test_full_bisection_projection_replay_marks_incomplete_coverage() -> None:
+    def mutate(trace):
+        del trace[0]["midpoint_network_state_projection"]
+
+    _study, _result, trace, audit = _trace_projection_replay_with_mutation(
+        mutate
+    )
+
+    assert audit["network_state_projection_replay_available"] is True
+    assert audit["network_state_projection_replay_complete_coverage"] is False
+    assert audit[
+        "network_state_projection_replay_checked_state_position_count"
+    ] == 3 * len(trace) - 1
+    assert audit["network_state_projection_replay_coverage_gaps"] == [
+        {"iteration": 1, "position": "midpoint"}
+    ]
+    assert audit["network_state_projection_replay_mismatch_count"] == 0
+    assert audit["network_state_projection_replay_verdict"] == (
+        "bisection_network_state_projection_replay_incomplete_coverage"
+    )
+    assert audit[
+        "all_trace_network_state_projections_match_independent_replay"
+    ] is False
+
+
 def test_network_state_fingerprint_replay_detects_internal_state_corruption() -> None:
     study = FanVariableFrictionLoopStudy(
         name="Network-state replay corruption",

@@ -509,8 +509,13 @@ def test_gui_check_mode_needs_no_display(capsys):
 
 
 def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
+    app.status_var = Status()
     app.last_run = run_analysis(
         "fan_operating_point",
         json.loads(

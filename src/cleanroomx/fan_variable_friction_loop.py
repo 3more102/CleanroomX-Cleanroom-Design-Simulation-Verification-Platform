@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 
@@ -207,6 +209,77 @@ def _solve_network_at_airflow(
             "pressure requirement"
         )
     return solved, max(network_pressure, 0.0)
+
+
+def _network_state_sha256(network: dict) -> str:
+    variable_friction = network.get("variable_friction", {})
+    canonical_state = {
+        "nodes": [
+            {
+                "name": row["name"],
+                "relative_pressure_pa": row["relative_pressure_pa"],
+                "specified_injection_m3_h": row["specified_injection_m3_h"],
+                "net_edge_outflow_m3_h": row["net_edge_outflow_m3_h"],
+                "mass_balance_residual_m3_h": row[
+                    "mass_balance_residual_m3_h"
+                ],
+                "specified_pressure_power_w": row[
+                    "specified_pressure_power_w"
+                ],
+            }
+            for row in network["nodes"]
+        ],
+        "edges": [
+            {
+                "name": row["name"],
+                "start_node": row["start_node"],
+                "end_node": row["end_node"],
+                "resistance_pa_per_m3_s_squared": row[
+                    "resistance_pa_per_m3_s_squared"
+                ],
+                "airflow_m3_s": row["airflow_m3_s"],
+                "airflow_m3_h": row["airflow_m3_h"],
+                "flow_direction": row["flow_direction"],
+                "pressure_difference_pa": row["pressure_difference_pa"],
+                "constitutive_pressure_difference_pa": row[
+                    "constitutive_pressure_difference_pa"
+                ],
+                "pressure_law_residual_pa": row["pressure_law_residual_pa"],
+                "dissipated_pressure_power_w": row[
+                    "dissipated_pressure_power_w"
+                ],
+            }
+            for row in network["edges"]
+        ],
+        "max_abs_mass_balance_residual_m3_h": network[
+            "max_abs_mass_balance_residual_m3_h"
+        ],
+        "max_abs_pressure_law_residual_pa": network[
+            "max_abs_pressure_law_residual_pa"
+        ],
+        "pressure_power": network["pressure_power"],
+        "variable_friction": {
+            "outer_iterations": variable_friction.get("outer_iterations"),
+            "automatic_friction_edge_count": variable_friction.get(
+                "automatic_friction_edge_count"
+            ),
+            "near_zero_frozen_edge_count": variable_friction.get(
+                "near_zero_frozen_edge_count"
+            ),
+            "max_relative_resistance_closure_error": variable_friction.get(
+                "max_relative_resistance_closure_error"
+            ),
+            "edge_closure": variable_friction.get("edge_closure", []),
+        },
+    }
+    encoded = json.dumps(
+        canonical_state,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _point_check(
@@ -872,6 +945,7 @@ def _bisection_decision_trace_audit(
 
     residual_replay_checks = []
     pressure_component_replay_checks = []
+    network_state_replay_checks = []
     residual_replay_available = (
         study is not None
         and segment_left is not None
@@ -905,6 +979,7 @@ def _bisection_decision_trace_audit(
                     "loop_network_pressure_pa": network_pressure,
                     "system_pressure_pa": system_pressure,
                     "residual_pa": fan_pressure - system_pressure,
+                    "network_state_sha256": _network_state_sha256(_network),
                 }
             return state_cache[airflow]
 
@@ -1227,6 +1302,54 @@ def _bisection_decision_trace_audit(
                                 )
                                 for check in position_checks.values()
                             )
+                        ),
+                    }
+                )
+
+            network_state_fields = tuple(
+                f"{position}_network_state_sha256"
+                for position in ("low", "midpoint", "high")
+            )
+            if all(field in step for field in network_state_fields):
+                network_position_states = {
+                    "low": low_state,
+                    "midpoint": midpoint_state,
+                    "high": high_state,
+                }
+                network_position_checks = {}
+                for position, recomputed_state in (
+                    network_position_states.items()
+                ):
+                    recorded_sha256 = str(
+                        step[f"{position}_network_state_sha256"]
+                    )
+                    recomputed_sha256 = str(
+                        recomputed_state["network_state_sha256"]
+                    )
+                    network_position_checks[position] = {
+                        "recorded_network_state_sha256": recorded_sha256,
+                        "recomputed_network_state_sha256": (
+                            recomputed_sha256
+                        ),
+                        "network_state_matches_independent_replay": (
+                            recorded_sha256 == recomputed_sha256
+                        ),
+                    }
+                network_state_replay_checks.append(
+                    {
+                        "iteration": int(step["iteration"]),
+                        "algorithm": "sha256",
+                        "canonicalization": (
+                            "network-state-projection-json-sort-keys-compact-utf8-v1"
+                        ),
+                        "low": network_position_checks["low"],
+                        "midpoint": network_position_checks["midpoint"],
+                        "high": network_position_checks["high"],
+                        "all_network_states_match_independent_replay": all(
+                            check[
+                                "network_state_matches_independent_replay"
+                            ]
+                            for check in network_position_checks.values()
                         ),
                     }
                 )
@@ -1850,6 +1973,71 @@ def _bisection_decision_trace_audit(
         "pressure_component_replay_checks": (
             pressure_component_replay_checks
         ),
+        "network_state_replay_available": residual_replay_available,
+        "network_state_replay_algorithm": (
+            "sha256" if residual_replay_available else None
+        ),
+        "network_state_replay_canonicalization": (
+            "network-state-projection-json-sort-keys-compact-utf8-v1"
+            if residual_replay_available
+            else None
+        ),
+        "network_state_replay_check_count": len(
+            network_state_replay_checks
+        ),
+        "network_state_replay_evidence_complete": (
+            len(network_state_replay_checks) == len(trace)
+            if residual_replay_available
+            else None
+        ),
+        "all_low_network_states_match_independent_replay": (
+            len(network_state_replay_checks) == len(trace)
+            and all(
+                check["low"][
+                    "network_state_matches_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_midpoint_network_states_match_independent_replay": (
+            len(network_state_replay_checks) == len(trace)
+            and all(
+                check["midpoint"][
+                    "network_state_matches_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_high_network_states_match_independent_replay": (
+            len(network_state_replay_checks) == len(trace)
+            and all(
+                check["high"][
+                    "network_state_matches_independent_replay"
+                ]
+                for check in network_state_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "all_trace_network_states_match_independent_replay": (
+            len(network_state_replay_checks) == len(trace)
+            and all(
+                check["all_network_states_match_independent_replay"]
+                for check in network_state_replay_checks
+            )
+            if residual_replay_available
+            else None
+        ),
+        "network_state_replay_violation_iterations": [
+            check["iteration"]
+            for check in network_state_replay_checks
+            if not check["all_network_states_match_independent_replay"]
+        ],
+        "network_state_replay_checks": network_state_replay_checks,
         "all_steps_preserve_strict_sign_change_before_evaluation": all(
             step["strict_sign_change_before_evaluation"]
             for step in trace
@@ -1959,7 +2147,12 @@ def _bisection_decision_trace_audit(
             "reconstructs the active bisection states from the selected "
             "supplied fan segment, freshly re-solves the nonlinear loop at "
             "each low/high/midpoint airflow, and checks retained residuals "
-            "against that independent fan/system evaluation. The decision-semantics audit "
+            "against that independent fan/system evaluation. The network-state "
+            "replay additionally fingerprints a canonical projection of node "
+            "pressures, edge flows/resistances, solver residuals, pressure-power "
+            "balance, and variable-friction closure at each low/high/midpoint "
+            "state, then compares retained fingerprints with fresh independent "
+            "re-solves. The decision-semantics audit "
             "independently verifies each L/H/T choice against the recorded "
             "midpoint residual and configured operating-pressure tolerance. "
             "The origin replay additionally anchors the first trace state to "
@@ -2112,6 +2305,12 @@ def solve_fan_variable_friction_loop(
             high_system_pressure = float(
                 curve_checks[index + 1]["system_pressure_pa"]
             )
+            low_network_state_sha256 = _network_state_sha256(
+                point_networks[index]
+            )
+            high_network_state_sha256 = _network_state_sha256(
+                point_networks[index + 1]
+            )
             supplied_segment_span = high - low
             initial_bisection_bracket = {
                 "low_airflow_m3_h": round(low, 9),
@@ -2139,6 +2338,9 @@ def solve_fan_variable_friction_loop(
                         study.fixed_pressure_pa + network_pressure
                     )
                     residual = fan_pressure - system_pressure
+                    midpoint_network_state_sha256 = _network_state_sha256(
+                        network
+                    )
                     final = (
                         airflow,
                         fan_pressure,
@@ -2184,6 +2386,9 @@ def solve_fan_variable_friction_loop(
                                 low_system_pressure,
                                 9,
                             ),
+                            "low_network_state_sha256": (
+                                low_network_state_sha256
+                            ),
                             "high_fan_minus_system_pressure_pa": round(
                                 high_residual,
                                 9,
@@ -2199,6 +2404,9 @@ def solve_fan_variable_friction_loop(
                             "high_system_pressure_pa": round(
                                 high_system_pressure,
                                 9,
+                            ),
+                            "high_network_state_sha256": (
+                                high_network_state_sha256
                             ),
                             "midpoint_fan_pressure_pa": round(
                                 fan_pressure,
@@ -2219,6 +2427,9 @@ def solve_fan_variable_friction_loop(
                             "midpoint_fan_minus_system_pressure_pa": round(
                                 residual,
                                 9,
+                            ),
+                            "midpoint_network_state_sha256": (
+                                midpoint_network_state_sha256
                             ),
                             "decision": decision,
                             "strict_sign_change_before_evaluation": (
@@ -2307,12 +2518,18 @@ def solve_fan_variable_friction_loop(
                         low_fan_pressure = fan_pressure
                         low_network_pressure = network_pressure
                         low_system_pressure = system_pressure
+                        low_network_state_sha256 = (
+                            midpoint_network_state_sha256
+                        )
                     else:
                         high = airflow
                         high_residual = residual
                         high_fan_pressure = fan_pressure
                         high_network_pressure = network_pressure
                         high_system_pressure = system_pressure
+                        high_network_state_sha256 = (
+                            midpoint_network_state_sha256
+                        )
                 else:
                     termination_reason = "bisection_iteration_limit"
             except RuntimeError as exc:

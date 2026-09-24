@@ -753,6 +753,96 @@ def solve_fan_variable_friction_loop(
             ) = final
             selected_segment = index
             if abs(residual) > tolerance:
+                terminal_width = high - low
+                terminal_width_fraction = (
+                    terminal_width / supplied_segment_span
+                )
+                expected_terminal_width_fraction = (
+                    0.5 ** operating_iterations
+                )
+                terminal_bracket = {
+                    "low_airflow_m3_h": round(low, 9),
+                    "high_airflow_m3_h": round(high, 9),
+                    "width_m3_h": round(terminal_width, 9),
+                    "half_width_m3_h": round(
+                        0.5 * terminal_width,
+                        9,
+                    ),
+                    "low_fan_minus_system_pressure_pa": round(
+                        low_residual,
+                        9,
+                    ),
+                    "high_fan_minus_system_pressure_pa": round(
+                        high_residual,
+                        9,
+                    ),
+                    "width_fraction_of_supplied_segment": round(
+                        terminal_width_fraction,
+                        12,
+                    ),
+                    "completed_iteration_count": operating_iterations,
+                    "invariant_audit": {
+                        "strict_sign_change_preserved": (
+                            low_residual > 0.0
+                            and high_residual < 0.0
+                        ),
+                        "binary_contraction_step_count": (
+                            operating_iterations
+                        ),
+                        "expected_width_fraction_of_supplied_segment": round(
+                            expected_terminal_width_fraction,
+                            15,
+                        ),
+                        "actual_width_fraction_of_supplied_segment": round(
+                            terminal_width_fraction,
+                            15,
+                        ),
+                        "absolute_width_fraction_consistency_error": round(
+                            abs(
+                                terminal_width_fraction
+                                - expected_terminal_width_fraction
+                            ),
+                            18,
+                        ),
+                    },
+                }
+                search_evidence = {
+                    "method": "bounded_bisection",
+                    "supplied_segment_index": selected_segment,
+                    "supplied_segment_low_airflow_m3_h": round(
+                        left.airflow_m3_h,
+                        6,
+                    ),
+                    "supplied_segment_high_airflow_m3_h": round(
+                        right.airflow_m3_h,
+                        6,
+                    ),
+                    "selected_supplied_point_index": None,
+                    "operating_iterations": operating_iterations,
+                    "final_bisection_bracket": None,
+                    "iteration_limit_evidence": {
+                        "last_evaluated_midpoint_airflow_m3_h": round(
+                            selected_airflow,
+                            9,
+                        ),
+                        "last_evaluated_fan_minus_system_pressure_pa": round(
+                            residual,
+                            9,
+                        ),
+                        "pressure_tolerance_satisfied": False,
+                        "remaining_bisection_bracket": terminal_bracket,
+                    },
+                    "scope_note": (
+                        "The iteration-limit evidence retains the active "
+                        "signed-residual bracket remaining after the final "
+                        "budgeted bisection evaluation. Its geometry and "
+                        "binary-contraction audit are solver implementation "
+                        "diagnostics only; no operating point is accepted, "
+                        "and the remaining bracket is not physical airflow "
+                        "uncertainty, interpolation error, a continuous "
+                        "worst-case bound, or an equipment-acceptance limit."
+                    ),
+                }
                 return {
                     **_nonconverged_result(
                         study,
@@ -763,6 +853,7 @@ def solve_fan_variable_friction_loop(
                             "configured pressure residual tolerance."
                         ),
                     ),
+                    "operating_point_search_evidence": search_evidence,
                     "solver_diagnostics": {
                         "converged": False,
                         "termination_reason": termination_reason,

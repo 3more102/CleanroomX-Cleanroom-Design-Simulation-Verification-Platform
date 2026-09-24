@@ -281,6 +281,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._grid_var = tk.StringVar(value="0.5 m")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._selection_detail_var = tk.StringVar(value="Select a room or device to edit its properties.")
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -325,6 +326,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Button(toolbar, text="Duplicate", command=self.duplicate_selected).pack(
+            side="left", padx=2
+        )
         ttk.Button(toolbar, text="Delete", style="Danger.TButton", command=self.delete_selected).pack(
             side="left", padx=2
         )
@@ -359,9 +363,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(header2, text="2D PLAN", style="Section.TLabel").pack(
             side="left", padx=6, pady=(4, 5)
         )
+        ttk.Button(header2, text="Fit", width=4, command=self.fit_views).pack(
+            side="right", padx=(2, 6)
+        )
+        ttk.Button(header2, text="+", width=3, command=lambda: self._zoom_2d_center(1.2)).pack(
+            side="right", padx=2
+        )
+        ttk.Button(header2, text="−", width=3, command=lambda: self._zoom_2d_center(1 / 1.2)).pack(
+            side="right", padx=2
+        )
         ttk.Label(
             header2,
-            text="Left: select / drag   ·   Right or middle: pan   ·   Wheel: zoom",
+            text="Drag: move · Right/middle: pan · Wheel: zoom",
             style="Muted.TLabel",
         ).pack(side="right", padx=6)
         self.canvas_2d = tk.Canvas(
@@ -388,6 +401,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="Click object to select · Wheel to zoom",
             style="Muted.TLabel",
         ).pack(side="left", padx=8)
+        ttk.Button(header3, text="ISO", width=4, command=lambda: self.set_3d_preset(35, 28)).pack(
+            side="right", padx=2
+        )
+        ttk.Button(header3, text="Top", width=4, command=lambda: self.set_3d_preset(0, 75)).pack(
+            side="right", padx=2
+        )
+        ttk.Button(header3, text="Front", width=5, command=lambda: self.set_3d_preset(0, 10)).pack(
+            side="right", padx=2
+        )
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
                 side="right", padx=2
@@ -404,8 +426,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w"
         )
+        ttk.Label(
+            inspector,
+            textvariable=self._selection_detail_var,
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(1, 7))
         fields = (
             ("name", "Name"),
             ("x_m", "X (m)"),
@@ -416,7 +443,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("pressure_pa", "Pressure (Pa)"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -424,7 +451,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -452,6 +479,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
+        for canvas in (self.canvas_2d, self.canvas_3d):
+            canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
+            canvas.bind("<Control-0>", lambda event: self.fit_views())
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -487,11 +518,27 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._selection_detail_var.set(
+                "Select a room or device to edit it. Delete removes; Ctrl+D duplicates."
+            )
             for var in self._property_vars.values():
                 var.set("")
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+        if self.selected and self.selected.kind == "room":
+            area = item.get("length_m", 0.0) * item.get("width_m", 0.0)
+            volume = area * item.get("height_m", 0.0)
+            pressure = item.get("pressure_pa")
+            pressure_text = "pressure —" if pressure is None else f"pressure {pressure:g} Pa"
+            self._selection_detail_var.set(
+                f"{area:.2f} m² floor · {volume:.2f} m³ volume · {pressure_text}"
+            )
+        else:
+            self._selection_detail_var.set(
+                f"{item.get('type', 'device').title()} at "
+                f"({item.get('x_m', 0.0):g}, {item.get('y_m', 0.0):g}, {item.get('z_m', 0.0):g}) m"
+            )
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -566,6 +613,26 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.selected = _Hit("device", device["id"])
         self._load_property_panel()
         self._persist(f"Added {device_type}")
+
+    def duplicate_selected(self) -> None:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            return
+        duplicate = copy.deepcopy(item)
+        duplicate["id"] = (
+            f"room-{uuid.uuid4().hex[:8]}"
+            if self.selected.kind == "room"
+            else f"device-{uuid.uuid4().hex[:8]}"
+        )
+        duplicate["name"] = f"{item.get('name', self.selected.kind.title())} Copy"
+        offset = max(0.25, self.layout.get("grid_m", 0.5))
+        duplicate["x_m"] = duplicate.get("x_m", 0.0) + offset
+        duplicate["y_m"] = duplicate.get("y_m", 0.0) + offset
+        collection = self.layout["rooms"] if self.selected.kind == "room" else self.layout["devices"]
+        collection.append(duplicate)
+        self.selected = _Hit(self.selected.kind, duplicate["id"])
+        self._load_property_panel()
+        self._persist(f"Duplicated {item.get('name', self.selected.kind)}")
 
     def delete_selected(self) -> None:
         if self.selected is None:
@@ -881,6 +948,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = None
         if current:
             hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
+        self.canvas_2d.focus_set()
         self.selected = hit
         self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
         self._load_property_panel()
@@ -926,6 +994,13 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_wheel(self, event: tk.Event) -> None:
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
+    def _zoom_2d_center(self, factor: float) -> None:
+        self._zoom_at(
+            factor,
+            max(1, self.canvas_2d.winfo_width()) / 2,
+            max(1, self.canvas_2d.winfo_height()) / 2,
+        )
+
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
         before = self._canvas_to_world(x, y)
         self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
@@ -949,6 +1024,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["elevation_deg"] = max(
             5.0, min(75.0, self.layout["view"]["elevation_deg"] + delta)
         )
+        self._draw_3d()
+
+    def set_3d_preset(self, azimuth: float, elevation: float) -> None:
+        self.layout["view"]["azimuth_deg"] = azimuth % 360
+        self.layout["view"]["elevation_deg"] = max(5.0, min(75.0, elevation))
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
         self._draw_3d()
 
     def reset_3d(self) -> None:
@@ -980,6 +1062,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
         if hit is None:
             return
+        self.canvas_3d.focus_set()
         self.selected = hit
         self._load_property_panel()
         self.redraw()

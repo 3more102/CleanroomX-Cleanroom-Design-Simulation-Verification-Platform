@@ -113,6 +113,8 @@ v0.78 independently audits the meaning of every retained decision. A midpoint in
 
 v0.79 independently recomputes strict signed-residual bracketing and arithmetic midpoint geometry from each retained trace record's numeric fields, then checks the stored sign-change and midpoint flags against those recomputed facts. It also retains per-step raw-state evidence and the maximum absolute midpoint-centering error, so correct-looking stored booleans cannot hide corrupted numeric trace state. This remains numerical implementation provenance only; it does not add physical airflow uncertainty, interpolation-error, root-uniqueness/stability, stall/surge, manufacturer-region, commissioning/certification, or equipment-acceptance evidence.
 
+v0.80 adds a retained pressure-chain audit for every bounded-bisection step. Low, high, and midpoint fan pressures and total-system pressures are stored alongside the signed residuals; the audit independently recomputes `fan pressure - system pressure` for all three states, checks the stored residuals against that arithmetic identity, and reports the maximum absolute mismatch. The audit reuses already-computed pressure components rather than duplicating network solves, so it strengthens numerical provenance without changing the physical model or root-search behavior.
+
 ## CLI
 
 ```text

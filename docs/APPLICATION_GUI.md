@@ -76,6 +76,8 @@ The 2D view supports room creation, selection, drag movement with metric grid sn
 
 The 3D view is generated from the same canonical spatial model as the 2D layout. Room dimensions, labels, selection, and devices therefore stay synchronized. The view supports azimuth rotation, elevation adjustment, zoom, pan, reset, and fit behavior without adding a third-party rendering dependency.
 
+The desktop shell emphasizes the spatial workspace as the primary engineering surface. The spatial toolbar groups room/device creation, fit, grid, and explicit analysis synchronization controls. The 2D plan includes origin references, pressure context, color-coded device markers, and a metric scale bar; the 3D model includes a ground grid, orientation triad, color-matched devices, and dedicated rotation/tilt/reset controls. These are presentation and navigation improvements only and do not alter solver acceptance semantics.
+
 For room-verification and multi-room project-verification analyses, **Sync dimensions to active analysis** explicitly copies room dimensions (and an existing observed-pressure field when present) from the spatial model into the analysis JSON. Other engineering fields such as airflow, ACH requirements, particle requirements, and pressure-cascade criteria are preserved. Results for a synchronized analysis are invalidated and must be validated/run again.
 
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.

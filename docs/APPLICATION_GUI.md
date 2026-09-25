@@ -86,6 +86,12 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
+### Project edit undo/redo
+
+The desktop **Edit** menu provides bounded transactional undo/redo for authoritative analysis-document edits: committed valid JSON input, analysis add/remove/rename, imported input, and explicit spatial-to-analysis synchronization. Undo/redo restores stable analysis ids, active/editor context, and the captured raw editor text, then clears cached analysis results so restored inputs cannot inherit stale engineering evidence. A divergent project edit clears redo history.
+
+Project history is deliberately separate from the spatial workspace history and from the Tk JSON editor's native text undo. Ctrl+Z/Ctrl+Y/Ctrl+Shift+Z operate on project history outside the JSON editor; the spatial canvases keep their own geometry shortcuts, while focused JSON text keeps native character-level undo. Project history is cleared when a project object is replaced and after successful Save Project As, because Save As may rebase external file references. It is not persisted into schema version 1 and does not change solver equations, tolerances, or engineering acceptance semantics.
+
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
 ## Supported workflows
@@ -118,7 +124,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, bounded project-edit undo/redo with snapshot isolation and redo invalidation, transactional editor commit failure, analysis restoration without spatial-metadata rewind, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

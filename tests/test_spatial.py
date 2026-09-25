@@ -980,10 +980,12 @@ def test_pressure_overlay_reports_available_unavailable_conflicting_and_unmapped
     assert overlay["maximum_pressure_pa"] == 30.0
     assert by_id["process"]["availability"] == "available"
     assert by_id["process"]["pressure_pa"] == 30.0
+    assert by_id["process"]["pressure_source"] == "spatial"
     assert by_id["process"]["fill"] != "#dfe7ef"
     assert by_id["process"]["engineering_state"] == "conflicting"
     assert by_id["support"]["availability"] == "unavailable"
     assert by_id["support"]["pressure_pa"] is None
+    assert by_id["support"]["pressure_source"] == "unavailable"
     assert by_id["support"]["fill"] == "#dfe7ef"
     assert by_id["support"]["engineering_state"] == "unmapped"
 
@@ -1189,11 +1191,88 @@ def test_pressure_relationship_status_uses_supplied_pressure_and_explicit_cascad
         (5.0, 8.0, "pass"),
     ]
 
-    workspace.layout["rooms"][1]["pressure_pa"] = 25.0
-    assert workspace._pressure_relationships()[0][4] == "fail"
+    preparation = next(
+        room for room in analysis.input["rooms"] if room["name"] == "Preparation"
+    )
+    preparation["observed_pressure_pa"] = 25.0
+    assert workspace._pressure_relationships()[0][3:] == (5.0, "fail")
 
-    workspace.layout["rooms"][2].pop("pressure_pa")
+    ante = next(room for room in analysis.input["rooms"] if room["name"] == "Ante")
+    ante.pop("observed_pressure_pa")
     assert workspace._pressure_relationships()[1][3:] == (
         None,
         "unavailable",
     )
+
+
+
+def test_pressure_overlay_prefers_current_mapped_engineering_pressure_over_spatial_copy():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 31.0,
+                }
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process display",
+                "analysis_room_name": "Process",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 6.0,
+                "width_m": 5.0,
+                "height_m": 3.0,
+                "pressure_pa": 20.0,
+            }
+        ]
+    }
+
+    overlay = pressure_overlay_state(layout, analysis)
+
+    assert overlay["rooms"][0]["pressure_pa"] == 31.0
+    assert overlay["rooms"][0]["pressure_source"] == "engineering"
+    assert overlay["minimum_pressure_pa"] == 31.0
+    assert overlay["maximum_pressure_pa"] == 31.0
+
+
+def test_pressure_relationship_threshold_matches_project_verification_exactly():
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "src" / "cleanroomx" / "demo" / "gui_demo.cleanroomx.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    project = project_from_dict(payload)
+    analysis = project.analysis_by_id("verification")
+
+    class Flag:
+        def get(self) -> bool:
+            return True
+
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = project.metadata[SPATIAL_METADATA_KEY]
+    workspace._analysis_getter = lambda: analysis
+    workspace._show_relationships = Flag()
+
+    process = next(room for room in analysis.input["rooms"] if room["name"] == "Process")
+    preparation = next(
+        room for room in analysis.input["rooms"] if room["name"] == "Preparation"
+    )
+    process["observed_pressure_pa"] = 35.0
+    preparation["observed_pressure_pa"] = 25.0
+    assert workspace._pressure_relationships()[0][3:] == (10.0, "pass")
+
+    process["observed_pressure_pa"] = 34.999999999
+    assert workspace._pressure_relationships()[0][4] == "fail"

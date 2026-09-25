@@ -150,9 +150,10 @@ def validate_project(
     for analysis in project.analyses:
         try:
             validate_analysis_input(analysis.kind, analysis.input, base_dir=base)
-        except (KeyError, OSError, TypeError, ValueError) as exc:
+        except Exception as exc:  # analysis-validator isolation boundary
             invalid_analyses += 1
-            message = str(exc) or exc.__class__.__name__
+            detail = str(exc).strip() or "validation failed"
+            message = f"{exc.__class__.__name__}: {detail}"
             findings.append(
                 ProjectValidationFinding(
                     severity="error",

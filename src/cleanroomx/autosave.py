@@ -4,6 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+import hmac
 import json
 import os
 from pathlib import Path
@@ -18,7 +19,10 @@ from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
-RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_SCHEMA_VERSION = 2
+LEGACY_RECOVERY_SCHEMA_VERSIONS = (1,)
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
+RECOVERY_INTEGRITY_CANONICALIZATION = "canonical-json-excluding-integrity-v1"
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 
@@ -135,6 +139,58 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _recovery_integrity_digest(data: dict[str, Any]) -> str:
+    canonical = {
+        key: value
+        for key, value in data.items()
+        if key != "integrity"
+    }
+    return sha256(_canonical_json(canonical).encode("utf-8")).hexdigest()
+
+
+def _attach_recovery_integrity(data: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(data)
+    payload["integrity"] = {
+        "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+        "canonicalization": RECOVERY_INTEGRITY_CANONICALIZATION,
+        "digest": _recovery_integrity_digest(payload),
+    }
+    return payload
+
+
+def _validate_recovery_integrity(data: dict[str, Any], *, required: bool) -> None:
+    integrity = data.get("integrity")
+    if integrity is None:
+        if required:
+            raise RecoveryFormatError("recovery integrity block is required")
+        return
+    if not isinstance(integrity, dict):
+        raise RecoveryFormatError("recovery integrity must be an object")
+    if integrity.get("algorithm") != RECOVERY_INTEGRITY_ALGORITHM:
+        raise RecoveryFormatError(
+            f"recovery integrity algorithm must be {RECOVERY_INTEGRITY_ALGORITHM!r}"
+        )
+    if (
+        integrity.get("canonicalization")
+        != RECOVERY_INTEGRITY_CANONICALIZATION
+    ):
+        raise RecoveryFormatError(
+            "unsupported recovery integrity canonicalization"
+        )
+    digest = integrity.get("digest")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(ch not in "0123456789abcdef" for ch in digest)
+    ):
+        raise RecoveryFormatError("recovery integrity digest must be lowercase SHA-256")
+    expected = _recovery_integrity_digest(data)
+    if not hmac.compare_digest(digest, expected):
+        raise RecoveryFormatError(
+            "recovery artifact integrity check failed; content does not match its SHA-256"
+        )
+
+
 def _normalized_source_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -149,18 +205,49 @@ def project_identity(path: str | Path | None, *, unsaved_id: str) -> str:
 def _file_sha256(path: Path) -> tuple[os.stat_result, str]:
     last_error: OSError | None = None
     for _attempt in range(2):
-        before = path.stat()
-        digest = sha256()
         try:
+            before_path = path.stat()
+            digest = sha256()
             with path.open("rb") as handle:
+                before_handle = os.fstat(handle.fileno())
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
+                after_handle = os.fstat(handle.fileno())
+            after_path = path.stat()
         except OSError as exc:
             last_error = exc
             continue
-        after = path.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return after, digest.hexdigest()
+        before_identity = (
+            before_path.st_dev,
+            before_path.st_ino,
+            before_path.st_size,
+            before_path.st_mtime_ns,
+        )
+        before_handle_identity = (
+            before_handle.st_dev,
+            before_handle.st_ino,
+            before_handle.st_size,
+            before_handle.st_mtime_ns,
+        )
+        after_handle_identity = (
+            after_handle.st_dev,
+            after_handle.st_ino,
+            after_handle.st_size,
+            after_handle.st_mtime_ns,
+        )
+        after_identity = (
+            after_path.st_dev,
+            after_path.st_ino,
+            after_path.st_size,
+            after_path.st_mtime_ns,
+        )
+        if (
+            before_identity
+            == before_handle_identity
+            == after_handle_identity
+            == after_identity
+        ):
+            return after_path, digest.hexdigest()
         last_error = OSError(f"source changed while fingerprinting: {path}")
     assert last_error is not None
     raise last_error
@@ -205,11 +292,16 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     if data.get("schema") != RECOVERY_SCHEMA:
         raise RecoveryFormatError(f"recovery schema must be {RECOVERY_SCHEMA!r}")
     version = data.get("schema_version")
-    if version != RECOVERY_SCHEMA_VERSION:
+    supported_versions = (*LEGACY_RECOVERY_SCHEMA_VERSIONS, RECOVERY_SCHEMA_VERSION)
+    if version not in supported_versions:
         raise RecoveryFormatError(
             f"unsupported recovery schema version {version!r}; "
-            f"expected {RECOVERY_SCHEMA_VERSION}"
+            f"supported versions are {supported_versions}"
         )
+    _validate_recovery_integrity(
+        data,
+        required=version == RECOVERY_SCHEMA_VERSION,
+    )
     identity = data.get("project_identity")
     if not isinstance(identity, str) or not identity:
         raise RecoveryFormatError("project_identity must be a non-empty string")
@@ -474,7 +566,7 @@ class AutosaveManager:
     def _write_recovery(self, request: _AutosaveRequest) -> Path:
         snapshot = json.loads(request.snapshot_text)
         recovery_id = uuid.uuid4().hex
-        payload = {
+        payload = _attach_recovery_integrity({
             "schema": RECOVERY_SCHEMA,
             "schema_version": RECOVERY_SCHEMA_VERSION,
             "application_version": __version__,
@@ -484,7 +576,7 @@ class AutosaveManager:
             "saved_at_utc": _utc_now_text(),
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
-        }
+        })
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from .input_json import load_strict_json
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_variable_friction_speed import FanVariableFrictionSpeedStudy
 from .loop_network_io import looped_flow_network_from_dict
@@ -60,5 +60,5 @@ def load_fan_variable_friction_speed_study(
     path: str | Path,
 ) -> FanVariableFrictionSpeedStudy:
     return fan_variable_friction_speed_study_from_dict(
-        load_strict_json(path)
+        json.loads(Path(path).read_text(encoding="utf-8"))
     )

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from .project import atomic_write_text
 from .loop_network import solve_looped_network
 from .loop_network_io import load_looped_flow_network
 from .loop_network_report import markdown_looped_network_report
@@ -45,7 +45,7 @@ def main() -> int:
         else markdown_looped_network_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0

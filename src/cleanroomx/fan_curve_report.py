@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_fan_operating_point_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Fan/System Operating-Point Report — {result['study']}",
+        f"# CleanroomX Fan/System Operating-Point Report — {markdown_text(result['study'])}",
         "",
         f"- Fan curve: **{result['fan_curve']}**",
         f"- System curve: **{result['system_curve']}**",

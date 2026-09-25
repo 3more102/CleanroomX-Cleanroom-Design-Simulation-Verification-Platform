@@ -9,12 +9,16 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .spatial_history import SpatialEditHistory, SpatialHistoryState
+from .spatial_integrity import (
+    DEVICE_TYPES,
+    SPATIAL_GEOMETRY_EPSILON_M,
+    SPATIAL_LAYOUT_VERSION,
+    SPATIAL_METADATA_KEY,
+)
 
 
-SPATIAL_METADATA_KEY = "spatial_layout"
-SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+class SpatialSyncError(ValueError):
+    """Raised when spatial geometry cannot be mapped to engineering input safely."""
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -32,7 +36,20 @@ def _positive(value: Any, default: float) -> float:
 
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return slug or "room"
+
+
+def _unique_id(preferred: Any, used_ids: set[str], *, fallback: str) -> str:
+    """Return a deterministic non-empty identifier unique within one collection."""
+    base = str(preferred).strip() if preferred is not None else ""
+    base = base or fallback
+    candidate = base
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
 
 
 def empty_layout() -> dict:
@@ -67,10 +84,11 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            room_id = _unique_id(
+                raw.get("id"),
+                used_ids,
+                fallback=_room_id(name),
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,21 +104,29 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
-        for raw in raw_devices:
+        for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_id = _unique_id(
+                raw.get("id"),
+                used_device_ids,
+                fallback=f"device-{index + 1}",
+            )
+            room_id = raw.get("room_id")
+            if room_id is not None:
+                room_id = str(room_id).strip() or None
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -140,6 +166,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -148,7 +175,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _room_id(name),
+            "id": _unique_id(None, used_ids, fallback=_room_id(name)),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,
@@ -185,8 +212,40 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
     # Do not persist an empty auto-layout. This lets a later verification analysis
     # seed the workspace without overwriting a deliberately persisted empty layout.
     if normalized["rooms"]:
+        normalized = normalize_layout(normalized)
         metadata[SPATIAL_METADATA_KEY] = normalized
     return normalized
+
+
+def _duplicate_room_names(rooms: list[dict]) -> list[str]:
+    first_names: dict[str, str] = {}
+    duplicates: list[str] = []
+    duplicate_keys: set[str] = set()
+    for room in rooms:
+        if not isinstance(room, dict):
+            continue
+        name = str(room.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        first = first_names.get(key)
+        if first is None:
+            first_names[key] = name
+        elif key not in duplicate_keys:
+            duplicates.append(first)
+            duplicate_keys.add(key)
+    return duplicates
+
+
+def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
+    duplicates = _duplicate_room_names(rooms)
+    if not duplicates:
+        return
+    labels = ", ".join(repr(name) for name in duplicates)
+    raise SpatialSyncError(
+        f"Cannot synchronize spatial geometry because {source} contains duplicate "
+        f"room name(s): {labels}. Give every room a unique name and try again."
+    )
 
 
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
@@ -216,6 +275,8 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     if not isinstance(raw_rooms, list):
         return False
 
+    _require_unique_sync_names(rooms, source="the spatial layout")
+    _require_unique_sync_names(raw_rooms, source="the active analysis")
     by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
     for source in rooms:
         target = by_name.get(source["name"])
@@ -230,6 +291,106 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
                 target["observed_pressure_pa"] = source["pressure_pa"]
                 changed = True
     return changed
+
+
+def _room_overlap_records(
+    rooms: list[dict],
+) -> list[tuple[int, int, list[float]]]:
+    """Return deterministic room-overlap records using an adaptive broad phase.
+
+    The sweep axis is chosen from projected room density. Exact two-dimensional
+    overlap checks still use the same explicit engineering tolerance as before.
+    Results are sorted by original room order to preserve validation/report order.
+    """
+    if len(rooms) < 2:
+        return []
+
+    bounds = [
+        (
+            index,
+            room["x_m"],
+            room["y_m"],
+            room["x_m"] + room["length_m"],
+            room["y_m"] + room["width_m"],
+        )
+        for index, room in enumerate(rooms)
+    ]
+    min_x = min(item[1] for item in bounds)
+    min_y = min(item[2] for item in bounds)
+    max_x = max(item[3] for item in bounds)
+    max_y = max(item[4] for item in bounds)
+    x_span = max(max_x - min_x, SPATIAL_GEOMETRY_EPSILON_M)
+    y_span = max(max_y - min_y, SPATIAL_GEOMETRY_EPSILON_M)
+    x_density = sum(item[3] - item[1] for item in bounds) / x_span
+    y_density = sum(item[4] - item[2] for item in bounds) / y_span
+    sweep_x = x_density <= y_density
+
+    def axis_start(item: tuple[int, float, float, float, float]) -> float:
+        return item[1] if sweep_x else item[2]
+
+    def axis_end(item: tuple[int, float, float, float, float]) -> float:
+        return item[3] if sweep_x else item[4]
+
+    ordered = sorted(bounds, key=lambda item: (axis_start(item), item[0]))
+    active: list[tuple[int, float, float, float, float]] = []
+    overlaps: list[tuple[int, int, list[float]]] = []
+
+    for current in ordered:
+        current_start = axis_start(current)
+        active = [
+            item
+            for item in active
+            if axis_end(item) > current_start + SPATIAL_GEOMETRY_EPSILON_M
+        ]
+        for other in active:
+            x0 = max(current[1], other[1])
+            y0 = max(current[2], other[2])
+            x1 = min(current[3], other[3])
+            y1 = min(current[4], other[4])
+            if (
+                x1 > x0 + SPATIAL_GEOMETRY_EPSILON_M
+                and y1 > y0 + SPATIAL_GEOMETRY_EPSILON_M
+            ):
+                left_index, right_index = sorted((current[0], other[0]))
+                overlaps.append((left_index, right_index, [x0, y0, x1, y1]))
+
+        active.append(current)
+
+    overlaps.sort(key=lambda item: (item[0], item[1]))
+    return overlaps
+
+
+def _spatial_validation_key(layout: dict) -> tuple:
+    """Return the validation-relevant state, deliberately excluding camera/view data."""
+    rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
+    devices = layout.get("devices", []) if isinstance(layout, dict) else []
+    return (
+        tuple(
+            (
+                room.get("id"),
+                room.get("name"),
+                room.get("x_m"),
+                room.get("y_m"),
+                room.get("length_m"),
+                room.get("width_m"),
+                room.get("height_m"),
+            )
+            for room in rooms
+            if isinstance(room, dict)
+        ),
+        tuple(
+            (
+                device.get("id"),
+                device.get("name"),
+                device.get("room_id"),
+                device.get("x_m"),
+                device.get("y_m"),
+                device.get("z_m"),
+            )
+            for device in devices
+            if isinstance(device, dict)
+        ),
+    )
 
 
 def validate_layout(value: Any) -> list[dict]:
@@ -257,29 +418,22 @@ def validate_layout(value: Any) -> list[dict]:
                 }
             )
 
-    for left_index, left in enumerate(rooms):
-        left_x1 = left["x_m"] + left["length_m"]
-        left_y1 = left["y_m"] + left["width_m"]
-        for right in rooms[left_index + 1 :]:
-            right_x1 = right["x_m"] + right["length_m"]
-            right_y1 = right["y_m"] + right["width_m"]
-            x0 = max(left["x_m"], right["x_m"])
-            y0 = max(left["y_m"], right["y_m"])
-            x1 = min(left_x1, right_x1)
-            y1 = min(left_y1, right_y1)
-            if x1 > x0 + 1e-9 and y1 > y0 + 1e-9:
-                issues.append(
-                    {
-                        "code": "room_overlap",
-                        "severity": "warning",
-                        "item_ids": [left["id"], right["id"]],
-                        "bounds_m": [x0, y0, x1, y1],
-                        "message": (
-                            f"Rooms '{left['name']}' and '{right['name']}' overlap "
-                            f"by {(x1 - x0) * (y1 - y0):g} m²."
-                        ),
-                    }
-                )
+    for left_index, right_index, bounds_m in _room_overlap_records(rooms):
+        left = rooms[left_index]
+        right = rooms[right_index]
+        x0, y0, x1, y1 = bounds_m
+        issues.append(
+            {
+                "code": "room_overlap",
+                "severity": "warning",
+                "item_ids": [left["id"], right["id"]],
+                "bounds_m": bounds_m,
+                "message": (
+                    f"Rooms '{left['name']}' and '{right['name']}' overlap "
+                    f"by {(x1 - x0) * (y1 - y0):g} m²."
+                ),
+            }
+        )
 
     room_by_id = {room["id"]: room for room in rooms}
     for device in devices:
@@ -314,8 +468,8 @@ def validate_layout(value: Any) -> list[dict]:
         y = device["y_m"]
         z = device["z_m"]
         inside_xy = (
-            room["x_m"] - 1e-9 <= x <= room["x_m"] + room["length_m"] + 1e-9
-            and room["y_m"] - 1e-9 <= y <= room["y_m"] + room["width_m"] + 1e-9
+            room["x_m"] - SPATIAL_GEOMETRY_EPSILON_M <= x <= room["x_m"] + room["length_m"] + SPATIAL_GEOMETRY_EPSILON_M
+            and room["y_m"] - SPATIAL_GEOMETRY_EPSILON_M <= y <= room["y_m"] + room["width_m"] + SPATIAL_GEOMETRY_EPSILON_M
         )
         if not inside_xy:
             issues.append(
@@ -328,7 +482,7 @@ def validate_layout(value: Any) -> list[dict]:
                     ),
                 }
             )
-        if z < -1e-9 or z > room["height_m"] + 1e-9:
+        if z < -SPATIAL_GEOMETRY_EPSILON_M or z > room["height_m"] + SPATIAL_GEOMETRY_EPSILON_M:
             issues.append(
                 {
                     "code": "device_elevation_outside_room",
@@ -376,6 +530,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        on_history_record: Callable[
+            [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
+            bool,
+        ] | None = None,
+        on_undo_requested: Callable[[], bool] | None = None,
+        on_redo_requested: Callable[[], bool] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -383,6 +543,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
         self._status_setter = status_setter
+        self._on_history_record = on_history_record
+        self._on_undo_requested = on_undo_requested
+        self._on_redo_requested = on_redo_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -394,9 +557,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
+        self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
-        self._history = SpatialEditHistory(limit=100)
-        self._history_project_token: int | None = None
+        self._history_can_undo = False
+        self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
 
         self._build()
@@ -534,11 +698,6 @@ class SpatialDesignWorkspace(ttk.Frame):
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
-        project_token = id(project)
-        if project_token != self._history_project_token:
-            self._history.clear()
-            self._history_project_token = project_token
-            self._drag_history_before = None
         self.layout = ensure_project_layout(project, analysis)
         if self.selected and not self._selected_object():
             self.selected = None
@@ -556,48 +715,46 @@ class SpatialDesignWorkspace(ttk.Frame):
         snapshot.pop("view", None)
         return snapshot
 
-    def _restore_history_state(self, state: SpatialHistoryState) -> None:
-        view = copy.deepcopy(self.layout.get("view", {}))
-        restored = copy.deepcopy(state.layout)
-        restored["view"] = view
-        project = self._project_getter()
-        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(restored)
-        self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        self.selected = _Hit(*state.selection) if state.selection is not None else None
+    def history_selection(self) -> tuple[str, str] | None:
+        return self._selection_state()
+
+    def restore_history_selection(
+        self, selection: tuple[str, str] | None
+    ) -> None:
+        self.selected = _Hit(*selection) if selection is not None else None
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
-        self._on_change()
-        self._update_history_controls()
         self.redraw()
+
+    def set_history_availability(self, can_undo: bool, can_redo: bool) -> None:
+        self._history_can_undo = bool(can_undo)
+        self._history_can_redo = bool(can_redo)
+        self._update_history_controls()
 
     def _update_history_controls(self) -> None:
         if hasattr(self, "_undo_button"):
-            self._undo_button.configure(state="normal" if self._history.can_undo else "disabled")
+            self._undo_button.configure(
+                state="normal" if getattr(self, "_history_can_undo", False) else "disabled"
+            )
         if hasattr(self, "_redo_button"):
-            self._redo_button.configure(state="normal" if self._history.can_redo else "disabled")
+            self._redo_button.configure(
+                state="normal" if getattr(self, "_history_can_redo", False) else "disabled"
+            )
 
     def undo_edit(self) -> bool:
-        restored = self._history.undo()
-        if restored is None:
-            self._status_setter("Nothing to undo in the spatial workspace")
-            self._update_history_controls()
+        callback = getattr(self, "_on_undo_requested", None)
+        if callback is None:
+            self._status_setter("Project undo is unavailable")
             return False
-        state, description = restored
-        self._restore_history_state(state)
-        self._status_setter(f"Undo: {description}")
-        return True
+        return bool(callback())
 
     def redo_edit(self) -> bool:
-        restored = self._history.redo()
-        if restored is None:
-            self._status_setter("Nothing to redo in the spatial workspace")
-            self._update_history_controls()
+        callback = getattr(self, "_on_redo_requested", None)
+        if callback is None:
+            self._status_setter("Project redo is unavailable")
             return False
-        state, description = restored
-        self._restore_history_state(state)
-        self._status_setter(f"Redo: {description}")
-        return True
+        return bool(callback())
 
     def _on_undo_shortcut(self, event=None):
         self.undo_edit()
@@ -617,13 +774,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        if history_before is not None:
-            self._history.record(
-                before_layout=history_before,
-                before_selection=selection_before,
-                after_layout=self._history_layout(),
-                after_selection=self._selection_state(),
-                description=message,
+        history_callback = getattr(self, "_on_history_record", None)
+        if history_before is not None and history_callback is not None:
+            history_callback(
+                history_before,
+                selection_before,
+                self._history_layout(),
+                self._selection_state(),
+                message,
             )
         self._on_change()
         self._status_setter(message)
@@ -649,9 +807,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
         )
 
+    def _refresh_validation(self, *, force: bool = False) -> None:
+        validation_key = _spatial_validation_key(self.layout)
+        if force or validation_key != self._last_validation_key:
+            self._validation_issues = validate_layout(self.layout)
+            self._last_validation_key = validation_key
+            self._update_validation_summary()
+
     def report_validation(self) -> None:
-        self._validation_issues = validate_layout(self.layout)
-        self._update_validation_summary()
+        self._refresh_validation(force=True)
         if not self._validation_issues:
             self._status_setter("Spatial checks: PASS")
             self.redraw()
@@ -830,8 +994,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
-        self._validation_issues = validate_layout(self.layout)
-        self._update_validation_summary()
+        self._refresh_validation()
         self._draw_2d()
         self._draw_3d()
 

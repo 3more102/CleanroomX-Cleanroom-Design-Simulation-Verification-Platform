@@ -308,7 +308,7 @@ For development and tests:
 
     cleanroomx verify-project examples/facility_project.json
 
-A failing configured verification requirement returns exit code 2.
+A failing configured verification requirement returns exit code 2. Verification JSON also reports an aggregate `status` and `complete` flag so unresolved evidence is not presented as a plain pass: `pass_with_unchecked` means configured checks passed but at least one check could not be evaluated, while `not_checked` means no verification finding was evaluated. The existing `passed` boolean remains a compatibility field meaning that no configured check failed; automation that requires a complete successful verification should require `status == "pass"` (equivalently, both `passed == true` and `complete == true`).
 
 ## Run the particle screening simulation
 
@@ -702,3 +702,16 @@ The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer p
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.
 
 v0.37 adds deterministic bounded corner uncertainty around the nonlinear fan/variable-friction loop solver for explicit fixed-pressure and selected automatic-friction local-loss bounds. Every corner rebuilds the affected geometry evidence and re-runs the full Darcy-friction fan/network solve. Complete operating-point and internal edge-flow envelopes are reported only when the nominal case and every evaluated corner solve inside the supplied fan-curve range; no-intersection or numerical non-convergence remains indeterminate. The analysis is deterministic corner evidence, not statistical uncertainty propagation, and does not infer K-factor uncertainty, covariance, geometry manufacturing tolerances, fan-curve uncertainty, controls, leakage, commissioning acceptance, or certification.
+
+## Release 2 integration (unreleased)
+
+The Release 2 integration branch consolidates the previously overlapping persistence, recovery, project-history, run-evidence, reporting, plugin, and portable-bundle work into one architecture. The current integration includes:
+
+- durable verified atomic project/export persistence and crash-recovery integrity;
+- guarded saved-project revisions and migration-aware source revision tracking;
+- one bounded project-wide Undo/Redo transaction stream for project, analysis, and spatial edits;
+- immutable analysis-run snapshots, exact-input provenance, external-dependency freshness checks, and integrity-checked persisted run history;
+- versioned analysis plugin API v1;
+- integrity-checked portable project bundles and self-contained portable engineering HTML reports.
+
+See [Plugin API](docs/PLUGINS.md), [Project Bundles](docs/PROJECT_BUNDLES.md), and [Portable Engineering HTML Reports](docs/PORTABLE_ENGINEERING_REPORT.md). Release 2 remains unreleased until the integration PR completes its full Python 3.11/3.12/3.13 and installed-application release gates.

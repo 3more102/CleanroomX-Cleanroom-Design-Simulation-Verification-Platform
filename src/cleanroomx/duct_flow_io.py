@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from .input_json import load_strict_json
 from .duct_flow import ParallelFlowNetwork, ParallelFlowPath, ParallelFlowSection
 
 
@@ -24,5 +24,5 @@ def parallel_flow_network_from_dict(data: dict) -> ParallelFlowNetwork:
 
 def load_parallel_flow_network(path: str | Path) -> ParallelFlowNetwork:
     return parallel_flow_network_from_dict(
-        load_strict_json(path)
+        json.loads(Path(path).read_text(encoding="utf-8"))
     )

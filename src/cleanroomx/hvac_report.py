@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_hvac_report(result: dict) -> str:
-    lines = [f"# CleanroomX HVAC Report — {result['project']}", ""]
+    lines = [f"# CleanroomX HVAC Report — {markdown_text(result['project'])}", ""]
     lines.extend(
         [
             "## Airflow and preliminary capacity",
@@ -17,8 +19,8 @@ def markdown_hvac_report(result: dict) -> str:
         units = room["filter_units"] if room["filter_units"] is not None else "—"
         balance_status = "PASS" if balance["passes_minimum_surplus"] else "FAIL"
         lines.append(
-            f"| {room['name']} | {room['cleanroom_airflow_m3_h']} | "
-            f"{room['governing_airflow_m3_h']} | {thermal['governing_airflow_basis']} | "
+            f"| {markdown_text(room['name'])} | {room['cleanroom_airflow_m3_h']} | "
+            f"{room['governing_airflow_m3_h']} | {markdown_text(thermal['governing_airflow_basis'])} | "
             f"{balance['net_surplus_m3_h']} | {balance_status} | "
             f"{thermal['preliminary_cooling_capacity_kw']} | "
             f"{thermal['preliminary_heating_capacity_kw']} | {units} |"
@@ -28,7 +30,7 @@ def markdown_hvac_report(result: dict) -> str:
     for room in result["rooms"]:
         balance = room["air_balance"]
         lines.append(
-            f"- **{room['name']}:** supply {balance['supply_airflow_m3_h']} m³/h, "
+            f"- **{markdown_text(room['name'])}:** supply {balance['supply_airflow_m3_h']} m³/h, "
             f"return {balance['return_airflow_m3_h']} m³/h, exhaust "
             f"{balance['exhaust_airflow_m3_h']} m³/h, transfer-in "
             f"{balance['transfer_in_airflow_m3_h']} m³/h, transfer-out "
@@ -41,7 +43,7 @@ def markdown_hvac_report(result: dict) -> str:
         thermal = room["thermal"]
         indoor = thermal["room_air"]
         lines.append(
-            f"- **{room['name']} room:** {indoor['dry_bulb_c']} °C, "
+            f"- **{markdown_text(room['name'])} room:** {indoor['dry_bulb_c']} °C, "
             f"{indoor['relative_humidity_percent']}% RH, "
             f"W={indoor['humidity_ratio_g_kg_da']} g/kgda, "
             f"h={indoor['enthalpy_kj_kg_da']} kJ/kgda, "
@@ -50,7 +52,7 @@ def markdown_hvac_report(result: dict) -> str:
         outdoor = thermal["outdoor_air"]
         if outdoor is not None:
             lines.append(
-                f"- **{room['name']} outdoor:** {outdoor['dry_bulb_c']} °C, "
+                f"- **{markdown_text(room['name'])} outdoor:** {outdoor['dry_bulb_c']} °C, "
                 f"{outdoor['relative_humidity_percent']}% RH, "
                 f"W={outdoor['humidity_ratio_g_kg_da']} g/kgda, "
                 f"h={outdoor['enthalpy_kj_kg_da']} kJ/kgda."
@@ -69,12 +71,12 @@ def markdown_hvac_report(result: dict) -> str:
         )
         for path in network["paths"]:
             lines.append(
-                f"| {path['name']} | {path['total_pressure_drop_pa']} |"
+                f"| {markdown_text(path['name'])} | {path['total_pressure_drop_pa']} |"
             )
         lines.extend(
             [
                 "",
-                f"Critical path: **{network['critical_path']}**.",
+                f"Critical path: **{markdown_text(network['critical_path'])}**.",
                 f"Critical-path duct pressure drop: **{network['critical_path_pressure_drop_pa']} Pa**.",
                 "",
                 network["scope_note"],
@@ -88,9 +90,9 @@ def markdown_hvac_report(result: dict) -> str:
                 "",
                 "## Branch-flow supply network",
                 "",
-                f"- Source node: **{network['source_node']}**.",
+                f"- Source node: **{markdown_text(network['source_node'])}**.",
                 f"- Solved source airflow: **{network['source_airflow_m3_h']} m³/h**.",
-                f"- Critical terminal: **{network['critical_terminal']}**.",
+                f"- Critical terminal: **{markdown_text(network['critical_terminal'])}**.",
                 f"- Critical-path pressure drop: **{network['critical_path_pressure_drop_pa']} Pa**.",
                 "",
                 "| Branch | From | To | Solved airflow m³/h | Pressure drop Pa |",
@@ -99,8 +101,8 @@ def markdown_hvac_report(result: dict) -> str:
         )
         for item in network["branches"]:
             lines.append(
-                f"| {item['name']} | {item['upstream_node']} | "
-                f"{item['downstream_node']} | {item['airflow_m3_h']} | "
+                f"| {markdown_text(item['name'])} | {markdown_text(item['upstream_node'])} | "
+                f"{markdown_text(item['downstream_node'])} | {item['airflow_m3_h']} | "
                 f"{item['total_pressure_drop_pa']} |"
             )
         lines.extend(
@@ -112,7 +114,7 @@ def markdown_hvac_report(result: dict) -> str:
         )
         for terminal in network["terminals"]:
             lines.append(
-                f"| {terminal['node']} | {terminal['airflow_m3_h']} | "
+                f"| {markdown_text(terminal['node'])} | {terminal['airflow_m3_h']} | "
                 f"{terminal['total_pressure_drop_pa']} |"
             )
         lines.extend(["", network["scope_note"]])

@@ -80,16 +80,41 @@ jobs:
         run: >-
           python -m pytest -q
           tests/test_application.py
+          tests/test_input_contracts.py
+          tests/test_cli_external_dependency_integrity.py
           tests/test_application_all_workflows.py
           tests/test_project_document.py
+          tests/test_run_history.py
+          tests/test_cli_output_persistence.py
           tests/test_autosave.py
           tests/test_crash_recovery.py
           tests/test_recovery_diff.py
           tests/test_gui.py
           tests/test_gui_autosave.py
           tests/test_gui_recovery.py
+      - name: Run Release 2 consolidation regressions
+        run: >-
+          python -m pytest -q
+          tests/test_release2_project_model.py
+          tests/test_release2_spatial_integrity.py
+          tests/test_release2_recovery_quarantine.py
+          tests/test_persistence.py
+          tests/test_project_write_guard.py
+          tests/test_project_history.py
+          tests/test_project_revisions.py
+          tests/test_gui_migration.py
+          tests/test_run_history.py
+          tests/test_dependency_state.py
+          tests/test_engineering_report.py
+          tests/test_project_bundle.py
+          tests/test_plugins.py
       - name: Run complete test suite
         run: python -m pytest -q
+      - name: Run Release 2 performance evidence
+        if: matrix.python-version == '3.13'
+        run: |
+          python scripts/benchmark_spatial_validation.py
+          python scripts/benchmark_project_bundle.py
       - name: Build wheel and verify installed application
         run: |
           rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env
@@ -97,6 +122,7 @@ jobs:
           python -m venv /tmp/cleanroomx-wheel-env
           /tmp/cleanroomx-wheel-env/bin/python -m pip install --no-index /tmp/cleanroomx-wheel/cleanroomx-*.whl
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-bundle --help
           /tmp/cleanroomx-wheel-env/bin/python - <<'PY'
           from pathlib import Path
           import cleanroomx

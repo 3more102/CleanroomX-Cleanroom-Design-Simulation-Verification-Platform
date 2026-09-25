@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from .input_json import load_strict_json
 from .psychrometric_uncertainty_models import UncertainAirState
 from .uncertainty_models import Provenance, UncertainValue
 
@@ -37,5 +37,5 @@ def psychrometric_uncertainty_from_dict(data: dict) -> UncertainAirState:
 
 
 def load_psychrometric_uncertainty(path: str | Path) -> UncertainAirState:
-    data = load_strict_json(path)
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
     return psychrometric_uncertainty_from_dict(data)

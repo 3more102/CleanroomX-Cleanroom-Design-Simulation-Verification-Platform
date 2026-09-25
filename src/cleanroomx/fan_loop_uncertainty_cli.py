@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from .project import atomic_write_text
 from .fan_loop_uncertainty import analyze_fan_loop_network_uncertainty
 from .fan_loop_uncertainty_io import load_fan_loop_network_uncertainty
 from .fan_loop_uncertainty_report import (
@@ -33,7 +33,7 @@ def main() -> int:
         else markdown_fan_loop_network_uncertainty_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0 if result["status"] == "complete" else 2

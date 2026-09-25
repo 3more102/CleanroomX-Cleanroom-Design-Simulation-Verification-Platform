@@ -6,14 +6,19 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.application as application_module
 from cleanroomx.application import (
     ANALYSIS_SPECS,
+    AnalysisRun,
+    ExternalDependencyChangedError,
     analysis_catalog,
+    analysis_run_matches_input,
     application_info,
     rebase_analysis_file_references,
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
+    verify_analysis_run_bundle,
 )
 
 
@@ -191,6 +196,103 @@ def test_application_execution_provenance_hashes_inline_input_canonically():
     assert first_provenance["external_dependencies_stable"] is True
 
 
+def test_analysis_run_matches_only_its_exact_canonical_input():
+    payload = _example("basic_room.json")
+    run = run_analysis("room_verification", payload)
+
+    reordered = dict(reversed(list(payload.items())))
+    assert analysis_run_matches_input(run, "room_verification", reordered) is True
+
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+    assert analysis_run_matches_input(run, "room_verification", changed) is False
+    assert analysis_run_matches_input(run, "hvac", payload) is False
+
+
+def test_analysis_run_input_match_fails_closed_without_valid_provenance():
+    payload = _example("basic_room.json")
+    run = run_analysis("room_verification", payload)
+    corrupted = application_module.AnalysisRun(
+        kind=run.kind,
+        title=run.title,
+        status=run.status,
+        result=run.result,
+        markdown=run.markdown,
+        diagnostics={},
+        plot=run.plot,
+    )
+
+    assert analysis_run_matches_input(
+        corrupted, "room_verification", payload
+    ) is False
+
+
+def test_analysis_run_snapshots_reject_recursive_mutation_and_remain_serializable():
+    run = run_analysis("fan_operating_point", _example("fan_operating_point_demo.json"))
+
+    assert isinstance(run.result, dict)
+    assert isinstance(run.diagnostics, dict)
+    assert isinstance(run.plot, dict)
+
+    with pytest.raises(TypeError, match="immutable"):
+        run.result["tampered"] = True
+    with pytest.raises(TypeError, match="immutable"):
+        run.result["curve_point_checks"].append({})
+    with pytest.raises(TypeError, match="immutable"):
+        run.diagnostics["application_execution_provenance"]["input_sha256"] = "0" * 64
+    with pytest.raises(TypeError, match="immutable"):
+        run.plot["series"].clear()
+
+    json.dumps(run.result, allow_nan=False)
+    json.dumps(run.diagnostics, allow_nan=False)
+    json.dumps(run.plot, allow_nan=False)
+    json.dumps(run.to_dict(), allow_nan=False)
+
+
+def test_analysis_run_snapshot_breaks_source_aliases():
+    result = {"nested": {"value": 1}, "items": [{"value": 2}]}
+    diagnostics = {"audit": {"state": "original"}}
+    plot = {"series": [{"x": [1.0], "y": [2.0]}]}
+
+    run = application_module.AnalysisRun(
+        kind="test",
+        title="Test",
+        status="complete",
+        result=result,
+        markdown="report",
+        diagnostics=diagnostics,
+        plot=plot,
+    )
+
+    result["nested"]["value"] = 99
+    result["items"][0]["value"] = 88
+    diagnostics["audit"]["state"] = "changed"
+    plot["series"][0]["x"].append(3.0)
+
+    assert run.result["nested"]["value"] == 1
+    assert run.result["items"][0]["value"] == 2
+    assert run.diagnostics["audit"]["state"] == "original"
+    assert run.plot["series"][0]["x"] == [1.0]
+
+
+def test_analysis_run_to_dict_returns_detached_ordinary_mutable_containers():
+    run = run_analysis("fan_operating_point", _example("fan_operating_point_demo.json"))
+
+    exported = run.to_dict()
+    assert type(exported["result"]) is dict
+    assert type(exported["diagnostics"]) is dict
+    assert type(exported["plot"]) is dict
+    assert type(exported["plot"]["series"]) is list
+
+    exported["result"]["tampered"] = True
+    exported["diagnostics"]["application_execution_provenance"]["input_sha256"] = "0" * 64
+    exported["plot"]["series"].clear()
+
+    assert "tampered" not in run.result
+    assert run.diagnostics["application_execution_provenance"]["input_sha256"] != "0" * 64
+    assert run.plot["series"]
+
+
 
 def test_rebase_analysis_file_references_preserves_consistency_referents(tmp_path):
     source = tmp_path / "source"
@@ -357,3 +459,301 @@ def test_every_catalog_workflow_runs_end_to_end_through_application_service(
 def test_application_end_to_end_matrix_covers_entire_catalog():
     covered = {kind for kind, _ in _APPLICATION_EXAMPLES} | {"consistency"}
     assert covered == set(ANALYSIS_SPECS)
+
+
+def _copy_example(tmp_path: Path, name: str) -> None:
+    (tmp_path / name).write_bytes((ROOT / "examples" / name).read_bytes())
+
+
+def test_file_backed_analysis_discards_result_when_dependency_changes_during_run(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+        "room_airflow_abs_tolerance_m3_h": 0.0,
+        "require_same_room_set": True,
+    }
+    original = application_module._run_consistency
+
+    def run_then_change_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        dependency = base_dir / "consistency_hvac_demo.json"
+        dependency.write_text(
+            dependency.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_change_dependency,
+    )
+
+    with pytest.raises(
+        ExternalDependencyChangedError,
+        match="result was discarded",
+    ) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == ["hvac_project"]
+    assert raised.value.changes[0]["status"] == "changed_during_run"
+    assert (
+        raised.value.changes[0]["sha256_before"]
+        != raised.value.changes[0]["sha256_after"]
+    )
+
+
+def test_file_backed_analysis_discards_result_when_dependency_disappears(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    original = application_module._run_consistency
+
+    def run_then_remove_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        (base_dir / "facility_project.json").unlink()
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_remove_dependency,
+    )
+
+    with pytest.raises(
+        ExternalDependencyChangedError,
+        match="verification_project",
+    ) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert raised.value.changes == (
+        {
+            "field": "verification_project",
+            "declared_path": "facility_project.json",
+            "status": "unavailable_or_unstable",
+        },
+    )
+
+
+def test_file_backed_dependency_change_reporting_is_deterministic(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    original = application_module._run_consistency
+
+    def run_then_change_both_dependencies(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        for name in ("facility_project.json", "consistency_hvac_demo.json"):
+            dependency = base_dir / name
+            dependency.write_text(
+                dependency.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_change_both_dependencies,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == [
+        "verification_project",
+        "hvac_project",
+    ]
+
+
+def test_stable_file_backed_run_records_revision_timestamps(tmp_path):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    assert provenance["external_dependencies_stable"] is True
+    assert provenance["external_dependency_count"] == 2
+    for dependency in provenance["external_dependencies"]:
+        assert dependency["mtime_ns_before"] == dependency["mtime_ns_after"]
+        assert dependency["mtime_ns_before"] > 0
+
+
+def test_dossier_analysis_uses_same_external_dependency_guard(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    payload = {
+        "name": "Revision-stability regression",
+        "verification_project": "facility_project.json",
+    }
+    original = application_module._run_dossier
+
+    def run_then_change_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        dependency = base_dir / "facility_project.json"
+        dependency.write_text(
+            dependency.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_dossier",
+        run_then_change_dependency,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        run_analysis("dossier", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == [
+        "verification_project"
+    ]
+    assert raised.value.changes[0]["status"] == "changed_during_run"
+
+
+def test_external_dependency_fingerprint_retries_a_torn_read(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_sha256_file = application_module._sha256_file
+    calls = {"count": 0}
+
+    def mutate_after_first_hash(path):
+        digest = original_sha256_file(path)
+        if path == target and calls["count"] == 0:
+            calls["count"] += 1
+            path.write_text(
+                path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        return digest
+
+    monkeypatch.setattr(
+        application_module,
+        "_sha256_file",
+        mutate_after_first_hash,
+    )
+
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    verification = next(
+        item
+        for item in provenance["external_dependencies"]
+        if item["field"] == "verification_project"
+    )
+    expected = hashlib.sha256(target.read_bytes()).hexdigest()
+    assert calls["count"] == 1
+    assert verification["sha256_before"] == expected
+    assert verification["sha256_after"] == expected
+    assert verification["stable_during_run"] is True
+
+
+def test_analysis_run_preserves_legacy_positional_constructor_shape():
+    run = AnalysisRun("kind", "title", "status", {}, "", {}, None)
+    assert run.input_snapshot == {}
+
+
+def test_run_bundle_captures_immutable_input_and_verifies():
+    payload = _example("basic_room.json")
+    submitted = json.loads(json.dumps(payload))
+    run = run_analysis("room_verification", payload)
+    payload["name"] = "mutated after execution"
+
+    bundle = run.to_dict()
+    verification = verify_analysis_run_bundle(bundle)
+
+    assert run.to_dict() == bundle
+    assert bundle["schema"] == "cleanroomx.analysis-run"
+    assert bundle["schema_version"] == 1
+    assert bundle["input_snapshot"] == submitted
+    assert run.input_snapshot == submitted
+    assert len(bundle["integrity"]["sha256"]) == 64
+    assert verification["status"] == "ok"
+    assert verification["analysis_kind"] == "room_verification"
+    assert verification["input_sha256"] == run.diagnostics[
+        "application_execution_provenance"
+    ]["input_sha256"]
+    assert verification["bundle_sha256"] == bundle["integrity"]["sha256"]
+
+
+def test_run_bundle_verification_is_independent_of_current_registry(monkeypatch):
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    reduced = dict(application_module.ANALYSIS_SPECS)
+    reduced.pop("room_verification")
+    monkeypatch.setattr(application_module, "ANALYSIS_SPECS", reduced)
+
+    verification = verify_analysis_run_bundle(bundle)
+
+    assert verification["status"] == "ok"
+    assert verification["analysis_kind"] == "room_verification"
+
+
+def test_run_bundle_verification_detects_document_tampering():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["status"] = "tampered"
+
+    with pytest.raises(ValueError, match="content has changed"):
+        verify_analysis_run_bundle(bundle)
+
+
+def test_run_bundle_verification_rejects_missing_required_fields():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle.pop("result")
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="missing required field"):
+        verify_analysis_run_bundle(bundle)
+
+
+def test_run_bundle_verification_detects_input_provenance_mismatch_even_if_resigned():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["input_snapshot"]["name"] = "different submitted input"
+
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="input snapshot does not match"):
+        verify_analysis_run_bundle(bundle)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def _fmt(value: object) -> str:
     return "—" if value is None else str(value)
@@ -7,7 +9,7 @@ def _fmt(value: object) -> str:
 
 def markdown_fan_loop_network_uncertainty_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Fan/Loop-Network Uncertainty Report — {result['analysis']}",
+        f"# CleanroomX Fan/Loop-Network Uncertainty Report — {markdown_text(result['analysis'])}",
         "",
         f"- Status: **{result['status'].upper()}**",
         f"- Fan curve: **{result['fan_curve']}**",

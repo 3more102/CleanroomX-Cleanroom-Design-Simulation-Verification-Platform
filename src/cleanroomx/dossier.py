@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Iterable
 
-from .input_json import load_strict_json
+from .input_contracts import validate_dossier_input_contract
 
 
 def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
@@ -752,7 +752,10 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .uncertainty_io import load_uncertain_room
 
     manifest_path = Path(manifest_path)
-    data = load_strict_json(manifest_path)
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("dossier manifest must contain a JSON object")
+    validate_dossier_input_contract(data)
     name = str(data.get("name", "")).strip()
     if not name:
         raise ValueError("dossier name cannot be empty")

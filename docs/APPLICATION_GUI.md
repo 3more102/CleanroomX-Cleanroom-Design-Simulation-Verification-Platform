@@ -46,7 +46,11 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load. Within supported schema version 1, unrecognized additive fields at the document, project, and analysis-record levels are retained as opaque strict-JSON data across open/edit/save round trips instead of being silently discarded. CleanroomX-owned fields remain authoritative.
+
+### Protected legacy conversion
+
+When one of the supported legacy formats is opened, the desktop displays it as a migrated unsaved copy rather than treating the in-memory schema-v1 model as a normal saved project. The original legacy path remains available for resolving relative engineering references, but **Save Project** routes to **Save Project As**. The first Save As must use a different path; CleanroomX refuses the legacy source itself. Cancelled or failed saves keep that protection active. Only a successful validated schema-v1 save elsewhere clears the migration protection.
 
 ### External-change write protection
 
@@ -98,7 +102,7 @@ Consistency and dossier workflows resolve relative file references against proje
 
 The main notebook now includes **Design 2D + 3D**, a synchronized cleanroom layout workspace backed by project metadata. It is intentionally separate from the engineering solver implementations: spatial edits do not silently change analysis inputs.
 
-The 2D view supports room creation, selection, drag movement with metric grid snapping, property editing and resizing, deletion, zoom, pan, fit-to-view, coordinate feedback, and placement of doors, FFUs, supply points, returns, exhausts, equipment, and sensors. Spatial model edits have bounded transactional **Undo/Redo**: add, delete, property changes, and a full drag gesture are each one history operation; redo is invalidated by a new divergent edit, and undo/redo restores selection without rewinding the current camera/view state. Toolbar buttons expose the feature, with Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z available while a spatial canvas has focus. When room pressure is present in a verification input, the layout visualizes only that supplied pressure data; it does not invent pressure values.
+The 2D view supports room creation, selection, drag movement with metric grid snapping, property editing and resizing, deletion, zoom, pan, fit-to-view, coordinate feedback, and placement of doors, FFUs, supply points, returns, exhausts, equipment, and sensors. Spatial model edits participate in the same bounded application-wide transactional **Undo/Redo** stream as analysis and project edits: add, delete, property changes, and a full drag gesture are each one transaction; redo is invalidated by a new divergent edit, and undo/redo restores selection without rewinding the current camera/view state. The spatial toolbar delegates to that same global history, with Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z available while a spatial canvas has focus. When room pressure is present in a verification input, the layout visualizes only that supplied pressure data; it does not invent pressure values.
 
 The 3D view is generated from the same canonical spatial model as the 2D layout. Room dimensions, labels, selection, and devices therefore stay synchronized. The view supports azimuth rotation, elevation adjustment, zoom, pan, reset, and fit behavior without adding a third-party rendering dependency.
 
@@ -108,7 +112,11 @@ Existing projects remain schema-version-1 compatible because the spatial documen
 
 ## Results and plots
 
-All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.
+All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256, byte-size, and nanosecond modification-time evidence for external dependencies. Diagnostics exposes this evidence and **Export Run Bundle JSON** preserves the completed run data.
+
+For `consistency` and `dossier`, those external dependencies are guarded as engineering run inputs rather than treated as advisory provenance only. CleanroomX fingerprints each referenced file from a stable read before execution and again after result/report generation. If a referenced file changes, disappears, or remains unstable while being fingerprinted, the run fails with an actionable error and the result is discarded. Stabilize the source files and run again. This prevents the desktop from presenting a result assembled while its external engineering inputs were changing; it does not lock files against other programs.
+
+Cached desktop results are also bound to the canonical SHA-256 of the exact submitted analysis input. Before a cached result is restored, before a completed background run is accepted, and before result/run-bundle/report export, CleanroomX compares that recorded identity with the current analysis kind and input. A mismatch clears the cached result and requires a rerun. The existing immediate invalidation hooks remain in place, but the provenance check is the final fail-closed boundary if a mutation path misses an invalidation notification.
 
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
@@ -121,3 +129,17 @@ CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the co
 ## Engineering boundary
 
 The desktop application does not change CleanroomX acceptance semantics or convert screening calculations into certification evidence. CleanroomX does not by itself establish ISO cleanroom certification, CFD validation, commissioning or TAB acceptance, manufacturer approval, stall/surge safety, physical uncertainty or statistical confidence, or regulatory compliance. Source data, assumptions, boundary conditions, and applicable engineering standards remain the operator's responsibility.
+
+## Release 2 desktop workflows
+
+The Release 2 integration adds durable project-state and evidence workflows around the existing engineering backends:
+
+- **Project-wide Undo/Redo** uses one bounded transaction history across project fields, analysis edits, and spatial edits. Persistent run-history evidence and the current camera/view are not rewound as design edits.
+- **Saved revisions** preserve validated prior project bytes before guarded overwrites and restore only to a separate destination, keeping the currently opened project binding explicit.
+- **Recovery integrity** verifies current recovery artifacts with SHA-256 evidence before they are offered for restoration. Legacy v1 recovery artifacts remain readable but are labeled unverified.
+- **Run history** records accepted completed runs as a bounded integrity-checked audit ledger tied to the exact analysis input and execution provenance.
+- **Portable HTML reports** export the current fresh completed run as a self-contained verified engineering report. See [Portable Engineering HTML Report](PORTABLE_ENGINEERING_REPORT.md).
+- **Portable project bundles** collect a project and referenced external dependencies into an integrity-checked handoff artifact. See [Project Bundles](PROJECT_BUNDLES.md).
+- **Analysis plugins** use the versioned plugin API and are isolated from built-in registry keys. See [Plugins](PLUGINS.md).
+
+Stale cached results are rejected when the active analysis input or recorded external dependency revision no longer matches the completed run.

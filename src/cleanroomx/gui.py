@@ -23,29 +23,50 @@ from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
     analysis_catalog,
+    analysis_run_is_current,
     application_info,
     rebase_analysis_file_references,
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
 )
+from .engineering_report import engineering_report_html
+from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectFileBusyError,
+    ProjectSaveDurabilityError,
     ProjectWriteConflictError,
-    atomic_write_text,
     capture_project_file_revision,
     load_project_document,
-    load_project_document_with_revision,
+    load_project_document_with_revision_info,
     new_project,
+    project_from_dict,
     save_project_document,
     save_project_document_guarded,
 )
+from .project_history import ProjectEditHistory, ProjectHistoryState
+from .project_bundle import (
+    export_project_bundle,
+    extract_project_bundle,
+)
+from .project_revisions import restore_project_revision, scan_project_revisions
 from .recovery_ui import RecoveryCenter
-from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .revision_ui import ProjectRevisionCenter
+from .run_history import (
+    RUN_HISTORY_METADATA_KEY,
+    RunHistoryIntegrityError,
+    append_run_history_evidence,
+    build_run_history_evidence,
+    run_history_records,
+    validate_run_history,
+)
+from .spatial import SPATIAL_METADATA_KEY, SpatialDesignWorkspace, SpatialSyncError, sync_layout_to_analysis
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
+PROJECT_HISTORY_LIMIT = 100
 
 
 _UNIT_SUFFIXES = (
@@ -122,28 +143,42 @@ class AnalysisPicker(tk.Toplevel):
         frame.pack(fill="both", expand=True, padx=12, pady=6)
         self.tree = ttk.Treeview(
             frame,
-            columns=("category", "description"),
+            columns=("category", "source", "description"),
             show="tree headings",
             height=14,
         )
         self.tree.heading("#0", text="Analysis")
         self.tree.heading("category", text="Category")
+        self.tree.heading("source", text="Implementation")
         self.tree.heading("description", text="Description")
         self.tree.column("#0", width=230, stretch=False)
         self.tree.column("category", width=110, stretch=False)
-        self.tree.column("description", width=460, stretch=True)
+        self.tree.column("source", width=180, stretch=False)
+        self.tree.column("description", width=420, stretch=True)
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
         for item in analysis_catalog():
+            source = "Built-in"
+            plugin = item.get("plugin")
+            if isinstance(plugin, dict):
+                identity = (
+                    plugin.get("distribution_name")
+                    or plugin.get("entry_point_name")
+                    or item["key"]
+                )
+                version = plugin.get("distribution_version")
+                source = f"Plugin: {identity}" + (
+                    f" {version}" if version else ""
+                )
             self.tree.insert(
                 "",
                 "end",
                 iid=item["key"],
                 text=item["title"],
-                values=(item["category"], item["description"]),
+                values=(item["category"], source, item["description"]),
             )
 
         buttons = ttk.Frame(self)
@@ -158,7 +193,7 @@ class AnalysisPicker(tk.Toplevel):
             self.tree.selection_set(first[0])
             self.tree.focus(first[0])
 
-        self.geometry("850x470")
+        self.geometry("1020x470")
 
     def _accept(self) -> None:
         selection = self.tree.selection()
@@ -166,6 +201,108 @@ class AnalysisPicker(tk.Toplevel):
             return
         self.result = selection[0]
         self.destroy()
+
+
+class RunHistoryDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc, metadata: dict):
+        super().__init__(parent)
+        self.title("Analysis Run History")
+        self.geometry("1180x680")
+        self.minsize(900, 520)
+        self.transient(parent)
+
+        summary = validate_run_history(metadata)
+        self.records = run_history_records(metadata)
+        ttk.Label(
+            self,
+            text=(
+                f"Verified retained digest chain — {summary['record_count']} record(s). "
+                "Digests detect accidental corruption; they are not authenticity signatures."
+            ),
+        ).pack(fill="x", padx=10, pady=(10, 6))
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        list_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(list_frame, weight=1)
+        body.add(detail_frame, weight=2)
+
+        self.tree = ttk.Treeview(
+            list_frame,
+            columns=("time", "analysis", "kind", "status", "input"),
+            show="tree headings",
+            height=10,
+        )
+        self.tree.heading("#0", text="#")
+        self.tree.heading("time", text="Completed UTC")
+        self.tree.heading("analysis", text="Analysis")
+        self.tree.heading("kind", text="Kind")
+        self.tree.heading("status", text="Status")
+        self.tree.heading("input", text="Input SHA-256")
+        self.tree.column("#0", width=55, stretch=False)
+        self.tree.column("time", width=185, stretch=False)
+        self.tree.column("analysis", width=230)
+        self.tree.column("kind", width=190)
+        self.tree.column("status", width=120, stretch=False)
+        self.tree.column("input", width=165, stretch=False)
+        list_scroll = ttk.Scrollbar(
+            list_frame, orient="vertical", command=self.tree.yview
+        )
+        self.tree.configure(yscrollcommand=list_scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        list_scroll.pack(side="right", fill="y")
+
+        self.detail = tk.Text(detail_frame, wrap="none")
+        detail_scroll = ttk.Scrollbar(
+            detail_frame, orient="vertical", command=self.detail.yview
+        )
+        self.detail.configure(yscrollcommand=detail_scroll.set)
+        self.detail.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+
+        for record in reversed(self.records):
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(record["sequence"]),
+                text=str(record["sequence"]),
+                values=(
+                    record["completed_at_utc"],
+                    record["analysis_name"],
+                    record["analysis_kind"],
+                    record["status"],
+                    record["input_sha256"][:16] + "…",
+                ),
+            )
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children[0])
+            self.tree.focus(children[0])
+            self._show_selected()
+
+    def _show_selected(self, event=None) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        sequence = int(selection[0])
+        record = next(
+            item for item in self.records if item["sequence"] == sequence
+        )
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        self.detail.insert(
+            "1.0",
+            json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
+        )
+        self.detail.configure(state="disabled")
 
 
 class CleanroomXApp:
@@ -186,12 +323,14 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
+        self._migration_source_path: Path | None = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
+        self._project_history = ProjectEditHistory(limit=PROJECT_HISTORY_LIMIT)
         self._autosave_interval_seconds = max(0.0, float(autosave_interval_seconds))
         self._autosave_interval_ms = (
             max(1000, int(self._autosave_interval_seconds * 1000))
@@ -241,6 +380,16 @@ class CleanroomXApp:
         file_menu.add_command(label="Open Project...", accelerator="Ctrl+O", command=self.open_project)
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
+        file_menu.add_command(label="Saved Revisions...", command=self.show_saved_revisions)
+        file_menu.add_separator()
+        file_menu.add_command(
+            label="Open Portable Project Bundle...",
+            command=self.open_portable_project_bundle,
+        )
+        file_menu.add_command(
+            label="Export Portable Project Bundle...",
+            command=self.export_portable_project_bundle,
+        )
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
@@ -249,6 +398,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
+        file_menu.add_command(label="Export Portable HTML Report...", command=self.export_report_html)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -261,7 +411,18 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Validate Input", command=self.validate_current)
         analysis_menu.add_command(label="Run Analysis", accelerator="F5", command=self.run_current)
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
+        analysis_menu.add_separator()
+        analysis_menu.add_command(label="Run History...", command=self.show_run_history)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
+
+        self.edit_menu = tk.Menu(menubar, tearoff=False)
+        self.edit_menu.add_command(
+            label="Undo Project Edit", command=self.undo_project_edit, state="disabled"
+        )
+        self.edit_menu.add_command(
+            label="Redo Project Edit", command=self.redo_project_edit, state="disabled"
+        )
+        menubar.add_cascade(label="Edit", menu=self.edit_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
         view_menu.add_command(label="Refresh Structured Input", command=self.refresh_structure)
@@ -346,6 +507,9 @@ class CleanroomXApp:
             on_change=self._on_spatial_changed,
             on_sync_requested=self._sync_spatial_to_current_analysis,
             status_setter=self.status_var.set,
+            on_history_record=self._record_spatial_project_edit,
+            on_undo_requested=self.undo_project_edit,
+            on_redo_requested=self.redo_project_edit,
         )
         self.notebook.add(self.spatial_workspace, text="Design 2D + 3D")
 
@@ -457,6 +621,243 @@ class CleanroomXApp:
         self._runs_by_analysis.clear()
         self._clear_rendered_run()
 
+    def _project_history_manager(self) -> ProjectEditHistory:
+        history = getattr(self, "_project_history", None)
+        if history is None:
+            history = ProjectEditHistory(limit=PROJECT_HISTORY_LIMIT)
+            self._project_history = history
+        return history
+
+    def _spatial_history_selection(self) -> tuple[str, str] | None:
+        workspace = getattr(self, "spatial_workspace", None)
+        getter = getattr(workspace, "history_selection", None)
+        return getter() if callable(getter) else None
+
+    def _project_history_document(self) -> dict:
+        """Capture the complete undoable design state.
+
+        Persistent audit evidence is not an edit and must never be erased by Undo.
+        Spatial camera/view state is also excluded so design undo preserves the
+        operator's current viewport.
+        """
+
+        data = copy.deepcopy(self.project.to_dict())
+        metadata = data.get("project", {}).get("metadata")
+        if isinstance(metadata, dict):
+            metadata.pop(RUN_HISTORY_METADATA_KEY, None)
+            layout = metadata.get(SPATIAL_METADATA_KEY)
+            if isinstance(layout, dict):
+                layout.pop("view", None)
+        return data
+
+    def _capture_project_history_state(self) -> ProjectHistoryState:
+        return self._project_history_manager().capture(
+            self._project_history_document(),
+            getattr(self, "_editor_analysis_id", None),
+            self._spatial_history_selection(),
+        )
+
+    def _update_project_history_controls(self) -> None:
+        history = self._project_history_manager()
+        menu = getattr(self, "edit_menu", None)
+        if menu is not None:
+            undo_description = history.undo_description
+            redo_description = history.redo_description
+            menu.entryconfigure(
+                0,
+                label=(
+                    f"Undo {undo_description}"
+                    if undo_description is not None
+                    else "Undo Project Edit"
+                ),
+                state="normal" if history.can_undo else "disabled",
+            )
+            menu.entryconfigure(
+                1,
+                label=(
+                    f"Redo {redo_description}"
+                    if redo_description is not None
+                    else "Redo Project Edit"
+                ),
+                state="normal" if history.can_redo else "disabled",
+            )
+        workspace = getattr(self, "spatial_workspace", None)
+        setter = getattr(workspace, "set_history_availability", None)
+        if callable(setter):
+            setter(history.can_undo, history.can_redo)
+
+    def _clear_project_history(self) -> None:
+        self._project_history_manager().clear()
+        self._update_project_history_controls()
+
+    def _record_project_edit(
+        self,
+        before: ProjectHistoryState,
+        description: str,
+    ) -> bool:
+        recorded = self._project_history_manager().record(
+            before=before,
+            after_document=self._project_history_document(),
+            after_editor_analysis_id=getattr(self, "_editor_analysis_id", None),
+            after_spatial_selection=self._spatial_history_selection(),
+            description=description,
+        )
+        self._update_project_history_controls()
+        return recorded
+
+    def _record_spatial_project_edit(
+        self,
+        before_layout: dict,
+        before_selection: tuple[str, str] | None,
+        after_layout: dict,
+        after_selection: tuple[str, str] | None,
+        description: str,
+    ) -> bool:
+        """Record a spatial mutation in the same transaction stream as all edits."""
+
+        after_document = self._project_history_document()
+        before_document = copy.deepcopy(after_document)
+        project_block = before_document.get("project")
+        if not isinstance(project_block, dict):
+            raise ValueError("project history snapshot is missing project metadata")
+        metadata = project_block.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("project history snapshot metadata must be an object")
+        before_design = copy.deepcopy(before_layout)
+        if isinstance(before_design, dict):
+            before_design.pop("view", None)
+        metadata[SPATIAL_METADATA_KEY] = before_design
+
+        before = self._project_history_manager().capture(
+            before_document,
+            getattr(self, "_editor_analysis_id", None),
+            before_selection,
+        )
+        recorded = self._project_history_manager().record(
+            before=before,
+            after_document=after_document,
+            after_editor_analysis_id=getattr(self, "_editor_analysis_id", None),
+            after_spatial_selection=after_selection,
+            description=description,
+        )
+        self._update_project_history_controls()
+        return recorded
+
+    def _project_from_history_state(
+        self, state: ProjectHistoryState
+    ) -> ProjectDocument:
+        """Rebuild validated design state while preserving audit evidence and viewport."""
+
+        current_metadata = self.project.metadata
+        audit_history = (
+            copy.deepcopy(current_metadata[RUN_HISTORY_METADATA_KEY])
+            if RUN_HISTORY_METADATA_KEY in current_metadata
+            else None
+        )
+        current_layout = current_metadata.get(SPATIAL_METADATA_KEY)
+        current_view = (
+            copy.deepcopy(current_layout.get("view", {}))
+            if isinstance(current_layout, dict)
+            else {}
+        )
+
+        restored = project_from_dict(copy.deepcopy(state.document))
+        if audit_history is not None:
+            restored.metadata[RUN_HISTORY_METADATA_KEY] = audit_history
+
+        restored_layout = restored.metadata.get(SPATIAL_METADATA_KEY)
+        if isinstance(restored_layout, dict) and current_view:
+            restored_layout["view"] = current_view
+        return restored
+
+    def _perform_project_edit(self, description: str, mutation):
+        """Apply one validated application-wide mutation transaction."""
+
+        before = self._capture_project_history_state()
+        try:
+            result = mutation()
+            project_from_dict(copy.deepcopy(self.project.to_dict()))
+        except Exception:
+            self.project = self._project_from_history_state(before)
+            self._editor_analysis_id = before.editor_analysis_id
+            raise
+        self._record_project_edit(before, description)
+        return result
+
+    def _restore_project_history_state(self, state: ProjectHistoryState) -> None:
+        restored = self._project_from_history_state(state)
+        self.project = restored
+        self.name_var.set(restored.name)
+        self.description_var.set(restored.description)
+        self._clear_run_cache()
+        self._refresh_analysis_list(select_id=state.editor_analysis_id)
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.refresh()
+            restore_selection = getattr(workspace, "restore_history_selection", None)
+            if callable(restore_selection):
+                restore_selection(state.spatial_selection)
+
+        self._update_project_history_controls()
+        self._update_title()
+
+    def _prepare_project_history_action(self, action: str) -> bool:
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                f"Cannot {action}",
+                (
+                    "The current project fields must be valid before project history "
+                    f"can be changed.\n\n{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+        return True
+
+    def undo_project_edit(self) -> bool:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before undoing a project edit.",
+                parent=self.root,
+            )
+            return False
+        if not self._prepare_project_history_action("undo"):
+            return False
+        item = self._project_history_manager().undo()
+        if item is None:
+            self._update_project_history_controls()
+            return False
+        state, description = item
+        self._restore_project_history_state(state)
+        self.status_var.set(f"Undo: {description}")
+        return True
+
+    def redo_project_edit(self) -> bool:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before redoing a project edit.",
+                parent=self.root,
+            )
+            return False
+        if not self._prepare_project_history_action("redo"):
+            return False
+        item = self._project_history_manager().redo()
+        if item is None:
+            self._update_project_history_controls()
+            return False
+        state, description = item
+        self._restore_project_history_state(state)
+        self.status_var.set(f"Redo: {description}")
+        return True
+
     def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
         if analysis_id is None:
             return
@@ -469,9 +870,88 @@ class CleanroomXApp:
         if run is None:
             self._clear_rendered_run()
             return False
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+        except KeyError:
+            self._invalidate_last_run_for(analysis_id)
+            return False
+        if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
+            self._invalidate_last_run_for(analysis_id)
+            self.status_var.set(
+                f"{analysis.name} — cached result is out of date; run the analysis again."
+            )
+            return False
         self.last_run = run
         self.last_run_analysis_id = analysis_id
         self._render_run(run, select_results=False)
+        return True
+
+    def _current_fresh_run(self) -> AnalysisRun | None:
+        run = self.last_run
+        analysis_id = self.last_run_analysis_id
+        if run is None or analysis_id is None:
+            return None
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+        except KeyError:
+            self._invalidate_last_run_for(analysis_id)
+            return None
+        if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
+            self._invalidate_last_run_for(analysis_id)
+            self.status_var.set(
+                f"{analysis.name} — result is out of date; run the analysis again."
+            )
+            return None
+        return run
+
+    def _record_completed_run(
+        self,
+        analysis: AnalysisDocument,
+        run: AnalysisRun,
+        evidence: dict | None = None,
+    ) -> dict:
+        prepared = (
+            evidence
+            if evidence is not None
+            else build_run_history_evidence(analysis.input, run)
+        )
+        record = append_run_history_evidence(
+            self.project.metadata,
+            analysis_id=analysis.id,
+            analysis_name=analysis.name,
+            analysis_kind=analysis.kind,
+            evidence=prepared,
+        )
+        self._update_title()
+        return record
+
+    def show_run_history(self) -> bool:
+        try:
+            summary = validate_run_history(self.project.metadata)
+        except RunHistoryIntegrityError as exc:
+            self.status_var.set("Run history integrity check failed")
+            messagebox.showerror(
+                "Run history integrity failure",
+                (
+                    "CleanroomX found invalid or modified run-history evidence and "
+                    "did not rewrite it.\n\n"
+                    f"{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+        if summary["record_count"] == 0:
+            messagebox.showinfo(
+                "Analysis Run History",
+                "No completed analysis runs have been recorded in this project yet.",
+                parent=self.root,
+            )
+            return False
+        RunHistoryDialog(self.root, self.project.metadata)
         return True
 
     def _on_input_modified(self, event=None) -> None:
@@ -510,20 +990,51 @@ class CleanroomXApp:
             ) from exc
         if not isinstance(payload, dict):
             raise ValueError("analysis input must be a JSON object")
-        analysis.input = payload
-        self._sync_metadata()
+
+        name = self.name_var.get().strip()
+        if not name:
+            raise ValueError("project name cannot be empty")
+        description = self.description_var.get()
+        input_changed = analysis.input != payload
+        metadata_changed = (
+            self.project.name != name or self.project.description != description
+        )
+        if input_changed and metadata_changed:
+            edit_description = f"Edit {analysis.name} input and project fields"
+        elif input_changed:
+            edit_description = f"Edit {analysis.name} input"
+        else:
+            edit_description = "Edit project fields"
+
+        def mutate() -> None:
+            analysis.input = payload
+            self.project.name = name
+            self.project.description = description
+
+        self._perform_project_edit(edit_description, mutate)
+        cached_run = getattr(self, "_runs_by_analysis", {}).get(analysis.id)
+        if input_changed and cached_run is not None and not analysis_run_is_current(
+            cached_run, analysis.kind, payload, base_dir=self._base_dir()
+        ):
+            self._invalidate_last_run_for(analysis.id)
         return analysis
 
     def _sync_metadata(self) -> None:
         name = self.name_var.get().strip()
         if not name:
             raise ValueError("project name cannot be empty")
-        self.project.name = name
-        self.project.description = self.description_var.get()
+        description = self.description_var.get()
+
+        def mutate() -> None:
+            self.project.name = name
+            self.project.description = description
+
+        self._perform_project_edit("Edit project fields", mutate)
 
     def _base_dir(self) -> Path | None:
-        if self.project_path is not None:
-            return self.project_path.parent
+        project_path = getattr(self, "project_path", None)
+        if project_path is not None:
+            return project_path.parent
         recovery_source = getattr(self, "_recovery_source_path", None)
         if recovery_source is not None:
             return recovery_source.parent
@@ -857,7 +1368,19 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
-        changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
+        try:
+            changed = self._perform_project_edit(
+                f"Synchronize spatial geometry to {analysis.name}",
+                lambda: sync_layout_to_analysis(self.spatial_workspace.layout, analysis),
+            )
+        except SpatialSyncError as exc:
+            self.status_var.set("Spatial synchronization blocked by ambiguous room names")
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                str(exc),
+                parent=self.root,
+            )
+            return
         if not changed:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return
@@ -899,6 +1422,7 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
+        self._migration_source_path = None
         self._begin_autosave_project(recovered.source_path)
 
         ui_state = recovered.ui_state
@@ -913,6 +1437,7 @@ class CleanroomXApp:
             else self.project.description
         )
         self._clear_run_cache()
+        self._clear_project_history()
         self._refresh_analysis_list()
 
         editor_id = ui_state.get("editor_analysis_id")
@@ -977,6 +1502,81 @@ class CleanroomXApp:
             return False
         return True
 
+    def show_saved_revisions(self) -> bool:
+        if self.project_path is None:
+            self.status_var.set("Save the project before browsing saved revisions.")
+            return False
+
+        try:
+            scan = scan_project_revisions(self.project_path)
+        except OSError as exc:
+            messagebox.showerror(
+                "Revision scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        if not scan.revisions and not scan.issues:
+            self.status_var.set("No saved project revisions found.")
+            return False
+
+        dialog = ProjectRevisionCenter(self.root, scan)
+        self.root.wait_window(dialog)
+        if dialog.result is None:
+            return False
+
+        base_name = self.project_path.name
+        if base_name.endswith(".cleanroomx.json"):
+            base_name = base_name[: -len(".cleanroomx.json")]
+        destination_text = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Restore saved revision as a copy",
+            initialdir=str(self.project_path.parent),
+            initialfile=f"{base_name}.restored.cleanroomx.json",
+            defaultextension=".cleanroomx.json",
+            filetypes=[
+                ("CleanroomX project", "*.cleanroomx.json"),
+                ("JSON files", "*.json"),
+            ],
+        )
+        if not destination_text:
+            return False
+
+        destination = Path(destination_text)
+        try:
+            restored_path = restore_project_revision(
+                dialog.result,
+                destination,
+                expected_source_path=self.project_path,
+            )
+        except ProjectWriteConflictError:
+            self.status_var.set(
+                f"Revision restore blocked: {destination.name} changed on disk."
+            )
+            messagebox.showwarning(
+                "Restore destination changed on disk",
+                (
+                    f"{destination.name} changed after it was selected. "
+                    "CleanroomX did not overwrite it. Choose another destination "
+                    "or retry after reviewing the file."
+                ),
+                parent=self.root,
+            )
+            return False
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Revision restore failed",
+                (
+                    f"{exc}\n\n"
+                    "The current project and the saved revision artifact were preserved."
+                ),
+                parent=self.root,
+            )
+            return False
+
+        self.status_var.set(f"Restored saved revision as {restored_path.name}")
+        return True
+
     def offer_startup_recovery(self) -> bool:
         return self.show_recovery_center(announce_empty=False)
 
@@ -992,10 +1592,12 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
+        self._migration_source_path = None
         self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
         self._clear_run_cache()
+        self._clear_project_history()
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set("New project")
@@ -1022,23 +1624,147 @@ class CleanroomXApp:
             except Exception as exc:
                 messagebox.showerror("Open failed", str(exc), parent=self.root)
 
+    def open_portable_project_bundle(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
+        bundle_path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Open CleanroomX portable project bundle",
+            filetypes=[
+                ("CleanroomX portable bundle", "*.cleanroomx.zip"),
+                ("ZIP archives", "*.zip"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not bundle_path:
+            return
+        if not self._confirm_project_replacement():
+            return
+        parent_directory = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose folder for the extracted portable project",
+        )
+        if not parent_directory:
+            return
+
+        bundle = Path(bundle_path)
+        suffix = ".cleanroomx.zip"
+        folder_name = (
+            bundle.name[:-len(suffix)]
+            if bundle.name.lower().endswith(suffix)
+            else bundle.stem
+        )
+        folder_name = folder_name.strip()
+        if folder_name in {"", ".", ".."}:
+            folder_name = "CleanroomX Portable Project"
+        destination = Path(parent_directory) / folder_name
+        try:
+            project_path = extract_project_bundle(bundle, destination)
+            self.load_project_path(project_path)
+        except Exception as exc:
+            self.status_var.set("Portable project open failed")
+            messagebox.showerror(
+                "Portable project open failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        self.status_var.set(f"Opened portable project — {project_path.parent.name}")
+
+    def export_portable_project_bundle(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot export portable project",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX portable project bundle",
+            defaultextension=".cleanroomx.zip",
+            filetypes=[
+                ("CleanroomX portable bundle", "*.cleanroomx.zip"),
+                ("ZIP archives", "*.zip"),
+            ],
+        )
+        if not path:
+            return
+        try:
+            report = export_project_bundle(
+                path,
+                self.project,
+                source_base=self._base_dir(),
+                source_project_path=self._autosave_source_path(),
+            )
+        except Exception as exc:
+            self.status_var.set("Portable project export failed")
+            messagebox.showerror(
+                "Portable project export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        self.status_var.set(
+            f"Portable project exported — {report['dependency_count']} "
+            f"dependency file(s)"
+        )
+        messagebox.showinfo(
+            "Portable project exported",
+            (
+                f"Created {Path(path).name}.\n\n"
+                f"Dependencies packaged: {report['dependency_count']}\n"
+                f"Bundle SHA-256: {report['bundle_sha256']}"
+            ),
+            parent=self.root,
+        )
+
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
-        project, project_revision = load_project_document_with_revision(project_path)
+        (
+            project,
+            project_revision,
+            migration_info,
+        ) = load_project_document_with_revision_info(project_path)
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
         self._project_file_revision = project_revision
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
+        self._migration_source_path = (
+            project_path.resolve(strict=False) if migration_info.migrated else None
+        )
         self._begin_autosave_project(project_path)
         self.name_var.set(project.name)
         self.description_var.set(project.description)
         self._clear_run_cache()
+        self._clear_project_history()
         self._refresh_analysis_list()
-        self._capture_saved_state()
-        self.status_var.set(f"Opened {project_path.name}")
-        self._update_title()
+        if migration_info.migrated:
+            # Keep the current-schema conversion explicitly unsaved so the first
+            # normal Save cannot destroy the only pre-migration source.
+            self._baseline_state = "__cleanroomx_migrated_copy_requires_save_as__"
+            self.status_var.set(
+                "Legacy project migrated in memory — use Save Project As to preserve "
+                "the original source file."
+            )
+            self._update_title()
+        else:
+            self._capture_saved_state()
+            self.status_var.set(f"Opened {project_path.name}")
+            self._update_title()
 
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()
@@ -1048,7 +1774,9 @@ class CleanroomXApp:
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
             return
-        if self.project_path is not None:
+        if getattr(self, "_migration_source_path", None) is not None:
+            suffix = f" — Migrated copy of {self.project_path.name}"
+        elif self.project_path is not None:
             suffix = f" — {self.project_path.name}"
         elif getattr(self, "_restored_recovery_artifact", None) is not None:
             suffix = " — Recovered copy"
@@ -1073,6 +1801,37 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def _report_project_save_busy(self, path: Path) -> None:
+        self.status_var.set(
+            f"Save blocked: another CleanroomX process is saving {path.name}."
+        )
+        messagebox.showwarning(
+            "Project save in progress",
+            (
+                f"Another CleanroomX process is currently saving {path.name}.\n\n"
+                "This window did not write to the project. Retry Save after the "
+                "other save completes; revision protection will still reject any "
+                "newer on-disk content."
+            ),
+            parent=self.root,
+        )
+
+    def _report_save_durability_uncertain(self, path: Path) -> None:
+        self.status_var.set(
+            f"Save durability not confirmed for {path.name}; recovery state retained."
+        )
+        messagebox.showwarning(
+            "Save durability not confirmed",
+            (
+                f"CleanroomX wrote and verified the new bytes for {path.name}, but "
+                "the filesystem could not confirm that the directory update is "
+                "crash-durable.\n\n"
+                "This window remains marked as unsaved and recovery data is retained. "
+                "Retry Save; if the warning continues, save to another location."
+            ),
+            parent=self.root,
+        )
+
     def save_project(self) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -1085,6 +1844,9 @@ class CleanroomXApp:
         if self.project_path is None:
             self.save_project_as()
             return
+        if getattr(self, "_migration_source_path", None) is not None:
+            self.save_project_as()
+            return
 
         expected_revision = getattr(self, "_project_file_revision", None)
         try:
@@ -1095,6 +1857,13 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
+        except ProjectFileBusyError:
+            self._report_project_save_busy(self.project_path)
+            return
+        except ProjectSaveDurabilityError as exc:
+            self._project_file_revision = exc.committed_revision
+            self._report_save_durability_uncertain(self.project_path)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(self.project_path)
             return
@@ -1127,6 +1896,23 @@ class CleanroomXApp:
             return
 
         destination = Path(path)
+        migration_source = getattr(self, "_migration_source_path", None)
+        if (
+            migration_source is not None
+            and destination.resolve(strict=False)
+            == migration_source.resolve(strict=False)
+        ):
+            messagebox.showwarning(
+                "Preserve legacy project",
+                (
+                    "A migrated legacy project must be saved to a different file first. "
+                    "The original legacy file is preserved so the pre-migration source "
+                    "remains available for rollback or comparison."
+                ),
+                parent=self.root,
+            )
+            return
+
         recovery_source = getattr(self, "_recovery_source_path", None)
         restored_artifact = getattr(self, "_restored_recovery_artifact", None)
         if (
@@ -1161,12 +1947,12 @@ class CleanroomXApp:
                     target_base=destination.parent,
                 )
 
+        same_as_open_project = (
+            self.project_path is not None
+            and destination.resolve(strict=False)
+            == self.project_path.resolve(strict=False)
+        )
         try:
-            same_as_open_project = (
-                self.project_path is not None
-                and destination.resolve(strict=False)
-                == self.project_path.resolve(strict=False)
-            )
             expected_revision = (
                 getattr(self, "_project_file_revision", None)
                 if same_as_open_project
@@ -1179,6 +1965,14 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
+        except ProjectFileBusyError:
+            self._report_project_save_busy(destination)
+            return
+        except ProjectSaveDurabilityError as exc:
+            if same_as_open_project:
+                self._project_file_revision = exc.committed_revision
+            self._report_save_durability_uncertain(destination)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(destination)
             return
@@ -1190,8 +1984,13 @@ class CleanroomXApp:
         self.project_path = saved_path
         self._project_file_revision = saved_revision
         self._recovery_source_path = None
+        self._migration_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()
+            # History snapshots contain path-valued analysis inputs relative to the
+            # previous project directory. Keeping them after a base-directory change
+            # could restore strings under the wrong path context.
+            self._clear_project_history()
         if editor_id is not None:
             try:
                 self._load_analysis_into_editor(self.project.analysis_by_id(editor_id))
@@ -1232,8 +2031,17 @@ class CleanroomXApp:
             kind=kind,
             input=payload,
         )
-        self.project.analyses.append(analysis)
-        self.project.active_analysis_id = analysis_id
+
+        def mutate() -> None:
+            self.project.analyses.append(analysis)
+            self.project.active_analysis_id = analysis_id
+            self._editor_analysis_id = analysis_id
+
+        try:
+            self._perform_project_edit(f"Add analysis {analysis.name}", mutate)
+        except Exception as exc:
+            messagebox.showerror("Cannot add analysis", str(exc), parent=self.root)
+            return
         self._refresh_analysis_list(select_id=analysis_id)
         self._update_title()
 
@@ -1248,7 +2056,15 @@ class CleanroomXApp:
             "Rename analysis", "Analysis name", initialvalue=analysis.name, parent=self.root
         )
         if value and value.strip():
-            analysis.name = value.strip()
+            new_name = value.strip()
+            try:
+                self._perform_project_edit(
+                    f"Rename analysis {analysis.name}",
+                    lambda: setattr(analysis, "name", new_name),
+                )
+            except Exception as exc:
+                messagebox.showerror("Cannot rename analysis", str(exc), parent=self.root)
+                return
             self.analysis_tree.item(analysis.id, text=analysis.name)
             self._update_title()
 
@@ -1265,11 +2081,21 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
+        def mutate() -> None:
+            self.project.analyses = [
+                item for item in self.project.analyses if item.id != analysis.id
+            ]
+            self.project.active_analysis_id = (
+                self.project.analyses[0].id if self.project.analyses else None
+            )
+            self._editor_analysis_id = self.project.active_analysis_id
+
+        try:
+            self._perform_project_edit(f"Remove analysis {analysis.name}", mutate)
+        except Exception as exc:
+            messagebox.showerror("Cannot remove analysis", str(exc), parent=self.root)
+            return
         self._invalidate_last_run_for(analysis.id)
-        self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
-        self.project.active_analysis_id = (
-            self.project.analyses[0].id if self.project.analyses else None
-        )
         self._refresh_analysis_list()
         self._update_title()
 
@@ -1302,7 +2128,14 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
-        analysis.input = payload
+        try:
+            self._perform_project_edit(
+                f"Import input for {analysis.name}",
+                lambda: setattr(analysis, "input", payload),
+            )
+        except Exception as exc:
+            messagebox.showerror("Import failed", str(exc), parent=self.root)
+            return
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
         self.status_var.set(f"Imported {source_path.name}")
@@ -1378,9 +2211,24 @@ class CleanroomXApp:
         def worker() -> None:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
-                self._queue.put(("success", generation, analysis_id, result))
             except Exception as exc:
                 self._queue.put(("error", generation, analysis_id, str(exc)))
+                return
+
+            history_evidence = None
+            history_error = None
+            try:
+                history_evidence = build_run_history_evidence(payload, result)
+            except Exception as exc:  # audit preparation must not hide a valid result
+                history_error = str(exc)
+            self._queue.put(
+                (
+                    "success",
+                    generation,
+                    analysis_id,
+                    (result, history_evidence, history_error),
+                )
+            )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1415,13 +2263,66 @@ class CleanroomXApp:
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
-                    self._runs_by_analysis[analysis_id] = payload
-                    self.last_run = payload
+                    history_evidence = None
+                    history_error = None
+                    run = payload
+                    if (
+                        isinstance(payload, tuple)
+                        and len(payload) == 3
+                        and isinstance(payload[0], AnalysisRun)
+                    ):
+                        run, history_evidence, history_error = payload
+
+                    try:
+                        analysis = self.project.analysis_by_id(analysis_id)
+                    except KeyError:
+                        self._invalidate_last_run_for(analysis_id)
+                        self.status_var.set(
+                            "Completed result discarded — the analysis no longer exists."
+                        )
+                        continue
+                    if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
+                        self._invalidate_last_run_for(analysis_id)
+                        self.status_var.set(
+                            f"Completed result discarded — {analysis.name} inputs changed; "
+                            "run the analysis again."
+                        )
+                        continue
+
+                    if history_error is None:
+                        try:
+                            self._record_completed_run(
+                                analysis, run, history_evidence
+                            )
+                        except RunHistoryIntegrityError as exc:
+                            history_error = str(exc)
+
+                    self._runs_by_analysis[analysis_id] = run
+                    self.last_run = run
                     self.last_run_analysis_id = analysis_id
-                    self._render_run(payload)
-                    self.status_var.set(
-                        f"Completed — {payload.title} — status: {payload.status}"
-                    )
+                    self._render_run(run)
+                    if history_error is None:
+                        self.status_var.set(
+                            f"Completed — {run.title} — status: {run.status}"
+                        )
+                    else:
+                        self.status_var.set(
+                            f"Completed — {run.title}; run history was not updated."
+                        )
+                        messagebox.showwarning(
+                            "Run history not updated",
+                            (
+                                "The analysis completed and its result is available, but "
+                                "CleanroomX did not append an audit record because run-history "
+                                "evidence could not be prepared or the existing history failed "
+                                "integrity validation. Existing history was left unchanged. "
+                                "Export the run bundle if this result must be retained.\n\n"
+                                f"{history_error}"
+                            ),
+                            parent=self.root,
+                        )
         except queue.Empty:
             pass
         self.root.after(100, self._poll_worker)
@@ -1522,8 +2423,13 @@ class CleanroomXApp:
             canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
 
     def export_result_json(self) -> None:
-        if self.last_run is None:
-            messagebox.showinfo("No result", "Run an analysis first.")
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current result",
+                "Run the current analysis before exporting a result.",
+                parent=self.root,
+            )
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".json",
@@ -1533,14 +2439,19 @@ class CleanroomXApp:
             self._write_export_file(
                 path,
                 json.dumps(
-                    self.last_run.result, indent=2, ensure_ascii=False, allow_nan=False
+                    run.result, indent=2, ensure_ascii=False, allow_nan=False
                 ) + "\n",
                 label="Result",
             )
 
     def export_run_bundle_json(self) -> None:
-        if self.last_run is None:
-            messagebox.showinfo("No result", "Run an analysis first.")
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current result",
+                "Run the current analysis before exporting a run bundle.",
+                parent=self.root,
+            )
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".json",
@@ -1550,7 +2461,7 @@ class CleanroomXApp:
             self._write_export_file(
                 path,
                 json.dumps(
-                    self.last_run.to_dict(),
+                    run.to_dict(),
                     indent=2,
                     ensure_ascii=False,
                     allow_nan=False,
@@ -1559,15 +2470,65 @@ class CleanroomXApp:
             )
 
     def export_report_markdown(self) -> None:
-        if self.last_run is None:
-            messagebox.showinfo("No report", "Run an analysis first.")
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current report",
+                "Run the current analysis before exporting a report.",
+                parent=self.root,
+            )
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".md",
             filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt")],
         )
         if path:
-            self._write_export_file(path, self.last_run.markdown, label="Report")
+            self._write_export_file(path, run.markdown, label="Report")
+
+    def export_report_html(self) -> None:
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current report",
+                "Run the current analysis before exporting a portable report.",
+                parent=self.root,
+            )
+            return
+        analysis_id = self.last_run_analysis_id
+        if analysis_id is None:
+            return
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+            document = engineering_report_html(
+                run,
+                project_name=self.project.name,
+                project_description=self.project.description,
+                analysis_id=analysis.id,
+                analysis_name=analysis.name,
+                analysis_kind=analysis.kind,
+                input_payload=analysis.input,
+                base_dir=self._base_dir(),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            self.status_var.set("HTML report export failed")
+            messagebox.showerror(
+                "HTML report export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".html",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+        )
+        if path:
+            self._write_export_file(
+                path,
+                document,
+                label="HTML report",
+            )
 
     def show_about(self) -> None:
         messagebox.showinfo(
@@ -1661,7 +2622,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
-    validate_application_registry()
+    registry = validate_application_registry()
     project_path = bundled_demo_project_path() if args.demo else args.project
 
     root = tk.Tk()
@@ -1669,6 +2630,21 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke and registry["plugin_issue_count"]:
+        issues = registry["plugin_issues"]
+        lines = [
+            f"{item['entry_point_name'] or '<unnamed>'}: {item['error']}"
+            for item in issues[:8]
+        ]
+        if len(issues) > 8:
+            lines.append(f"... and {len(issues) - 8} more issue(s)")
+        messagebox.showwarning(
+            "CleanroomX plugin issues",
+            "Some installed analysis plugins were disabled. Built-in workflows "
+            "remain available.\n\n" + "\n".join(lines)
+            + "\n\nRun cleanroomx-gui --check for machine-readable details.",
+            parent=root,
+        )
     recovered_at_startup = False
     if not args.smoke:
         recovered_at_startup = app.offer_startup_recovery()

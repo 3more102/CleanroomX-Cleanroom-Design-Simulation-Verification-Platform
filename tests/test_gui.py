@@ -9,6 +9,12 @@ import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.run_history import (
+    RUN_HISTORY_METADATA_KEY,
+    append_run_history_record,
+    build_run_history_evidence,
+    run_history_records,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +72,303 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.analysis_by_id("a").input == {"value": 2}
     assert app.project.analysis_by_id("b").input == {"value": 9}
     assert app.project.description == "Preserve editor state"
+
+
+def test_restore_run_discards_cached_result_when_analysis_input_changed():
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a", name="Room", kind="room_verification", input=changed
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._runs_by_analysis = {"a": run}
+    app.last_run = run
+    app.last_run_analysis_id = "a"
+    app.status_var = Status()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    assert app._restore_run_for("a") is False
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+    assert "out of date" in app.status_var.value.lower()
+
+
+def test_completed_run_is_discarded_if_analysis_input_changed_during_execution():
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a", name="Room", kind="room_verification", input=changed
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._queue = queue.Queue()
+    app._queue.put(("success", 3, "a", run))
+    app._run_generation = 3
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    app._render_run = lambda value: rendered.append(value)
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert rendered == []
+    assert "discarded" in app.status_var.value.lower()
+    assert "inputs changed" in app.status_var.value.lower()
+
+
+def test_accepted_completed_run_is_recorded_in_persisted_audit_history():
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    analysis = AnalysisDocument(
+        id="a", name="Room", kind="room_verification", input=dict(payload)
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+    )
+    evidence = build_run_history_evidence(payload, run)
+    app._queue = queue.Queue()
+    app._queue.put(("success", 4, "a", (run, evidence, None)))
+    app._run_generation = 4
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    title_updates = []
+    app._render_run = lambda value: rendered.append(value)
+    app._update_title = lambda: title_updates.append(True)
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._runs_by_analysis == {"a": run}
+    assert app.last_run is run
+    assert rendered == [run]
+    assert title_updates == [True]
+    records = run_history_records(app.project.metadata)
+    assert len(records) == 1
+    assert records[0]["analysis_id"] == "a"
+    assert records[0]["analysis_name"] == "Room"
+    assert records[0]["input_snapshot"] == payload
+    assert records[0]["input_sha256"] == (
+        run.diagnostics["application_execution_provenance"]["input_sha256"]
+    )
+
+
+def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    prior_run = run_analysis("room_verification", payload)
+    current_run = run_analysis("room_verification", payload)
+    metadata = {}
+    append_run_history_record(
+        metadata,
+        analysis_id="a",
+        analysis_name="Room",
+        analysis_kind="room_verification",
+        input_payload=payload,
+        run=prior_run,
+        completed_at_utc="2026-09-25T11:00:00Z",
+    )
+    metadata[RUN_HISTORY_METADATA_KEY]["records"][0]["status"] = "corrupt"
+    corrupt_snapshot = json.loads(json.dumps(metadata))
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    analysis = AnalysisDocument(
+        id="a", name="Room", kind="room_verification", input=dict(payload)
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+        metadata=metadata,
+    )
+    evidence = build_run_history_evidence(payload, current_run)
+    app._queue = queue.Queue()
+    app._queue.put(("success", 5, "a", (current_run, evidence, None)))
+    app._run_generation = 5
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    app._render_run = lambda value: rendered.append(value)
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app._poll_worker()
+
+    assert app._runs_by_analysis == {"a": current_run}
+    assert app.last_run is current_run
+    assert rendered == [current_run]
+    assert app.project.metadata == corrupt_snapshot
+    assert "run history was not updated" in app.status_var.value.lower()
+    assert len(warnings) == 1
+    assert warnings[0]["title"] == "Run history not updated"
+    assert "left unchanged" in warnings[0]["message"].lower()
+
+
+def test_result_export_refuses_stale_cached_run(monkeypatch):
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a", name="Room", kind="room_verification", input=changed
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._runs_by_analysis = {"a": run}
+    app.last_run = run
+    app.last_run_analysis_id = "a"
+    app.status_var = Status()
+    app.root = object()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    save_dialog_calls = []
+    info_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: save_dialog_calls.append(kwargs) or "",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: info_calls.append((title, message)),
+    )
+
+    app.export_result_json()
+
+    assert save_dialog_calls == []
+    assert info_calls
+    assert info_calls[0][0] == "No current result"
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
 
 
 def test_abandon_waits_for_worker_exit_before_reenabling_ui():
@@ -385,6 +688,9 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
     app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="c"
+    )
     app.project_path = project_dir / "project.cleanroomx.json"
     app.status_var = Status()
     app._current_analysis = lambda: analysis
@@ -517,14 +823,24 @@ def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeyp
             self.value = value
 
     app.status_var = Status()
-    app.last_run = run_analysis(
-        "fan_operating_point",
-        json.loads(
-            (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
-                encoding="utf-8"
-            )
-        ),
+    payload = json.loads(
+        (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
+            encoding="utf-8"
+        )
     )
+    run = run_analysis("fan_operating_point", payload)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="fan", name="Fan", kind="fan_operating_point", input=payload
+            )
+        ],
+        active_analysis_id="fan",
+    )
+    app._runs_by_analysis = {"fan": run}
+    app.last_run = run
+    app.last_run_analysis_id = "fan"
     output = tmp_path / "run-bundle.json"
     monkeypatch.setattr(
         gui_module.filedialog,
@@ -637,9 +953,30 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
 
 
 def test_per_analysis_run_cache_restores_without_forcing_result_tab():
-    run_a = object()
-    run_b = object()
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run_a = run_analysis("room_verification", payload)
+    run_b = run_analysis("room_verification", payload)
     app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="analysis-a",
+                name="A",
+                kind="room_verification",
+                input=dict(payload),
+            ),
+            AnalysisDocument(
+                id="analysis-b",
+                name="B",
+                kind="room_verification",
+                input=dict(payload),
+            ),
+        ],
+        active_analysis_id="analysis-a",
+    )
     app._runs_by_analysis = {"analysis-a": run_a, "analysis-b": run_b}
     app.last_run = None
     app.last_run_analysis_id = None
@@ -872,3 +1209,75 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+def test_spatial_sync_ambiguity_is_reported_without_mutating_analysis(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "Ante", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    original = json.loads(json.dumps(analysis.input))
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app.root = object()
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="verification"
+    )
+    app.status_var = Status()
+    app._editor_analysis = lambda: analysis
+    app._current_analysis = lambda: analysis
+    app._commit_editor = lambda selected: selected
+    app.spatial_workspace = type(
+        "Workspace",
+        (),
+        {
+            "layout": {
+                "rooms": [
+                    {
+                        "id": "process-a",
+                        "name": "Process",
+                        "x_m": 0,
+                        "y_m": 0,
+                        "length_m": 7,
+                        "width_m": 5,
+                        "height_m": 3,
+                    },
+                    {
+                        "id": "process-b",
+                        "name": "process",
+                        "x_m": 8,
+                        "y_m": 0,
+                        "length_m": 8,
+                        "width_m": 5,
+                        "height_m": 3,
+                    },
+                ]
+            }
+        },
+    )()
+
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    app._sync_spatial_to_current_analysis()
+
+    assert analysis.input == original
+    assert warnings
+    assert warnings[0][0] == "Cannot synchronize geometry"
+    assert "duplicate room name" in warnings[0][1]
+    assert "blocked" in app.status_var.value.lower()

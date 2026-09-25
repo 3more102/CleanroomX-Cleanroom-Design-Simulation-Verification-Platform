@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_fan_driven_parallel_network_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Fan-Driven Parallel Network Report — {result['study']}",
+        f"# CleanroomX Fan-Driven Parallel Network Report — {markdown_text(result['study'])}",
         "",
         f"- Fan curve: **{result['fan_curve']}**",
         f"- Status: **{result['status'].upper()}**",
@@ -18,7 +20,7 @@ def markdown_fan_driven_parallel_network_report(result: dict) -> str:
     ]
     for path in result["path_resistances"]:
         lines.append(
-            f"| {path['name']} | {path['resistance_pa_per_m3_s_squared']} |"
+            f"| {markdown_text(path['name'])} | {path['resistance_pa_per_m3_s_squared']} |"
         )
 
     point = result["fan_operating_point"]
@@ -58,7 +60,7 @@ def markdown_fan_driven_parallel_network_report(result: dict) -> str:
         )
         for path in network["paths"]:
             lines.append(
-                f"| {path['name']} | {path['airflow_m3_h']} | "
+                f"| {markdown_text(path['name'])} | {path['airflow_m3_h']} | "
                 f"{path['airflow_fraction']} | {path['pressure_drop_pa']} |"
             )
 
@@ -66,7 +68,7 @@ def markdown_fan_driven_parallel_network_report(result: dict) -> str:
             lines.extend(
                 [
                     "",
-                    f"### Path — {path['name']}",
+                    f"### Path — {markdown_text(path['name'])}",
                     "",
                     "| Section | Airflow (m³/h) | Velocity (m/s) | Friction loss (Pa) | Local loss (Pa) | Total loss (Pa) |",
                     "|---|---:|---:|---:|---:|---:|",
@@ -74,7 +76,7 @@ def markdown_fan_driven_parallel_network_report(result: dict) -> str:
             )
             for section in path["sections"]:
                 lines.append(
-                    f"| {section['name']} | {section['airflow_m3_h']} | "
+                    f"| {markdown_text(section['name'])} | {section['airflow_m3_h']} | "
                     f"{section['velocity_m_s']} | "
                     f"{section['friction_pressure_drop_pa']} | "
                     f"{section['local_pressure_drop_pa']} | "

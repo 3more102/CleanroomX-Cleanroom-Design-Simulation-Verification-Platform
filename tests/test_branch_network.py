@@ -5,6 +5,7 @@ from cleanroomx.branch_network import (
     BranchFlowNetwork,
     TerminalDemand,
     analyze_branch_flow_network,
+    calculate_branch_flow_network,
 )
 from cleanroomx.hvac import analyze_hvac_project
 from cleanroomx.hvac_io import hvac_project_from_dict
@@ -215,3 +216,85 @@ def test_hvac_rejects_branch_flow_total_that_differs_from_governing_airflow() ->
 def test_terminal_airflow_must_be_finite(value: float) -> None:
     with pytest.raises(ValueError, match="finite"):
         TerminalDemand("Process", value)
+
+
+
+def test_branch_critical_path_uses_unrounded_pressure_loss() -> None:
+    network = BranchFlowNetwork(
+        source_node="AHU",
+        branches=(
+            BranchDuct(
+                name="A",
+                upstream_node="AHU",
+                downstream_node="Room A",
+                length_m=0.0,
+                friction_factor=0.0,
+                air_density_kg_m3=1.2,
+                local_loss_coefficient=1.0,
+                width_m=1.0,
+                height_m=1.0,
+            ),
+            BranchDuct(
+                name="B",
+                upstream_node="AHU",
+                downstream_node="Room B",
+                length_m=0.0,
+                friction_factor=0.0,
+                air_density_kg_m3=1.2,
+                local_loss_coefficient=1.00005,
+                width_m=1.0,
+                height_m=1.0,
+            ),
+        ),
+        terminal_demands=(
+            TerminalDemand("Room A", 3600.0),
+            TerminalDemand("Room B", 3600.0),
+        ),
+    )
+
+    calculation = calculate_branch_flow_network(network)
+    result = analyze_branch_flow_network(network)
+
+    assert [terminal["total_pressure_drop_pa"] for terminal in result["terminals"]] == [
+        0.6,
+        0.6,
+    ]
+    assert (
+        calculation["terminals"][1]["total_pressure_drop_pa"]
+        > calculation["terminals"][0]["total_pressure_drop_pa"]
+    )
+    assert result["critical_terminal"] == "Room B"
+    assert result["critical_path"] == ["B"]
+
+
+def test_branch_path_aggregation_rounds_only_after_full_precision_sum() -> None:
+    branches = []
+    upstream = "AHU"
+    for index in range(20):
+        downstream = "Room" if index == 19 else f"J{index}"
+        branches.append(
+            BranchDuct(
+                name=f"B{index}",
+                upstream_node=upstream,
+                downstream_node=downstream,
+                length_m=0.0,
+                friction_factor=0.0,
+                air_density_kg_m3=1.2,
+                local_loss_coefficient=100.00008166666667,
+                width_m=1.0,
+                height_m=1.0,
+            )
+        )
+        upstream = downstream
+
+    network = BranchFlowNetwork(
+        source_node="AHU",
+        branches=tuple(branches),
+        terminal_demands=(TerminalDemand("Room", 3600.0),),
+    )
+
+    result = analyze_branch_flow_network(network)
+
+    assert all(branch["total_pressure_drop_pa"] == 60.0 for branch in result["branches"])
+    assert result["terminals"][0]["total_pressure_drop_pa"] == 1200.001
+    assert result["critical_path_pressure_drop_pa"] == 1200.001

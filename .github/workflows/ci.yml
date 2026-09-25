@@ -92,6 +92,9 @@ jobs:
           tests/test_gui_recovery.py
       - name: Run complete test suite
         run: python -m pytest -q
+      - name: Benchmark durable project I/O
+        if: matrix.python-version == '3.13'
+        run: python benchmarks/project_io.py --output /tmp/cleanroomx-project-io-benchmark.json
       - name: Build wheel and verify installed application
         run: |
           rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env

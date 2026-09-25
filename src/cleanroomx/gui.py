@@ -37,6 +37,7 @@ from .project import (
     capture_project_file_revision,
     load_project_document,
     new_project,
+    save_project_document,
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter

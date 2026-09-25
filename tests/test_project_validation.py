@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
@@ -261,3 +262,59 @@ def test_project_validation_cli_writes_atomic_markdown_report(tmp_path):
     assert exit_code == 0
     assert "Status: PASS" in output.read_text(encoding="utf-8")
     assert list(tmp_path.glob(f".{output.name}.*.tmp")) == []
+
+
+def test_project_validation_does_not_mutate_invalid_spatial_state():
+    project = ProjectDocument(
+        name="No mutation",
+        analyses=[_analysis("room-a", _valid_room())],
+        active_analysis_id="room-a",
+        metadata={
+            "spatial_layout": {
+                "version": 1,
+                "grid_m": 0.5,
+                "rooms": [
+                    {
+                        "id": "",
+                        "name": "Room",
+                        "x_m": "not-a-number",
+                        "y_m": 0.0,
+                        "length_m": 4.0,
+                        "width_m": 4.0,
+                        "height_m": 3.0,
+                    }
+                ],
+                "devices": [],
+            }
+        },
+    )
+    before = copy.deepcopy(project.to_dict())
+
+    report = validate_project(project)
+
+    assert report.status == "fail"
+    assert project.to_dict() == before
+    assert {item.code for item in report.findings} >= {
+        "spatial_room_id_invalid",
+        "spatial_room_coordinate_invalid",
+    }
+
+
+def test_project_validation_handles_large_analysis_collection_deterministically():
+    project = ProjectDocument(
+        name="Large validation",
+        analyses=[
+            _analysis(f"room-{index:03d}", _valid_room(f"Room {index:03d}"))
+            for index in range(250)
+        ],
+        active_analysis_id="room-000",
+    )
+
+    first = validate_project(project)
+    second = validate_project(project)
+
+    assert first.status == "pass"
+    assert first.analyses_checked == 250
+    assert first.valid_analyses == 250
+    assert first.invalid_analyses == 0
+    assert first.to_dict() == second.to_dict()

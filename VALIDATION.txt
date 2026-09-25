@@ -43,17 +43,29 @@ run id 36171783101
 conclusion SUCCESS
 Merged main commit:
 1fc662441763fd6bd2070aac6d6449410f06fb2a
+PR #476 — Finish CleanroomX viewport controls
+Exact tested PR head:
+df1ef16207fcca8abfbaf08a48fe13fadd77c221
+PR CI run #1561
+run id 36183831885
+conclusion SUCCESS
+Merged main commit:
+e528c694debbf6a3263693669f5acb6026f1951f
 
-PASS - Python 3.11/3.12/3.13 full CI jobs for both final PR closures
+PASS - Python 3.11/3.12/3.13 full CI jobs for the final PR closures
 PASS - windows-latest PowerShell/CMD checkout launcher smoke
 PASS - clean wheel build/install and installed application checks
 PASS - Python 3.13 performance evidence and installed Tk/Xvfb GUI demo smoke
+PASS - PR #476 full suite: 1003 passed on Python 3.11, 3.12, and 3.13
+PASS - PR #476 focused spatial gate: 59 passed; Release 2 consolidation gate: 132 passed
 PASS - spatial-to-engineering synchronization is dimension-only
 PASS - engineering-to-spatial pull is dimension-only and preflighted atomically
 PASS - fresh current verification pressure is projected without being persisted into geometry
 PASS - synchronized 2D/3D pressure-cascade relationship rendering
 PASS - deterministic 2D/3D viewport transforms
 PASS - 3D Fit derives zoom and both pan axes from real room floor/ceiling geometry
+PASS - explicit 2D viewport reset preserves model geometry
+PASS - Shift+left-drag 3D orbit updates azimuth and clamps elevation to 5–75 degrees
 PASS - persisted window and generic-opening object types
 PASS - immutable v0.102.1 publisher tags only a successful CI SHA that still equals current main
 

@@ -19,6 +19,7 @@ from .autosave import (
     restore_recovery_artifact,
     scan_recovery_artifacts,
 )
+from .jsonio import strict_json_loads
 from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
@@ -67,12 +68,9 @@ _UNIT_SUFFIXES = (
 )
 
 
-def _reject_json_constant(value: str):
-    raise ValueError(f"non-finite JSON constant is not allowed: {value}")
-
-
 def _strict_json_loads(text: str):
-    return json.loads(text, parse_constant=_reject_json_constant)
+    """Backward-compatible GUI wrapper around the shared strict JSON boundary."""
+    return strict_json_loads(text)
 
 
 def unit_hint(path: str) -> str:

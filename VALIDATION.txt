@@ -5,6 +5,23 @@ Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 
 FINAL v0.102.1 SPATIAL PRODUCTION BASELINE
+PR #487 — Finalize deterministic spatial drag semantics on current main
+Exact tested PR head:
+3823a4e34d0cf855a374e1a9773dc6d059d644e5
+PR CI run #1585
+run id 36185323572
+conclusion SUCCESS
+Focused spatial gate: 63 passed
+Python 3.11: 1008 passed
+Python 3.12: 1008 passed
+Python 3.13: 1008 passed
+PASS - windows-latest PowerShell/CMD checkout launcher smoke
+PASS - Python 3.13 performance evidence and installed Tk/Xvfb CleanroomX GUI smoke
+Merged functional main commit:
+89eaf6b1548ca0748dd72431eecc101bddec9af9
+PASS - snapped drag translation is independent of Tk motion-event sampling
+PASS - no-op drags do not dirty, record history, or schedule autosave
+
 PR #467 — Close final CleanroomX spatial production gaps
 Exact tested PR head:
 4be4fb840480df7a5f1e0313a73830313150d9dd

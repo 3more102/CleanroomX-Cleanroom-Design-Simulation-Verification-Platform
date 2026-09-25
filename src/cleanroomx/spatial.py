@@ -114,12 +114,18 @@ def normalize_layout(value: Any) -> dict:
                 fallback=f"device-{index + 1}",
             )
             used_device_ids.add(device_id)
+            raw_room_id = raw.get("room_id")
+            room_id = (
+                str(raw_room_id).strip() or None
+                if raw_room_id is not None
+                else None
+            )
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "name": str(raw.get("name") or device_type.upper()).strip(),
+                    "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -192,6 +198,7 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
         raw = metadata[SPATIAL_METADATA_KEY]
         validate_spatial_layout_document(raw)
         normalized = normalize_layout(raw)
+        validate_spatial_layout_document(normalized)
         metadata[SPATIAL_METADATA_KEY] = normalized
         return normalized
 

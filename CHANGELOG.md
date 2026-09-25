@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased autosave completion ownership hardening — 2026-09-25
+
+- Keeps a background recovery `Future` coordinator-owned until its completion callback has finalized shared autosave state; `Future.done()` alone is no longer treated as idle.
+- Queues/coalesces snapshots that arrive in the done-before-callback window instead of replacing the tracked Future/request pair.
+- Prevents delayed completion callbacks from clearing newer tracked state and makes `wait_for_idle()` require no Future, active request, or pending request.
+- Adds a deterministic concurrency regression that forces the exact callback-finalization race and verifies the newest recovery snapshot remains tracked and persisted.
+- Preserves project/recovery schemas, explicit-save behavior, bounded history, solver semantics, and runtime dependencies.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

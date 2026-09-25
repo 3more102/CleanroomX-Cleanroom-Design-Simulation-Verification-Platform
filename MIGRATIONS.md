@@ -25,11 +25,13 @@ The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `
 
 Unknown future project formats are rejected rather than silently reinterpreted.
 
-## Save behavior after migration
+## Migration provenance and protected first save
 
-Loading a supported legacy file does not overwrite it automatically. If the migrated project is saved, CleanroomX writes schema version 1 using the current document model. Saving is validated first and uses an atomic temporary-file replacement.
+Supported migrations now return explicit immutable provenance alongside the validated current-schema project model. The migration record identifies the source format, source schema version when one exists, target schema version, and the deterministic migration step that ran. Existing callers of `project_from_dict()`, `load_project_document()`, and `load_project_document_with_revision()` retain their historical return types; migration-aware callers use the additive `*_with_migration_info` APIs.
 
-For controlled archival workflows, retain a copy of the original legacy file before saving the migrated project.
+The desktop treats a migrated legacy project as an unsaved converted copy. The source path remains available only as the engineering path context and as the protected legacy source. **Save Project** routes to **Save Project As**, and the first Save As refuses the original legacy path. A successful Save As writes schema version 1 to a different file before the migration protection is cleared. Closing without saving leaves the original legacy bytes unchanged.
+
+This protection makes rollback explicit: the pre-migration source remains available for comparison or use with an older CleanroomX version. CleanroomX still does not synthesize reverse migrations.
 
 
 ## v0.100 path-context behavior

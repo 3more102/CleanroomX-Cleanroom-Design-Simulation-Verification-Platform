@@ -80,6 +80,8 @@ The spatial workspace also exposes an operator scene summary with room/device co
 
 Use **Export SVG** to save the canonical 2D spatial model as a standalone vector drawing. The export preserves room geometry, names, dimensions, supplied pressure labels, device positions/types, and metadata identifiers without changing the project or analysis inputs. The SVG is generated directly from the normalized spatial model and requires no third-party graphics dependency.
 
+Use **Export CSV** to produce a deterministic engineering schedule from the same canonical model. Room records include coordinates, dimensions, calculated area and volume, and supplied pressure; device records include type, assigned room, and XYZ coordinates. CSV quoting is standards-compliant, unassigned devices remain explicit, and the export does not mutate the project or analysis inputs.
+
 For room-verification and multi-room project-verification analyses, **Sync dimensions to active analysis** explicitly copies room dimensions (and an existing observed-pressure field when present) from the spatial model into the analysis JSON. Other engineering fields such as airflow, ACH requirements, particle requirements, and pressure-cascade criteria are preserved. Results for a synchronized analysis are invalidated and must be validated/run again.
 
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.

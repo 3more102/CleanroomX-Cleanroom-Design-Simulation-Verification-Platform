@@ -232,6 +232,225 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+
+def validate_layout_integrity(value: Any) -> list[dict]:
+    """Return deterministic structural errors without coercing or mutating layout data."""
+    issues: list[dict] = []
+    if not isinstance(value, dict):
+        return [{
+            "code": "layout_not_object",
+            "severity": "error",
+            "item_ids": [],
+            "message": "Spatial layout must be an object.",
+        }]
+
+    version = value.get("version")
+    if version is not None and (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version != SPATIAL_LAYOUT_VERSION
+    ):
+        issues.append({
+            "code": "layout_version_unsupported",
+            "severity": "error",
+            "item_ids": [],
+            "message": (
+                f"Spatial layout version must be {SPATIAL_LAYOUT_VERSION} when provided."
+            ),
+        })
+
+    def numeric(value: Any) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        number = float(value)
+        return number if math.isfinite(number) else None
+
+    if "grid_m" in value:
+        grid = numeric(value.get("grid_m"))
+        if grid is None or grid <= 0.0:
+            issues.append({
+                "code": "grid_invalid",
+                "severity": "error",
+                "item_ids": [],
+                "message": "Spatial grid_m must be a finite positive number.",
+            })
+
+    raw_rooms = value.get("rooms", [])
+    if not isinstance(raw_rooms, list):
+        issues.append({
+            "code": "rooms_not_array",
+            "severity": "error",
+            "item_ids": [],
+            "message": "Spatial rooms must be an array.",
+        })
+        raw_rooms = []
+
+    raw_devices = value.get("devices", [])
+    if not isinstance(raw_devices, list):
+        issues.append({
+            "code": "devices_not_array",
+            "severity": "error",
+            "item_ids": [],
+            "message": "Spatial devices must be an array.",
+        })
+        raw_devices = []
+
+    room_ids: set[str] = set()
+    for index, room in enumerate(raw_rooms):
+        if not isinstance(room, dict):
+            issues.append({
+                "code": "room_not_object",
+                "severity": "error",
+                "item_ids": [],
+                "message": f"Spatial room at index {index} must be an object.",
+            })
+            continue
+
+        raw_id = room.get("id")
+        room_id = raw_id.strip() if isinstance(raw_id, str) else ""
+        item_ids = [room_id] if room_id else []
+        if not room_id:
+            issues.append({
+                "code": "room_id_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": f"Spatial room at index {index} must have a non-empty stable id.",
+            })
+        elif room_id in room_ids:
+            issues.append({
+                "code": "duplicate_room_id",
+                "severity": "error",
+                "item_ids": [room_id],
+                "message": f"Spatial room id '{room_id}' is duplicated.",
+            })
+        else:
+            room_ids.add(room_id)
+
+        name = room.get("name")
+        if not isinstance(name, str) or not name.strip():
+            issues.append({
+                "code": "room_name_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": f"Spatial room at index {index} must have a non-empty name.",
+            })
+
+        for key in ("x_m", "y_m"):
+            if numeric(room.get(key)) is None:
+                issues.append({
+                    "code": "room_coordinate_invalid",
+                    "severity": "error",
+                    "item_ids": item_ids,
+                    "message": f"Spatial room '{room_id or index}' {key} must be a finite number.",
+                })
+        for key in ("length_m", "width_m", "height_m"):
+            number = numeric(room.get(key))
+            if number is None or number <= 0.0:
+                issues.append({
+                    "code": "room_dimension_invalid",
+                    "severity": "error",
+                    "item_ids": item_ids,
+                    "message": (
+                        f"Spatial room '{room_id or index}' {key} must be a finite positive number."
+                    ),
+                })
+        if "pressure_pa" in room and numeric(room.get("pressure_pa")) is None:
+            issues.append({
+                "code": "room_pressure_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": (
+                    f"Spatial room '{room_id or index}' pressure_pa must be a finite number."
+                ),
+            })
+
+    device_ids: set[str] = set()
+    for index, device in enumerate(raw_devices):
+        if not isinstance(device, dict):
+            issues.append({
+                "code": "device_not_object",
+                "severity": "error",
+                "item_ids": [],
+                "message": f"Spatial device at index {index} must be an object.",
+            })
+            continue
+
+        raw_id = device.get("id")
+        device_id = raw_id.strip() if isinstance(raw_id, str) else ""
+        item_ids = [device_id] if device_id else []
+        if not device_id:
+            issues.append({
+                "code": "device_id_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": f"Spatial device at index {index} must have a non-empty stable id.",
+            })
+        elif device_id in device_ids:
+            issues.append({
+                "code": "duplicate_device_id",
+                "severity": "error",
+                "item_ids": [device_id],
+                "message": f"Spatial device id '{device_id}' is duplicated.",
+            })
+        else:
+            device_ids.add(device_id)
+
+        device_type = device.get("type")
+        if device_type not in DEVICE_TYPES:
+            issues.append({
+                "code": "device_type_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": (
+                    f"Spatial device '{device_id or index}' type must be one of "
+                    + ", ".join(DEVICE_TYPES)
+                    + "."
+                ),
+            })
+        name = device.get("name")
+        if not isinstance(name, str) or not name.strip():
+            issues.append({
+                "code": "device_name_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": f"Spatial device at index {index} must have a non-empty name.",
+            })
+
+        for key in ("x_m", "y_m", "z_m"):
+            if numeric(device.get(key)) is None:
+                issues.append({
+                    "code": "device_coordinate_invalid",
+                    "severity": "error",
+                    "item_ids": item_ids,
+                    "message": (
+                        f"Spatial device '{device_id or index}' {key} must be a finite number."
+                    ),
+                })
+
+        room_id = device.get("room_id")
+        if room_id is not None and (not isinstance(room_id, str) or not room_id.strip()):
+            issues.append({
+                "code": "device_room_id_invalid",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": (
+                    f"Spatial device '{device_id or index}' room_id must be a non-empty string or null."
+                ),
+            })
+        elif isinstance(room_id, str) and room_id.strip() not in room_ids:
+            issues.append({
+                "code": "orphan_device_room",
+                "severity": "error",
+                "item_ids": item_ids,
+                "message": (
+                    f"Spatial device '{device_id or index}' references missing room id "
+                    f"'{room_id.strip()}'."
+                ),
+            })
+
+    return issues
+
+
 def validate_layout(value: Any) -> list[dict]:
     """Return advisory spatial-edit warnings without mutating persisted layout data."""
     layout = normalize_layout(value)

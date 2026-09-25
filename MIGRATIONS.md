@@ -31,11 +31,13 @@ Within supported schema version 1, fields that this CleanroomX build does not in
 
 The same preservation rule is applied during supported legacy migration where an unconsumed source field has a lossless schema-v1 destination. The explicit schema-v0 shape carries unconsumed top-level and analysis fields forward. The older pre-schema single-analysis shape carries unconsumed top-level fields forward without reinterpreting them as current project metadata. CleanroomX does not interpret, validate the domain meaning of, or update opaque extension content beyond the normal strict-JSON requirement; extensions that require incompatible semantics should use an appropriate schema/version contract rather than relying on an unknown field.
 
-## Save behavior after migration
+## Migration provenance and protected first save
 
-Loading a supported legacy file does not overwrite it automatically. If the migrated project is saved, CleanroomX writes schema version 1 using the current document model. Saving is validated first and uses an atomic temporary-file replacement.
+Supported migrations expose immutable provenance alongside the validated current-schema project model: source format, source schema version when one exists, target schema version, and the deterministic migration step that ran. Existing `project_from_dict()`, `load_project_document()`, and `load_project_document_with_revision()` callers retain their historical return types; migration-aware callers use the additive `*_with_migration_info` APIs.
 
-For controlled archival workflows, retain a copy of the original legacy file before saving the migrated project.
+The desktop treats a migrated legacy project as an unsaved converted copy while retaining the legacy file only as path context and the protected migration source. **Save Project** routes to **Save Project As**, and the first Save As refuses the original legacy path. Migration protection is cleared only after a validated schema-v1 save succeeds at a different path. Closing without saving leaves the original legacy bytes unchanged.
+
+This preserves an explicit rollback/comparison source. CleanroomX does not synthesize reverse migrations.
 
 
 ## v0.100 path-context behavior

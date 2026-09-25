@@ -36,6 +36,8 @@ v0.100 records canonical SHA-256 identity for submitted application inputs and b
 
 Fan operating-point plots reuse backend-computed system-pressure evidence and render labeled fan/system series. Abandoned runs remain exclusive until their backend worker exits. The installed wheel includes the self-contained demo and supports `cleanroomx-gui --demo`.
 
+Current unreleased desktop hardening also protects opened projects from external overwrite conflicts and preserves a bounded, SHA-256-verified history of prior explicit saves. **File → Saved Revisions…** restores a selected valid revision only as a separate project copy; it does not overwrite the active source project.
+
 
 ### v0.99 application registry integrity
 

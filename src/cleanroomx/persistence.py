@@ -54,6 +54,7 @@ class AtomicWriteVerificationError(OSError):
 
 
 _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
+    errno.EBADF,
     errno.EINVAL,
     getattr(errno, "ENOTSUP", errno.EINVAL),
     getattr(errno, "EOPNOTSUPP", errno.EINVAL),
@@ -83,36 +84,65 @@ def _fsync_directory(directory: Path) -> None:
         os.close(descriptor)
 
 
-def _stable_file_sha256(
-    path: Path,
+def stable_file_sha256(
+    path: str | Path,
     *,
     attempts: int = 3,
 ) -> tuple[os.stat_result, str]:
-    """Hash one stable file revision, rejecting mutation or replacement during read."""
+    """Hash one stable file revision and reject path/descriptor replacement races."""
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
+    source = Path(path)
     last_error: OSError | None = None
     for _attempt in range(attempts):
         try:
-            before = path.stat()
+            before_path = source.stat()
             digest = sha256()
-            with path.open("rb") as handle:
+            with source.open("rb") as handle:
+                before_handle = os.fstat(handle.fileno())
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
-            after = path.stat()
+                after_handle = os.fstat(handle.fileno())
+            after_path = source.stat()
         except OSError as exc:
             last_error = exc
             continue
-        if (
-            before.st_dev == after.st_dev
-            and before.st_ino == after.st_ino
-            and before.st_size == after.st_size
-            and before.st_mtime_ns == after.st_mtime_ns
-        ):
-            return after, digest.hexdigest()
-        last_error = OSError(f"file changed while verifying: {path}")
+
+        identities = (
+            (
+                before_path.st_dev,
+                before_path.st_ino,
+                before_path.st_size,
+                before_path.st_mtime_ns,
+            ),
+            (
+                before_handle.st_dev,
+                before_handle.st_ino,
+                before_handle.st_size,
+                before_handle.st_mtime_ns,
+            ),
+            (
+                after_handle.st_dev,
+                after_handle.st_ino,
+                after_handle.st_size,
+                after_handle.st_mtime_ns,
+            ),
+            (
+                after_path.st_dev,
+                after_path.st_ino,
+                after_path.st_size,
+                after_path.st_mtime_ns,
+            ),
+        )
+        if identities[0] == identities[1] == identities[2] == identities[3]:
+            return after_path, digest.hexdigest()
+        last_error = OSError(f"file changed while verifying: {source}")
     assert last_error is not None
     raise last_error
+
+
+# Backward-compatible private alias for existing tests/internal callers.
+_stable_file_sha256 = stable_file_sha256
 
 
 def _verify_file_payload(

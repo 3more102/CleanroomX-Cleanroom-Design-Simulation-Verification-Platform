@@ -1,758 +1,159 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.102.1 desktop application.
+[![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
-## Verified development status
+**CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current release line is **CleanroomX v0.102.1**, the final production closure of the synchronized 2D/3D spatial-design workspace on top of the verified Release 2 engineering baseline. It uses one canonical spatial model, bidirectional dimension-only engineering synchronization, fresh verification-pressure projection without geometry contamination, synchronized 2D/3D cascade state, windows/generic openings, deterministic viewport transforms, spatial integrity checks, and deterministic layout metrics while preserving the validated solver/provenance backend. Published `v0.100.0`, `v0.101.0`, and `v0.102.0` tags remain immutable at their original validated commits.
+The current stable release is **v0.102.1**.
 
-CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, strict engineering-ingestion and project-batch regressions, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
+## What CleanroomX provides
 
-### Network-state replay provenance ladder
+### 2D + 3D cleanroom design workspace
 
-| Version | Audited state |
-| --- | --- |
-| v0.85 | selected operating scalar pressure-state replay |
-| v0.87 | full low/midpoint/high bisection network-state SHA-256 replay |
-| v0.88 | terminal-bracket network-state SHA-256 replay |
-| v0.89 | selected operating network-state SHA-256 replay |
-| v0.90 | terminal network-state canonical projection replay with field localization |
-| v0.91 | selected operating network-state canonical projection replay with field localization |
-| v0.92 | full per-bisection low/midpoint/high canonical projection replay with exact mismatch localization |
-| v0.93 | supplied fan-point canonical SHA-256 and field-level projection replay |
-| v0.94 | signed-zero-stable canonical network-result identity with named-collection order invariance and solver metadata/configuration/history provenance |
-| v0.95 | complete standalone solver-result identity/self-audit with uncertainty-corner and dossier linkage |
-| v0.96 | shared application services, versioned project persistence, and user-operable Tkinter desktop GUI |
-| v0.97 | GUI lifecycle hardening, complete workflow regression, and per-analysis result sessions |
-| v0.98 | release metadata synchronization, registry binding self-validation, and visible dirty-state tracking |
-| v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
-| v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
-| v0.100 | execution provenance, portable path context, atomic exports, fan/system plot evidence, and consolidated installed-desktop release |
-| v0.101 | Release 2 architecture consolidation, durable project lifecycle, deterministic batch automation, strict engineering JSON ingestion, portable bundles/reports, precision hardening, and final numerical-integrity gates |\n| v0.102 | synchronized 2D/3D spatial closure with proven engineering-sync provenance/state, guarded mapping, persistence validation, and focused spatial regression coverage |
-| v0.102.1 | final spatial production closure with bidirectional dimension-only sync, fresh result-pressure projection, windows/openings, centralized transforms, and stronger installed-GUI smoke |
+- One canonical spatial model shared by the synchronized 2D editor and 3D viewer.
+- Floors, rooms, dimensions, elevations, classifications, doors, windows, transfer openings, and placed equipment/devices.
+- Grid snapping, room movement and resize, viewport controls, fit/reset, 3D orbit, labels, pressure overlays, and pressure-cascade visualization.
+- Spatial integrity checks for invalid geometry, overlapping rooms, duplicate names, orphan assignments, and invalid device placement.
+- Project-wide transactional Undo/Redo.
+- Deterministic spatial editing and no-op suppression to avoid unnecessary history/autosave changes.
 
+### Engineering verification
 
-### v0.102.1 final spatial production closure
+CleanroomX includes engineering workflows for:
 
-v0.102.1 keeps the published v0.102.0 tag unchanged and assigns a new patch identity to the final post-release spatial work. Spatial-to-engineering push and engineering-to-spatial pull synchronize dimensions only. Fresh current verification results can drive pressure colors, labels, and cascade state without being persisted into geometry. Windows and generic wall openings are persisted first-class objects, and the same canonical layout feeds both the 2D editor and 3D viewer.
+- room volume and air-change calculations;
+- ACH, differential-pressure, and particle-concentration checks;
+- multi-room pressure-cascade verification;
+- recovery/particle-decay screening;
+- psychrometric and thermal calculations;
+- supply/return/exhaust/transfer airflow balance;
+- preliminary fan duty and power calculations;
+- duct pressure-loss analysis;
+- branch, fixed-resistance, and looped airflow networks;
+- fan/network operating-point solving;
+- variable-friction network solving;
+- bounded uncertainty and numerical provenance analysis.
 
-### v0.102 synchronized 2D/3D spatial closure
+### Spatial ↔ engineering synchronization
 
-v0.102 publishes the final synchronized spatial workspace without moving the already-published v0.101.0 tag. Room-level engineering synchronization state is deterministic: **synchronized**, **geometry newer**, **engineering newer**, **conflicting**, or **unmapped**. "Newer" is reported only when a persisted last-synchronized baseline proves which side changed; otherwise divergence fails closed as conflicting. Project-verification mappings are preflighted before mutation so a bad later mapping cannot leave a partial synchronization. The release retains the same validated solver equations, tolerances, project schema version, units, and engineering acceptance semantics.
+Spatial and engineering data remain deliberately separated.
 
-### v0.101 Release 2
+- Geometry synchronization is **dimension-only**.
+- Changes are preflighted before mutation.
+- CleanroomX tracks synchronized, geometry-newer, engineering-newer, conflicting, and unmapped states.
+- Fresh verification pressure may drive 2D/3D pressure visualization without being written back into spatial geometry.
 
-v0.101 assigns a new immutable release identity to the completed Release 2 tree instead of moving the already-published v0.100.0 tag. Release 2 consolidates durable verified persistence, guarded project revisions, crash recovery, bounded project/spatial undo-redo, analysis plugin API v1, immutable run snapshots and history, dependency freshness tracking, verified portable project bundles, self-contained engineering HTML reports, deterministic project batch automation, strict engineering JSON ingestion, precision-safe HVAC composition, explicit verification completeness, Markdown report hardening, and foundational finite-number validation. The release does not alter solver equations, numerical tolerances, no-extrapolation/root-selection behavior, or engineering acceptance semantics.
+### Project integrity and evidence
 
+- Strict JSON ingestion.
+- Atomic project/report persistence.
+- Autosave and crash-recovery artifacts.
+- Saved project revisions and external-write protection.
+- Immutable run snapshots and execution provenance.
+- Deterministic project batch execution.
+- Portable project bundles and engineering reports.
+- SHA-256 based numerical/provenance evidence for supported solver workflows.
 
-### v0.100 consolidated desktop release
+## Quick start
 
-v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves and GUI exports use same-directory atomic replacement; export failures are surfaced in the desktop UI.
+### Windows — repository checkout
 
-Fan operating-point plots reuse backend-computed system-pressure evidence and render labeled fan/system series. Abandoned runs remain exclusive until their backend worker exits. The installed wheel includes the self-contained demo and supports `cleanroomx-gui --demo`.
+From PowerShell:
 
+```powershell
+cd C:\CleanroomX
+.\start-cleanroomx.ps1
+```
 
-### v0.99 application registry integrity
+CMD is also supported:
 
-v0.99 strengthens the completed desktop release by validating the registry as a software contract rather than only checking importability. Duplicate analysis keys are rejected; every normal analysis must retain parser and runner bindings; `consistency` and `dossier` must remain explicit custom application adapters; every declared parser, runner, and reporter must resolve to a callable; and the validation returns counts plus adapter metadata. `cleanroomx-gui --check` exposes the same evidence so installation/readiness checks can verify the catalog they are about to operate.
+```cmd
+start-cleanroomx.cmd
+```
 
-### v0.98 desktop application
+Run the installation/readiness check:
 
-v0.98 completes the user-operable Tkinter application over the existing validated CleanroomX backends. It provides project creation/open/save, stable strict-JSON `.cleanroomx.json` persistence with migration of supported legacy shapes, unsaved-change protection with a visible dirty marker, analysis creation/rename/removal, per-analysis result restoration, structured JSON input inspection with engineering-unit hints, file import/export, backend validation, guarded non-blocking analysis execution, result/diagnostic/report views, fan-curve plotting where supported, and JSON/Markdown export. The headless `cleanroomx-gui --check` path resolves every declared parser/runner/reporter binding, and application regressions execute every workflow exposed by the desktop catalog end-to-end through the shared application service.
+```powershell
+.\start-cleanroomx.ps1 --check
+```
 
-After installation, launch the application with:
+### Python installation
+
+CleanroomX supports **Python 3.11, 3.12, and 3.13**.
 
 ```bash
+python -m venv .venv
+python -m pip install -e .
 cleanroomx-gui
 ```
 
-Open the self-contained demonstration shipped inside the installed package:
+Open the packaged demonstration:
 
 ```bash
 cleanroomx-gui --demo
 ```
 
-From a repository checkout, `examples/gui_demo.cleanroomx.json` remains the editable source copy.
-
-### Windows checkout launcher
-
-From PowerShell in the repository root, use the PATH-independent launcher:
-
-```powershell
-.\start-cleanroomx.ps1
-```
-
-It prefers `.venv\Scripts\python.exe`, executes the current checkout directly from `src`, and opens the bundled demo by default so the synchronized **Design 2D + 3D** workspace is immediately available. The CMD wrapper is equivalent:
-
-```powershell
-.\start-cleanroomx.cmd
-```
-
-Normal GUI arguments pass through unchanged, for example `.\start-cleanroomx.ps1 --check`.
-
-For automated installation checks without a display:
+Headless readiness check:
 
 ```bash
 cleanroomx-gui --check
 ```
 
-The CI smoke path starts the real Tk application under a virtual display and runs the active demo analysis before exiting. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the desktop/project workflow and [docs/LAYOUT_2D_3D.md](docs/LAYOUT_2D_3D.md) for the synchronized spatial editor/viewer, pressure overlays, floor metadata, geometry validation, and analysis synchronization.
+## Main command-line tools
 
-### Project batch automation
-
-Run every analysis in a saved CleanroomX project headlessly through the same validated application service as the desktop:
+Run a saved project:
 
 ```bash
 cleanroomx-project-run project.cleanroomx.json
 ```
 
-Repeat `--analysis ID` for a deterministic subset, add `--fail-fast` to stop after the first execution exception, and use `--format json|markdown --output PATH` for an atomic report. The runner binds the batch to the parsed project SHA-256, preserves each completed run's existing execution/dependency provenance, and stops scheduling if the source project changes during execution. Engineering PASS/FAIL-style states remain domain results; batch exit codes describe orchestration integrity. See [docs/PROJECT_BATCH_AUTOMATION.md](docs/PROJECT_BATCH_AUTOMATION.md).
+Create or verify portable project evidence:
 
-### v0.95 solver-result integrity linkage
-
-v0.95 adds a separate deterministic identity for the complete standalone nonlinear fan/variable-friction solver result. The digest excludes only its own `result_integrity` block, normalizes signed zero, sorts semantically named node/edge/closure collections, and preserves solver/search order where ordering is meaningful.
-
-An independent audit recomputes that identity and reports availability, metadata agreement, SHA-256 agreement, and overall consistency. Nonlinear uncertainty analyses retain the audit for the nominal result and every evaluated corner, explicitly separating missing integrity coverage from actual corruption. Engineering dossiers preserve the same corner-level linkage and aggregate coverage evidence.
-
-This identity is intentionally separate from the top-level nonlinear uncertainty result digest and from the network-state fingerprint/projection replay ladder. It is deterministic software-content evidence only and is not proof of source authenticity, physical correctness, cleanroom certification, CFD validation, fan acceptance, commissioning/TAB acceptance, manufacturer approval, stall/surge safety, physical uncertainty, or statistical confidence.
-
-### v0.94 canonical solver provenance hardening
-
-v0.94 hardens the single canonical network-result identity used by supplied-point, full-bisection, terminal, and selected replay. The projection now covers network/status/reference-node identity, inner Newton iteration count, configured mass-balance tolerance, final node/edge/pressure-power evidence, variable-friction convergence/configuration, chronological outer-iteration history, and named edge-closure evidence. Semantically named node, edge, and closure collections are sorted for identity, while chronological solver/search histories remain ordered.
-
-Floating-point signed zero is normalized only inside the canonical representation, so `-0.0` and `0.0` hash and compare as the same numerical state where sign is not physically meaningful. Solver calculations and retained physical outputs are not rewritten for hashing. The canonicalization identifier is `network-result-projection-sort-named-collections-normalize-signed-zero-preserve-iteration-history-json-sort-keys-compact-utf8-v3`.
-
-The existing deterministic comparator remains the only recursive field-level comparator. SHA-256 equality and projection equality remain separate evidence layers, and richer solver-metadata/configuration mismatches propagate through uncertainty aggregation, strict JSON serialization, standalone Markdown, and engineering dossiers with exact path/value/type/numerical-error provenance.
-
-This is deterministic numerical/software provenance verification only. It is not cleanroom or ISO certification, CFD validation, fan acceptance, manufacturer approval, commissioning/TAB evidence, proof of global root uniqueness or physical stability, stall/surge analysis, physical uncertainty quantification, statistical confidence analysis, or proof that source data are authentic or physically correct.
-
-### v0.92 full per-bisection projection replay
-
-v0.92 closes the field-level replay gap across every retained bounded-bisection trace row. For each applicable iteration it retains the canonical **low**, **midpoint**, and **high** network-state projections, reconstructs the exact replay airflows from the retained search origin and L/H/T decision trace, performs fresh nonlinear network solves at those exact airflows, rebuilds the same canonical projection used by terminal/selected replay, and compares retained versus recomputed state field-by-field.
-
-SHA-256 replay remains a separate audit layer; projection equality is not inferred from hash equality. Projection diagnostics retain **all** mismatches in deterministic iteration/position/path order and preserve JSON-style path, retained/recomputed value, retained/recomputed type, mismatch kind, numerical absolute error when meaningful, comparable-field identity, per-field maximum error, and tied worst witnesses. Coverage tracks checked versus expected iterations and state positions, and incomplete replay coverage cannot be reported as fully consistent.
-
-The same evidence propagates through nonlinear uncertainty aggregation, standalone JSON/Markdown reports, and engineering dossiers with exact corner → iteration → position → path provenance. Replay failures do not create, remove, or change an engineering operating point; solver decisions, no-extrapolation behavior, tolerances, convergence criteria, power calculations, and engineering acceptance semantics remain separate.
-
-This replay is deterministic numerical/provenance verification only. It is **not** cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
-
-## v0.95 engineering core
-
-- Room volume and nominal supply-air ACH calculations.
-- Requirement-driven checks for ACH, differential pressure, and airborne particle concentration.
-- Multi-room project models and facility-level verification reports.
-- Directed room-to-room pressure-cascade verification using project-configured minimum pressure differences.
-- Validation for duplicate rooms, unknown cascade references, duplicate links, and impossible directed pressure cycles.
-- A transparent well-mixed first-order particle decay/recovery screening model.
-- Psychrometric room/outdoor air-state calculations.
-- Explicit sensible and latent heat-load inputs.
-- Makeup-air load and preliminary cooling/heating capacity calculations.
-- Governing airflow comparison between cleanroom airflow, makeup air, and sensible-load airflow.
-- Optional FFU/filter-unit count from rated airflow and explicit design utilization.
-- Per-room supply/return/exhaust/transfer airflow balance and minimum-surplus verification.
-- Optional terminal-filter pressure drop plus preliminary supply-fan static-pressure and electrical-power sizing.
-- Path-based duct pressure-loss analysis using Darcy-Weisbach friction plus explicit local loss coefficients.
-- Optional Darcy friction-factor resolution from explicit absolute roughness and kinematic viscosity, with Reynolds-number evidence and preserved manual-factor compatibility.
-- Circular and rectangular duct geometry with hydraulic-diameter reporting.
-- Critical-path selection across user-defined duct paths and direct integration into fan duty.
-- Directed supply-tree branch-flow solving from explicit terminal demands with continuity residuals and terminal critical-path analysis.
-- Passive parallel-path airflow solving for simple common-pressure-node networks using explicit fixed resistances.
-- Fixed-resistance looped airflow-network solving for connected meshes with arbitrary loops, signed reverse flow, node-continuity residuals, and edge pressure-law residuals.
-- Bounded fan/loop-network operating-point coupling for passive two-terminal fixed-resistance meshes, with no fan-curve extrapolation and full operating-flow re-solve.
-- Deterministic fan/loop-network uncertainty corner analysis over user-supplied fixed-pressure and named edge-resistance bounds, with no fan-curve extrapolation and full loop re-solving at each bounded corner.
-- Bounded fan-speed/VFD sweeps over fixed-resistance loop networks, re-solving the full mesh at each transformed fan-curve operating point.
-- Explicit loop-network damper-resistance scenario studies using user-supplied per-edge resistance multipliers, with baseline/case flow redistribution and residual evidence.
-- Optional loop-edge resistance derivation from explicit circular/rectangular duct geometry, Darcy friction, air density, and local K, with automatic friction resolved once at an explicit reference airflow.
-- Optional variable-friction loop iteration for automatic roughness/viscosity geometry edges, with Reynolds/Darcy recomputation at solved edge flow, relaxation, closure reporting, explicit near-zero-flow handling, and pre-solve validation of stored automatic-friction evidence.
-- Bounded fan/variable-friction loop coupling that re-solves the complete Darcy-friction network at every candidate fan/system airflow, with no fan-curve extrapolation, convergence diagnostics, and explicit non-converged states.
-- Deterministic bounded uncertainty for fan/variable-friction loop coupling over explicit fixed-pressure, optional fan-speed ratio, selected supplied fan-point pressures/airflow coordinates or explicit correlated whole fan-curve scenarios, and selected automatic-friction local-loss, absolute-roughness, kinematic-viscosity, air-density, duct-length, circular-diameter, and rectangular width/height bounds, with full nonlinear re-solving at every evaluated case and no envelope when any case is unresolved.
-- Aggregate nonlinear solver-quality evidence across uncertainty corners, including exact worst-metric witness provenance, v0.52 configured residual-tolerance utilization/margin checks, and v0.56 configured outer/Newton/operating iteration-budget utilization with remaining-iteration evidence; pressure-law residual remains a threshold-free raw diagnostic.
-- Nominal-centered evaluated-corner excursion evidence for complete nonlinear uncertainty studies, reporting lower/upper absolute and percentage departures for operating airflow, fan/system pressure, air power, and available power-chain metrics without presenting them as sensitivity coefficients.
-- Supplied-fan-curve boundary-clearance evidence for nonlinear uncertainty corners, retaining each solved corner's exact supplied or speed-transformed airflow range and reporting absolute/normalized distance to the nearest no-extrapolation endpoint with tied source-corner provenance.
-- No-intersection supplied-endpoint diagnostics for unresolved nonlinear uncertainty corners, identifying the limiting lower/upper supplied airflow endpoint and preserving signed fan-minus-system pressure mismatch with exact source-corner context, without extrapolating a missing operating point.
-- Fan/system supplied-curve intersection-bracket provenance for solved nonlinear uncertainty corners, retaining the exact interpolation-segment endpoint fan/system pressures and signed residuals that enclose the bounded root without fan-curve extrapolation.
-- Local fan/system crossing-conditioning evidence derived from the same supplied-point brackets, reporting fan/system/residual secant slopes, reciprocal airflow-per-pressure gradient, and secant-root agreement with exact source-corner provenance; no stability or acceptance threshold is inferred.
-- Pressure-residual→airflow numerical-equivalence auditing for solved nonlinear uncertainty corners, mapping the configured pressure tolerance and actual solved residual through the local fan-minus-system secant gradient into absolute/signed first-order airflow equivalents, with bracket-normalized evidence and exact source-corner provenance; these are numerical solver diagnostics, not uncertainty or acceptance limits.
-- Bounded operating-point root-search geometry for nonlinear fan/variable-friction solves, distinguishing direct supplied-point tolerance contacts from true bisection and retaining the final signed-residual bracket width, half-width, normalized span, iteration, and uncertainty-corner provenance without treating search width as physical airflow uncertainty or acceptance margin.
-- Bisection implementation-invariant auditing for retained root-search geometry, checking the live strict residual-sign bracket, selected-midpoint centering, and iteration-implied binary width contraction with raw consistency-error provenance across uncertainty corners.
-- Iteration-limit bisection provenance for v0.70, retaining the unresolved search's last evaluated midpoint and remaining active signed-residual bracket with contraction/invariant evidence while explicitly accepting no operating point.
-- Bounded-bisection decision-trace provenance for v0.72, retaining every successful midpoint evaluation as an L/H/T endpoint-replacement/tolerance-acceptance sequence, auditing per-step sign bracketing and midpoint geometry, and propagating exact trace coverage/violation provenance across uncertainty corners and dossier output.
-- Bisection decision-trace replay auditing for v0.73, verifying contiguous iteration numbering and replaying every nonterminal L/H decision into the next retained airflow/residual bracket with exact uncertainty-corner violation provenance.
-- Fan-curve interpolation segment-position evidence for solved nonlinear uncertainty corners, reporting local supplied-point clearances, normalized position inside the active piecewise-linear segment, and tied source-corner provenance without treating point spacing as interpolation error or an equipment margin.
-- Supplied-point fan-minus-system residual-topology auditing for the nonlinear solver and every uncertainty corner, exposing complete/partial point coverage, tolerance contacts, strict sign-change segments, sampled residual monotonicity, residual-increase transitions, and multiple discrete candidate-crossing features without treating them as proof of continuous intersection uniqueness.
-- Explicit selected-crossing-candidate provenance for solved nonlinear cases: discrete candidates are stored in the solver's actual priority order and results retain the selected feature, zero-based priority rank, additional-candidate count, and whether the selected sampled feature was unique.
-- Alternative crossing-candidate separation evidence for solved cases with multiple discrete supplied-point candidates, retaining each alternative tolerance-contact point or sign-change interval, its solver-priority rank, the selected airflow's gap to that interval, tied nearest alternatives, and explicit zero-gap overlap without estimating another continuous root.
-- Scale-aware alternative-candidate separation for v0.68, normalizing each discrete candidate interval gap by that case's supplied fan-curve airflow span and aggregating the minimum normalized separation with exact source-corner provenance.
-- Supplied-grid resolution normalization for v0.71, recording minimum/maximum adjacent supplied-point airflow spacing and max/min spacing ratio, then expressing selected-to-alternative candidate interval gaps in units of the minimum supplied spacing with tied uncertainty-corner provenance.
-- Supplied-point candidate index-separation for v0.74, retaining exact candidate index intervals and measuring selected-to-alternative separation in supplied-point index steps with tied uncertainty-corner provenance.
-- Iteration-limit decision-trace terminal replay for v0.75, retaining every completed bounded-bisection L/H decision on non-converged iteration-limit searches and verifying that the final decision exactly reproduces the remaining signed-residual bracket without accepting a root.
-- Bisection decision-trace geometry consistency for v0.76, verifying every retained trace width against its airflow endpoints and every normalized width against the binary contraction implied by the recorded iteration, with exact uncertainty-corner violation provenance.
-- Bisection trace origin-to-terminal replay for v0.77, anchoring the first retained bracket to the selected supplied fan-curve segment and reconstructing every L/H/T decision through the solved or iteration-limit terminal bracket while preserving v0.76 trace-geometry checks.
-- Bisection trace decision-semantics auditing for v0.78, independently checking every retained L/H/T choice against its midpoint residual and configured operating-pressure tolerance with exact violating-iteration and uncertainty-corner provenance.
-- Independent bisection trace raw-state auditing for v0.79, recomputing strict residual bracketing and arithmetic midpoint geometry directly from retained numeric trace fields, checking stored flags against those facts, and propagating exact raw-state violation provenance.
-- Bisection trace pressure-state auditing for v0.80, retaining midpoint fan, loop, fixed, and total system pressure for every bounded-bisection evaluation and independently checking `system = fixed + loop`, `residual = fan - system`, and the retained fixed-pressure component against the study input, with exact uncertainty-corner violation provenance.
-- Independent fan/system residual replay for v0.81, reconstructing each retained bisection low/high/midpoint airflow from the selected supplied segment and L/H/T chain, freshly re-solving the nonlinear variable-friction network and fan interpolation, and comparing every retained residual against recomputed fan-minus-system pressure with exact iteration/corner and worst-error provenance.
-- Independent midpoint pressure-component replay for v0.82, re-solving the nonlinear loop and fan interpolation at each replayed midpoint to verify retained fan, loop-network, and total system pressures directly, including common-mode corruption that can preserve the residual.
-- Full-bracket pressure-component replay for v0.83, retaining low/high endpoint fan, loop-network, and total system pressures at every bisection step and independently replaying low/midpoint/high component states to detect endpoint corruption that leaves residuals and midpoint evidence unchanged.
-- Exact pressure-component replay violation provenance for v0.84, recording the iteration, bracket position, pressure component, recorded/recomputed values, absolute error, and tied maximum-error witnesses, with the same evidence propagated across uncertainty corners and reports.
-- Independent selected operating-state replay for v0.85, freshly re-solving the retained selected airflow and verifying its search origin plus final fan, loop-network, total-system, and residual pressure state, with solved-corner uncertainty aggregation.
-- Terminal-bracket pressure-component replay for v0.86, retaining and independently replaying low/high fan, loop-network, and total system pressures on solved final brackets and post-decision iteration-limit remaining brackets, with exact terminal mismatch records and tied worst-error provenance.
-- Independent internal network-state fingerprint replay for v0.87, retaining SHA-256 fingerprints of canonical node/edge/closure state at every low/midpoint/high bisection position and comparing them with fresh nonlinear re-solves, so internal network-state corruption cannot hide behind unchanged scalar pressure evidence.
-- Terminal-bracket network-state fingerprint replay for v0.88, retaining and independently replaying canonical low/high internal network-state hashes on solved final brackets and post-decision iteration-limit remaining brackets, including endpoint-position violation provenance.
-- Selected operating network-state fingerprint replay for v0.89, retaining the canonical internal network-state SHA-256 for the accepted operating solution and comparing it with a fresh nonlinear re-solve, so selected-state internal corruption cannot hide behind unchanged airflow and scalar pressure/residual evidence.
-- Terminal network-state projection replay diagnostics for v0.90, retaining canonical low/high terminal node/edge/pressure-power/closure projections and independently comparing them with fresh endpoint solves to report exact JSON-style mismatch paths without changing solver decisions or engineering acceptance semantics.
-- Selected operating network-state projection replay diagnostics for v0.91, retaining the accepted solution's canonical node/edge/pressure-power/closure projection and independently comparing it with a fresh exact-selected-airflow solve to report deterministic JSON-style mismatch paths, recorded/recomputed values, type evidence, numerical absolute errors when meaningful, tied per-field worst-error witnesses, and uncertainty-corner provenance even when the retained SHA-256 is unchanged. This replay is numerical/provenance verification only: it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness, stall/surge analysis, or physical uncertainty quantification.
-- Full per-bisection network-state projection replay diagnostics for v0.92, retaining canonical low/midpoint/high projections on every bounded-bisection trace row and independently re-solving the exact reconstructed search airflows. Replay reports complete checked-versus-expected state-position coverage, exact iteration/position/path mismatch provenance, recorded/recomputed/type evidence, deterministic all-mismatch ordering, numerical absolute errors, and tied per-field worst witnesses across uncertainty corners and dossiers. This is numerical/provenance verification only: it is not cleanroom certification, CFD validation, fan acceptance, commissioning evidence, proof of global root uniqueness or physical stability, stall/surge analysis, manufacturer operating-envelope validation, physical uncertainty quantification, or statistical confidence analysis.
-- Signed-zero-stable complete solver-provenance canonicalization for v0.94, extending the shared network-result identity to solver/network metadata and ordered iteration history while keeping named result collections order-invariant and preserving all solver physics and engineering-status semantics.
-- Supplied fan-point internal network-state replay for v0.93, retaining the canonical SHA-256 and full network-state projection for every successfully evaluated supplied fan-curve sample before candidate selection, then independently re-solving each exact supplied airflow. The audit keeps hash identity separate from field-level projection equality, localizes every projection corruption to point-indexed deterministic JSON paths, preserves detailed values/types/numerical errors and tied per-field witnesses, and distinguishes actual corruption from incomplete evaluation/replay coverage across solved, no-intersection, non-converged, uncertainty, and dossier workflows. This is deterministic numerical/provenance verification only and does not change candidate discovery, interpolation, root selection, solver tolerances, convergence, or engineering acceptance.
-- Canonical solver-result provenance hardening for v0.94, expanding the shared replay projection to include solver/network identity, Newton iteration metadata, configured mass-balance tolerance, variable-friction convergence/configuration and chronological outer-iteration history; normalizing signed zero only in canonical representation; sorting only semantically named collections; and preserving ordered solver/search sequences. The same shared comparator, uncertainty aggregation, dossier propagation, and engineering-status semantics remain in force.
-- Bidirectional sampled residual sign-change topology for v0.69, retaining strict negative-to-positive supplied-point crossings as audit-only evidence while preserving the existing positive-to-negative solver-candidate policy.
-- Canonical SHA-256 result-integrity evidence for each nonlinear fan/variable-friction uncertainty analysis, propagated unchanged into standalone and dossier Markdown so an exact computed result can be identified and independently recomputed.
-- Complete per-metric power-coverage auditing for nonlinear uncertainty studies: fluid, shaft, electrical-input, and specific-fan-power ranges are emitted only when that metric is available at every solved evaluated corner; partial or unavailable coverage remains explicit with exact missing corner indices.
-- Explicit fan-speed/variable-friction loop sweeps that reuse the existing affinity-law scaling and v0.33 nonlinear coupling solver for every transformed speed case, preserving per-speed no-intersection/non-convergence states.
-- Fan/system operating-point solving from supplied fan performance points and an explicit fixed-plus-quadratic system curve, without extrapolation.
-- HVAC fan-curve design-duty verification at the required governing airflow and computed/entered static pressure, with bounded interpolation and no extrapolation.
-- Fan/duct-network operating-point integration that derives a critical quadratic system resistance from explicit duct geometry, loss inputs, and fixed reference airflow fractions.
-- Fan-driven passive parallel-network integration that derives equivalent resistance and pressure-balanced branch flows at the solved operating point.
-- Bounded fan-speed/VFD sweeps using explicit fan affinity-law scaling of supplied reference curves, with no transformed-curve extrapolation.
-- Deterministic bounded fan/system operating-point uncertainty across user-supplied fixed-pressure and quadratic-resistance intervals, with a complete airflow/pressure envelope only when every bounded corner is solved.
-- Manifest-driven integrated engineering dossiers with SHA-256 source fingerprints across verification, HVAC/fan-duty screening, recovery, uncertainty workflows, fixed-resistance fan/network workflows, fan/variable-friction loop studies, fan-speed/variable-friction loop studies, nonlinear fan/variable-friction uncertainty analyses, and optional cross-module consistency, plus v0.57 exact-result SHA-256 identity for nonlinear uncertainty outputs.
-- Standalone and dossier-integrated cross-module consistency checks for duplicated room airflow inputs, with explicit tolerance and optional identical-room-set enforcement.
-- Dossier-integrated HVAC-to-fan operating-airflow consistency across fixed-resistance and variable-friction fan/network workflows plus evaluated nonlinear-uncertainty corners, using an explicit user-supplied absolute tolerance and preserving no-intersection or numerical non-convergence cases as unresolved/not-comparable.
-- Measured particle-recovery qualification records with project-configured target, maximum recovery time, and optional per-sample absolute concentration uncertainty.
-- Conservative recovery decisions with pass/fail/indeterminate/incomplete/not-checked status plus traceability metadata.
-- Log-linear decay diagnostics and estimated effective ACH as screening outputs only.
-- Conservative interval propagation for uncertain room dimensions and supply airflow.
-- Provenance records for engineering input source, reference, revision/date, and uncertainty basis.
-- Robust minimum-ACH decisions with pass/fail/indeterminate/not-checked status.
-- Conservative uncertainty-aware minimum/maximum qualification checks for measured quantities such as pressure and particle concentration.
-- Worst-case interval propagation for room-to-room pressure cascades, with `indeterminate` when an acceptance threshold is overlapped.
-- Deterministic thermal/HVAC uncertainty intervals for explicit loads, airflow, supply-air temperature, room/outdoor psychrometric states, and equipment-capacity screening.
-- Deterministic psychrometric-state uncertainty envelopes for dry-bulb temperature, relative humidity, pressure, humidity ratio, enthalpy, specific volume, dew point, and moist-air specific heat.
-- JSON input, Markdown/JSON reports, CLI workflows, tests, and GitHub Actions CI on Python 3.11–3.13.
-
-## Important engineering boundary
-
-CleanroomX does **not** claim that ACH, room pressure, a pressure cascade, airflow surplus, a fitted recovery model, or a simple decay model determines ISO cleanroom classification. ISO 14644-1 classifies air cleanliness by airborne particle concentration. ISO 14644-3 provides cleanroom test methods. Project, process, safety, and regulatory requirements can add other criteria.
-
-CleanroomX therefore does not embed unofficial ISO classification, ACH, pressure-cascade, airflow-surplus, filter-pressure-drop, duct-friction, fitting-loss, fan-sizing, particle-target, or recovery-time limits. Numeric requirements are supplied by the user from the applicable licensed standard, client URS/specification, qualification protocol, process design basis, manufacturer data, or regulator.
-
-The decay/recovery function is a **screening model**, not CFD. It assumes a well-mixed room and first-order effective removal and does not model particle generation, deposition, leakage, local airflow patterns, or transient HVAC controls.
-
-The HVAC module is also a preliminary engineering model. The v0.8 branch-flow solver propagates fixed terminal demands through a directed tree by mass continuity, while the v0.9 standalone parallel-flow solver distributes a specified total flow across simple paths sharing the same pressure nodes under fixed R·Q² resistance assumptions. The v0.11 standalone fan-curve solver finds an operating point only inside user-supplied fan data against an explicit fixed-plus-quadratic system curve. The v0.12 HVAC fan-curve duty check instead tests the required HVAC airflow/static-pressure duty against bounded interpolation of supplied fan data; it does not infer an HVAC system curve or extrapolate fan performance. The v0.14 fan/duct-network workflow complements that design-duty check by deriving a fixed-ratio quadratic system curve from the path-based duct model and solving its bounded intersection with the supplied fan curve. The v0.16 fan-network workflow instead derives the equivalent resistance of passive common-pressure-node branches and solves the pressure-balanced branch split at the bounded fan operating point. The v0.19 fan-speed workflow applies user-requested affinity-law speed ratios to supplied reference fan-curve points and reuses the bounded operating-point solver at each transformed speed. The v0.23 looped-network workflow solves connected steady-state meshes from explicit fixed quadratic edge resistances and balanced node injections, including reverse-flow cases, while reporting continuity and pressure-law residuals. The fixed-resistance, damper-scenario, fan-coupled, and fan-speed/loop workflows remain bounded models rather than a general nonlinear duct-network/control solver. v0.30 adds a separate iterative Darcy-friction loop workflow for automatically derived geometry edges; CleanroomX still does not infer damper positions, leakage, system effect, acoustics, stall/surge limits, motor/VFD limits, or commissioning acceptance. It does not replace detailed coil selection, weather/load modeling, duct design, manufacturer fan selection, CFD, commissioning, certification, or qualified HVAC/cleanroom engineering review.
-
-v0.21 automatic friction can resolve a Darcy factor from explicit roughness and kinematic viscosity at a known section/reference airflow for path-based and fixed-demand-tree calculations. It does not iteratively vary friction factor while solving a fan/network operating point, and the passive parallel-network workflows remain fixed-resistance models.
-
-v0.26 fan/loop-network coupling reduces a passive two-terminal fixed-resistance mesh to its exact quadratic equivalent from a reference solve, intersects that equivalent with supplied fan data, and re-solves the full mesh at the bounded operating airflow. Internal external injections, variable-friction iteration, controls, leakage, and fan extrapolation remain outside this workflow.
-
-v0.27 damper studies are explicit fixed-resistance scenarios only. A configured multiplier represents a user-declared increase in one edge's quadratic resistance; CleanroomX does not infer damper position, K-value, actuator behavior, control logic, or an automatically balanced setting.
-
-v0.29 fan-speed/loop studies apply the existing affinity-law transformation to supplied fan data and reuse the fixed-resistance fan/loop solver at each explicit speed ratio. They do not infer acceptable VFD ranges, motor limits, variable-friction behavior, or manufacturer performance outside supplied data.
-
-v0.30 variable-friction loop solving re-evaluates automatic Darcy friction from each edge's absolute solved airflow, relaxes geometry-derived resistance updates, and repeats the validated fixed-resistance loop solve until resistance closure is reached. Direct resistance inputs and user-supplied friction factors remain fixed; zero-flow branches are not assigned invented Reynolds values.
-
-v0.31 fan/loop-network uncertainty evaluates explicit lower/upper bounds on fixed pressure and selected fixed loop-edge resistances around the v0.26 fan coupling. Every corner re-derives the equivalent network resistance and re-solves the full fixed-resistance loop. If any corner falls outside the supplied fan curve, the complete operating-point and internal edge-flow corner ranges are withheld. Internal edge-flow min/max values are evaluated-corner evidence, not guaranteed continuous-box extrema.
-
-v0.32 integrates v0.31 fan/loop-network uncertainty and v0.29 fan-speed/loop studies into engineering dossiers. Source inputs are SHA-256 fingerprinted; indeterminate uncertainty corners and unresolved speed cases propagate into dossier attention state, while missing uncertainty provenance remains visible as unresolved traceability. The dossier does not turn these screening workflows into fan acceptance, commissioning, certification, or statistical uncertainty claims.
-
-v0.33 couples supplied fan data directly to the v0.30 variable-friction loop solver. Every fan-curve endpoint check and every bounded root-search airflow re-solves the complete network and iterates automatic Darcy friction to the configured resistance-closure tolerance. Fan pressure remains piecewise-linear only inside supplied data. A network iteration failure is reported as `non_converged`; no operating point is fabricated. The workflow remains a steady engineering network model rather than CFD and does not infer fan/VFD limits, controls, leakage, system effect, stall/surge acceptance, or equipment selection.
-
-v0.34 applies the existing affinity-law fan-curve transform to each explicit speed ratio and then delegates each transformed curve to the v0.33 variable-friction coupling solver. Each speed case preserves transformed supplied-data bounds, complete network re-solving, Darcy resistance closure, fan/system residuals, and independent solved/no-intersection/non-converged status. No acceptable VFD range or motor limit is inferred.
-
-v0.35 integrates the v0.33 and v0.34 nonlinear fan/loop workflows into engineering dossiers. Inputs are SHA-256 fingerprinted, solver diagnostics and convergence evidence are preserved in JSON and Markdown, HVAC operating-airflow consistency includes solved nonlinear cases, and `non_converged` cases always propagate as dossier attention rather than PASS.
-
-v0.36 hardens automatic-friction evidence validation before any network iteration. Geometry-derived edges that claim automatic roughness/viscosity friction must carry complete finite stored geometry, reference-flow, and friction evidence; malformed evidence is rejected even when the solved branch flow is near zero.
-
-v0.37 adds deterministic bounded uncertainty around the nonlinear fan/variable-friction loop workflow. It varies explicit fixed pressure and selected automatic-friction duct local-loss coefficients, rebuilds affected geometry evidence, and re-solves Darcy friction and the bounded fan/system intersection at every corner. Complete operating-point and branch-flow corner ranges are reported only when the nominal case and every corner solve; corner ranges are evidence over evaluated combinations, not statistical or guaranteed continuous-box extrema.
-
-v0.38 integrates the v0.37 nonlinear uncertainty workflow into engineering dossiers. Referenced uncertainty inputs are SHA-256 fingerprinted, complete corner evidence remains available in JSON, Markdown surfaces corner counts and bounded airflow envelopes, indeterminate analyses become dossier attention items, and missing provenance remains a separate unresolved traceability condition. When HVAC/fan operating-airflow consistency is configured, each evaluated nonlinear uncertainty corner is checked independently; unresolved corners remain not comparable.
-
-v0.39 extends nonlinear fan/variable-friction uncertainty from fixed pressure and local-loss K to user-bounded absolute roughness, kinematic viscosity, and air density on automatic-friction geometry edges. Every physical-input corner rebuilds the affected duct evidence before the complete Darcy-friction fan/network solve; nominal values continue to come only from the loop geometry, invalid physical bounds are rejected, and the corner limit remains explicit.
-
-v0.40 extends the same nonlinear corner engine to user-bounded automatic-friction duct length and circular-duct diameter. Each geometry corner reconstructs the duct resistance evidence before the full Darcy-friction network/fan solve. Diameter bounds are rejected when they would collide with the maximum bounded roughness. Rectangular width/height uncertainty remains outside this release because the stored evidence does not preserve an unambiguous width/height orientation.
-
-v0.41 preserves the original explicit circular diameter or rectangular width/height inside geometry-derived resistance evidence. That removes the prior rectangular orientation ambiguity and enables user-bounded rectangular width/height uncertainty with the same complete nonlinear corner re-solving. Geometry bounds are rejected when their minimum implied hydraulic diameter would reach or fall below the maximum bounded roughness.
-
-v0.42 extends the nonlinear uncertainty engine to pressure bounds at selected supplied fan-curve airflow points. Each fan-pressure corner is combined with the configured system/duct uncertainty corners and re-solved through the complete variable-friction network. Nominal point pressures remain single-sourced in the supplied fan curve; bounds that can create negative pressure or a pressure increase with airflow are rejected. Fan airflow coordinates remain fixed and no curve extrapolation is introduced.
-
-v0.43 extends the same engine to airflow-coordinate bounds at selected supplied fan-curve point indices. Nominal airflow coordinates remain single-sourced in the fan curve, every possible bounded curve must retain nonnegative strictly increasing airflow coordinates, and each combined airflow/pressure/system/duct corner is solved without fan-curve extrapolation.
-
-v0.44 adds an optional bounded fan-speed ratio to the same nonlinear corner engine. Each corner first applies any configured fan-point coordinate/pressure bounds to the supplied reference curve, then reuses the existing affinity-law transform before the complete variable-friction network solve. The speed interval must remain strictly positive; CleanroomX does not infer allowable VFD range, motor speed, manufacturer limits, or operating acceptance.
-
-v0.45 adds explicit named whole fan-curve scenarios for cases where supplied lower/upper or test-derived curves must remain correlated point sets. The nominal curve and each scenario are evaluated as whole curves and may be crossed with fan-speed and system/duct uncertainty, but whole-curve scenarios cannot be combined with independent fan-point pressure or airflow-coordinate bounds. Scenario curves remain subject to the same monotonic fan-curve validation and no-extrapolation boundary.
-
-v0.46 makes complete uncertainty envelopes directly auditable. It keeps exact zero-based corner witnesses for each operating-point and internal edge-airflow minimum/maximum, and adds tie-aware operating-point source records that preserve every matching extreme corner together with its active fan/system/duct uncertainty inputs. Markdown surfaces the same witness evidence. These are references into evaluated cases, not sensitivity coefficients or claims that an interior continuous combination cannot be more extreme; indeterminate analyses emit no envelope witnesses.
-
-v0.47 adds deterministic corner-outcome diagnostics for the same nonlinear uncertainty engine. Every evaluated corner contributes to status and solver termination-reason counts; unresolved cases retain their exact corner index and active fan/system/duct inputs. This evidence is diagnostic only: if any corner is unresolved, CleanroomX still withholds the complete operating-point and internal edge-flow envelope.
-
-v0.48 extends the same auditability to internal edge-airflow extrema. For every edge lower/upper bound in a complete study, CleanroomX records all evaluated corners tied at that extreme together with their active uncertainty inputs, while retaining the compact first-witness corner indices. Indeterminate studies still emit no complete edge-flow extrema provenance.
-
-v0.49 adds fan air-power min/max across the evaluated corners of a complete nonlinear fan/variable-friction uncertainty study. Air-power extrema use the same compact first-witness and tie-aware source provenance as airflow and pressure, and engineering dossiers surface the evaluated-corner range. These values are corner-study evidence only; they are not claimed as guaranteed extrema for every interior continuous input combination.
-
-v0.50 extends that evidence through the explicit fan-power efficiency chain already used by the nonlinear solver. Complete uncertainty studies retain evaluated-corner ranges and tie-aware source provenance for fluid air power, shaft power, electrical input, and specific fan power. Shaft/electrical metrics appear only when their required user-supplied efficiencies exist; no efficiency is inferred, and the configured efficiency values are treated as fixed rather than uncertain in this workflow.
-
-v0.51 aggregates nonlinear solver-quality evidence across evaluated uncertainty corners. It reports the worst solved-corner operating-pressure residual, Darcy-resistance closure error, mass-balance residual, pressure-law residual, network outer-iteration count, and operating-point iteration count together with exact tied source corners. Configured tolerances are shown only where the solver already defines them; no acceptance threshold is invented for pressure-law residual or iteration counts. Incomplete studies remain explicitly marked as partial solver-quality coverage.
-
-v0.52 turns the solver's existing configured pressure-residual, resistance-closure, and mass-balance tolerances into explicit numerical audit evidence. For each supported metric it reports the worst solved-corner value, tolerance utilization ratio, and remaining numerical margin, then labels the aggregate audit as complete within configured tolerances, incomplete coverage, not evaluable, or configured-tolerance exceeded. This is solver-convergence evidence only and does not create a new engineering, equipment, commissioning, or standards acceptance criterion.
-
-v0.53 adds nominal-relative excursion evidence to complete nonlinear uncertainty envelopes. For each operating-point metric, and for each available power-chain metric, CleanroomX reports the evaluated-corner lower and upper deviation from the solved nominal case in both engineering units and percent. Percentage excursion is omitted when the nominal value is effectively zero. These values summarize the evaluated corner set only and are not sensitivity coefficients or guarantees of continuous interior extrema.
-
-v0.54 adds supplied-fan-curve boundary-clearance evidence for every solved nonlinear uncertainty corner. CleanroomX retains that corner's exact supplied or speed-transformed fan-curve airflow endpoints, reports lower/upper and nearest airflow headroom plus normalized position, and identifies the evaluated corner(s) with minimum endpoint headroom. This is a no-extrapolation audit diagnostic only; it does not infer an acceptable minimum margin, stall/surge boundary, manufacturer operating region, or equipment acceptance.
-
-v0.56 extends the same numerical audit model to iteration budgets that were already explicit solver inputs. It records the selected network's inner Newton iteration count and compares worst solved-corner outer-Darcy, inner-Newton, and operating-point iterations with `max_outer_iterations`, `max_newton_iterations`, and `max_operating_iterations`, reporting utilization and remaining iterations with exact witness provenance. Incomplete studies remain explicitly partial. These are algorithmic convergence budgets, not engineering, equipment, commissioning, certification, or cleanroom acceptance limits.
-
-v0.57 adds deterministic result-integrity evidence to nonlinear fan/variable-friction uncertainty results. CleanroomX canonicalizes the complete result payload before the integrity field is attached, computes a SHA-256 digest over sorted-key compact UTF-8 JSON, and surfaces that digest in standalone reports and engineering dossiers. The digest identifies exact computed content; it is not an equipment, commissioning, certification, or source-authority decision.
-
-v0.58 hardens evaluated-corner power evidence. Each power metric now carries explicit complete/partial/unavailable coverage with available/total corner counts and exact missing corner indices. A range, extrema witness set, and nominal-relative excursion are emitted only when that metric covers every solved evaluated corner; subset-only metrics are never presented as complete deterministic-corner ranges.
-
-v0.59 adds supplied-curve intersection-bracket provenance for every solved nonlinear uncertainty corner. CleanroomX reuses the already evaluated fan-curve points on the operating interpolation segment, preserves their fan and system pressures plus signed fan-minus-system residuals, records whether the root is strictly sign-bracketed or touches an endpoint within the configured pressure tolerance, and aggregates minimum endpoint residual-gap/span evidence with tied source-corner provenance. This is numerical root-enclosure evidence only and does not define an equipment or fan-operating acceptance margin.
-
-v0.60 adds local crossing-conditioning evidence on top of that exact bracket. It derives fan-pressure, system-pressure, and fan-minus-system secant slopes without any new fan-curve evaluation or extrapolation, reports the reciprocal local airflow-per-pressure gradient when defined, and compares the bracket secant-root airflow with the solved nonlinear operating airflow. Aggregate evidence retains the minimum absolute residual slope and maximum secant-root disagreement with tied source-corner provenance. These are numerical conditioning diagnostics only; CleanroomX does not infer a dynamic stability criterion, stall/surge boundary, acceptable conditioning threshold, manufacturer operating region, or equipment acceptance limit.
-
-v0.61 adds a discrete supplied-point residual-topology audit to the nonlinear fan/variable-friction solver and propagates it through uncertainty analyses and engineering dossiers. The audit records which supplied points were actually evaluated, tolerance-contact points, strict sign-change segments, residual transitions, sampled non-increasing behavior within the configured pressure tolerance, and discrete candidate-crossing features. It preserves partial coverage on numerical non-convergence and identifies uncertainty corners with residual increases or multiple candidate features. These records are diagnostics of the supplied-point samples only; they do not prove the number or uniqueness of continuous physical fan/system intersections and do not define dynamic-stability or equipment-acceptance criteria.
-
-v0.62 adds interpolation-segment position evidence for every solved nonlinear uncertainty corner. It reuses the exact supplied-point root bracket to report the local segment span, lower/upper point clearance, nearest supplied segment endpoint, normalized position, and normalized nearest-endpoint clearance, then aggregates the smallest clearances and largest active segment span with tied source-corner provenance. These values describe supplied-data geometry only; they are not interpolation-error estimates, fan-performance uncertainty, stall/surge margins, or equipment-acceptance limits.
-
-v0.63 makes the nonlinear solver's discrete crossing selection explicitly auditable. Candidate features are stored in the same priority order used by the solver: supplied-point tolerance contacts first in point order, followed by strict positive-to-negative sign-change segments in segment order. Every solved case records the selected feature, zero-based priority rank, number of additional sampled candidates, and whether the selected feature is the only discrete candidate. Uncertainty aggregation reports selected-candidate coverage and exact solved-corner indices where alternatives remain. This documents deterministic sampled-data solver choice only; it does not prove continuous physical intersection count or uniqueness and does not create a stability or equipment-acceptance margin.
-
-v0.66 measures how far the solved airflow lies from every additional discrete crossing candidate retained by the v0.63 audit. Tolerance-contact candidates are treated as exact airflow points and strict sign-change candidates as supplied-point airflow intervals; the result retains each alternative gap, nearest tied alternatives, overlap state, and the minimum separation across uncertainty corners with source-corner provenance. A zero gap means only that the selected airflow falls inside an alternative candidate interval. The audit does not estimate another continuous root or establish dynamic stability, stall/surge, manufacturer-region, commissioning, certification, or equipment-acceptance criteria.
-
-v0.67 self-audits retained bisection geometry against the solver implementation: strict endpoint residual signs, midpoint centering, binary contraction step count, expected width fraction, actual width fraction, and floating-point consistency error. Direct supplied-point tolerance contacts remain outside this bisection-only audit.
-
-v0.68 makes v0.66 candidate separation scale-aware by dividing each selected-to-alternative interval gap by the exact supplied fan-curve airflow span used for that solve. The aggregate retains the minimum normalized separation and tied source corners. This normalization is a dimensionless sampled-data diagnostic only; it is not a physical robustness, stability, stall/surge, manufacturer, commissioning, certification, or equipment-acceptance margin.
-
-v0.69 completes the sampled sign-topology record by retaining strict negative-to-positive fan-minus-system residual transitions separately from the solver-eligible positive-to-negative crossing candidates. Reverse crossings are reported per evaluated case and aggregated across uncertainty corners with exact indices, but never enter the solver candidate list or alter the selected operating point. They are discrete numerical audit evidence only and do not prove an additional continuous root, dynamic stability, stall/surge behavior, manufacturer operating region, commissioning/certification status, or equipment acceptance.
-
-v0.70 preserves numerical search provenance when a bounded fan/system bisection exhausts `max_operating_iterations` before satisfying the configured pressure residual tolerance. The non-converged result retains the last evaluated midpoint, the remaining strict-sign bracket, its absolute and supplied-segment-normalized width, completed binary contraction count, and contraction-consistency audit. Uncertainty aggregation preserves exact affected corner indices and tied worst consistency-error provenance. No operating point is accepted or fabricated, and the remaining bracket is not treated as physical airflow uncertainty, interpolation error, a continuous guarantee, stability/stall/surge evidence, or equipment acceptance.
-
-v0.55 adds supplied-endpoint diagnostics for evaluated corners with `no_intersection_in_supplied_range`. Each such corner records whether the lower or upper supplied airflow endpoint bounds the case, the endpoint fan and system pressures, the signed fan-minus-system pressure mismatch, and the absolute boundary pressure gap. Aggregate evidence counts lower/upper boundary cases and retains the largest evaluated gap with source-corner provenance. No fan-curve extrapolation or missing operating-point estimate is performed.
-
-The uncertainty workflows use deterministic user-supplied input intervals. They are not statistical measurement-uncertainty budgets, do not invent tolerances or acceptance limits, and do not replace calibration records, project qualification procedures, or project/regulatory conformity decision rules. Standalone psychrometric uncertainty evaluates every unique corner of the configured dry-bulb/relative-humidity/pressure box. Thermal uncertainty can use the same bounded room/outdoor states and propagates their endpoint corners into makeup-air load and sensible-airflow intervals. Fan/system uncertainty evaluates every unique fixed-pressure/resistance corner and withholds a complete operating-point envelope if any corner would require fan-curve extrapolation. The nonlinear fan/variable-friction workflow additionally reports fan air-power min/max across evaluated corners when the study is complete; those air-power values are not claimed as guaranteed continuous-interval extrema. These workflows do not model covariance, hourly weather/load behavior, variable controls, or equipment selection.
-
-## Install
-
-For normal use from a repository checkout:
-
-    python -m pip install .
-    cleanroomx-gui --check
-    cleanroomx-gui --demo
-
-For development and tests:
-
-    python -m pip install -e .[dev]
-
-## Verify one room
-
-    cleanroomx verify examples/basic_room.json
-
-## Verify a multi-room project
-
-    cleanroomx verify-project examples/facility_project.json
-
-A failing configured verification requirement returns exit code 2. Verification JSON also reports an aggregate `status` and `complete` flag so unresolved evidence is not presented as a plain pass: `pass_with_unchecked` means configured checks passed but at least one check could not be evaluated, while `not_checked` means no verification finding was evaluated. The existing `passed` boolean remains a compatibility field meaning that no configured check failed; automation that requires a complete successful verification should require `status == "pass"` (equivalently, both `passed == true` and `complete == true`).
-
-## Run the particle screening simulation
-
-    cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 0.95
-    cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 0.95
-
-## Run the HVAC / psychrometric analysis
-
-    cleanroomx-hvac examples/semiconductor_thermal_demo.json
-
-Duct critical-path demo:
-
-    cleanroomx-hvac examples/duct_network_demo.json
-
-Automatic Darcy-friction demo (explicit roughness and kinematic viscosity):
-
-    cleanroomx-hvac examples/auto_friction_duct_demo.json
-
-Branch-flow supply-tree demo:
-
-    cleanroomx-hvac examples/branch_flow_network_demo.json
-
-JSON output:
-
-    cleanroomx-hvac examples/duct_network_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-hvac examples/duct_network_demo.json --output hvac-report.md
-
-The HVAC input keeps the independently selected cleanroom airflow separate from thermal sizing. It can also include room air-balance data, a preliminary supply-fan model, an optional supplied fan curve for design-duty verification, and either the path-based duct model or the branch-flow supply-tree model. See docs/THERMAL_MODEL.md, docs/AIRFLOW_FAN_MODEL.md, docs/DUCT_NETWORK_MODEL.md, docs/BRANCH_FLOW_NETWORK.md, and docs/STANDARDS.md.
-
-## Solve passive parallel duct flow
-
-    cleanroomx-duct-flow examples/parallel_flow_demo.json
-
-JSON output:
-
-    cleanroomx-duct-flow examples/parallel_flow_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-duct-flow examples/parallel_flow_demo.json --output parallel-flow-report.md
-
-The v0.9 solver applies only to passive duct paths that share the same upstream and downstream pressure nodes. It solves the flow split from explicit fixed path resistances and reports both mass-balance and equal-pressure residuals. See docs/PARALLEL_FLOW_SOLVER.md.
-
-## Solve a fixed-resistance looped airflow network
-
-    cleanroomx-loop-flow examples/looped_network_demo.json
-
-JSON output:
-
-    cleanroomx-loop-flow examples/looped_network_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-loop-flow examples/looped_network_demo.json --output looped-network-report.md
-
-The v0.25 solver handles connected steady-state meshes with arbitrary loops using fixed quadratic edge laws `ΔP = R·Q·|Q|` and explicitly balanced node injections. `R` may be supplied directly or derived from explicit duct geometry, density, Darcy factor, and local K. Automatic friction may be resolved once at an explicit reference airflow, but resistance is not iterated with solved loop flow. See docs/LOOPED_NETWORK_SOLVER.md.
-
-Geometry-derived resistance demo:
-
-    cleanroomx-loop-flow examples/looped_network_geometry_demo.json
-
-## Solve a looped network with variable Darcy friction
-
-    cleanroomx-loop-friction examples/variable_friction_loop_demo.json
-
-JSON output:
-
-    cleanroomx-loop-friction examples/variable_friction_loop_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-loop-friction examples/variable_friction_loop_demo.json --output variable-friction-loop-report.md
-
-The v0.30 workflow iterates only geometry-derived edges configured with automatic roughness/viscosity friction inputs. Explicit resistance and user-supplied-friction edges remain fixed. See docs/VARIABLE_FRICTION_LOOP.md.
-
-## Solve a fan-driven loop with variable Darcy friction
-
-    cleanroomx-fan-loop-friction examples/fan_variable_friction_loop_demo.json
-    cleanroomx-fan-loop-friction-speed examples/fan_variable_friction_speed_demo.json
-
-JSON output:
-
-    cleanroomx-fan-loop-friction examples/fan_variable_friction_loop_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-loop-friction examples/fan_variable_friction_loop_demo.json --output fan-variable-loop-report.md
-
-The v0.33 workflow searches only inside the supplied fan curve. At every fan/system evaluation it scales the two-terminal through-flow, solves the complete loop, recomputes automatic Darcy friction from solved branch airflow, and iterates resistance closure before comparing fan and system pressure. Fixed-resistance networks remain compatible with the existing v0.26 result. See docs/FAN_VARIABLE_FRICTION_LOOP.md.
-
-## Solve a fan-driven looped network
-
-    cleanroomx-fan-loop examples/fan_loop_network_demo.json
-
-JSON output:
-
-    cleanroomx-fan-loop examples/fan_loop_network_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-loop examples/fan_loop_network_demo.json --output fan-loop-report.md
-
-The v0.26 workflow accepts a passive two-terminal v0.25 loop network, derives its equivalent fixed quadratic resistance from a reference through-flow, intersects that system law with supplied fan data without extrapolation, and re-solves the original loop at the operating airflow. See docs/FAN_LOOP_NETWORK.md.
-
-## Analyze bounded fan/loop-network uncertainty
-
-    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json
-
-JSON output:
-
-    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-loop-uncertainty examples/fan_loop_uncertainty_demo.json --output fan-loop-uncertainty-report.md
-
-The v0.31 workflow evaluates every unique lower/upper corner of user-supplied fixed-pressure and named loop-edge resistance bounds. It re-derives the equivalent fixed-resistance loop law and re-solves the full mesh at each bounded fan operating point. A complete operating-point and internal edge-flow corner range is reported only when the nominal case and every configured corner intersect the supplied fan curve without extrapolation. See docs/FAN_LOOP_UNCERTAINTY.md.
-
-## Sweep fan speed over a looped network
-
-    cleanroomx-fan-loop-speed examples/fan_loop_speed_demo.json
-
-JSON output:
-
-    cleanroomx-fan-loop-speed examples/fan_loop_speed_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-loop-speed examples/fan_loop_speed_demo.json --output fan-loop-speed-report.md
-
-The v0.29 workflow applies explicit fan-speed ratios to the supplied reference fan curve using the existing affinity-law transform, solves each transformed curve against the same passive fixed-resistance two-terminal loop, and re-solves the full mesh at every bounded operating point. See docs/FAN_LOOP_SPEED_STUDY.md.
-
-## Run loop damper-resistance scenarios
-
-    cleanroomx-damper-study examples/damper_study_demo.json
-
-JSON output:
-
-    cleanroomx-damper-study examples/damper_study_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-damper-study examples/damper_study_demo.json --output damper-study-report.md
-
-The v0.27 workflow solves the unchanged baseline loop and each explicit throttling case, where selected edge resistances are multiplied by user-supplied finite factors greater than or equal to 1. It reports the resulting edge-flow redistribution and solver residuals without inferring damper position or automatic control. See docs/DAMPER_STUDY.md.
-
-## Solve a fan/system operating point
-
-    cleanroomx-fan-curve examples/fan_operating_point_demo.json
-
-JSON output:
-
-    cleanroomx-fan-curve examples/fan_operating_point_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-curve examples/fan_operating_point_demo.json --output fan-operating-point-report.md
-
-The v0.11 solver interpolates only between supplied fan pressure/airflow points and intersects them with an explicit system model `ΔP = ΔP_fixed + R·Q²`. If no crossing exists inside the supplied fan data, it reports that condition rather than extrapolating. See docs/FAN_SYSTEM_OPERATING_POINT.md.
-
-## Analyze bounded fan/system uncertainty
-
-    cleanroomx-fan-uncertainty examples/fan_uncertainty_demo.json
-
-JSON output:
-
-    cleanroomx-fan-uncertainty examples/fan_uncertainty_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-uncertainty examples/fan_uncertainty_demo.json --output fan-uncertainty-report.md
-
-The v0.24 workflow holds the supplied fan curve fixed, evaluates every unique lower/upper corner of user-supplied fixed-pressure and quadratic-resistance bounds, and reports an airflow/pressure operating-point envelope only when every bounded corner is solved inside the supplied fan-curve range. See docs/FAN_SYSTEM_UNCERTAINTY.md.
-
-## Solve a fan operating point from a reference duct network
-
-    cleanroomx-fan-duct examples/fan_duct_network_demo.json
-
-JSON output:
-
-    cleanroomx-fan-duct examples/fan_duct_network_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-duct examples/fan_duct_network_demo.json --output fan-duct-report.md
-
-The v0.14 integration derives a quadratic system curve from the existing duct-section geometry and loss inputs plus a declared reference system airflow. Each section's reference airflow fraction is held fixed as total airflow changes. This is explicit proportional scaling, not a new pressure-balancing network solution. See docs/FAN_DUCT_NETWORK_INTEGRATION.md.
-
-## Solve a fan-driven passive parallel network
-
-    cleanroomx-fan-network examples/fan_parallel_network_demo.json
-
-JSON output:
-
-    cleanroomx-fan-network examples/fan_parallel_network_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-network examples/fan_parallel_network_demo.json --output fan-network-report.md
-
-The v0.16 workflow derives an equivalent fixed R·Q² resistance from passive branches that share common upstream/downstream pressure nodes, combines it with an explicit fixed-pressure term, solves the bounded fan/system intersection, and then redistributes the operating airflow across the original branches using equal pressure drop. It reports mass- and equal-pressure residuals and does not extrapolate supplied fan data. See docs/FAN_NETWORK_INTEGRATION.md.
-
-## Sweep fan speed with affinity-law scaling
-
-    cleanroomx-fan-speed examples/fan_speed_sweep_demo.json
-
-JSON output:
-
-    cleanroomx-fan-speed examples/fan_speed_sweep_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-fan-speed examples/fan_speed_sweep_demo.json --output fan-speed-report.md
-
-The v0.19 workflow scales only the supplied reference fan-curve points for explicit user-provided speed ratios using airflow ∝ speed and pressure ∝ speed², reports the cubic affinity power ratio, and solves each transformed curve against the explicit system curve without extrapolation. It does not infer acceptable fan/VFD speed limits or motor input power. See docs/FAN_SPEED_STUDY.md.
-
-## Analyze a measured particle-recovery test
-
-    cleanroomx-recovery-test examples/recovery_test_demo.json
-
-JSON output:
-
-    cleanroomx-recovery-test examples/recovery_test_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-recovery-test examples/recovery_test_demo.json --output recovery-report.md
-
-The recovery workflow uses measured time/concentration samples directly and optionally accepts an absolute concentration uncertainty for each sample. PASS requires a complete sample uncertainty interval at or below the target by the configured maximum time; target overlap at the deadline is INDETERMINATE. The original nominal recovery time/window remains reported for traceability. The log-linear fit uses nominal values only and remains diagnostic.
-
-See docs/RECOVERY_TEST.md.
-
-## Analyze uncertainty and input provenance
-
-    cleanroomx-uncertainty examples/uncertainty_room_demo.json
-
-JSON output:
-
-    cleanroomx-uncertainty examples/uncertainty_room_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-uncertainty examples/uncertainty_room_demo.json --output uncertainty-report.md
-
-The uncertainty workflow propagates user-supplied absolute bounds through room volume and supply ACH using deterministic conservative intervals. A configured minimum ACH is reported as pass only when the complete interval meets it, fail only when the complete interval is below it, and indeterminate when the requirement lies inside the interval.
-
-See docs/UNCERTAINTY_PROVENANCE.md.
-
-## Run uncertainty-aware qualification checks
-
-    cleanroomx-qualification examples/qualification_uncertainty_demo.json
-
-JSON output:
-
-    cleanroomx-qualification examples/qualification_uncertainty_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-qualification examples/qualification_uncertainty_demo.json --output qualification-report.md
-
-The v0.7 qualification workflow evaluates user-configured minimum/maximum requirements over the complete supplied uncertainty interval. Pressure cascades use the conservative differential interval `H_low - L_high` to `H_high - L_low`. A threshold overlap is `indeterminate`, not a pass.
-
-See docs/QUALIFICATION_UNCERTAINTY.md.
-
-## Analyze thermal/HVAC uncertainty
-
-    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json
-
-JSON output:
-
-    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-thermal-uncertainty examples/thermal_uncertainty_demo.json --output thermal-uncertainty-report.md
-
-The v0.10 workflow propagates user-supplied absolute bounds through explicit sensible/latent loads, cleanroom and makeup airflow, and optional supply-air temperature. It reports conservative cooling/heating capacity and governing-airflow intervals, plus optional available-capacity pass/fail/indeterminate checks.
-
-See docs/THERMAL_UNCERTAINTY.md.
-
-## Analyze psychrometric-state uncertainty
-
-    cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json
-
-JSON output:
-
-    cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json --format json
-
-Write a Markdown report:
-
-    cleanroomx-psychrometric-uncertainty examples/psychrometric_uncertainty_demo.json --output psychrometric-uncertainty-report.md
-
-The v0.15 workflow propagates user-supplied absolute bounds for dry-bulb temperature, relative humidity, and total pressure through the existing CleanroomX psychrometric equations by evaluating every unique input-box corner. It reports deterministic envelopes for vapor pressure, humidity ratio, enthalpy, specific volume, dew point, and moist-air specific heat.
-
-See docs/PSYCHROMETRIC_UNCERTAINTY.md.
-
-## Build an integrated engineering dossier
-
-    cleanroomx-dossier examples/dossier_demo.json
-
-JSON output:
-
-    cleanroomx-dossier examples/dossier_demo.json --format json
-
-Write a Markdown dossier:
-
-    cleanroomx-dossier examples/dossier_demo.json --output dossier.md
-
-The v0.20 dossier hashes every referenced input with SHA-256 and covers verification, HVAC/fan-duty screening, recovery, room/qualification/thermal/psychrometric uncertainty, standalone fan/system studies, reference-flow fan/duct-network studies, fan-driven passive parallel-network studies, fan-speed affinity-law studies, and optional v0.17 verification/HVAC consistency checks. Recovery INDETERMINATE, fan no-intersection, consistency failure, and unresolved comparability states are preserved rather than promoted to pass. The dossier is a traceability/reporting layer, not cleanroom certification or fan/equipment acceptance.
-
-Consistency-integrated dossier demo:
-
-    cleanroomx-dossier examples/dossier_consistency_demo.json
-
-HVAC/fan operating-airflow consistency demo:
-
-    cleanroomx-dossier examples/dossier_fan_airflow_consistency_demo.json
-
-The v0.22 check compares the analyzed HVAC total governing airflow with every included solved fan operating point, including individual fan-speed cases. Unsolved cases remain `not_comparable`; they are not converted into failures. The absolute tolerance is a project input, not a built-in engineering or standards limit. See docs/HVAC_FAN_AIRFLOW_CONSISTENCY.md.
-
-See docs/ENGINEERING_DOSSIER.md.
-
-## Check cross-module input consistency
-
-    cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json
-
-Allow an explicit absolute data-consistency tolerance:
-
-    cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json --airflow-tolerance-m3-h 5
-
-Require identical room-name sets:
-
-    cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json --require-same-room-set
-
-The v0.17 checker matches rooms by exact name and compares verification supply airflow against HVAC cleanroom airflow. Its tolerance is supplied by the user and is not a standards-derived engineering acceptance limit. See docs/CROSS_MODULE_CONSISTENCY.md.
-
-## Multi-room pressure-cascade JSON
-
-```json
-{
-  "name": "Suite",
-  "rooms": [
-    {
-      "name": "Process",
-      "length_m": 6.0,
-      "width_m": 5.0,
-      "height_m": 3.0,
-      "supply_airflow_m3_h": 2700.0,
-      "observed_pressure_pa": 30.0
-    },
-    {
-      "name": "Ante",
-      "length_m": 4.0,
-      "width_m": 3.0,
-      "height_m": 3.0,
-      "supply_airflow_m3_h": 720.0,
-      "observed_pressure_pa": 8.0
-    }
-  ],
-  "pressure_cascade": [
-    {
-      "higher_pressure_room": "Process",
-      "lower_pressure_room": "Ante",
-      "min_delta_pa": 10.0
-    }
-  ]
-}
+```bash
+cleanroomx-project-bundle --help
 ```
 
-The numeric limits in the examples are demonstration project inputs, **not quoted ISO limits**.
+Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/network studies, uncertainty, consistency checks, and engineering dossiers.
 
-## Roadmap
+## Validation
 
-The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.99 workflows.
+The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
 
-## Standards references
+Recorded release evidence includes:
 
-- ISO 14644-1:2015 — classification of air cleanliness by particle concentration.
-- ISO 14644-3:2019 — cleanroom and clean-zone test methods.
-- ISO 14644-4:2022 — cleanroom design, construction, and start-up.
-- ASHRAE Handbook—Fundamentals — psychrometrics and duct design.
-- ASHRAE Duct Fitting Database / Standard 120 resources — duct fitting resistance and loss coefficients.
-- ASHRAE Design Guide for Cleanrooms.
-- JCGM 100:2008 — Guide to the expression of uncertainty in measurement.
-- JCGM 106:2012 — role of measurement uncertainty in conformity assessment.
-- NIST Technical Note 1297 — Guidelines for Evaluating and Expressing the Uncertainty of NIST Measurement Results.
+- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
+- Windows PowerShell and CMD launcher smoke tests;
+- clean wheel build/install checks;
+- installed Tk GUI smoke testing;
+- synchronized 2D/3D spatial regression coverage;
+- autosave completion-race regression coverage;
+- solver/provenance compatibility gates.
 
-Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.
+The exact release evidence is preserved in:
 
-v0.37 adds deterministic bounded corner uncertainty around the nonlinear fan/variable-friction loop solver for explicit fixed-pressure and selected automatic-friction local-loss bounds. Every corner rebuilds the affected geometry evidence and re-runs the full Darcy-friction fan/network solve. Complete operating-point and internal edge-flow envelopes are reported only when the nominal case and every evaluated corner solve inside the supplied fan-curve range; no-intersection or numerical non-convergence remains indeterminate. The analysis is deterministic corner evidence, not statistical uncertainty propagation, and does not infer K-factor uncertainty, covariance, geometry manufacturing tolerances, fan-curve uncertainty, controls, leakage, commissioning acceptance, or certification.
+- [VALIDATION.txt](VALIDATION.txt)
+- [TEST_EVIDENCE.md](TEST_EVIDENCE.md)
+- [CHANGELOG.md](CHANGELOG.md)
 
-## Release 2 integration (v0.101.0)
+## Engineering boundary
 
-The Release 2 integration branch consolidates the previously overlapping persistence, recovery, project-history, run-evidence, reporting, plugin, and portable-bundle work into one architecture. The current integration includes:
+CleanroomX provides **engineering screening, simulation, verification, and software/provenance evidence**.
 
-- durable verified atomic project/export persistence and crash-recovery integrity;
-- guarded saved-project revisions and migration-aware source revision tracking;
-- one bounded project-wide Undo/Redo transaction stream for project, analysis, and spatial edits;
-- immutable analysis-run snapshots, exact-input provenance, external-dependency freshness checks, and integrity-checked persisted run history;
-- versioned analysis plugin API v1;
-- integrity-checked portable project bundles and self-contained portable engineering HTML reports.
+It does **not**, by itself, establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
 
-See [Plugin API](docs/PLUGINS.md), [Project Bundles](docs/PROJECT_BUNDLES.md), and [Portable Engineering HTML Reports](docs/PORTABLE_ENGINEERING_REPORT.md). Release 2 is released as v0.101.0 after the full Python 3.11/3.12/3.13 and installed-application gates passed; PR #434 additionally validated the PATH-independent Windows checkout launcher.
+## Documentation
+
+- [Application & GUI](docs/APPLICATION_GUI.md)
+- [2D + 3D spatial workspace](docs/LAYOUT_2D_3D.md)
+- [Architecture](ARCHITECTURE.md)
+- [Deployment](DEPLOYMENT.md)
+- [Migration notes](MIGRATIONS.md)
+- [Security](SECURITY.md)
+- [Rollback](ROLLBACK.md)
+- [Changelog](CHANGELOG.md)
+
+## Release
+
+**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)

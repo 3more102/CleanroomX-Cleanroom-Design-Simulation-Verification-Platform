@@ -1122,6 +1122,13 @@ class CleanroomXApp:
             try:
                 self.load_project_path(path)
             except Exception as exc:
+                self._record_runtime_event(
+                    "project.open_failed",
+                    level="error",
+                    message=str(exc),
+                    file_name=Path(path).name,
+                    error_type=type(exc).__name__,
+                )
                 messagebox.showerror("Open failed", str(exc), parent=self.root)
 
     def load_project_path(self, path: str | Path) -> None:
@@ -1533,6 +1540,13 @@ class CleanroomXApp:
             analysis = self._commit_editor()
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
         except Exception as exc:
+            self._record_runtime_event(
+                "analysis.run_rejected",
+                level="warning",
+                message=str(exc),
+                editor_analysis_id=getattr(self, "_editor_analysis_id", None),
+                error_type=type(exc).__name__,
+            )
             self.status_var.set("Cannot run — invalid input")
             messagebox.showerror("Cannot run analysis", str(exc), parent=self.root)
             return

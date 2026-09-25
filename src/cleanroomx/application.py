@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
+from functools import lru_cache
 from importlib import import_module
 import copy
 import hashlib
@@ -550,14 +551,11 @@ def _canonical_input_sha256(payload: dict) -> str:
 
 
 _RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
+_RUNTIME_CODE_FINGERPRINT_ATTEMPTS = 3
 
 
-def _fingerprint_python_tree(root: Path) -> dict:
-    """Fingerprint Python source by relative path and exact bytes."""
-
-    root = Path(root)
-    if not root.is_dir():
-        raise RuntimeError(f"CleanroomX source root is unavailable: {root}")
+def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, int], ...]:
+    """Return deterministic file identity/size/time evidence for Python source."""
 
     try:
         sources = sorted(
@@ -569,16 +567,37 @@ def _fingerprint_python_tree(root: Path) -> dict:
             ),
             key=lambda path: path.relative_to(root).as_posix(),
         )
+        manifest = []
+        for source in sources:
+            stat = source.stat()
+            manifest.append(
+                (
+                    source.relative_to(root).as_posix(),
+                    stat.st_dev,
+                    stat.st_ino,
+                    stat.st_size,
+                    stat.st_mtime_ns,
+                    stat.st_ctime_ns,
+                )
+            )
     except OSError as exc:
-        raise RuntimeError(f"cannot enumerate CleanroomX source files: {root}") from exc
+        raise RuntimeError(f"cannot inspect CleanroomX source tree: {root}") from exc
+    return tuple(manifest)
 
-    if not sources:
-        raise RuntimeError(f"no Python source files found under CleanroomX root: {root}")
 
+@lru_cache(maxsize=8)
+def _hash_python_tree_manifest(
+    root_text: str,
+    manifest: tuple[tuple[str, int, int, int, int, int], ...],
+) -> dict:
+    """Hash exact source bytes for one already-observed tree manifest."""
+
+    root = Path(root_text)
     digest = hashlib.sha256()
     try:
-        for source in sources:
-            relative = source.relative_to(root).as_posix().encode("utf-8")
+        for relative_text, *_metadata in manifest:
+            source = root / relative_text
+            relative = relative_text.encode("utf-8")
             content = source.read_bytes()
             digest.update(len(relative).to_bytes(4, "big"))
             digest.update(relative)
@@ -587,12 +606,36 @@ def _fingerprint_python_tree(root: Path) -> dict:
     except OSError as exc:
         raise RuntimeError(f"cannot read CleanroomX source file: {source}") from exc
 
+    if _python_tree_manifest(root) != manifest:
+        raise RuntimeError("CleanroomX source tree changed while it was being fingerprinted")
+
     return {
         "algorithm": _RUNTIME_CODE_FINGERPRINT_ALGORITHM,
         "sha256": digest.hexdigest(),
-        "source_file_count": len(sources),
+        "source_file_count": len(manifest),
     }
 
+
+def _fingerprint_python_tree(root: Path) -> dict:
+    """Fingerprint Python source while avoiding repeated unchanged-tree reads."""
+
+    root = Path(root).resolve()
+    if not root.is_dir():
+        raise RuntimeError(f"CleanroomX source root is unavailable: {root}")
+
+    for _attempt in range(_RUNTIME_CODE_FINGERPRINT_ATTEMPTS):
+        manifest = _python_tree_manifest(root)
+        if not manifest:
+            raise RuntimeError(f"no Python source files found under CleanroomX root: {root}")
+        try:
+            return copy.deepcopy(_hash_python_tree_manifest(str(root), manifest))
+        except RuntimeError as exc:
+            if "changed while it was being fingerprinted" not in str(exc):
+                raise
+
+    raise RuntimeError(
+        "CleanroomX source tree changed repeatedly while capturing runtime provenance"
+    )
 
 def _capture_runtime_code_fingerprint() -> dict:
     return _fingerprint_python_tree(Path(__file__).resolve().parent)

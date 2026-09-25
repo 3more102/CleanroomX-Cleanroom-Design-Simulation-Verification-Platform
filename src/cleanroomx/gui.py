@@ -43,6 +43,8 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .run_history import RunHistoryManager, scan_run_history
+from .run_history_ui import RunHistoryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -176,6 +178,7 @@ class CleanroomXApp:
         *,
         autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
         autosave_manager: AutosaveManager | None = None,
+        run_history_manager: RunHistoryManager | None = None,
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
@@ -203,6 +206,7 @@ class CleanroomXApp:
         self._autosave_manager.begin_project(None)
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
+        self._run_history_manager = run_history_manager or RunHistoryManager()
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -243,6 +247,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
+        file_menu.add_command(label="Run History...", command=self.show_run_history)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
         file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
@@ -1015,6 +1020,43 @@ class CleanroomXApp:
     def offer_startup_recovery(self) -> bool:
         return self.show_recovery_center(announce_empty=False)
 
+    def show_run_history(self) -> bool:
+        if self.project_path is None:
+            messagebox.showinfo(
+                "Run history",
+                "Save this project before using durable analysis run history.",
+                parent=self.root,
+            )
+            return False
+        manager = getattr(self, "_run_history_manager", None)
+        if manager is None:
+            messagebox.showerror(
+                "Run history unavailable",
+                "The run-history service is not available in this session.",
+                parent=self.root,
+            )
+            return False
+        try:
+            scan = scan_run_history(manager.history_dir, self.project_path)
+        except OSError as exc:
+            messagebox.showerror(
+                "Run history scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        if not scan.entries and not scan.issues:
+            self.status_var.set("No archived analysis runs found for this project.")
+            messagebox.showinfo(
+                "Run history",
+                "No archived analysis runs were found for this project.",
+                parent=self.root,
+            )
+            return False
+        dialog = RunHistoryCenter(self.root, scan)
+        self.root.wait_window(dialog)
+        return True
+
     def new_project(self) -> None:
         if self._running:
             messagebox.showwarning("Analysis running", "Abandon the current run first.")
@@ -1419,6 +1461,41 @@ class CleanroomXApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _submit_run_history_archive(
+        self,
+        analysis: AnalysisDocument,
+        run: AnalysisRun,
+    ) -> bool:
+        project_path = self.project_path
+        manager = getattr(self, "_run_history_manager", None)
+        if project_path is None or manager is None:
+            return False
+        try:
+            future = manager.submit(
+                project_path=project_path,
+                expected_project_revision=getattr(self, "_project_file_revision", None),
+                project_dirty=self._has_unsaved_changes(),
+                analysis_id=analysis.id,
+                analysis_name=analysis.name,
+                analysis_kind=analysis.kind,
+                analysis_input=analysis.input,
+                run=run,
+            )
+        except Exception as exc:
+            self._queue.put(("history_error", None, analysis.id, str(exc)))
+            return False
+
+        def completed(done) -> None:
+            try:
+                path = done.result()
+            except Exception as exc:
+                self._queue.put(("history_error", None, analysis.id, str(exc)))
+            else:
+                self._queue.put(("history_success", None, analysis.id, str(path)))
+
+        future.add_done_callback(completed)
+        return True
+
     def cancel_run(self) -> None:
         if not self._running or self._abandon_requested:
             return
@@ -1438,6 +1515,24 @@ class CleanroomXApp:
         try:
             while True:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
+                if kind == "history_success":
+                    if not self._running:
+                        self.status_var.set(
+                            f"Run history archived — {Path(str(payload)).name}"
+                        )
+                    continue
+                if kind == "history_error":
+                    self.status_var.set("Run history archive failed")
+                    messagebox.showwarning(
+                        "Run history not saved",
+                        (
+                            "The analysis completed, but its durable history record "
+                            f"could not be saved.\n\n{payload}\n\n"
+                            "The current result remains available for manual export."
+                        ),
+                        parent=self.root,
+                    )
+                    continue
                 if generation != self._run_generation:
                     continue
                 if self._abandon_requested:
@@ -1471,8 +1566,11 @@ class CleanroomXApp:
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
+                    archived = self._submit_run_history_archive(analysis, payload)
+                    archive_note = "" if archived else " — session result only"
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
+                        f"{archive_note}"
                     )
         except queue.Empty:
             pass
@@ -1673,6 +1771,9 @@ class CleanroomXApp:
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)
+        run_history_manager = getattr(self, "_run_history_manager", None)
+        if run_history_manager is not None:
+            run_history_manager.shutdown(wait=False)
         self.root.destroy()
 
 

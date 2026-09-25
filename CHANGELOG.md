@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased spatial identity integrity — 2026-09-25
+
+- Makes spatial metadata normalization deterministic and idempotent when legacy or malformed room/device identifiers are missing or duplicated.
+- Preserves every first valid persisted identifier, reserves identifiers declared by later entries, and repairs collisions with stable suffixes instead of random UUIDs.
+- Enforces unique normalized device identifiers as well as room identifiers, protecting selection, undo/redo, and object-reference ownership from duplicate-id ambiguity.
+- Detects device references to duplicated room identifiers, keeps the existing first-occurrence binding for compatibility, and surfaces an explicit operator warning that the assignment requires review.
+- Keeps schema version 1 and valid existing spatial metadata unchanged; no solver equations, numerical tolerances, or engineering acceptance semantics are modified.
+- Adds deterministic/idempotent normalization, reserved-id, duplicate-device-id, ambiguous-reference, and duplicate-derived-room regression coverage.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

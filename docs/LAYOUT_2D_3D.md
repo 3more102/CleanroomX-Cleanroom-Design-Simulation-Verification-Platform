@@ -14,16 +14,16 @@ version-1 layouts that predate floor metadata are defaulted to a metric `Floor 1
 Floor data includes a stable ID, floor name, elevation, default ceiling height, and metric units.
 Rooms have stable IDs, X/Y position, length, width, height, floor elevation, optional pressure,
 optional project-defined classification text, and an optional `analysis_room_name` link.
-Devices use stable IDs and support doors, supply diffusers, return grilles, exhaust grilles,
-FFUs, equipment, sensors, and transfer openings. Door/transfer records may carry width, height,
-wall side, orientation, and swing metadata.
+Devices use stable IDs and support doors, windows, generic wall openings, supply diffusers,
+return grilles, exhaust grilles, FFUs, equipment, sensors, and transfer openings. Wall-opening
+records may carry width, height, wall side, orientation, and swing metadata.
 
 ## 2D editor
 
 Open **Design 2D + 3D** in the desktop application. The 2D side supports:
 
 - room creation, selection, drag movement, corner-handle resizing, deletion, and property editing;
-- placed doors, supply, return, exhaust, FFU, equipment, sensor, and transfer objects;
+- placed doors, windows, generic openings, supply, return, exhaust, FFU, equipment, sensor, and transfer objects;
 - configurable metric grid spacing through **Floor…** and independently switchable snap-to-grid;
 - zoom, pan, fit-to-view, coordinate feedback, selection highlighting, and project-wide undo/redo;
 - optional labels, device visibility, pressure overlay, and pressure-cascade relationship arrows;
@@ -34,11 +34,14 @@ selected room resizes its footprint. The property inspector can edit device Z el
 association, opening dimensions/orientation/wall side/swing, room floor elevation,
 classification text, and analysis-room linkage.
 
-Pressure color is shown only when a room has a supplied pressure value. Relationship arrows are
-drawn only from the active analysis's explicit `pressure_cascade` records. When both linked rooms
-have supplied pressures, CleanroomX shows the observed delta and marks the configured minimum
-relationship as pass or fail; missing pressure remains explicitly unavailable. The same relation
-state is rendered in both 2D and 3D. CleanroomX does not invent missing pressure or airflow values.
+Pressure color uses explicit evidence only. A fresh completed verification result can be projected
+into the view without being persisted into spatial geometry; otherwise the explicitly stored spatial
+pressure is used. Relationship arrows are drawn only from the active analysis's explicit
+`pressure_cascade` records and consume the same fresh-or-spatial pressure evidence. When both
+linked rooms have pressure evidence, CleanroomX shows the observed delta and marks the configured
+minimum relationship as pass or fail; missing pressure remains explicitly unavailable. The same
+relation state is rendered in both 2D and 3D. CleanroomX does not invent missing pressure or airflow
+values.
 
 ## 3D viewer
 
@@ -48,15 +51,16 @@ Mouse wheel zooms. Middle/right drag pans. The rotate, tilt, reset, and fit cont
 camera. Selecting a room or object in 3D selects the same canonical object used by the 2D editor.
 
 Room floor elevation and room height control the vertical extrusion. Device Z is relative to its
-assigned room floor elevation. Door and transfer-opening height is rendered from the same device
-record used in 2D.
+assigned room floor elevation. Door, window, generic-opening, and transfer-opening height is
+rendered from the same device record used in 2D.
 
 ## Engineering synchronization
 
-Spatial editing does not silently alter engineering inputs. Use **Sync dimensions to active
-analysis** explicitly. For room-verification and project-verification workflows, CleanroomX copies
-only spatial room length, width, and height. Observed pressure and all other engineering evidence
-remain owned by the engineering analysis and are never overwritten by dimension synchronization.
+Spatial editing does not silently alter engineering inputs. Use **Push dimensions to analysis**
+when the spatial layout is authoritative, or **Pull dimensions from analysis** when engineering
+geometry is authoritative. For room-verification and project-verification workflows, both
+directions synchronize only room length, width, and height. Spatial X/Y placement is preserved by
+pulls. Observed pressure and all other engineering evidence remain outside geometry synchronization.
 
 A room can keep a stable `analysis_room_name` even when its display name changes. Duplicate
 links and links to a missing analysis room are rejected instead of being applied ambiguously.
@@ -66,9 +70,10 @@ last-synchronized geometry baseline proves which side changed. If geometry diffe
 provenance, CleanroomX reports **conflicting** rather than guessing. The baseline stores only the
 common room dimensions and mapping identity; it does not duplicate solver outputs.
 
-Synchronization resolves and validates every room mapping before changing any engineering input,
-so a later bad link cannot leave a partially updated analysis. After an actual engineering-input
-change, the affected analysis must be validated/run again; prior results are not treated as current.
+Synchronization resolves every room mapping before mutation. Reverse pulls also validate every
+mapped dimension before changing any spatial room, so a later bad room cannot leave a partial
+update. After an actual engineering-input change, the affected analysis must be validated/run
+again; prior results are not treated as current.
 
 ## Persistence and validation
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial transactional edit history — 2026-09-25
+
+- Adds bounded model-level **Undo/Redo** for spatial room/device property edits, creation, deletion, and drag movement; a complete drag gesture is coalesced into one history entry.
+- Restores room/device selection with each edit while deliberately preserving the current 2D/3D camera state, so geometry undo does not rewind the operator's viewport.
+- Clears redo history after divergent edits and resets history when the active project object is replaced, preventing edits from one project being replayed into another.
+- Adds toolbar controls plus Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z shortcuts on the spatial canvases, with enabled/disabled state derived from the real history stacks.
+- Adds regression coverage for bounded history, no-op suppression, snapshot isolation, redo invalidation, model restoration, selection restoration, and viewport preservation.
+
 ## Unreleased spatial workspace safety pass — 2026-09-25
 
 - Adds deterministic validation for overlapping rooms, duplicate room names, orphan/unassigned devices, devices outside their assigned room footprint, and device elevations outside room height.

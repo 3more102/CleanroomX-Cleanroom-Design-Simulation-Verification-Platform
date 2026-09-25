@@ -46,7 +46,7 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. The project boundary snapshots nested metadata and analysis inputs into detached strict JSON before they enter or leave the document model. It rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, duplicate JSON object keys, non-string object keys, non-JSON Python containers such as tuples, cyclic structures, invalid UTF-8 surrogate text, and non-finite values such as `NaN` or `Infinity`. These checks run before an existing project file can be replaced, preventing silent key/type coercion and caller-side mutation of serialized snapshots. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ### External-change write protection
 
@@ -78,7 +78,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 1. Create a new project or open an existing `.cleanroomx.json` project.
 2. Add an analysis from the application catalog, or select an existing analysis.
-3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
+3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; duplicate object keys and non-finite constants such as `NaN` and `Infinity` are rejected rather than silently changing an engineering input.
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.

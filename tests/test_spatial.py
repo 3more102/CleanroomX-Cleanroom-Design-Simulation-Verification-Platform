@@ -156,6 +156,36 @@ def test_normalize_layout_repairs_missing_and_duplicate_ids_deterministically():
     assert len({device["id"] for device in first["devices"]}) == len(first["devices"])
 
 
+
+def test_normalize_layout_repairs_do_not_steal_later_explicit_ids():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {"id": "room", "name": "First"},
+                {"id": "room", "name": "Duplicate"},
+                {"id": "room-2", "name": "Explicit suffix"},
+                {"name": "room-2"},
+            ],
+            "devices": [
+                {"id": "device", "type": "sensor", "name": "First"},
+                {"id": "device", "type": "sensor", "name": "Duplicate"},
+                {"id": "device-2", "type": "sensor", "name": "Explicit suffix"},
+            ],
+        }
+    )
+
+    assert [room["id"] for room in layout["rooms"]] == [
+        "room",
+        "room-3",
+        "room-2",
+        "room-2-2",
+    ]
+    assert [device["id"] for device in layout["devices"]] == [
+        "device",
+        "device-3",
+        "device-2",
+    ]
+
 def test_derive_layout_assigns_unique_deterministic_ids_for_duplicate_room_names():
     analysis = AnalysisDocument(
         id="verification",

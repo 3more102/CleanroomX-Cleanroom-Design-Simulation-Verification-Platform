@@ -688,6 +688,9 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
     app._running = False
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="c"
+    )
     app.project_path = project_dir / "project.cleanroomx.json"
     app.status_var = Status()
     app._current_analysis = lambda: analysis
@@ -1228,6 +1231,9 @@ def test_spatial_sync_ambiguity_is_reported_without_mutating_analysis(monkeypatc
     app = CleanroomXApp.__new__(CleanroomXApp)
     app._running = False
     app.root = object()
+    app.project = ProjectDocument(
+        name="Demo", analyses=[analysis], active_analysis_id="verification"
+    )
     app.status_var = Status()
     app._editor_analysis = lambda: analysis
     app._current_analysis = lambda: analysis

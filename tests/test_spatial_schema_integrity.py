@@ -128,6 +128,34 @@ def test_normalize_layout_preserves_unknown_extension_fields():
     assert normalized["view"]["projection_mode"] == "vendor-perspective"
 
 
+@pytest.mark.parametrize(
+    ("collection", "duplicate_id", "message"),
+    [
+        ("rooms", "room-a", "spatial_layout room ids must be unique"),
+        ("devices", "device-a", "spatial_layout device ids must be unique"),
+    ],
+)
+def test_project_loader_rejects_duplicate_persisted_spatial_ids(
+    collection,
+    duplicate_id,
+    message,
+):
+    spatial = {"version": 1, "rooms": [], "devices": []}
+    if collection == "rooms":
+        spatial["rooms"] = [
+            {"id": duplicate_id, "name": "A"},
+            {"id": duplicate_id, "name": "B"},
+        ]
+    else:
+        spatial["devices"] = [
+            {"id": duplicate_id, "type": "sensor", "name": "A"},
+            {"id": duplicate_id, "type": "sensor", "name": "B"},
+        ]
+
+    with pytest.raises(ProjectFormatError, match=message):
+        project_from_dict(_project_payload(spatial))
+
+
 def test_project_loader_rejects_future_spatial_layout_version():
     with pytest.raises(
         ProjectFormatError,

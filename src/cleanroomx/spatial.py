@@ -862,6 +862,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        result_getter: Callable[[], Any] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -875,6 +876,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
         self._status_setter = status_setter
+        self._result_getter = result_getter or (lambda: None)
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
         self._on_redo_requested = on_redo_requested
@@ -892,6 +894,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._engineering_var = tk.StringVar(value="Engineering: unavailable")
+        self._pressure_result_var = tk.StringVar(value="Pressure evidence: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._metrics_var = tk.StringVar(value="0 rooms")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
@@ -902,6 +906,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
         self._resize_room_id: str | None = None
+        self._hover: _Hit | None = None
 
         self._build()
         self.refresh()
@@ -919,6 +924,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("exhaust", "+ Exhaust"),
             ("equipment", "+ Equipment"),
             ("sensor", "+ Sensor"),
+            ("window", "+ Window"),
+            ("opening", "+ Opening"),
             ("transfer", "+ Transfer"),
         ):
             ttk.Button(
@@ -936,8 +943,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
-            command=self._on_sync_requested,
+            text="Push geometry → analysis",
+            command=self.request_push_to_analysis,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Pull geometry ← analysis",
+            command=self.pull_from_active_analysis,
         ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -1005,7 +1017,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._engineering_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._pressure_result_var).grid(
+            row=3, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
@@ -1015,17 +1033,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
-            ("pressure_pa", "Pressure (Pa)"),
+            ("pressure_pa", "Spatial pressure (Pa)"),
+            ("pressure_target_pa", "Pressure target (Pa)"),
+            ("temperature_target_c", "Temp target (°C)"),
+            ("humidity_target_rh_pct", "RH target (%)"),
             ("floor_elevation_m", "Floor elev. (m)"),
             ("classification", "Classification"),
             ("analysis_room_name", "Analysis room"),
+            ("engineering_zone_id", "Engineering zone"),
+            ("airflow_ref", "Airflow ref"),
+            ("notes", "Notes"),
             ("room_id", "Room ID"),
             ("orientation_deg", "Orientation (deg)"),
             ("wall_side", "Wall side"),
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 4 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -1033,7 +1057,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 4 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -1070,6 +1094,86 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+    def _result_payload(self) -> dict | None:
+        candidate = self._result_getter()
+        if isinstance(candidate, dict):
+            return candidate
+        result = getattr(candidate, "result", None)
+        return result if isinstance(result, dict) else None
+
+    def _overlay(self) -> dict:
+        return pressure_overlay(
+            self.layout,
+            self._analysis_getter(),
+            self._result_payload(),
+        )
+
+    def request_push_to_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter("Select a room/project verification analysis before synchronizing.")
+            return
+        report = engineering_sync_report(self.layout, analysis)
+        destructive = [
+            item for item in report["rooms"]
+            if item["status"] in {"engineering_newer", "conflicting"}
+        ]
+        if destructive:
+            names = ", ".join(item["room_name"] for item in destructive[:4])
+            if len(destructive) > 4:
+                names += f" (+{len(destructive) - 4} more)"
+            if not messagebox.askyesno(
+                "Engineering data differs",
+                (
+                    "Pushing spatial geometry will replace engineering dimensions for: "
+                    f"{names}.\n\nContinue with the explicit push?"
+                ),
+                parent=self,
+            ):
+                return
+        self._on_sync_requested()
+
+    def pull_from_active_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter("Select a room/project verification analysis before synchronizing.")
+            return
+        report = engineering_sync_report(self.layout, analysis)
+        destructive = [
+            item for item in report["rooms"]
+            if item["status"] in {"geometry_newer", "conflicting"}
+        ]
+        if destructive:
+            names = ", ".join(item["room_name"] for item in destructive[:4])
+            if len(destructive) > 4:
+                names += f" (+{len(destructive) - 4} more)"
+            if not messagebox.askyesno(
+                "Spatial geometry differs",
+                (
+                    "Pulling engineering dimensions will replace spatial room dimensions for: "
+                    f"{names}.\n\nContinue with the explicit pull?"
+                ),
+                parent=self,
+            ):
+                return
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        if sync_analysis_to_layout(self.layout, analysis):
+            self._load_property_panel()
+            self._persist(
+                "Pulled geometry from active analysis",
+                history_before=history_before,
+                selection_before=selection_before,
+            )
+        else:
+            self._status_setter("Spatial geometry already matches the active analysis.")
 
     def refresh(self) -> None:
         project = self._project_getter()

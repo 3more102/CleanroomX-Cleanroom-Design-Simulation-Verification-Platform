@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased atomic CLI output persistence — 2026-09-25
+
+- Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.
+- Stages each report in the destination directory, flushes and fsyncs it, then atomically replaces the destination; if staging or replacement fails, the previously valid report remains intact and temporary files are cleaned up.
+- Leaves stdout behavior, report formats, project schema version 1, solver equations, numerical tolerances, and engineering acceptance semantics unchanged.
+- Adds failure-injection coverage with an existing report plus a regression invariant preventing output-capable CLI modules from reintroducing direct in-place writes, and adds the new tests to the v0.100 application/desktop compatibility gate.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

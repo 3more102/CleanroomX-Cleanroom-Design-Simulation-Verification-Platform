@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .json_integrity import load_json_file
 
 from .branch_network import BranchDuct, BranchFlowNetwork, TerminalDemand
 from .duct import DuctNetwork, DuctPath, DuctSection
@@ -116,5 +117,5 @@ def hvac_project_from_dict(data: dict) -> HVACProject:
 
 
 def load_hvac_project(path: str | Path) -> HVACProject:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_json_file(path)
     return hvac_project_from_dict(data)

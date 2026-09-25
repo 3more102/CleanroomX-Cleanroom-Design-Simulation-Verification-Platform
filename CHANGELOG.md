@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased immutable session run history — 2026-09-25
+
+- Adds a bounded per-project/path-context desktop history for every accepted analysis run instead of retaining only the latest run per analysis.
+- Deep-copies completed run evidence on history ingress and full-entry egress, preserving prior result/report/diagnostic/plot snapshots even after later reruns or input edits.
+- Keeps historical evidence separate from current-result ownership: current result/export paths still require the existing exact input-SHA freshness check, while historical bundle export requires an explicit Run History selection.
+- Adds lightweight frozen history summaries so routine history-list refreshes do not copy large result payloads; full run data is copied only when a selected historical bundle is requested.
+- Resets session history on project/recovery replacement and Save-As path-context changes so run evidence cannot leak across project identities or changed relative-file contexts.
+- Preserves project schema version 1, recovery schema, solver equations, tolerances, engineering acceptance semantics, and existing run-bundle JSON shape.
+- Adds focused regressions for deterministic bounded retention, mutation isolation, desktop integration/reset behavior, and explicit historical bundle export.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

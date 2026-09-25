@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 import pytest
@@ -83,6 +84,84 @@ def test_autosave_skips_identical_snapshot(tmp_path):
         assert manager.request_autosave(snapshot, source_path=source) is False
         assert len(list((tmp_path / "recovery").glob("*.recovery.json"))) == 1
     finally:
+        manager.shutdown(wait=True)
+
+
+def test_done_future_remains_owned_until_completion_callback_finishes(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+
+    callback_entered = threading.Event()
+    release_callback = threading.Event()
+    second_write_started = threading.Event()
+    release_second_write = threading.Event()
+    write_count = {"value": 0}
+    callback_count = {"value": 0}
+    counter_lock = threading.Lock()
+
+    original_write_recovery = manager._write_recovery
+    original_on_write_done = manager._on_write_done
+
+    def controlled_write(request):
+        with counter_lock:
+            write_count["value"] += 1
+            write_index = write_count["value"]
+        if write_index == 2:
+            second_write_started.set()
+            if not release_second_write.wait(5.0):
+                raise TimeoutError("test did not release second autosave write")
+        return original_write_recovery(request)
+
+    def controlled_done(request, future):
+        with counter_lock:
+            callback_count["value"] += 1
+            callback_index = callback_count["value"]
+        if callback_index == 1:
+            callback_entered.set()
+            if not release_callback.wait(5.0):
+                raise TimeoutError("test did not release first completion callback")
+        return original_on_write_done(request, future)
+
+    manager._write_recovery = controlled_write
+    manager._on_write_done = controlled_done
+
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=source,
+        ) is True
+        assert callback_entered.wait(5.0)
+
+        # The first Future is already done here, but its completion callback has
+        # not finalized coordinator state. A newer snapshot must be queued rather
+        # than replacing the tracked Future/request pair.
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=2),
+            source_path=source,
+        ) is True
+        assert manager.status().message == "Autosave queued"
+
+        release_callback.set()
+        assert second_write_started.wait(5.0)
+
+        # The queued write is deliberately blocked. wait_for_idle() must continue
+        # to observe it as owned work instead of returning during the race window.
+        with pytest.raises(TimeoutError, match="did not become idle"):
+            manager.wait_for_idle(timeout=0.05)
+
+        release_second_write.set()
+        manager.wait_for_idle(timeout=5.0)
+
+        status = manager.status()
+        assert status.state == "saved"
+        assert status.artifact_path is not None
+        artifact = load_recovery_artifact(status.artifact_path)
+        assert artifact["snapshot"]["ui_state"]["marker"] == 2
+        assert write_count["value"] == 2
+    finally:
+        release_callback.set()
+        release_second_write.set()
         manager.shutdown(wait=True)
 
 

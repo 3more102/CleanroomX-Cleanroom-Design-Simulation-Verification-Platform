@@ -507,6 +507,7 @@ class CleanroomXApp:
             on_change=self._on_spatial_changed,
             on_sync_requested=self._sync_spatial_to_current_analysis,
             status_setter=self.status_var.set,
+            result_getter=self._spatial_fresh_run,
             on_history_record=self._record_spatial_project_edit,
             on_undo_requested=self.undo_project_edit,
             on_redo_requested=self.redo_project_edit,
@@ -905,6 +906,19 @@ class CleanroomXApp:
             self.status_var.set(
                 f"{analysis.name} — result is out of date; run the analysis again."
             )
+            return None
+        return run
+
+    def _spatial_fresh_run(self) -> AnalysisRun | None:
+        analysis = self._editor_analysis()
+        if analysis is None:
+            return None
+        run = self._runs_by_analysis.get(analysis.id)
+        if run is None:
+            return None
+        if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
             return None
         return run
 
@@ -2341,6 +2355,9 @@ class CleanroomXApp:
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
         self._draw_plot()
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.redraw()
         if select_results:
             self.notebook.select(1)
 
@@ -2663,11 +2680,34 @@ def main(argv: list[str] | None = None) -> int:
             messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.smoke:
-        if project_path and app.project.analyses:
-            run = app.smoke_run_active()
-            json.dumps(run.to_dict(), allow_nan=False)
-        root.update_idletasks()
-        root.update()
+        try:
+            if project_path and app.project.analyses:
+                run = app.smoke_run_active()
+                json.dumps(run.to_dict(), allow_nan=False)
+            root.update_idletasks()
+            root.update()
+            if args.demo:
+                layout = app.spatial_workspace.layout
+                if len(layout.get("rooms", [])) < 3:
+                    raise RuntimeError("packaged demo spatial layout did not load")
+                if not app.spatial_workspace.canvas_2d.find_withtag("room"):
+                    raise RuntimeError("2D layout did not render demo rooms")
+                if not app.spatial_workspace.canvas_3d.find_withtag("room3d"):
+                    raise RuntimeError("3D viewer did not render demo rooms")
+                if not app.spatial_workspace.canvas_2d.find_withtag("pressure_relationship"):
+                    raise RuntimeError("pressure-cascade relationships did not render")
+                overlay = app.spatial_workspace._overlay()
+                if not any(room.get("source") == "result" for room in overlay["rooms"]):
+                    raise RuntimeError("solver-backed pressure evidence did not reach spatial view")
+                if not any(
+                    relationship.get("source") == "result"
+                    for relationship in overlay["relationships"]
+                ):
+                    raise RuntimeError("solver-backed pressure cascade did not reach spatial view")
+        except Exception as exc:
+            root.destroy()
+            print(f"CleanroomX GUI smoke: FAIL — {exc}")
+            return 2
         root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0

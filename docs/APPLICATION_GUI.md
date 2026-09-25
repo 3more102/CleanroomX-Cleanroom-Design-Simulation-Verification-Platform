@@ -82,7 +82,9 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, a self-verifying run-bundle JSON, or report Markdown and save the project. Run bundles include the immutable submitted input snapshot, normalized result, report, diagnostics, plot data, application version, and a canonical SHA-256 integrity record. **Verify Run Bundle JSON...** checks the whole-document digest and cross-checks the embedded input snapshot against execution provenance without re-running a solver. Writes are atomic and filesystem errors are surfaced in the GUI.
+
+Run-bundle integrity is tamper evidence, not a digital signature or proof of authorship. File-backed consistency/dossier bundles retain dependency hashes and stability evidence; they do not embed the referenced external files.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
@@ -108,7 +110,7 @@ Existing projects remain schema-version-1 compatible because the spatial documen
 
 ## Results and plots
 
-All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.
+All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Each `cleanroomx.analysis-run` bundle is schema-versioned, preserves a deep-copied submitted input snapshot, and hashes the complete exported document (excluding only the integrity record itself) using canonical sorted-key compact UTF-8 JSON. **Verify Run Bundle JSON...** recomputes that digest and verifies that the input snapshot still matches the recorded execution-provenance hash.
 
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 

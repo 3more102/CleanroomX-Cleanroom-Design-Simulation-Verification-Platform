@@ -35,6 +35,7 @@ from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectFileBusyError,
     ProjectSaveDurabilityError,
     ProjectWriteConflictError,
     capture_project_file_revision,
@@ -1500,6 +1501,21 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def _report_project_save_busy(self, path: Path) -> None:
+        self.status_var.set(
+            f"Save blocked: another CleanroomX process is saving {path.name}."
+        )
+        messagebox.showwarning(
+            "Project save in progress",
+            (
+                f"Another CleanroomX process is currently saving {path.name}.\n\n"
+                "This window did not write to the project. Retry Save after the "
+                "other save completes; revision protection will still reject any "
+                "newer on-disk content."
+            ),
+            parent=self.root,
+        )
+
     def _report_save_durability_uncertain(self, path: Path) -> None:
         self.status_var.set(
             f"Save durability not confirmed for {path.name}; recovery state retained."
@@ -1538,6 +1554,9 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
+        except ProjectFileBusyError:
+            self._report_project_save_busy(self.project_path)
+            return
         except ProjectSaveDurabilityError as exc:
             self._project_file_revision = exc.committed_revision
             self._report_save_durability_uncertain(self.project_path)
@@ -1626,6 +1645,9 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
+        except ProjectFileBusyError:
+            self._report_project_save_busy(destination)
+            return
         except ProjectSaveDurabilityError as exc:
             if same_as_open_project:
                 self._project_file_revision = exc.committed_revision

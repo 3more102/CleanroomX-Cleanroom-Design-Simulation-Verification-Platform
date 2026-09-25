@@ -56,6 +56,16 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+## Project-level undo and redo
+
+The desktop **Edit** menu provides **Undo Project Change** and **Redo Project Change** for document-level transactions. The history is bounded to 100 entries and covers analysis creation, rename, removal, imported-input replacement, project-name/description edits grouped by field focus, and explicit **Sync dimensions to active analysis** operations. Undo/redo restores a validated project snapshot together with the exact raw JSON editor draft and active editor identity.
+
+History is scoped to the current document. **New Project**, opening another project, restoring a recovery artifact, and a successful **Save Project As** clear project history so states from one document/path context cannot be replayed into another. A normal in-place save keeps history; undoing afterward simply makes the document dirty again and does not modify the on-disk file until the next explicit save.
+
+Project-history restoration clears cached analysis results because those results may no longer correspond to restored inputs. The active project path and its external-write revision guard are deliberately not rewound by Undo/Redo.
+
+Ctrl+Z/Ctrl+Y are context-sensitive. While the JSON editor has focus, its native text undo/redo remains local to the draft. While a spatial canvas has focus, the spatial transactional history handles geometry edits. Outside those local editors, Ctrl+Z/Ctrl+Y operate on project-level history; Ctrl+Shift+Z is also available for project/spatial redo.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

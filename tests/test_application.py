@@ -8,6 +8,7 @@ import pytest
 
 from cleanroomx.application import (
     ANALYSIS_SPECS,
+    AnalysisRun,
     analysis_catalog,
     application_info,
     rebase_analysis_file_references,
@@ -191,6 +192,12 @@ def test_application_execution_provenance_hashes_inline_input_canonically():
     assert first_provenance["external_dependency_count"] == 0
     assert first_provenance["external_dependencies_stable"] is True
 
+
+
+def test_analysis_run_preserves_legacy_positional_constructor_shape():
+    run = AnalysisRun("kind", "title", "status", {}, "", {}, None)
+
+    assert run.input_snapshot == {}
 
 
 def test_run_bundle_captures_immutable_input_and_verifies():

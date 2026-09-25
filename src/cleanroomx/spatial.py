@@ -623,7 +623,7 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     if getattr(analysis, "kind", "") == "room_verification":
         source = rooms[0]
         target = analysis.input
-        for key in ("name", "length_m", "width_m", "height_m"):
+        for key in ("length_m", "width_m", "height_m"):
             value = source[key]
             if target.get(key) != value:
                 target[key] = value

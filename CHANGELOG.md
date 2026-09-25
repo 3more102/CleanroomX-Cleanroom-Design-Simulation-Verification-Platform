@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased external analysis input stability — 2026-09-25
+
+- Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.
+- Captures revision-stable SHA-256, byte-size, and nanosecond modification-time evidence before and after execution; hashing reads reject file-identity/size/mtime changes instead of accepting a torn fingerprint.
+- Raises an actionable `ExternalDependencyChangedError` and discards the computed run, so the desktop cannot publish potentially mixed-revision evidence as a completed analysis.
+- Preserves project schema version 1, solver equations, numerical tolerances, acceptance semantics, stable-file workflow behavior, and existing external-dependency provenance fields; timestamp fields are additive.
+- Adds regression coverage for single/multiple dependency changes, disappearance during execution, deterministic reporting, and unchanged dependencies.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

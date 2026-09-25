@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased verification outcome integrity — 2026-09-25
+
+- Adds explicit aggregate `status` and `complete` fields to room and multi-room verification reports so `not_checked` evidence is no longer surfaced by the application as an ordinary pass.
+- Uses deterministic four-state aggregation: `fail` if any finding fails, `pass_with_unchecked` when evaluated passing findings coexist with unchecked findings, `pass` only when all findings are evaluated and passing, and `not_checked` when nothing is evaluated.
+- Preserves the existing `passed` property and verification CLI exit-code behavior as backward-compatible no-failure semantics; no engineering equation, tolerance, project schema, input format, or configured acceptance rule changes.
+- Integrates through the existing application result-status path and fallback Markdown reporting.
+- Adds focused aggregate, room, project, and application-path regression coverage.
+
 ## Unreleased precision-safe HVAC composition — 2026-09-25
 
 - Keeps full floating-point precision through duct-path, fixed-demand branch-flow, room thermal/air-balance, project aggregation, supply-fan, and fan-curve duty decisions.

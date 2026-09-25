@@ -308,7 +308,7 @@ For development and tests:
 
     cleanroomx verify-project examples/facility_project.json
 
-A failing configured verification requirement returns exit code 2.
+A failing configured verification requirement returns exit code 2. Verification JSON also reports an aggregate `status` and `complete` flag so unresolved evidence is not presented as a plain pass: `pass_with_unchecked` means configured checks passed but at least one check could not be evaluated, while `not_checked` means no verification finding was evaluated. The existing `passed` boolean remains a compatibility field meaning that no configured check failed; automation that requires a complete successful verification should require `status == "pass"` (equivalently, both `passed == true` and `complete == true`).
 
 ## Run the particle screening simulation
 

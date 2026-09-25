@@ -320,10 +320,6 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
     changed = False
     for source, target in planned:
-        if kind == "room_verification":
-            if target.get("name") != source["name"]:
-                target["name"] = source["name"]
-                changed = True
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:
                 target[key] = source[key]

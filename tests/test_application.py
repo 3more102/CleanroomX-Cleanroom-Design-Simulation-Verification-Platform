@@ -33,7 +33,7 @@ def test_application_catalog_exposes_major_existing_workflows():
     keys = {item["key"] for item in analysis_catalog()}
     assert {
         "project_verification", "hvac", "fan_operating_point", "loop_flow",
-        "variable_friction_loop", "fan_variable_friction_loop",
+        "pressure_network", "variable_friction_loop", "fan_variable_friction_loop",
         "fan_variable_friction_uncertainty", "dossier", "consistency",
     } <= keys
     assert len(keys) == len(ANALYSIS_SPECS)

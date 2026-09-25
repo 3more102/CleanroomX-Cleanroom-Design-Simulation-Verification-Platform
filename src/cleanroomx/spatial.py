@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import copy
+import hashlib
+import json
 import math
 import uuid
 from typing import Any, Callable
@@ -340,6 +342,126 @@ def validate_layout(value: Any) -> list[dict]:
             )
 
     return issues
+
+def _engineering_layout_payload(value: Any) -> dict:
+    """Return a canonical engineering-only spatial payload for hashing/export.
+
+    View/camera state and edit-grid settings are intentionally excluded so that
+    presentation-only changes do not alter the engineering design identity.
+    """
+    layout = normalize_layout(value)
+
+    rooms: list[dict] = []
+    for room in sorted(layout["rooms"], key=lambda item: str(item["id"])):
+        normalized_room = {
+            "id": str(room["id"]),
+            "name": str(room["name"]),
+            "x_m": room["x_m"],
+            "y_m": room["y_m"],
+            "length_m": room["length_m"],
+            "width_m": room["width_m"],
+            "height_m": room["height_m"],
+        }
+        if room.get("pressure_pa") is not None:
+            normalized_room["pressure_pa"] = room["pressure_pa"]
+        rooms.append(normalized_room)
+
+    devices = [
+        {
+            "id": str(device["id"]),
+            "type": str(device["type"]),
+            "name": str(device["name"]),
+            "room_id": None if device.get("room_id") is None else str(device.get("room_id")),
+            "x_m": device["x_m"],
+            "y_m": device["y_m"],
+            "z_m": device["z_m"],
+        }
+        for device in sorted(layout["devices"], key=lambda item: str(item["id"]))
+    ]
+
+    return {
+        "layout_version": SPATIAL_LAYOUT_VERSION,
+        "rooms": rooms,
+        "devices": devices,
+    }
+
+
+def spatial_design_fingerprint(value: Any) -> str:
+    """Return a deterministic SHA-256 identity for engineering spatial content."""
+    payload = _engineering_layout_payload(value)
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def build_spatial_audit(value: Any) -> dict:
+    """Build a deterministic audit bundle for the current 2D/3D design state."""
+    layout = normalize_layout(value)
+    engineering = _engineering_layout_payload(layout)
+    issues = validate_layout(layout)
+    room_ids = {room["id"] for room in engineering["rooms"]}
+
+    room_schedule: list[dict] = []
+    for room in engineering["rooms"]:
+        area_m2 = room["length_m"] * room["width_m"]
+        volume_m3 = area_m2 * room["height_m"]
+        item = dict(room)
+        item["floor_area_m2"] = area_m2
+        item["volume_m3"] = volume_m3
+        room_schedule.append(item)
+
+    device_schedule = [dict(device) for device in engineering["devices"]]
+    pressures = [
+        room["pressure_pa"]
+        for room in engineering["rooms"]
+        if room.get("pressure_pa") is not None
+    ]
+    assigned_device_count = sum(
+        1 for device in device_schedule if device.get("room_id") in room_ids
+    )
+    status = "pass" if not issues else "warning"
+
+    return {
+        "schema": "cleanroomx.spatial_audit",
+        "schema_version": 1,
+        "layout_version": SPATIAL_LAYOUT_VERSION,
+        "design_sha256": spatial_design_fingerprint(layout),
+        "summary": {
+            "room_count": len(room_schedule),
+            "device_count": len(device_schedule),
+            "assigned_device_count": assigned_device_count,
+            "unassigned_or_orphan_device_count": len(device_schedule) - assigned_device_count,
+            "total_floor_area_m2": sum(room["floor_area_m2"] for room in room_schedule),
+            "total_room_volume_m3": sum(room["volume_m3"] for room in room_schedule),
+            "pressure_min_pa": min(pressures) if pressures else None,
+            "pressure_max_pa": max(pressures) if pressures else None,
+            "validation_status": status,
+            "warning_count": len(issues),
+        },
+        "rooms": room_schedule,
+        "devices": device_schedule,
+        "validation": {
+            "status": status,
+            "issues": copy.deepcopy(issues),
+        },
+    }
+
+
+def spatial_audit_json(value: Any) -> str:
+    """Serialize the spatial audit bundle as strict deterministic JSON."""
+    return json.dumps(
+        build_spatial_audit(value),
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+    ) + "\n"
+
 
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:

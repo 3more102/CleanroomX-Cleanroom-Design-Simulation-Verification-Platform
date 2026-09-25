@@ -73,6 +73,11 @@ def test_strict_json_rejects_nonfinite_constants(token: str) -> None:
         strict_json_loads(f'{{"value": {token}}}')
 
 
+def test_strict_json_rejects_float_overflow_to_infinity() -> None:
+    with pytest.raises(NonFiniteJSONError, match="finite floating-point range"):
+        strict_json_loads('{"value": 1e400}')
+
+
 def test_strict_json_preserves_standard_json_decode_errors() -> None:
     with pytest.raises(json.JSONDecodeError):
         strict_json_loads('{"value":')

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    ProjectFileConflictError, ProjectFormatError, atomic_write_text,
+    load_project_document, load_project_document_with_fingerprint,
+    project_file_fingerprint, project_from_dict, save_project_document,
+    save_project_document_with_fingerprint,
 )
 
 
@@ -116,3 +119,80 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+
+def test_checked_project_save_rejects_external_content_change_and_preserves_disk(tmp_path):
+    path, opened_fingerprint = save_project_document_with_fingerprint(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(name="Opened"),
+    )
+    externally_changed = ProjectDocument(name="External edit")
+    save_project_document(path, externally_changed)
+    external_bytes = path.read_bytes()
+
+    with pytest.raises(ProjectFileConflictError, match="changed, was replaced, or was deleted"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local edit"),
+            expected_fingerprint=opened_fingerprint,
+        )
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path).name == "External edit"
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_checked_project_save_rejects_external_deletion(tmp_path):
+    path, opened_fingerprint = save_project_document_with_fingerprint(
+        tmp_path / "deleted.cleanroomx.json",
+        ProjectDocument(name="Opened"),
+    )
+    path.unlink()
+
+    with pytest.raises(ProjectFileConflictError, match="deleted on disk"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local edit"),
+            expected_fingerprint=opened_fingerprint,
+        )
+
+    assert not path.exists()
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_checked_project_save_uses_content_identity_not_mtime_only(tmp_path):
+    path, opened_fingerprint = save_project_document_with_fingerprint(
+        tmp_path / "mtime.cleanroomx.json",
+        ProjectDocument(name="Opened"),
+    )
+    before = path.stat()
+    os.utime(
+        path,
+        ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+    )
+
+    saved_path, saved_fingerprint = save_project_document_with_fingerprint(
+        path,
+        ProjectDocument(name="Local edit"),
+        expected_fingerprint=opened_fingerprint,
+    )
+
+    assert saved_path == path.resolve()
+    assert load_project_document(path).name == "Local edit"
+    assert saved_fingerprint["sha256"] == project_file_fingerprint(path)["sha256"]
+
+
+def test_load_with_fingerprint_hashes_the_exact_parsed_project_bytes(tmp_path):
+    path = save_project_document(
+        tmp_path / "fingerprint.cleanroomx.json",
+        ProjectDocument(name="Fingerprint"),
+    )
+
+    loaded, fingerprint = load_project_document_with_fingerprint(path)
+
+    assert loaded.name == "Fingerprint"
+    assert fingerprint["path"] == str(path.resolve())
+    assert fingerprint["exists"] is True
+    assert fingerprint["size"] == len(path.read_bytes())
+    assert fingerprint["sha256"] == project_file_fingerprint(path)["sha256"]

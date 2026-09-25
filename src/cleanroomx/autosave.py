@@ -19,6 +19,9 @@ from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
 RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
+RECOVERY_INTEGRITY_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+RECOVERY_INTEGRITY_SCOPE = "cleanroomx.autosave.without-integrity.v1"
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 
@@ -135,6 +138,58 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _recovery_payload_sha256(data: dict[str, Any]) -> str:
+    content = dict(data)
+    content.pop("integrity", None)
+    return sha256(_canonical_json(content).encode("utf-8")).hexdigest()
+
+
+def _attach_recovery_integrity(data: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(data)
+    payload["integrity"] = {
+        "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+        "canonicalization": RECOVERY_INTEGRITY_CANONICALIZATION,
+        "scope": RECOVERY_INTEGRITY_SCOPE,
+        "sha256": _recovery_payload_sha256(payload),
+    }
+    return payload
+
+
+def _validate_recovery_integrity(data: dict[str, Any]) -> None:
+    integrity = data.get("integrity")
+    if integrity is None:
+        return
+    if not isinstance(integrity, dict):
+        raise RecoveryFormatError("recovery integrity block must be an object")
+    if integrity.get("algorithm") != RECOVERY_INTEGRITY_ALGORITHM:
+        raise RecoveryFormatError(
+            f"recovery integrity algorithm must be {RECOVERY_INTEGRITY_ALGORITHM!r}"
+        )
+    if integrity.get("canonicalization") != RECOVERY_INTEGRITY_CANONICALIZATION:
+        raise RecoveryFormatError(
+            "unsupported recovery integrity canonicalization "
+            f"{integrity.get('canonicalization')!r}"
+        )
+    if integrity.get("scope") != RECOVERY_INTEGRITY_SCOPE:
+        raise RecoveryFormatError(
+            f"recovery integrity scope must be {RECOVERY_INTEGRITY_SCOPE!r}"
+        )
+    recorded = integrity.get("sha256")
+    if (
+        not isinstance(recorded, str)
+        or len(recorded) != 64
+        or any(character not in "0123456789abcdef" for character in recorded)
+    ):
+        raise RecoveryFormatError(
+            "recovery integrity sha256 must be 64 lowercase hexadecimal characters"
+        )
+    if recorded != _recovery_payload_sha256(data):
+        raise RecoveryFormatError(
+            "recovery integrity check failed: SHA-256 mismatch; "
+            "the artifact may be corrupted or externally modified"
+        )
+
+
 def _normalized_source_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -223,6 +278,7 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     snapshot = data.get("snapshot")
     if not isinstance(snapshot, dict):
         raise RecoveryFormatError("snapshot must be an object")
+    _validate_recovery_integrity(data)
     return data
 
 
@@ -485,6 +541,7 @@ class AutosaveManager:
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
         }
+        payload = _attach_recovery_integrity(payload)
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(

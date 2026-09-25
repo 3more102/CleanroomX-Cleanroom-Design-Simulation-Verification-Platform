@@ -18,6 +18,7 @@ from .autosave import (
     discard_recovery_artifact,
     restore_recovery_artifact,
     scan_recovery_artifacts,
+    source_fingerprint,
 )
 from .application import (
     ANALYSIS_SPECS,
@@ -176,6 +177,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_source_fingerprint: dict[str, object] | None = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -850,6 +852,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = recovered.project
         self.project_path = None
+        self._project_source_fingerprint = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -942,6 +945,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_source_fingerprint = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -976,10 +980,18 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
+        before = source_fingerprint(project_path)
         project = load_project_document(project_path)
+        after = source_fingerprint(project_path)
+        if not self._source_fingerprints_match(before, after):
+            raise RuntimeError(
+                "Project changed on disk while it was being opened. "
+                "Re-open the file so CleanroomX starts from one stable version."
+            )
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_source_fingerprint = after
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -990,6 +1002,47 @@ class CleanroomXApp:
         self._capture_saved_state()
         self.status_var.set(f"Opened {project_path.name}")
         self._update_title()
+
+    @staticmethod
+    def _source_fingerprints_match(
+        expected: dict[str, object] | None,
+        current: dict[str, object] | None,
+    ) -> bool:
+        if not isinstance(expected, dict) or not isinstance(current, dict):
+            return False
+        expected_exists = expected.get("exists") is True
+        current_exists = current.get("exists") is True
+        if expected_exists != current_exists:
+            return False
+        if not expected_exists:
+            return expected.get("path") == current.get("path")
+        expected_digest = expected.get("sha256")
+        current_digest = current.get("sha256")
+        return (
+            isinstance(expected_digest, str)
+            and bool(expected_digest)
+            and expected_digest == current_digest
+        )
+
+    @staticmethod
+    def _paths_match(left: str | Path | None, right: str | Path | None) -> bool:
+        if left is None or right is None:
+            return False
+        return Path(left).resolve(strict=False) == Path(right).resolve(strict=False)
+
+    def _project_source_changed_on_disk(self) -> bool:
+        project_path = getattr(self, "project_path", None)
+        expected = getattr(self, "_project_source_fingerprint", None)
+        if project_path is None or expected is None:
+            return False
+        current = source_fingerprint(project_path)
+        return not self._source_fingerprints_match(expected, current)
+
+    def _refresh_project_source_fingerprint(self) -> None:
+        project_path = getattr(self, "project_path", None)
+        self._project_source_fingerprint = (
+            source_fingerprint(project_path) if project_path is not None else None
+        )
 
     def _update_title(self) -> None:
         title_method = getattr(self.root, "title", None)
@@ -1016,8 +1069,39 @@ class CleanroomXApp:
         if self.project_path is None:
             self.save_project_as()
             return
+
+        try:
+            changed_on_disk = self._project_source_changed_on_disk()
+        except OSError as exc:
+            messagebox.showerror(
+                "Cannot verify project file",
+                (
+                    "CleanroomX could not verify that the project on disk still "
+                    f"matches the opened version.\n\n{exc}"
+                ),
+                parent=self.root,
+            )
+            return
+        if changed_on_disk:
+            save_copy = messagebox.askyesno(
+                "Project changed on disk",
+                (
+                    "The project file changed outside this CleanroomX session "
+                    "after it was opened. Normal Save will not overwrite those "
+                    "external changes.\n\n"
+                    "Save your current work to a different file instead?"
+                ),
+                parent=self.root,
+            )
+            if save_copy:
+                self.save_project_as()
+            else:
+                self.status_var.set("Save cancelled — project changed on disk")
+            return
+
         try:
             save_project_document(self.project_path, self.project)
+            self._refresh_project_source_fingerprint()
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
@@ -1063,6 +1147,32 @@ class CleanroomXApp:
             )
             return
 
+        if self._paths_match(destination, getattr(self, "project_path", None)):
+            try:
+                changed_on_disk = self._project_source_changed_on_disk()
+            except OSError as exc:
+                messagebox.showerror(
+                    "Cannot verify project file",
+                    (
+                        "CleanroomX could not verify the existing destination "
+                        f"before overwrite.\n\n{exc}"
+                    ),
+                    parent=self.root,
+                )
+                return
+            if changed_on_disk and not messagebox.askyesno(
+                "Overwrite external changes?",
+                (
+                    "This destination changed outside CleanroomX after it was "
+                    "opened. Overwriting it will replace those external changes "
+                    "with the current in-memory project.\n\n"
+                    "Overwrite anyway?"
+                ),
+                parent=self.root,
+            ):
+                self.status_var.set("Save As cancelled — external changes preserved")
+                return
+
         previous_base = self._base_dir()
         editor_id = self._editor_analysis_id
         candidate = copy.deepcopy(self.project)
@@ -1086,6 +1196,7 @@ class CleanroomXApp:
 
         self.project = candidate
         self.project_path = saved_path
+        self._refresh_project_source_fingerprint()
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

@@ -10,11 +10,12 @@ import tkinter as tk
 from tkinter import ttk
 
 from .spatial_history import SpatialEditHistory, SpatialHistoryState
-
-
-SPATIAL_METADATA_KEY = "spatial_layout"
-SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+from .spatial_schema import (
+    DEVICE_TYPES,
+    SPATIAL_LAYOUT_VERSION,
+    SPATIAL_METADATA_KEY,
+    validate_spatial_layout_document,
+)
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -32,7 +33,17 @@ def _positive(value: Any, default: float) -> float:
 
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return slug or "room"
+
+
+def _deduplicated_id(candidate: Any, used_ids: set[str], *, fallback: str) -> str:
+    base = str(candidate or "").strip() or fallback
+    if base not in used_ids:
+        return base
+    suffix = 2
+    while f"{base}-{suffix}" in used_ids:
+        suffix += 1
+    return f"{base}-{suffix}"
 
 
 def empty_layout() -> dict:
@@ -67,9 +78,11 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
+            room_id = _deduplicated_id(
+                raw.get("id") or _room_id(name),
+                used_ids,
+                fallback=f"room-{index + 1}",
+            )
             used_ids.add(room_id)
             room = {
                 "id": room_id,
@@ -86,15 +99,21 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
-        for raw in raw_devices:
+        for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_id = _deduplicated_id(
+                raw.get("id"),
+                used_device_ids,
+                fallback=f"device-{index + 1}",
+            )
+            used_device_ids.add(device_id)
             devices.append(
                 {
                     "id": device_id,
@@ -160,7 +179,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
-    return layout
+    return normalize_layout(layout)
 
 
 def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
@@ -170,7 +189,8 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
         metadata = project.metadata
 
     raw = metadata.get(SPATIAL_METADATA_KEY)
-    if isinstance(raw, dict):
+    if raw is not None:
+        validate_spatial_layout_document(raw)
         normalized = normalize_layout(raw)
         metadata[SPATIAL_METADATA_KEY] = normalized
         return normalized
@@ -615,8 +635,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         selection_before: tuple[str, str] | None = None,
     ) -> None:
         project = self._project_getter()
-        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
-        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        normalized = normalize_layout(self.layout)
+        validate_spatial_layout_document(normalized)
+        project.metadata[SPATIAL_METADATA_KEY] = normalized
+        self.layout = normalized
         if history_before is not None:
             self._history.record(
                 before_layout=history_before,

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased deterministic spatial identity and sync guard — 2026-09-25
+
+- Replaces random normalization-time replacement ids with deterministic, collision-free room/device ids while preserving already-unique persisted ids.
+- Makes layouts derived from verification inputs deterministic even when malformed source data contains duplicate room names, preventing repeated refresh/history snapshots from inventing new object identities.
+- Makes spatial-to-analysis geometry synchronization transactional and fail closed: the complete room-name mapping is validated before any engineering input is mutated.
+- Rejects duplicate or case-ambiguous room names during synchronization and requires an exact room-name match when a single-room analysis is synchronized from a multi-room layout.
+- Preserves project schema version 1, solver equations, numerical tolerances, engineering acceptance semantics, camera state, and existing explicit synchronization workflow.
+- Adds regression coverage for deterministic identity repair, unique device ids, derived-layout identity stability, ambiguous source/target rollback, exact single-room mapping, and unmatched-target rejection.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

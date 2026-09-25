@@ -29,6 +29,8 @@ jobs:
           tests/test_spatial_history.py
           tests/test_spatial_transforms.py
           tests/test_release2_spatial_integrity.py
+      - name: Run project diagnostics regressions
+        run: python -m pytest -q tests/test_project_diagnostics.py
       - name: Run v0.95 solver-result-integrity compatibility regressions
         run: >-
           python -m pytest -q
@@ -136,6 +138,7 @@ jobs:
           /tmp/cleanroomx-wheel-env/bin/python -m pip install --no-index /tmp/cleanroomx-wheel/cleanroomx-*.whl
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-bundle --help
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-check examples/gui_demo.cleanroomx.json --output /tmp/cleanroomx-project-diagnostics.json
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-run examples/gui_demo.cleanroomx.json --analysis verification --output /tmp/cleanroomx-project-batch.json
           /tmp/cleanroomx-wheel-env/bin/python - <<'PY'
           import json
@@ -144,6 +147,11 @@ jobs:
           assert payload['schema'] == 'cleanroomx.project-batch-run'
           assert payload['selection']['analysis_ids'] == ['verification']
           assert payload['execution']['completed_count'] == 1
+
+          diagnostics = json.loads(Path('/tmp/cleanroomx-project-diagnostics.json').read_text(encoding='utf-8'))
+          assert diagnostics['schema'] == 'cleanroomx.project-diagnostics'
+          assert diagnostics['summary']['complete'] is True
+          assert diagnostics['source']['stable_during_check'] is True
           PY
           /tmp/cleanroomx-wheel-env/bin/python - <<'PY'
           from pathlib import Path

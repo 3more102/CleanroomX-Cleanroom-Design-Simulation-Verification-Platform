@@ -53,6 +53,7 @@ Spatial and engineering data remain deliberately separated.
 - Saved project revisions and external-write protection.
 - Immutable run snapshots and execution provenance.
 - Deterministic project batch execution.
+- Project-wide read-only design/model diagnostics with spatial, synchronization, input-validity, and stale-evidence checks.
 - Portable project bundles and engineering reports.
 - SHA-256 based numerical/provenance evidence for supported solver workflows.
 
@@ -114,6 +115,14 @@ Create or verify portable project evidence:
 ```bash
 cleanroomx-project-bundle --help
 ```
+
+Run a project-wide model/provenance health check:
+
+```bash
+cleanroomx-project-check project.cleanroomx.json
+```
+
+See [Project Diagnostics](docs/PROJECT_DIAGNOSTICS.md) for rule scope, severity, freshness behavior, and exit codes.
 
 Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/network studies, uncertainty, consistency checks, and engineering dossiers.
 

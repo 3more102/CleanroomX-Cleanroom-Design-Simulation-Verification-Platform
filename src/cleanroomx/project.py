@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import copy
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,19 @@ from .application import ANALYSIS_SPECS
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
+
+_TOP_LEVEL_CORE_FIELDS = frozenset(
+    {
+        "schema",
+        "schema_version",
+        "application_version",
+        "project",
+        "analyses",
+        "active_analysis_id",
+    }
+)
+_PROJECT_BLOCK_CORE_FIELDS = frozenset({"name", "description", "metadata"})
+_ANALYSIS_CORE_FIELDS = frozenset({"id", "name", "kind", "input"})
 
 
 class ProjectFormatError(ValueError):
@@ -45,15 +59,43 @@ class ProjectFileRevision:
     sha256: str | None
 
 
+def _extension_fields(data: dict, reserved: frozenset[str]) -> dict[str, Any]:
+    """Copy same-schema fields that CleanroomX does not interpret.
+
+    The project loader has historically accepted unknown JSON fields. Keeping them
+    explicitly prevents an open/edit/save cycle from deleting extension metadata
+    owned by plugins, downstream tools, or newer same-schema producers.
+    """
+    return {
+        key: copy.deepcopy(value)
+        for key, value in data.items()
+        if key not in reserved
+    }
+
+
+def _with_core_fields(
+    extension_fields: dict[str, Any],
+    core_fields: dict[str, Any],
+) -> dict[str, Any]:
+    """Serialize opaque extensions while keeping CleanroomX-owned fields authoritative."""
+    result = copy.deepcopy(extension_fields)
+    result.update(core_fields)
+    return result
+
+
 @dataclass
 class AnalysisDocument:
     id: str
     name: str
     kind: str
     input: dict = field(default_factory=dict)
+    extension_fields: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input}
+        return _with_core_fields(
+            self.extension_fields,
+            {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input},
+        )
 
 
 @dataclass
@@ -63,20 +105,29 @@ class ProjectDocument:
     analyses: list[AnalysisDocument] = field(default_factory=list)
     active_analysis_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    project_extension_fields: dict[str, Any] = field(default_factory=dict)
+    top_level_extension_fields: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {
-            "schema": PROJECT_SCHEMA,
-            "schema_version": PROJECT_SCHEMA_VERSION,
-            "application_version": __version__,
-            "project": {
+        project_block = _with_core_fields(
+            self.project_extension_fields,
+            {
                 "name": self.name,
                 "description": self.description,
                 "metadata": self.metadata,
             },
-            "analyses": [item.to_dict() for item in self.analyses],
-            "active_analysis_id": self.active_analysis_id,
-        }
+        )
+        return _with_core_fields(
+            self.top_level_extension_fields,
+            {
+                "schema": PROJECT_SCHEMA,
+                "schema_version": PROJECT_SCHEMA_VERSION,
+                "application_version": __version__,
+                "project": project_block,
+                "analyses": [item.to_dict() for item in self.analyses],
+                "active_analysis_id": self.active_analysis_id,
+            },
+        )
 
     def analysis_by_id(self, analysis_id: str) -> AnalysisDocument:
         for item in self.analyses:
@@ -106,7 +157,13 @@ def _analysis_from_dict(data: dict) -> AnalysisDocument:
     payload = data.get("input", {})
     if not isinstance(payload, dict):
         raise ProjectFormatError(f"analysis {analysis_id!r} input must be an object")
-    return AnalysisDocument(id=analysis_id, name=name, kind=kind, input=payload)
+    return AnalysisDocument(
+        id=analysis_id,
+        name=name,
+        kind=kind,
+        input=payload,
+        extension_fields=_extension_fields(data, _ANALYSIS_CORE_FIELDS),
+    )
 
 
 def _migrate_legacy(data: dict) -> dict:
@@ -210,6 +267,10 @@ def project_from_dict(data: dict) -> ProjectDocument:
         analyses=analyses,
         active_analysis_id=active,
         metadata=metadata,
+        project_extension_fields=_extension_fields(
+            project_data, _PROJECT_BLOCK_CORE_FIELDS
+        ),
+        top_level_extension_fields=_extension_fields(data, _TOP_LEVEL_CORE_FIELDS),
     )
 
 

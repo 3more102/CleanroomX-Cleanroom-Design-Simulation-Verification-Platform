@@ -27,24 +27,38 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Qualify one-time release closure
-        id: closure
+      - name: Qualify current main release publication
+        id: publication
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          workflow=.github/workflows/publish-v0101-release.yml
           git cat-file -e "${TARGET_SHA}^{commit}"
-          git cat-file -e "${TARGET_SHA}:${workflow}"
-          if git cat-file -e "${TARGET_SHA}^:${workflow}" 2>/dev/null; then
+
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
             echo "publish=false" >> "${GITHUB_OUTPUT}"
-            echo "Release workflow already existed in the parent; skip publication."
-          else
-            echo "publish=true" >> "${GITHUB_OUTPUT}"
-            echo "This commit introduces the release workflow; publication is eligible."
+            echo "Skipping stale successful CI for ${TARGET_SHA}; current main is ${current_main_sha}."
+            exit 0
           fi
 
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Release ${TAG} already exists; immutable release is unchanged."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            remote_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${remote_sha}" = "${TARGET_SHA}"
+            echo "Existing tag ${TAG} matches ${TARGET_SHA}; release creation can resume."
+          fi
+
+          echo "publish=true" >> "${GITHUB_OUTPUT}"
+
       - name: Verify validated release baseline
-        if: steps.closure.outputs.publish == 'true'
+        if: steps.publication.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +68,7 @@ jobs:
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.101.0 Release 2 Test Evidence'
 
       - name: Publish tag and GitHub Release
-        if: steps.closure.outputs.publish == 'true'
+        if: steps.publication.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

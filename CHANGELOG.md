@@ -2,11 +2,12 @@
 
 ## Unreleased durable verified persistence — 2026-09-25
 
-- Hardens the shared project/autosave/desktop-export/CLI-output atomic-write primitive: temporary UTF-8 bytes are flushed and file-`fsync()`ed before replacement, the containing directory entry is `fsync()`ed where supported, and the committed destination is re-read from a stable path identity and checked against the intended byte size and SHA-256.
-- Raises an explicit `AtomicWriteVerificationError` when the replaced destination does not match the submitted bytes, preventing callers from treating an unverified persistence operation as successful.
-- Strengthens project and recovery source fingerprinting to reject path replacement during hashing by checking device/inode identity in addition to size and nanosecond modification time.
+- Hardens the shared project/autosave/desktop-export/CLI-output atomic-write primitive instead of introducing a parallel persistence path.
+- Writes exact UTF-8 bytes, flushes and file-`fsync()`s the same-directory staging file, then re-reads a stable staging revision and requires the intended byte size/SHA-256 **before** the authoritative destination can be replaced.
+- After atomic replacement, attempts parent-directory `fsync()` where the platform/filesystem supports directory descriptors and re-reads the committed destination; unexpected sync failures raise `AtomicWriteDurabilityError`, while staged/committed mismatches raise `AtomicWriteVerificationError`.
+- Strengthens project and recovery source fingerprinting to reject same-size/same-mtime path replacement during hashing by checking device/inode identity in addition to size and nanosecond modification time.
 - Preserves project schema version 1, public save call shapes, CLI report formats/options, solver equations, numerical tolerances, acceptance semantics, and the existing optimistic external-write guard.
-- Adds regression coverage for directory-sync invocation, post-replace corruption detection, ordinary replacement cleanup, and the existing guarded-save conflict paths; focused desktop CI now includes `test_project_write_guard.py` alongside CLI-output persistence tests.
+- Adds failure-injection coverage for staged corruption, committed corruption, directory-sync failure, exact UTF-8 bytes, path-replacement fingerprint races, temporary-file cleanup, and existing guarded-save conflicts; focused desktop CI includes `test_project_write_guard.py` alongside CLI-output persistence tests.
 
 ## Unreleased atomic CLI output persistence — 2026-09-25
 

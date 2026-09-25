@@ -58,3 +58,35 @@ def test_snapshot_history_ignores_noop_and_validates_limit():
     for invalid in (0, -1, True, 1.5):
         with pytest.raises((TypeError, ValueError)):
             SnapshotHistory(limit=invalid)
+
+
+def test_snapshot_history_soft_weight_budget_keeps_latest_reversible_edit():
+    history = SnapshotHistory[str](
+        limit=100,
+        max_weight=12,
+        measure=lambda value: len(value.encode("utf-8")),
+    )
+
+    for index in range(6):
+        before = f"b{index:02d}"
+        after = f"a{index:02d}"
+        assert history.record(
+            before=before,
+            after=after,
+            description=f"Edit {index}",
+        ) is True
+
+    assert history.approximate_weight is not None
+    assert history.approximate_weight <= 12
+    restored, description = history.undo()
+    assert description == "Edit 5"
+    assert restored == "b05"
+
+
+def test_snapshot_history_weight_configuration_is_explicit():
+    with pytest.raises(ValueError, match="configured together"):
+        SnapshotHistory[str](max_weight=10)
+    with pytest.raises(ValueError, match="configured together"):
+        SnapshotHistory[str](measure=len)
+    with pytest.raises(ValueError, match="max_weight"):
+        SnapshotHistory[str](max_weight=0, measure=len)

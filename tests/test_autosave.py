@@ -301,6 +301,36 @@ def test_schema_v1_recovery_remains_readable_but_is_marked_unverified(tmp_path):
     assert scan.candidates[0].integrity_status == "legacy_unverified"
 
 
+def test_schema_v1_unknown_integrity_field_is_not_reinterpreted_as_v2(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="legacy-extension-session")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = 1
+    payload["integrity"] = {"legacy_extension": "opaque value"}
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_recovery_artifact(artifact_path)
+    assert loaded["integrity"] == {"legacy_extension": "opaque value"}
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    assert scan.candidates[0].integrity_status == "legacy_unverified"
+
+
 def test_failed_post_write_integrity_verification_preserves_previous_history(
     tmp_path, monkeypatch
 ):

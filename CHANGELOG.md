@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.102.0 synchronized spatial closure — 2026-09-25
+
+- Publishes the completed Design 2D + 3D workspace from one canonical persisted spatial model while preserving the immutable `v0.101.0` tag.
+- Adds deterministic room-level engineering synchronization states: synchronized, geometry newer, engineering newer, conflicting, and unmapped.
+- Persists a minimal last-synchronized geometry/mapping baseline so "newer" is proven instead of inferred, validates that provenance at the project persistence boundary, and preflights project-verification mappings before any engineering input is mutated.
+- Retains floor metadata, room elevation/classification/stable analysis links, door/transfer openings, device placement, resize/snap/nudge controls, deterministic metrics, pressure overlays, and the shared-model 3D view.
+- Final synchronization PR #442 head `db9169555127b1799f261f31113d18cdaf2518ed` passed CI run #1503 with **985 passed** on Python 3.11/3.12/3.13, Windows launcher smoke, clean-wheel checks, and Python 3.13 Tk/Xvfb GUI smoke. The merged main commit `2c8d0696170080d5c333ff1fc809f671aec1ac1d` has the identical Git tree `af3c534599ee0921f8f21c8a14bd7b6b3e209258`.
+- Changes no solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion.
+
 ## v0.101.0 Release 2 closure — 2026-09-25
 
 - Assigns a new package/release identity to the completed Release 2 tree instead of moving or rewriting the already-published `v0.100.0` tag.

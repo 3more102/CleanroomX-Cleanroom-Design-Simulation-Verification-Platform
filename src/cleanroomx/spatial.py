@@ -961,36 +961,191 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
-    normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+def _finite_optional(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _analysis_pressure_target(room: dict, index: int, analysis: Any) -> tuple[dict | None, str | None]:
+    payload = getattr(analysis, "input", None)
+    if not isinstance(payload, dict):
+        return None, None
+    kind = getattr(analysis, "kind", "")
+    if kind == "room_verification":
+        if index == 0:
+            return payload, str(payload.get("name") or room.get("analysis_room_name") or room["name"])
+        return None, None
+    if kind != "project_verification":
+        return None, None
+    raw_rooms = payload.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return None, None
+    target_name = str(room.get("analysis_room_name") or room["name"]).strip()
+    matches = [
+        target
+        for target in raw_rooms
+        if isinstance(target, dict)
+        and str(target.get("name") or "").strip().casefold() == target_name.casefold()
     ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
+    if len(matches) != 1:
+        return None, target_name or None
+    return matches[0], str(matches[0].get("name") or target_name)
+
+
+def _pressure_finding(result: dict | None, room_name: str) -> tuple[dict | None, dict | None]:
+    if not isinstance(result, dict):
+        return None, None
+    if result.get("room") == room_name and isinstance(result.get("findings"), list):
+        reports = [result]
+    else:
+        raw_reports = result.get("rooms")
+        reports = raw_reports if isinstance(raw_reports, list) else []
+    for report in reports:
+        if not isinstance(report, dict) or report.get("room") != room_name:
+            continue
+        findings = report.get("findings")
+        if not isinstance(findings, list):
+            continue
+        for finding in findings:
+            if isinstance(finding, dict) and finding.get("code") == "PRESSURE":
+                return finding, report
+    return None, None
+
+
+def pressure_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> dict:
+    """Project real configured/result pressure evidence onto the spatial model.
+
+    A completed solver result wins over configured observed pressure. If neither
+    exists, a spatial-only pressure is shown only as spatial input. This function
+    never calculates or fabricates pressure values.
+    """
+    normalized = normalize_layout(layout)
     sync = engineering_sync_status(normalized, analysis)
     mapping_by_room = {
         record["room_id"]: record["state"] for record in sync["rooms"]
     }
-    rooms = []
-    for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
-        rooms.append(
+
+    entries: list[dict] = []
+    target_to_room_id: dict[str, str] = {}
+    for index, room in enumerate(normalized["rooms"]):
+        target, target_name = _analysis_pressure_target(room, index, analysis)
+        pressure = None
+        target_pressure = None
+        ach = None
+        source = "unavailable"
+        status = "unavailable"
+
+        if target is not None and target_name is not None:
+            target_to_room_id[target_name] = room["id"]
+            finding, report = _pressure_finding(result, target_name)
+            actual = (
+                _finite_optional(finding.get("actual"))
+                if isinstance(finding, dict)
+                else None
+            )
+            if actual is not None:
+                pressure = actual
+                target_pressure = _finite_optional(finding.get("limit"))
+                ach = _finite_optional(report.get("ach")) if isinstance(report, dict) else None
+                source = "result"
+                status = str(finding.get("status") or "unavailable")
+            else:
+                configured = _finite_optional(target.get("observed_pressure_pa"))
+                if configured is not None:
+                    pressure = configured
+                    source = "configured"
+                    status = "configured"
+                target_pressure = _finite_optional(target.get("min_pressure_pa"))
+
+        if pressure is None:
+            spatial_value = _finite_optional(room.get("pressure_pa"))
+            if spatial_value is not None:
+                pressure = spatial_value
+                source = "spatial"
+                status = "unmapped" if target is None else "configured"
+
+        entries.append(
             {
                 "room_id": room["id"],
-                "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "availability": "available" if pressure is not None else "unavailable",
+                "pressure_pa": pressure,
+                "pressure_target_pa": target_pressure,
+                "source": source,
+                "status": status,
+                "ach": ach,
+                "fill": "#dfe7ef",
                 "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
             }
         )
+
+    pressures = [item["pressure_pa"] for item in entries if item["pressure_pa"] is not None]
+    minimum = min(pressures) if pressures else None
+    maximum = max(pressures) if pressures else None
+    for item in entries:
+        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+
+    payload = getattr(analysis, "input", None)
+    requirements = (
+        payload.get("pressure_cascade", [])
+        if isinstance(payload, dict) and getattr(analysis, "kind", "") == "project_verification"
+        else []
+    )
+    result_findings = (
+        result.get("pressure_cascade", [])
+        if isinstance(result, dict) and isinstance(result.get("pressure_cascade"), list)
+        else []
+    )
+    relationships: list[dict] = []
+    for requirement in requirements if isinstance(requirements, list) else []:
+        if not isinstance(requirement, dict):
+            continue
+        high = str(requirement.get("higher_pressure_room") or "")
+        low = str(requirement.get("lower_pressure_room") or "")
+        finding = next(
+            (
+                item
+                for item in result_findings
+                if isinstance(item, dict)
+                and item.get("higher_pressure_room") == high
+                and item.get("lower_pressure_room") == low
+            ),
+            None,
+        )
+        relationships.append(
+            {
+                "higher_room_id": target_to_room_id.get(high),
+                "lower_room_id": target_to_room_id.get(low),
+                "higher_pressure_room": high,
+                "lower_pressure_room": low,
+                "limit_pa": _finite_optional(requirement.get("min_delta_pa")),
+                "actual_delta_pa": (
+                    _finite_optional(finding.get("actual_delta_pa"))
+                    if isinstance(finding, dict)
+                    else None
+                ),
+                "status": (
+                    str(finding.get("status") or "unavailable")
+                    if isinstance(finding, dict)
+                    else "unavailable"
+                ),
+                "source": "result" if isinstance(finding, dict) else "configured_requirement",
+            }
+        )
+
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,
-        "rooms": rooms,
+        "rooms": entries,
+        "relationships": relationships,
     }
 
 

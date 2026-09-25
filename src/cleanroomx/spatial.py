@@ -585,6 +585,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
@@ -625,9 +626,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Reset 2D", command=self.reset_2d).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+            side="left", padx=(6, 2)
         )
+        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_grid).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
         ttk.Label(toolbar, textvariable=self._validation_var).pack(side="left", padx=(8, 2))
         ttk.Button(
@@ -1112,8 +1115,27 @@ class SpatialDesignWorkspace(ttk.Frame):
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+
+        z_values = [0.0]
+        for room in self.layout["rooms"]:
+            base_z = _finite_number(room.get("elevation_m"), 0.0)
+            z_values.extend((base_z, base_z + room["height_m"]))
+        model_span = max(width_m, height_m, max(z_values) - min(z_values), 1.0)
+        c3w = max(200, self.canvas_3d.winfo_width())
+        c3h = max(200, self.canvas_3d.winfo_height())
+        self.layout["view"]["zoom_3d"] = max(
+            0.2,
+            min(5.0, 0.62 * min(c3w, c3h) / (34.0 * model_span)),
+        )
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
         self._persist("Fit spatial views")
+
+    def reset_2d(self) -> None:
+        self.layout["view"]["zoom_2d"] = 1.0
+        self.layout["view"]["pan_x"] = 0.0
+        self.layout["view"]["pan_y"] = 0.0
+        self._persist("Reset 2D view")
 
     def redraw(self) -> None:
         self._refresh_validation()
@@ -1150,15 +1172,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        sync_by_id = {
+            record["room_id"]: record["state"]
+            for record in engineering_sync_states(self.layout, self._analysis_getter())
+        }
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
+            sync_state = sync_by_id.get(room["id"], "unmapped")
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else (
+                    "#b45309"
+                    if room["id"] in warning_ids
+                    else (
+                        "#b91c1c"
+                        if sync_state == "conflicting"
+                        else ("#7c3aed" if sync_state == "engineering_newer" else ("#0f766e" if sync_state == "geometry_newer" else "#34495e"))
+                    )
+                )
             )
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             canvas.create_rectangle(
@@ -1173,6 +1208,44 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
+            )
+
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for relationship in pressure_relationships(self.layout, self._analysis_getter()):
+            higher = room_by_id.get(relationship.get("higher_room_id"))
+            lower = room_by_id.get(relationship.get("lower_room_id"))
+            if higher is None or lower is None:
+                continue
+            hx, hy = self._world_to_canvas(
+                higher["x_m"] + higher["length_m"] / 2.0,
+                higher["y_m"] + higher["width_m"] / 2.0,
+            )
+            lx, ly = self._world_to_canvas(
+                lower["x_m"] + lower["length_m"] / 2.0,
+                lower["y_m"] + lower["width_m"] / 2.0,
+            )
+            status = relationship["status"]
+            color = "#15803d" if status == "pass" else ("#dc2626" if status == "warning" else "#64748b")
+            canvas.create_line(
+                hx, hy, lx, ly,
+                fill=color,
+                width=2,
+                arrow=tk.LAST,
+                dash=(4, 2) if status == "unavailable" else (),
+                tags=("pressure-cascade",),
+            )
+            delta = relationship.get("delta_pa")
+            minimum = relationship.get("min_delta_pa")
+            if delta is None or minimum is None:
+                label = "pressure unavailable"
+            else:
+                label = f"Δ {delta:g} Pa / ≥ {minimum:g} Pa"
+            canvas.create_text(
+                (hx + lx) / 2.0,
+                (hy + ly) / 2.0 - 10,
+                text=label,
+                fill=color,
+                tags=("pressure-cascade",),
             )
 
         for issue in self._validation_issues:
@@ -1273,18 +1346,19 @@ class SpatialDesignWorkspace(ttk.Frame):
             y0 = room["y_m"] - cy
             x1 = x0 + room["length_m"]
             y1 = y0 + room["width_m"]
-            z = room["height_m"]
+            base_z = _finite_number(room.get("elevation_m"), 0.0)
+            top_z = base_z + room["height_m"]
             base = [
-                self._project_3d(x0, y0, 0),
-                self._project_3d(x1, y0, 0),
-                self._project_3d(x1, y1, 0),
-                self._project_3d(x0, y1, 0),
+                self._project_3d(x0, y0, base_z),
+                self._project_3d(x1, y0, base_z),
+                self._project_3d(x1, y1, base_z),
+                self._project_3d(x0, y1, base_z),
             ]
             top = [
-                self._project_3d(x0, y0, z),
-                self._project_3d(x1, y0, z),
-                self._project_3d(x1, y1, z),
-                self._project_3d(x0, y1, z),
+                self._project_3d(x0, y0, top_z),
+                self._project_3d(x1, y0, top_z),
+                self._project_3d(x1, y1, top_z),
+                self._project_3d(x0, y1, top_z),
             ]
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
@@ -1303,15 +1377,29 @@ class SpatialDesignWorkspace(ttk.Frame):
                 *sum((base[2], base[3], top[3], top[2]), ()),
                 fill="#53687c", outline=outline, tags=(tag, "room3d")
             )
+            pressure_text = (
+                "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
+            )
             canvas.create_text(
-                *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=room["name"],
+                *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, top_z + 0.2),
+                text=f"{room['name']}{pressure_text}",
                 fill="#f0f6fc",
                 tags=(tag, "room3d"),
             )
 
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
         for device in self.layout["devices"]:
-            x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
+            assigned_room = room_by_id.get(device.get("room_id"))
+            room_elevation = (
+                _finite_number(assigned_room.get("elevation_m"), 0.0)
+                if assigned_room is not None
+                else 0.0
+            )
+            x, y = self._project_3d(
+                device["x_m"] - cx,
+                device["y_m"] - cy,
+                room_elevation + device["z_m"],
+            )
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
@@ -1354,9 +1442,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         world = self._canvas_to_world(event.x, event.y)
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
-        grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self._snap_grid.get():
+            grid = self.layout["grid_m"]
+            item["x_m"] = round((item["x_m"] + dx) / grid) * grid
+            item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        else:
+            item["x_m"] += dx
+            item["y_m"] += dy
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()

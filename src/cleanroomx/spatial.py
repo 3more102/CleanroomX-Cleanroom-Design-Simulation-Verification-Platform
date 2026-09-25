@@ -1170,6 +1170,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        on_pull_requested: Callable[[], None] | None = None,
+        result_getter: Callable[[], Any] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -1182,6 +1184,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._analysis_getter = analysis_getter
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
+        self._on_pull_requested = on_pull_requested
+        self._result_getter = result_getter or (lambda: None)
         self._status_setter = status_setter
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
@@ -1222,6 +1226,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
         for device_type, label in (
             ("door", "+ Door"),
+            ("window", "+ Window"),
+            ("opening", "+ Opening"),
             ("ffu", "+ FFU"),
             ("supply", "+ Supply"),
             ("return", "+ Return"),
@@ -1245,8 +1251,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Push dimensions to analysis",
             command=self._on_sync_requested,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Pull dimensions from analysis",
+            command=self._on_pull_requested or (lambda: None),
+            state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -1744,14 +1756,28 @@ class SpatialDesignWorkspace(ttk.Frame):
             y = room["y_m"] + room["width_m"] / 2.0
             z = room["height_m"] if device_type in {"ffu", "supply", "return", "exhaust", "sensor"} else 0.0
             room_id = room["id"]
-            if device_type in {"door", "transfer"}:
+            if device_type in {"door", "window", "opening", "transfer"}:
                 y = room["y_m"]
-                z = 0.0 if device_type == "door" else min(1.0, room["height_m"] / 2.0)
+                z = (
+                    0.0
+                    if device_type in {"door", "opening"}
+                    else min(1.0, room["height_m"] / 2.0)
+                )
         else:
             x = y = z = 0.0
             room_id = None
-        default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
-        default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+        default_width = {
+            "door": 0.9,
+            "window": 1.2,
+            "opening": 1.0,
+            "transfer": 0.6,
+        }.get(device_type, 0.4)
+        default_height = {
+            "door": 2.1,
+            "window": 1.2,
+            "opening": 2.1,
+            "transfer": 0.4,
+        }.get(device_type, 0.2)
         device = {
             "id": f"device-{uuid.uuid4().hex[:8]}",
             "type": device_type,
@@ -1764,7 +1790,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "height_m": default_height,
             "orientation_deg": 0.0,
         }
-        if device_type in {"door", "transfer"}:
+        if device_type in {"door", "window", "opening", "transfer"}:
             device["wall_side"] = "south"
         if device_type == "door":
             device["swing"] = "left"
@@ -1884,6 +1910,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if key and key not in rooms_by_name:
                     rooms_by_name[key] = room
 
+        overlay = pressure_overlay_state(
+            self.layout,
+            analysis,
+            getattr(self, "_result_getter", lambda: None)(),
+        )
+        pressure_by_room = {
+            item["room_id"]: item.get("pressure_pa") for item in overlay["rooms"]
+        }
+
         relationships: list[
             tuple[dict, dict, float | None, float | None, str]
         ] = []
@@ -1905,11 +1940,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else None
             )
             observed_delta = None
-            if high.get("pressure_pa") is not None and low.get("pressure_pa") is not None:
-                observed_delta = (
-                    _finite_number(high.get("pressure_pa"), 0.0)
-                    - _finite_number(low.get("pressure_pa"), 0.0)
-                )
+            high_pressure = pressure_by_room.get(high["id"])
+            low_pressure = pressure_by_room.get(low["id"])
+            if high_pressure is not None and low_pressure is not None:
+                observed_delta = high_pressure - low_pressure
             if observed_delta is None:
                 state = "unavailable"
             elif minimum is None:
@@ -2046,7 +2080,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = pressure_overlay_state(
+            self.layout,
+            self._analysis_getter(),
+            getattr(self, "_result_getter", lambda: None)(),
+        )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -2078,7 +2116,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                     pressure_text = (
                         "\nPressure unavailable"
                         if overlay_room["pressure_pa"] is None
-                        else f"\n{overlay_room['pressure_pa']:g} Pa"
+                        else (
+                            f"\n{overlay_room['pressure_pa']:g} Pa "
+                            f"({overlay_room.get('source', 'spatial')})"
+                        )
                     )
                 else:
                     pressure_text = ""
@@ -2123,6 +2164,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self._show_devices.get():
             symbols = {
                 "door": "D",
+                "window": "W",
+                "opening": "O",
                 "supply": "S",
                 "return": "R",
                 "exhaust": "E",
@@ -2228,7 +2271,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = pressure_overlay_state(
+            self.layout,
+            self._analysis_getter(),
+            getattr(self, "_result_getter", lambda: None)(),
+        )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 

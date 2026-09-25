@@ -761,6 +761,60 @@ def test_next_room_overlap_conflict_cycles_stably_and_labels_rooms():
     assert wrapped == first
 
 
+def test_next_room_overlap_conflict_supports_backward_navigation_and_wrap():
+    rooms = [
+        {
+            "id": "a",
+            "name": "Airlock",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+        },
+        {
+            "id": "b",
+            "name": "Process",
+            "x_m": 2.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+        },
+        {
+            "id": "c",
+            "name": "Pack",
+            "x_m": 1.0,
+            "y_m": 2.0,
+            "length_m": 2.0,
+            "width_m": 4.0,
+        },
+    ]
+
+    last = next_room_overlap_conflict(rooms, direction=-1)
+    previous = next_room_overlap_conflict(
+        rooms, last["index"], direction=-1
+    )
+    wrapped = next_room_overlap_conflict(rooms, 0, direction=-1)
+
+    assert (last["index"], last["count"]) == (2, 3)
+    assert (last["room_a_id"], last["room_b_id"]) == ("b", "c")
+    assert (previous["room_a_id"], previous["room_b_id"]) == ("a", "c")
+    assert wrapped == last
+
+
+def test_next_room_overlap_conflict_resets_out_of_range_cursor_by_direction():
+    rooms = [
+        {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "b", "x_m": 2.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "c", "x_m": 1.0, "y_m": 2.0, "length_m": 2.0, "width_m": 4.0},
+    ]
+
+    forward = next_room_overlap_conflict(rooms, cursor=99)
+    backward = next_room_overlap_conflict(rooms, cursor=99, direction=-1)
+
+    assert forward["index"] == 0
+    assert backward["index"] == 2
+
+
 def test_next_room_overlap_conflict_is_non_mutating_and_handles_invalid_cursor():
     rooms = [
         {

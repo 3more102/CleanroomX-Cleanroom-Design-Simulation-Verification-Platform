@@ -469,9 +469,13 @@ def _spatial_validation_key(layout: dict) -> tuple:
                 device.get("id"),
                 device.get("name"),
                 device.get("room_id"),
+                device.get("type"),
                 device.get("x_m"),
                 device.get("y_m"),
                 device.get("z_m"),
+                device.get("width_m"),
+                device.get("height_m"),
+                device.get("wall_side"),
             )
             for device in devices
             if isinstance(device, dict)
@@ -580,6 +584,47 @@ def validate_layout(value: Any) -> list[dict]:
                     ),
                 }
             )
+        if device["type"] in {"door", "transfer"}:
+            opening_top = z + device.get("height_m", 0.0)
+            if opening_top > room["height_m"] + SPATIAL_GEOMETRY_EPSILON_M:
+                issues.append(
+                    {
+                        "code": "opening_above_room",
+                        "severity": "warning",
+                        "item_ids": [device["id"], room["id"]],
+                        "message": (
+                            f"Opening '{device['name']}' top elevation {opening_top:g} m "
+                            f"exceeds room '{room['name']}' height {room['height_m']:g} m."
+                        ),
+                    }
+                )
+            side = device.get("wall_side")
+            expected = None
+            actual = None
+            if side == "south":
+                expected, actual = room["y_m"], y
+            elif side == "north":
+                expected, actual = room["y_m"] + room["width_m"], y
+            elif side == "west":
+                expected, actual = room["x_m"], x
+            elif side == "east":
+                expected, actual = room["x_m"] + room["length_m"], x
+            if (
+                expected is not None
+                and actual is not None
+                and abs(actual - expected) > SPATIAL_GEOMETRY_EPSILON_M
+            ):
+                issues.append(
+                    {
+                        "code": "opening_off_wall",
+                        "severity": "warning",
+                        "item_ids": [device["id"], room["id"]],
+                        "message": (
+                            f"Opening '{device['name']}' is associated with the {side} wall "
+                            f"of room '{room['name']}' but is not located on that wall."
+                        ),
+                    }
+                )
 
     return issues
 
@@ -648,6 +693,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._metrics_var = tk.StringVar(value="0 rooms")
+        self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
@@ -687,9 +733,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=(6, 2)
-        )
+        ttk.Button(
+            toolbar,
+            text="Sync dimensions to active analysis",
+            command=self._on_sync_requested,
+        ).pack(side="right", padx=2)
+
+        viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
+        viewbar.pack(fill="x")
+        ttk.Checkbutton(
+            viewbar, text="Grid", variable=self._show_grid, command=self.redraw
+        ).pack(side="left", padx=(2, 6))
         for label, variable, key in (
             ("Snap", self._snap_to_grid, "snap_to_grid"),
             ("Pressure", self._show_pressure, "show_pressure"),
@@ -698,18 +752,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("Relations", self._show_relationships, "show_relationships"),
         ):
             ttk.Checkbutton(
-                toolbar,
+                viewbar,
                 text=label,
                 variable=variable,
                 command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
             ).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
-        ttk.Label(toolbar, textvariable=self._validation_var).pack(side="left", padx=(8, 2))
-        ttk.Button(
-            toolbar,
-            text="Sync dimensions to active analysis",
-            command=self._on_sync_requested,
-        ).pack(side="right", padx=2)
+        ttk.Label(viewbar, textvariable=self._zoom_var).pack(side="left", padx=(8, 2))
+        ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
+            side="left", padx=(10, 2)
+        )
+        ttk.Label(viewbar, textvariable=self._validation_var).pack(
+            side="left", padx=(8, 2)
+        )
 
         body = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
@@ -811,6 +865,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
             canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Left>", lambda event: self._nudge_selected(-1, 0))
+            canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
+            canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
+            canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -833,6 +891,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._on_change()
+        self._status_setter("Spatial view settings updated")
         self.redraw()
 
     def _update_metrics(self) -> None:
@@ -845,6 +905,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             f"FFU {counts['ffu']} · Supply {counts['supply']} · "
             f"Return {counts['return']} · Exhaust {counts['exhaust']}"
         )
+        self._zoom_var.set(f"Zoom {self.layout['view']['zoom_2d'] * 100:.0f}%")
 
     def edit_floor(self) -> None:
         floor = self.layout["floor"]
@@ -1630,6 +1691,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return None
 
     def _on_left_down(self, event: tk.Event) -> None:
+        self.canvas_2d.focus_set()
         current = self.canvas_2d.find_withtag("current")
         hit = None
         self._resize_room_id = None
@@ -1717,6 +1779,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_anchor = None
         self._drag_history_before = None
         self._resize_room_id = None
+
+    def _nudge_selected(self, x_direction: int, y_direction: int):
+        item = self._selected_object()
+        if item is None:
+            return "break"
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        step = self.layout["grid_m"] if self._snap_to_grid.get() else 0.1
+        dx = x_direction * step
+        dy = y_direction * step
+        item["x_m"] += dx
+        item["y_m"] += dy
+        if self.selected is not None and self.selected.kind == "room":
+            for device in self.layout["devices"]:
+                if device.get("room_id") == item["id"]:
+                    device["x_m"] += dx
+                    device["y_m"] += dy
+        self._load_property_panel()
+        self._persist(
+            "Spatial item nudged",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
+        return "break"
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)

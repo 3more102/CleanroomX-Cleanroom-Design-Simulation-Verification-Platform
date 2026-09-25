@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     resize_room,
+    snap_point_to_room_wall,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
@@ -537,3 +538,54 @@ def test_resize_room_rejects_unknown_handle_without_mutation():
 
     assert resize_room(room, "center", 8.0, 8.0) is False
     assert room == before
+
+
+def test_snap_point_to_room_wall_uses_nearest_wall_and_clamps_along_segment():
+    room = {
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+    }
+
+    assert snap_point_to_room_wall(room, 5.6, 4.5) == (6.0, 4.5, "e")
+    assert snap_point_to_room_wall(room, 3.0, 2.2) == (3.0, 2.0, "n")
+    assert snap_point_to_room_wall(room, 7.0, 8.0) == (6.0, 6.0, "e")
+
+
+def test_reassign_selected_door_snaps_to_room_wall_and_floor():
+    workspace = object.__new__(spatial_module.SpatialDesignWorkspace)
+    workspace.layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 6,
+                    "width_m": 4,
+                    "height_m": 3,
+                }
+            ],
+            "devices": [
+                {
+                    "id": "door-1",
+                    "type": "door",
+                    "name": "Door 1",
+                    "room_id": "process",
+                    "x_m": 3,
+                    "y_m": 2,
+                    "z_m": 1.2,
+                }
+            ],
+        }
+    )
+    workspace.selected = spatial_module._Hit("device", "door-1")
+
+    workspace._reassign_selected_device_room()
+
+    door = workspace.layout["devices"][0]
+    assert door["room_id"] == "process"
+    assert (door["x_m"], door["y_m"]) == (3.0, 0.0)
+    assert door["z_m"] == 0.0

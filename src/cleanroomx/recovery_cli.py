@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from .persistence import atomic_write_text
 from .recovery_io import load_recovery_test

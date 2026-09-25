@@ -238,6 +238,11 @@ footer { color: #667085; font-size: 12px; padding: 4px 2px 24px; }
     diagnostics_text = escape(_pretty_json(payload["diagnostics"]))
     markdown_text = escape(payload["backend_report_markdown"])
     machine_json = _embedded_json(payload)
+    description_html = (
+        f'  <p>{escape(project["description"])}</p>\n'
+        if project["description"]
+        else ""
+    )
 
     return (
         "<!doctype html>\n"
@@ -253,12 +258,8 @@ footer { color: #667085; font-size: 12px; padding: 4px 2px 24px; }
         "<header>\n"
         f"  <h1>{escape(analysis['name'])}</h1>\n"
         f"  <p class=\"subtitle\">{escape(project['name'])} · CleanroomX {escape(payload['application_version'])}</p>\n"
-        + (
-            f'  <p>{escape(project["description"])}</p>\n'
-            if project["description"]
-            else ""
-        )
-        + '  <div class="grid">\n'
+        f"{description_html}"
+        '  <div class="grid">\n'
         f'    <div class="card"><span class="label">Status</span><span class="value">{escape(analysis["status"])}</span></div>\n'
         f'    <div class="card"><span class="label">Workflow</span><span class="value">{escape(analysis["kind"])}</span></div>\n'
         f'    <div class="card"><span class="label">Analysis ID</span><span class="value">{escape(analysis["id"])}</span></div>\n'

@@ -31,4 +31,4 @@ Automated correctness/regression coverage is not a formal independent security a
 
 ## v0.100 file-integrity evidence
 
-Successful application runs record a canonical SHA-256 identity for the submitted input. File-backed consistency and dossier workflows record before/after SHA-256 plus byte-size evidence for referenced files so changes during a run are visible in Diagnostics and exported run bundles. These hashes are integrity/provenance evidence, not authentication or a digital signature.
+Successful application runs record a canonical SHA-256 identity for the submitted input. File-backed consistency and dossier workflows record before/after SHA-256 plus byte-size evidence for referenced files so changes during a run are visible in Diagnostics and exported run bundles. Exported run bundles also include the immutable submitted-input snapshot and a canonical SHA-256 over the complete bundle document; verification detects later modification and cross-checks the snapshot against execution provenance. These hashes are integrity/provenance evidence, not authentication, authorization, or a digital signature.

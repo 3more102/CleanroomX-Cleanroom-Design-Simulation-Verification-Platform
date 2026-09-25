@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -17,6 +18,13 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+def _project_json_snapshot(value: Any) -> Any:
+    try:
+        return clone_strict_json(value)
+    except StrictJSONError as exc:
+        raise ProjectFormatError(str(exc)) from exc
 
 
 class ProjectWriteConflictError(RuntimeError):
@@ -53,7 +61,9 @@ class AnalysisDocument:
     input: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input}
+        return _project_json_snapshot(
+            {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input}
+        )
 
 
 @dataclass
@@ -65,7 +75,7 @@ class ProjectDocument:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        return {
+        return _project_json_snapshot({
             "schema": PROJECT_SCHEMA,
             "schema_version": PROJECT_SCHEMA_VERSION,
             "application_version": __version__,
@@ -74,19 +84,23 @@ class ProjectDocument:
                 "description": self.description,
                 "metadata": self.metadata,
             },
-            "analyses": [item.to_dict() for item in self.analyses],
+            "analyses": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "kind": item.kind,
+                    "input": item.input,
+                }
+                for item in self.analyses
+            ],
             "active_analysis_id": self.active_analysis_id,
-        }
+        })
 
     def analysis_by_id(self, analysis_id: str) -> AnalysisDocument:
         for item in self.analyses:
             if item.id == analysis_id:
                 return item
         raise KeyError(analysis_id)
-
-
-def _reject_json_constant(value: str):
-    raise ProjectFormatError(f"non-finite JSON constant is not allowed: {value}")
 
 
 def _validated_string(value: Any, field_name: str) -> str:
@@ -157,16 +171,13 @@ def _migrate_legacy(data: dict) -> dict:
 def project_from_dict(data: dict) -> ProjectDocument:
     if not isinstance(data, dict):
         raise ProjectFormatError("project file must contain a JSON object")
-    try:
-        json.dumps(data, allow_nan=False)
-    except (TypeError, ValueError) as exc:
-        raise ProjectFormatError("project must contain only strict JSON values") from exc
+    data = _project_json_snapshot(data)
     data = _migrate_legacy(data)
 
     if data.get("schema") != PROJECT_SCHEMA:
         raise ProjectFormatError(f"project schema must be {PROJECT_SCHEMA!r}")
     version = data.get("schema_version")
-    if not isinstance(version, int):
+    if type(version) is not int:
         raise ProjectFormatError("schema_version must be an integer")
     if version > PROJECT_SCHEMA_VERSION:
         raise ProjectFormatError(
@@ -220,14 +231,13 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
 def load_project_document(path: str | Path) -> ProjectDocument:
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        data = strict_json_loads(source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except StrictJSONError as exc:
+        raise ProjectFormatError(str(exc)) from exc
     return project_from_dict(data)
 
 

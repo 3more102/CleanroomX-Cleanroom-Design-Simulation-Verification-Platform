@@ -47,7 +47,9 @@ from .project import (
     save_project_document_guarded,
 )
 from .project_history import ProjectEditHistory, ProjectHistoryState
+from .project_revisions import restore_project_revision, scan_project_revisions
 from .recovery_ui import RecoveryCenter
+from .revision_ui import ProjectRevisionCenter
 from .run_history import (
     RUN_HISTORY_METADATA_KEY,
     RunHistoryIntegrityError,
@@ -373,6 +375,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Open Project...", accelerator="Ctrl+O", command=self.open_project)
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
+        file_menu.add_command(label="Saved Revisions...", command=self.show_saved_revisions)
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
@@ -1481,6 +1484,81 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return False
+        return True
+
+    def show_saved_revisions(self) -> bool:
+        if self.project_path is None:
+            self.status_var.set("Save the project before browsing saved revisions.")
+            return False
+
+        try:
+            scan = scan_project_revisions(self.project_path)
+        except OSError as exc:
+            messagebox.showerror(
+                "Revision scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        if not scan.revisions and not scan.issues:
+            self.status_var.set("No saved project revisions found.")
+            return False
+
+        dialog = ProjectRevisionCenter(self.root, scan)
+        self.root.wait_window(dialog)
+        if dialog.result is None:
+            return False
+
+        base_name = self.project_path.name
+        if base_name.endswith(".cleanroomx.json"):
+            base_name = base_name[: -len(".cleanroomx.json")]
+        destination_text = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Restore saved revision as a copy",
+            initialdir=str(self.project_path.parent),
+            initialfile=f"{base_name}.restored.cleanroomx.json",
+            defaultextension=".cleanroomx.json",
+            filetypes=[
+                ("CleanroomX project", "*.cleanroomx.json"),
+                ("JSON files", "*.json"),
+            ],
+        )
+        if not destination_text:
+            return False
+
+        destination = Path(destination_text)
+        try:
+            restored_path = restore_project_revision(
+                dialog.result,
+                destination,
+                expected_source_path=self.project_path,
+            )
+        except ProjectWriteConflictError:
+            self.status_var.set(
+                f"Revision restore blocked: {destination.name} changed on disk."
+            )
+            messagebox.showwarning(
+                "Restore destination changed on disk",
+                (
+                    f"{destination.name} changed after it was selected. "
+                    "CleanroomX did not overwrite it. Choose another destination "
+                    "or retry after reviewing the file."
+                ),
+                parent=self.root,
+            )
+            return False
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Revision restore failed",
+                (
+                    f"{exc}\n\n"
+                    "The current project and the saved revision artifact were preserved."
+                ),
+                parent=self.root,
+            )
+            return False
+
+        self.status_var.set(f"Restored saved revision as {restored_path.name}")
         return True
 
     def offer_startup_recovery(self) -> bool:

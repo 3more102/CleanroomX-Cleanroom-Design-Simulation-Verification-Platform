@@ -295,3 +295,95 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
     }
 
     assert validate_layout(layout) == []
+
+def test_normalize_layout_repairs_duplicate_and_missing_ids_deterministically():
+    raw = {
+        "rooms": [
+            {
+                "id": "dup",
+                "name": "Alpha",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "dup",
+                "name": "Beta",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "name": "Gamma",
+                "x_m": 10,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "device",
+                "type": "sensor",
+                "name": "S1",
+                "room_id": "dup",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 1,
+            },
+            {
+                "id": "device",
+                "type": "sensor",
+                "name": "S2",
+                "room_id": "dup",
+                "x_m": 2,
+                "y_m": 2,
+                "z_m": 1,
+            },
+            {
+                "type": "equipment",
+                "name": "Tool",
+                "room_id": None,
+                "x_m": 0,
+                "y_m": 0,
+                "z_m": 0,
+            },
+        ],
+    }
+
+    first = normalize_layout(raw)
+    second = normalize_layout(raw)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == ["dup", "dup-2", "gamma"]
+    assert [device["id"] for device in first["devices"]] == [
+        "device",
+        "device-2",
+        "device-3",
+    ]
+
+
+def test_derive_layout_assigns_unique_deterministic_ids_for_colliding_room_names():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "A/B", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "A B", "length_m": 4, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+
+    first = derive_layout_from_analysis(analysis)
+    second = derive_layout_from_analysis(analysis)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == ["a-b", "a-b-2"]
+

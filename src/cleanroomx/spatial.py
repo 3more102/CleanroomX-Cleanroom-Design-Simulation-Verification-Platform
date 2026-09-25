@@ -15,6 +15,7 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_transforms import fit_3d_view, project_3d
 
 
 class SpatialSyncError(ValueError):
@@ -129,6 +130,9 @@ def normalize_layout(value: Any) -> dict:
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+                source_name = str(raw.get("pressure_source") or "").strip().lower()
+                if source_name in {"user", "engineering_input"}:
+                    room["pressure_source"] = source_name
             for field in ("classification", "analysis_room_name"):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
@@ -298,6 +302,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         }
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+            room["pressure_source"] = "engineering_input"
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     analysis_id = str(getattr(analysis, "id", "") or "").strip()
@@ -1507,8 +1512,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             pressure = self._property_vars["pressure_pa"].get().strip()
             if pressure:
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
+                item["pressure_source"] = "user"
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+                item.pop("pressure_source", None)
             for key in ("classification", "analysis_room_name"):
                 text = self._property_vars[key].get().strip()
                 if text:
@@ -1672,13 +1679,42 @@ class SpatialDesignWorkspace(ttk.Frame):
         height_m = max(1.0, max_y - min_y)
         cw = max(200, self.canvas_2d.winfo_width())
         ch = max(200, self.canvas_2d.winfo_height())
-        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (55 * width_m), ch / (55 * height_m))))
+        self.layout["view"]["zoom_2d"] = max(
+            0.2,
+            min(5.0, 0.78 * min(cw / (55 * width_m), ch / (55 * height_m))),
+        )
         scale = self._scale_2d()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+
+        points_3d: list[tuple[float, float, float]] = []
+        for room in self.layout["rooms"]:
+            x0 = room["x_m"] - cx
+            x1 = x0 + room["length_m"]
+            y0 = room["y_m"] - cy
+            y1 = y0 + room["width_m"]
+            z0 = room.get(
+                "floor_elevation_m",
+                self.layout["floor"]["elevation_m"],
+            )
+            z1 = z0 + room["height_m"]
+            for x in (x0, x1):
+                for y in (y0, y1):
+                    points_3d.append((x, y, z0))
+                    points_3d.append((x, y, z1))
+        zoom_3d, pan_3d_x, pan_3d_y = fit_3d_view(
+            points_3d,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            max_zoom=5.0,
+        )
+        self.layout["view"]["zoom_3d"] = zoom_3d
+        self.layout["view"]["pan_3d_x"] = pan_3d_x
+        self.layout["view"]["pan_3d_y"] = pan_3d_y
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
@@ -1835,11 +1871,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
-                pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
-                )
+                if self._show_pressure.get() and room.get("pressure_pa") is not None:
+                    pressure_source = {
+                        "user": "user",
+                        "engineering_input": "engineering input",
+                    }.get(room.get("pressure_source"), "spatial")
+                    pressure_text = f"\n{room['pressure_pa']:g} Pa · {pressure_source}"
+                elif self._show_pressure.get():
+                    pressure_text = "\nPressure unavailable"
+                else:
+                    pressure_text = ""
                 canvas.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2,
@@ -1945,15 +1986,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
-        az = math.radians(self.layout["view"]["azimuth_deg"])
-        el = math.radians(self.layout["view"]["elevation_deg"])
-        xr = x * math.cos(az) - y * math.sin(az)
-        yr = x * math.sin(az) + y * math.cos(az)
-        sy = yr * math.sin(el) - z * math.cos(el)
-        scale = 34.0 * self.layout["view"]["zoom_3d"]
-        return (
-            self.canvas_3d.winfo_width() / 2 + self.layout["view"]["pan_3d_x"] + xr * scale,
-            self.canvas_3d.winfo_height() * 0.66 + self.layout["view"]["pan_3d_y"] + sy * scale,
+        return project_3d(
+            x,
+            y,
+            z,
+            width_px=max(1, self.canvas_3d.winfo_width()),
+            height_px=max(1, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            zoom=self.layout["view"]["zoom_3d"],
+            pan_x_px=self.layout["view"]["pan_3d_x"],
+            pan_y_px=self.layout["view"]["pan_3d_y"],
         )
 
     def _draw_3d(self) -> None:

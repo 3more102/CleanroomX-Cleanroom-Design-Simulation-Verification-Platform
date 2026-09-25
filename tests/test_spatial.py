@@ -5,9 +5,12 @@ import math
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    build_spatial_audit,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    spatial_audit_json,
+    spatial_design_fingerprint,
     sync_layout_to_analysis,
     validate_layout,
 )
@@ -295,3 +298,144 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
     }
 
     assert validate_layout(layout) == []
+
+
+def test_spatial_design_fingerprint_is_order_and_view_independent_but_geometry_sensitive():
+    base = {
+        "grid_m": 0.5,
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+                "pressure_pa": 30,
+            },
+            {
+                "id": "ante",
+                "name": "Ante",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 3,
+                "width_m": 4,
+                "height_m": 3,
+                "pressure_pa": 10,
+            },
+        ],
+        "devices": [
+            {
+                "id": "ffu",
+                "type": "ffu",
+                "name": "FFU-1",
+                "room_id": "process",
+                "x_m": 2.5,
+                "y_m": 2,
+                "z_m": 3,
+            },
+            {
+                "id": "door",
+                "type": "door",
+                "name": "D-1",
+                "room_id": "ante",
+                "x_m": 5,
+                "y_m": 2,
+                "z_m": 0,
+            },
+        ],
+        "view": {"zoom_2d": 1.0, "azimuth_deg": 35},
+    }
+    presentation_variant = {
+        **base,
+        "grid_m": 2.0,
+        "rooms": list(reversed(base["rooms"])),
+        "devices": list(reversed(base["devices"])),
+        "view": {"zoom_2d": 4.0, "azimuth_deg": 170, "pan_x": 250},
+    }
+
+    fingerprint = spatial_design_fingerprint(base)
+
+    assert len(fingerprint) == 64
+    assert spatial_design_fingerprint(presentation_variant) == fingerprint
+
+    geometry_variant = {
+        **base,
+        "rooms": [dict(base["rooms"][0], length_m=5.25), base["rooms"][1]],
+    }
+    assert spatial_design_fingerprint(geometry_variant) != fingerprint
+
+
+def test_build_spatial_audit_reports_metrics_schedule_and_validation():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+                "pressure_pa": 30,
+            },
+            {
+                "id": "ante",
+                "name": "Ante",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 3,
+                "height_m": 3,
+                "pressure_pa": 10,
+            },
+        ],
+        "devices": [
+            {
+                "id": "ffu",
+                "type": "ffu",
+                "name": "FFU-1",
+                "room_id": "process",
+                "x_m": 2.5,
+                "y_m": 2,
+                "z_m": 3,
+            },
+            {
+                "id": "orphan",
+                "type": "sensor",
+                "name": "Sensor",
+                "room_id": "missing",
+                "x_m": 0,
+                "y_m": 0,
+                "z_m": 0,
+            },
+        ],
+    }
+
+    audit = build_spatial_audit(layout)
+
+    assert audit["schema"] == "cleanroomx.spatial_audit"
+    assert audit["schema_version"] == 1
+    assert len(audit["design_sha256"]) == 64
+    assert audit["summary"] == {
+        "room_count": 2,
+        "device_count": 2,
+        "assigned_device_count": 1,
+        "unassigned_or_orphan_device_count": 1,
+        "total_floor_area_m2": 32.0,
+        "total_room_volume_m3": 96.0,
+        "pressure_min_pa": 10.0,
+        "pressure_max_pa": 30.0,
+        "validation_status": "warning",
+        "warning_count": 1,
+    }
+    assert audit["rooms"][0]["id"] == "ante"
+    assert audit["rooms"][0]["floor_area_m2"] == 12.0
+    assert audit["rooms"][1]["volume_m3"] == 60.0
+    assert audit["validation"]["issues"][0]["code"] == "orphan_device_room"
+
+    serialized = spatial_audit_json(layout)
+    assert serialized.endswith("\n")
+    assert '"schema": "cleanroomx.spatial_audit"' in serialized
+    assert '"design_sha256"' in serialized

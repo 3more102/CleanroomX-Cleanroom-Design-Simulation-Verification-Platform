@@ -22,6 +22,7 @@ from .project import (
     project_from_dict,
     project_save_lock,
 )
+from .strict_json import StrictJSONError, strict_json_loads
 
 
 PROJECT_REVISION_SCHEMA = "cleanroomx.project-revision"
@@ -101,18 +102,15 @@ def _project_from_bytes(payload: bytes) -> tuple[ProjectDocument, dict[str, Any]
     except UnicodeDecodeError as exc:
         raise ProjectRevisionError("saved project revision must be UTF-8") from exc
     try:
-        data = json.loads(
-            text,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ProjectRevisionError(
-                    f"non-finite JSON constant is not allowed: {value}"
-                )
-            ),
-        )
+        data = strict_json_loads(text)
     except json.JSONDecodeError as exc:
         raise ProjectRevisionError(
             f"saved project revision contains invalid JSON at line {exc.lineno}, "
             f"column {exc.colno}"
+        ) from exc
+    except StrictJSONError as exc:
+        raise ProjectRevisionError(
+            f"saved project revision contains invalid strict JSON: {exc}"
         ) from exc
     try:
         project = project_from_dict(data)
@@ -189,19 +187,16 @@ def preserve_project_revision(
 
 def _load_payload(path: Path) -> dict[str, Any]:
     try:
-        data = json.loads(
-            path.read_text(encoding="utf-8"),
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ProjectRevisionError(
-                    f"non-finite JSON constant is not allowed: {value}"
-                )
-            ),
-        )
+        data = strict_json_loads(path.read_text(encoding="utf-8"))
     except UnicodeDecodeError as exc:
         raise ProjectRevisionError("project revision must be UTF-8 text") from exc
     except json.JSONDecodeError as exc:
         raise ProjectRevisionError(
             f"invalid project revision JSON at line {exc.lineno}, column {exc.colno}"
+        ) from exc
+    except StrictJSONError as exc:
+        raise ProjectRevisionError(
+            f"invalid project revision strict JSON: {exc}"
         ) from exc
     if not isinstance(data, dict):
         raise ProjectRevisionError("project revision must contain a JSON object")

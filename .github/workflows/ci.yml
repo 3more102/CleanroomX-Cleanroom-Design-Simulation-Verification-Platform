@@ -92,6 +92,9 @@ jobs:
           tests/test_gui_project_revisions.py
       - name: Run complete test suite
         run: python -m pytest -q
+      - name: Benchmark project revision save path
+        if: matrix.python-version == '3.13'
+        run: python tools/benchmark_project_revision_save.py
       - name: Build wheel and verify installed application
         run: |
           rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env

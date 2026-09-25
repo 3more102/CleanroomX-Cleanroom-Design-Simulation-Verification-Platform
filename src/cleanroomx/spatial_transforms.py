@@ -115,3 +115,24 @@ def project_3d(
         float(width_px) / 2.0 + float(pan_x_px) + xr * scale,
         float(height_px) * 0.66 + float(pan_y_px) + sy * scale,
     )
+
+
+def fit_3d_zoom(
+    width_m: float,
+    depth_m: float,
+    height_m: float,
+    *,
+    width_px: float,
+    height_px: float,
+    padding: float = 0.78,
+) -> float:
+    """Return a conservative orthographic zoom that keeps a model inside the viewport."""
+    model_diagonal = max(1.0, math.hypot(float(width_m), float(depth_m)))
+    vertical_span = max(1.0, model_diagonal + max(0.0, float(height_m)))
+    usable_width = max(1.0, float(width_px)) * float(padding)
+    usable_height = max(1.0, float(height_px)) * float(padding)
+    raw = min(
+        usable_width / (BASE_3D_PIXELS_PER_M * model_diagonal),
+        usable_height / (BASE_3D_PIXELS_PER_M * vertical_span),
+    )
+    return clamp_zoom(raw)

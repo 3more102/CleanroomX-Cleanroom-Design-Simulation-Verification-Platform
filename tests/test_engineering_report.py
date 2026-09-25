@@ -12,6 +12,7 @@ from cleanroomx.engineering_report import (
     EngineeringReportFreshnessError,
     build_engineering_report_payload,
     engineering_report_html,
+    engineering_report_markdown,
     verify_engineering_report_payload,
 )
 
@@ -54,6 +55,7 @@ def test_engineering_report_is_deterministic_self_contained_and_verifiable():
         analysis_name="Room A",
         analysis_kind="room_verification",
         input_payload=input_payload,
+        generated_at_utc="2026-09-25T12:00:00Z",
     )
     second = engineering_report_html(
         run,
@@ -63,6 +65,7 @@ def test_engineering_report_is_deterministic_self_contained_and_verifiable():
         analysis_name="Room A",
         analysis_kind="room_verification",
         input_payload=copy.deepcopy(input_payload),
+        generated_at_utc="2026-09-25T12:00:00Z",
     )
 
     assert first == second
@@ -146,3 +149,45 @@ def test_engineering_report_payload_rejects_non_json_project_description_type():
             analysis_kind="room_verification",
             input_payload=input_payload,
         )
+
+
+def test_engineering_report_preserves_release2_identity_timestamp_and_limitations():
+    input_payload, run = _run()
+    payload = build_engineering_report_payload(
+        run,
+        project_name="Facility",
+        project_description="Review package",
+        analysis_id="room-a",
+        analysis_name="Room A",
+        analysis_kind="room_verification",
+        input_payload=input_payload,
+        generated_at_utc="2026-09-25T12:34:56Z",
+    )
+
+    assert payload["generated_at_utc"] == "2026-09-25T12:34:56Z"
+    assert len(payload["project"]["state_sha256"]) == 64
+    assert payload["analysis"]["run_sha256"] == run.to_dict()["integrity"]["sha256"]
+    assert payload["plot"] == run.to_dict()["plot"]
+    assert payload["limitations"]
+    assert verify_engineering_report_payload(payload) is True
+
+
+def test_unified_markdown_report_uses_verified_report_payload():
+    input_payload, run = _run()
+    document = engineering_report_markdown(
+        run,
+        project_name="Facility",
+        project_description="Review package",
+        analysis_id="room-a",
+        analysis_name="Room A",
+        analysis_kind="room_verification",
+        input_payload=input_payload,
+        generated_at_utc="2026-09-25T12:34:56Z",
+    )
+
+    assert document.startswith("# Room A — CleanroomX Engineering Report\n")
+    assert "Generated UTC: 2026-09-25T12:34:56Z" in document
+    assert "Run SHA-256:" in document
+    assert "Project state SHA-256:" in document
+    assert "## Limitations" in document
+    assert "## Traceability evidence" in document

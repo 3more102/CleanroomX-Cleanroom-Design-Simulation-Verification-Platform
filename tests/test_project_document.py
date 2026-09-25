@@ -130,7 +130,7 @@ def test_checked_project_save_rejects_external_content_change_and_preserves_disk
     save_project_document(path, externally_changed)
     external_bytes = path.read_bytes()
 
-    with pytest.raises(ProjectFileConflictError, match="changed, was replaced, or was deleted"):
+    with pytest.raises(ProjectFileConflictError, match="content or existence changed"):
         save_project_document(
             path,
             ProjectDocument(name="Local edit"),
@@ -149,7 +149,7 @@ def test_checked_project_save_rejects_external_deletion(tmp_path):
     )
     path.unlink()
 
-    with pytest.raises(ProjectFileConflictError, match="deleted on disk"):
+    with pytest.raises(ProjectFileConflictError, match="content or existence changed"):
         save_project_document(
             path,
             ProjectDocument(name="Local edit"),
@@ -195,3 +195,25 @@ def test_load_with_fingerprint_hashes_the_exact_parsed_project_bytes(tmp_path):
     assert fingerprint["exists"] is True
     assert fingerprint["size"] == len(path.read_bytes())
     assert fingerprint["sha256"] == project_file_fingerprint(path)["sha256"]
+
+
+
+def test_checked_project_save_rejects_destination_created_after_missing_baseline(
+    tmp_path,
+):
+    path = tmp_path / "new-destination.cleanroomx.json"
+    missing_fingerprint = project_file_fingerprint(path)
+    assert missing_fingerprint["exists"] is False
+
+    save_project_document(path, ProjectDocument(name="External creator"))
+    external_bytes = path.read_bytes()
+
+    with pytest.raises(ProjectFileConflictError, match="content or existence changed"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local Save As"),
+            expected_fingerprint=missing_fingerprint,
+        )
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path).name == "External creator"

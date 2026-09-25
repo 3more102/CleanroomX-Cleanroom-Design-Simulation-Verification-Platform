@@ -533,9 +533,11 @@ class SpatialDesignWorkspace(ttk.Frame):
 
         self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
         self.canvas_3d.bind("<Delete>", lambda event: self.delete_selected())
+        self.canvas_2d.bind("<Key-f>", lambda event: self.center_selected())
+        self.canvas_2d.bind("<Key-F>", lambda event: self.center_selected())
+        self.canvas_3d.bind("<Key-f>", lambda event: self.center_selected())
+        self.canvas_3d.bind("<Key-F>", lambda event: self.center_selected())
         self.bind_all("<Escape>", lambda event: self.clear_selection())
-        self.bind_all("<Key-f>", lambda event: self.center_selected())
-        self.bind_all("<Key-F>", lambda event: self.center_selected())
         self._update_view_mode_buttons()
 
     def _update_view_mode_buttons(self) -> None:

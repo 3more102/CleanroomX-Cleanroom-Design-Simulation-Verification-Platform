@@ -6,6 +6,7 @@ import pytest
 
 import cleanroomx.project as project_module
 from cleanroomx.project import (
+    AtomicWriteDurabilityError,
     AtomicWriteVerificationError,
     ProjectDocument,
     atomic_write_text,
@@ -88,3 +89,22 @@ def test_project_loader_reports_invalid_utf8_as_project_format_error(tmp_path):
 
     with pytest.raises(project_module.ProjectFormatError, match="UTF-8"):
         project_module.load_project_document(path)
+
+
+def test_atomic_write_reports_verified_but_not_durable_state(tmp_path, monkeypatch):
+    target = tmp_path / "project.cleanroomx.json"
+
+    def fail_directory_fsync(_directory):
+        raise OSError("directory fsync failed")
+
+    monkeypatch.setattr(project_module, "_fsync_directory", fail_directory_fsync)
+
+    with pytest.raises(AtomicWriteDurabilityError) as exc_info:
+        atomic_write_text(target, "verified\n")
+
+    assert target.read_bytes() == b"verified\n"
+    assert exc_info.value.path == target
+    assert exc_info.value.current_revision == project_module.capture_project_file_revision(
+        target
+    )
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []

@@ -43,6 +43,7 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .run_history import RunHistory, RunHistoryEntry
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -190,6 +191,7 @@ class CleanroomXApp:
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
+        self._run_history = RunHistory()
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
@@ -249,6 +251,10 @@ class CleanroomXApp:
         file_menu.add_separator()
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
+        file_menu.add_command(
+            label="Export Selected Historical Run Bundle JSON...",
+            command=self.export_history_run_bundle_json,
+        )
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
@@ -396,6 +402,68 @@ class CleanroomXApp:
         self.report_text = self._add_text_tab("Report")
         self.diagnostics_text = self._add_text_tab("Diagnostics")
 
+        history_tab = ttk.Frame(self.notebook, padding=6)
+        self.notebook.add(history_tab, text="Run History")
+        history_header = ttk.Frame(history_tab)
+        history_header.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            history_header,
+            text=(
+                "Accepted runs are retained as immutable session snapshots. "
+                "Historical evidence never becomes the current result automatically."
+            ),
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            history_header,
+            text="Export selected run bundle...",
+            command=self.export_history_run_bundle_json,
+        ).pack(side="right", padx=(8, 0))
+
+        history_list = ttk.Frame(history_tab)
+        history_list.pack(fill="x")
+        self.history_tree = ttk.Treeview(
+            history_list,
+            columns=("sequence", "analysis", "status", "relation", "input"),
+            show="headings",
+            height=8,
+            selectmode="browse",
+        )
+        for key, title, width in (
+            ("sequence", "#", 55),
+            ("analysis", "Analysis at run", 250),
+            ("status", "Status", 105),
+            ("relation", "Current relation", 145),
+            ("input", "Input SHA-256", 145),
+        ):
+            self.history_tree.heading(key, text=title)
+            self.history_tree.column(key, width=width, stretch=key == "analysis")
+        history_scroll = ttk.Scrollbar(
+            history_list, orient="vertical", command=self.history_tree.yview
+        )
+        self.history_tree.configure(yscrollcommand=history_scroll.set)
+        self.history_tree.pack(side="left", fill="x", expand=True)
+        history_scroll.pack(side="right", fill="y")
+        self.history_tree.bind("<<TreeviewSelect>>", self._show_run_history_selection)
+
+        history_detail = ttk.Frame(history_tab)
+        history_detail.pack(fill="both", expand=True, pady=(6, 0))
+        self.history_text = tk.Text(history_detail, wrap="none", state="disabled")
+        history_detail_y = ttk.Scrollbar(
+            history_detail, orient="vertical", command=self.history_text.yview
+        )
+        history_detail_x = ttk.Scrollbar(
+            history_detail, orient="horizontal", command=self.history_text.xview
+        )
+        self.history_text.configure(
+            yscrollcommand=history_detail_y.set,
+            xscrollcommand=history_detail_x.set,
+        )
+        self.history_text.grid(row=0, column=0, sticky="nsew")
+        history_detail_y.grid(row=0, column=1, sticky="ns")
+        history_detail_x.grid(row=1, column=0, sticky="ew")
+        history_detail.rowconfigure(0, weight=1)
+        history_detail.columnconfigure(0, weight=1)
+
         plot_tab = ttk.Frame(self.notebook)
         self.notebook.add(plot_tab, text="Plot")
         self.plot_canvas = tk.Canvas(plot_tab, highlightthickness=0)
@@ -457,6 +525,10 @@ class CleanroomXApp:
     def _clear_run_cache(self) -> None:
         self._runs_by_analysis.clear()
         self._clear_rendered_run()
+        history = getattr(self, "_run_history", None)
+        if history is not None:
+            history.clear()
+        self._refresh_run_history()
 
     def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
         if analysis_id is None:
@@ -503,6 +575,111 @@ class CleanroomXApp:
             )
             return None
         return run
+
+    def _record_completed_run(
+        self, analysis: AnalysisDocument, run: AnalysisRun
+    ) -> None:
+        """Publish the latest result and retain an isolated historical snapshot."""
+        self._runs_by_analysis[analysis.id] = run
+        self.last_run = run
+        self.last_run_analysis_id = analysis.id
+        history = getattr(self, "_run_history", None)
+        if history is None:
+            history = RunHistory()
+            self._run_history = history
+        history.append(analysis.id, analysis.name, run)
+        self._refresh_run_history()
+
+    def _run_history_relation(self, entry: RunHistoryEntry) -> str:
+        try:
+            analysis = self.project.analysis_by_id(entry.analysis_id)
+        except KeyError:
+            return "analysis removed"
+        if analysis_run_matches_input(entry.run, analysis.kind, analysis.input):
+            return "matches current"
+        return "historical input"
+
+    def _refresh_run_history(self) -> None:
+        tree = getattr(self, "history_tree", None)
+        if tree is None:
+            return
+
+        selected_sequence: int | None = None
+        selection = tree.selection()
+        if selection:
+            token = str(selection[0])
+            if token.startswith("run-"):
+                try:
+                    selected_sequence = int(token[4:])
+                except ValueError:
+                    selected_sequence = None
+
+        for item in tree.get_children():
+            tree.delete(item)
+
+        history = getattr(self, "_run_history", None)
+        entries = () if history is None else history.entries()
+        available: set[int] = set()
+        for entry in entries:
+            available.add(entry.sequence)
+            digest = entry.input_sha256 or "unavailable"
+            tree.insert(
+                "",
+                "end",
+                iid=f"run-{entry.sequence}",
+                values=(
+                    entry.sequence,
+                    entry.analysis_name,
+                    entry.run.status,
+                    self._run_history_relation(entry),
+                    digest[:12],
+                ),
+            )
+
+        if selected_sequence not in available:
+            selected_sequence = entries[-1].sequence if entries else None
+        if selected_sequence is not None:
+            iid = f"run-{selected_sequence}"
+            tree.selection_set(iid)
+            tree.focus(iid)
+            tree.see(iid)
+            self._show_run_history_selection()
+        else:
+            history_text = getattr(self, "history_text", None)
+            if history_text is not None:
+                self._set_text(history_text, "")
+
+    def _selected_run_history_entry(self) -> RunHistoryEntry | None:
+        tree = getattr(self, "history_tree", None)
+        history = getattr(self, "_run_history", None)
+        if tree is None or history is None:
+            return None
+        selection = tree.selection()
+        if not selection:
+            return None
+        token = str(selection[0])
+        if not token.startswith("run-"):
+            return None
+        try:
+            sequence = int(token[4:])
+            return history.get(sequence)
+        except (KeyError, ValueError):
+            return None
+
+    def _show_run_history_selection(self, event=None) -> None:
+        entry = self._selected_run_history_entry()
+        history_text = getattr(self, "history_text", None)
+        if history_text is None:
+            return
+        if entry is None:
+            self._set_text(history_text, "")
+            return
+        detail = entry.to_dict()
+        detail["current_relation"] = self._run_history_relation(entry)
+        self._set_text(
+            history_text,
+            json.dumps(detail, indent=2, ensure_ascii=False, allow_nan=False),
+        )
 
     def _on_input_modified(self, event=None) -> None:
         if not self.input_text.edit_modified():
@@ -1467,9 +1644,7 @@ class CleanroomXApp:
                             "run the analysis again."
                         )
                         continue
-                    self._runs_by_analysis[analysis_id] = payload
-                    self.last_run = payload
-                    self.last_run_analysis_id = analysis_id
+                    self._record_completed_run(analysis, payload)
                     self._render_run(payload)
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
@@ -1620,6 +1795,32 @@ class CleanroomXApp:
                 label="Run bundle",
             )
 
+    def export_history_run_bundle_json(self) -> None:
+        entry = self._selected_run_history_entry()
+        if entry is None:
+            messagebox.showinfo(
+                "No historical run selected",
+                "Select a retained run in the Run History tab before exporting.",
+                parent=self.root,
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if path:
+            self._write_export_file(
+                path,
+                json.dumps(
+                    entry.run.to_dict(),
+                    indent=2,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ) + "\n",
+                label="Historical run bundle",
+            )
+
     def export_report_markdown(self) -> None:
         run = self._current_fresh_run()
         if run is None:
@@ -1654,9 +1855,7 @@ class CleanroomXApp:
         if analysis is None:
             raise ValueError("smoke project has no active analysis")
         run = run_analysis(analysis.kind, analysis.input, base_dir=self._base_dir())
-        self._runs_by_analysis[analysis.id] = run
-        self.last_run = run
-        self.last_run_analysis_id = analysis.id
+        self._record_completed_run(analysis, run)
         self._render_run(run)
         return run
 

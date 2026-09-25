@@ -160,9 +160,6 @@ def test_recovery_scan_detects_newer_changed_source(tmp_path):
         manager.shutdown(wait=True)
 
     source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-    saved_mtime_ns = int(
-        artifact["saved_at_utc"].replace("Z", "+00:00") != ""
-    )
     current_ns = source.stat().st_mtime_ns
     os.utime(source, ns=(current_ns + 2_000_000_000, current_ns + 2_000_000_000))
 

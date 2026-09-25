@@ -178,7 +178,7 @@ def test_worker_monitoring_failure_cleans_up_before_reenabling_ui(monkeypatch):
 
     app._poll_worker()
 
-    assert app._analysis_worker.shutdown_calls == [False]
+    assert app._analysis_worker.shutdown_calls == [True]
     assert app._running is False
     assert app._running_analysis_id is None
     assert app.run_button.state == "normal"

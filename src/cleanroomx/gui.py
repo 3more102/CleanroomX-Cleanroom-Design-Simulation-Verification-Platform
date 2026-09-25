@@ -18,6 +18,7 @@ from .autosave import (
     discard_recovery_artifact,
     restore_recovery_artifact,
     scan_recovery_artifacts,
+    source_fingerprint,
 )
 from .application import (
     ANALYSIS_SPECS,
@@ -176,6 +177,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_source_fingerprint: dict[str, object] | None = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -845,11 +847,76 @@ class CleanroomXApp:
                 "", "end", iid=f"row-{index}", text=path, values=(display, unit)
             )
 
+    @staticmethod
+    def _source_fingerprints_match(
+        expected: dict[str, object],
+        current: dict[str, object],
+    ) -> bool:
+        """Return True when two fingerprints identify the same file contents."""
+        return (
+            expected.get("path") == current.get("path")
+            and expected.get("exists") is True
+            and current.get("exists") is True
+            and expected.get("size") == current.get("size")
+            and expected.get("sha256") == current.get("sha256")
+        )
+
+    def _project_source_changed_on_disk(self) -> tuple[bool, str]:
+        """Detect a lost-update risk before replacing the active project file."""
+        if self.project_path is None:
+            return False, ""
+        if not hasattr(self, "_project_source_fingerprint"):
+            # Compatibility for lightweight test doubles created with __new__.
+            return False, ""
+        expected = self._project_source_fingerprint
+        if expected is None:
+            return (
+                True,
+                "CleanroomX has no verified baseline for the current project file.",
+            )
+        try:
+            current = source_fingerprint(self.project_path)
+        except OSError as exc:
+            return (
+                True,
+                f"CleanroomX could not verify the current project file: {exc}",
+            )
+        if self._source_fingerprints_match(expected, current):
+            return False, ""
+        if current.get("exists") is not True:
+            return (
+                True,
+                "The project file was deleted or moved after it was opened or last saved.",
+            )
+        return (
+            True,
+            "The project file changed on disk after it was opened or last saved.",
+        )
+
+    def _remember_project_source_fingerprint(self) -> None:
+        if self.project_path is None:
+            self._project_source_fingerprint = None
+            return
+        self._project_source_fingerprint = source_fingerprint(self.project_path)
+
+    def _warn_external_save_conflict(self, detail: str) -> None:
+        self.status_var.set("Save blocked — project changed on disk")
+        messagebox.showwarning(
+            "Project changed on disk",
+            (
+                f"{detail}\n\n"
+                "CleanroomX will not overwrite that version. Save this working "
+                "copy to a different file, then compare or reconcile the two versions."
+            ),
+            parent=self.root,
+        )
+
     def restore_recovery_path(self, path: str | Path) -> None:
         recovered = restore_recovery_artifact(path)
         self._discard_current_autosave()
         self.project = recovered.project
         self.project_path = None
+        self._project_source_fingerprint = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -942,6 +1009,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_source_fingerprint = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -976,10 +1044,18 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
+        before = source_fingerprint(project_path)
         project = load_project_document(project_path)
+        after = source_fingerprint(project_path)
+        if not self._source_fingerprints_match(before, after):
+            raise OSError(
+                "project changed on disk while it was being opened; reopen it "
+                "to avoid loading an inconsistent snapshot"
+            )
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_source_fingerprint = after
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1016,14 +1092,36 @@ class CleanroomXApp:
         if self.project_path is None:
             self.save_project_as()
             return
+        changed, detail = self._project_source_changed_on_disk()
+        if changed:
+            self._warn_external_save_conflict(detail)
+            self.save_project_as()
+            return
         try:
             save_project_document(self.project_path, self.project)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        try:
+            self._remember_project_source_fingerprint()
+        except OSError as exc:
+            self._project_source_fingerprint = None
+            self.status_var.set(
+                f"Saved {self.project_path.name}; future in-place save requires Save As"
+            )
+            messagebox.showwarning(
+                "Saved with file-verification warning",
+                (
+                    "The project was saved, but CleanroomX could not establish a "
+                    f"verified on-disk revision baseline:\n\n{exc}\n\n"
+                    "Future in-place saves will be blocked until the project is reopened."
+                ),
+                parent=self.root,
+            )
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
-        self.status_var.set(f"Saved {self.project_path.name}")
+        if self._project_source_fingerprint is not None:
+            self.status_var.set(f"Saved {self.project_path.name}")
 
     def save_project_as(self) -> None:
         try:
@@ -1044,6 +1142,16 @@ class CleanroomXApp:
             return
 
         destination = Path(path)
+        if (
+            self.project_path is not None
+            and destination.resolve(strict=False)
+            == self.project_path.resolve(strict=False)
+        ):
+            changed, detail = self._project_source_changed_on_disk()
+            if changed:
+                self._warn_external_save_conflict(detail)
+                return
+
         recovery_source = getattr(self, "_recovery_source_path", None)
         restored_artifact = getattr(self, "_restored_recovery_artifact", None)
         if (
@@ -1086,6 +1194,19 @@ class CleanroomXApp:
 
         self.project = candidate
         self.project_path = saved_path
+        try:
+            self._remember_project_source_fingerprint()
+        except OSError as exc:
+            self._project_source_fingerprint = None
+            messagebox.showwarning(
+                "Saved with file-verification warning",
+                (
+                    "The project was saved, but CleanroomX could not establish a "
+                    f"verified on-disk revision baseline:\n\n{exc}\n\n"
+                    "Reopen the project before using in-place Save."
+                ),
+                parent=self.root,
+            )
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

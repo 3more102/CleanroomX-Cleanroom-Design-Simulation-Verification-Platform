@@ -369,7 +369,7 @@ def save_project_document_with_fingerprint(
     """Save a validated project without silently overwriting a changed destination."""
     destination = Path(path)
     data = project.to_dict()
-    project_from_dict(data)
+    validated_project = project_from_dict(data)
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
@@ -378,7 +378,7 @@ def save_project_document_with_fingerprint(
 
     def validate_temp(temp_path: Path) -> None:
         loaded = load_project_document(temp_path)
-        if loaded != project:
+        if loaded != validated_project:
             raise ProjectFormatError("temporary project verification did not round-trip")
 
     def before_replace() -> None:

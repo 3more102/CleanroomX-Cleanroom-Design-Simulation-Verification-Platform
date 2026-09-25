@@ -4,26 +4,39 @@
 
 Validation date: 2026-09-25
 
-Exact tested and merged `main` commit:
+Merged Release 2 commit on `main`:
 
-`ec7b7a4e7f836159defa5591d396a951bfd5a3ba`
+`763929bc1abdc4e7b3436e0c718bcc3b5d5db00a`
+
+Exact CI-tested pull-request merge tree:
+
+- PR **#423 — Release 2 final combined-tree verification gate**
+- PR head: `25888c6a7564ae3448b6deb0a5c7396aed64bbd7`
+- Synthetic merge commit tested by GitHub Actions: `a468f229146433c88396e6d59dd61d716a16d990`
+- Tested tree: `b024e3b8789de11f605a81ee42bc01c4d8e6a3a4`
+- Merged `main` tree: `b024e3b8789de11f605a81ee42bc01c4d8e6a3a4`
+
+The tested PR merge tree and the merged `main` tree are byte-for-byte the same Git tree.
 
 Release 2 integration history:
 
 - PR **#414 — Release 2 architecture consolidation**, merged as `ae7297e229b51395f3bc278e9dab1e304517b84e`.
 - PR **#421 — Release 2 final frozen candidate**, merged as `aed7d6a7e4970e20a9419b9cf0255171b521698a`.
-- PR **#420 — Harden foundational numerical input integrity for Release 2**, merged as the tested `main` head above.
+- PR **#420 — Harden foundational numerical input integrity for Release 2**, merged as `ec7b7a4e7f836159defa5591d396a951bfd5a3ba`.
+- PR **#423 — Release 2 final combined-tree verification gate**, merged as `763929bc1abdc4e7b3436e0c718bcc3b5d5db00a`.
 
-GitHub Actions CI:
+GitHub Actions CI for the exact final combined tree:
 
-- Run **#1431**
-- Run id: `36143496033`
-- Event: push to `main`
+- Run **#1432**
+- Run id: `36143571035`
+- Event: pull request
 - Conclusion: **success**
+
+A second push CI run on the immediately preceding combined implementation commit `ec7b7a4e7f836159defa5591d396a951bfd5a3ba` also completed successfully as run **#1431** / `36143496033`.
 
 ## Matrix evidence
 
-The complete suite passed on every supported interpreter:
+The complete suite passed on every supported interpreter in final-tree run #1432:
 
 - Python 3.11: **880 passed**
 - Python 3.12: **880 passed**
@@ -53,14 +66,14 @@ Every Python 3.11/3.12/3.13 matrix job:
 Python 3.13 additionally passed:
 
 - Release 2 spatial-validation performance evidence;
-- Release 2 project-bundle performance evidence, including the stress case with a 32 MiB dependency;
+- Release 2 project-bundle performance evidence;
 - installed Tk/Xvfb `cleanroomx-gui --demo --smoke`.
 
 The project-bundle benchmark completed verification/export/extraction for small, medium, large, and stress cases. The stress case used a 33,554,432-byte dependency and completed without a validation failure.
 
 ## Release 2 scope covered by the verified tree
 
-The tested tree includes the consolidated Release 2 architecture and later correctness hardening:
+The tested tree includes the consolidated Release 2 architecture and final correctness hardening:
 
 - isolated project-model snapshots and lossless same-schema extension preservation;
 - stable analysis/spatial identity and strict project/spatial validation;
@@ -76,4 +89,4 @@ The tested tree includes the consolidated Release 2 architecture and later corre
 - Markdown report-boundary escaping;
 - finite-number validation at foundational engineering calculation boundaries.
 
-The v0.91-v0.95 compatibility suites remain green on the same exact tree. The Release 2 work does not claim cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance; those remain external engineering responsibilities.
+The v0.91-v0.95 compatibility suites remain green on the same final tree. CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence; it does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.

@@ -166,3 +166,50 @@ def test_gui_rejects_negative_autosave_interval_before_tk_startup():
     with pytest.raises(SystemExit) as exc:
         gui_module.main(["--autosave-interval-seconds", "-1", "--check"])
     assert exc.value.code == 2
+
+
+def test_notify_explicit_save_keeps_cleanup_failure_visible():
+    class Manager:
+        def notify_explicit_save(self, _path):
+            return AutosaveStatus(
+                state="failed",
+                message="Project saved, but autosave recovery cleanup is incomplete",
+                artifact_path=Path("/tmp/stale.recovery.json"),
+            )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._recovery_checkpoint_after_id = None
+    app._autosave_manager = Manager()
+    app.autosave_status_var = Value("")
+
+    status = app._notify_explicit_save(Path("/tmp/project.cleanroomx.json"))
+
+    assert status is not None and status.state == "failed"
+    assert app.autosave_status_var.value == "Autosave: failed"
+
+
+def test_clean_checkpoint_does_not_hide_failed_recovery_discard():
+    failure = AutosaveStatus(
+        state="failed",
+        message="Autosave recovery discard incomplete: permission denied",
+        artifact_path=Path("/tmp/stale.recovery.json"),
+    )
+
+    class Manager:
+        def status(self):
+            return AutosaveStatus(state="saved", message="saved")
+
+        def discard_current_recoveries(self):
+            return failure
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._recovery_checkpoint_after_id = None
+    app._autosave_manager = Manager()
+    app._has_unsaved_changes = lambda: False
+    app.autosave_status_var = Value("")
+    app.status_var = Value("")
+
+    app._checkpoint_recovery()
+
+    assert app.autosave_status_var.value == "Autosave: failed"
+    assert app.status_var.value == failure.message

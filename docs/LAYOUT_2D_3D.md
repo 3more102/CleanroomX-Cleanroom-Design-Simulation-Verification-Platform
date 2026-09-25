@@ -58,8 +58,15 @@ Other engineering inputs are preserved.
 
 A room can keep a stable `analysis_room_name` even when its display name changes. Duplicate
 links and links to a missing analysis room are rejected instead of being applied ambiguously.
-After synchronization, the affected analysis must be validated/run again; prior results are not
-treated as current.
+The workspace reports room-level synchronization state as **synchronized**, **geometry newer**,
+**engineering newer**, **conflicting**, or **unmapped**. "Newer" is reported only when a persisted
+last-synchronized geometry baseline proves which side changed. If geometry differs without that
+provenance, CleanroomX reports **conflicting** rather than guessing. The baseline stores only the
+common room dimensions and mapping identity; it does not duplicate solver outputs.
+
+Synchronization resolves and validates every room mapping before changing any engineering input,
+so a later bad link cannot leave a partially updated analysis. After an actual engineering-input
+change, the affected analysis must be validated/run again; prior results are not treated as current.
 
 ## Persistence and validation
 

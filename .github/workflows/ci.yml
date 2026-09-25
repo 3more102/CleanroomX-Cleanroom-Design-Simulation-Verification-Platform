@@ -18,6 +18,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
       - run: pip install -e .[dev]
+      - name: Run spatial design focused regressions
+        run: >-
+          python -m pytest -q
+          tests/test_spatial.py
+          tests/test_spatial_history.py
+          tests/test_spatial_transforms.py
+          tests/test_release2_spatial_integrity.py
       - name: Run v0.95 solver-result-integrity compatibility regressions
         run: >-
           python -m pytest -q

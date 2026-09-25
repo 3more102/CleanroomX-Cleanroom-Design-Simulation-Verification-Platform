@@ -101,6 +101,43 @@ def _validate_view(view: Any) -> None:
             )
 
 
+def _validate_engineering_sync(sync: Any, room_ids: set[str]) -> None:
+    if sync is None:
+        return
+    if not isinstance(sync, dict):
+        raise SpatialLayoutFormatError("spatial_layout.engineering_sync must be an object")
+
+    _require_non_empty_string(
+        sync.get("analysis_id"), "spatial_layout.engineering_sync.analysis_id"
+    )
+    rooms = sync.get("rooms", [])
+    if not isinstance(rooms, list):
+        raise SpatialLayoutFormatError(
+            "spatial_layout.engineering_sync.rooms must be an array"
+        )
+
+    seen_room_ids: set[str] = set()
+    for index, record in enumerate(rooms):
+        prefix = f"spatial_layout.engineering_sync.rooms[{index}]"
+        if not isinstance(record, dict):
+            raise SpatialLayoutFormatError(f"{prefix} must be an object")
+        room_id = _require_non_empty_string(record.get("room_id"), f"{prefix}.room_id")
+        if room_id not in room_ids:
+            raise SpatialLayoutFormatError(
+                f"{prefix}.room_id references missing room id {room_id!r}"
+            )
+        if room_id in seen_room_ids:
+            raise SpatialLayoutFormatError(
+                f"{prefix}.room_id duplicates synchronization room id {room_id!r}"
+            )
+        seen_room_ids.add(room_id)
+        _require_non_empty_string(
+            record.get("analysis_room_name"), f"{prefix}.analysis_room_name"
+        )
+        for field in ("length_m", "width_m", "height_m"):
+            _require_positive_number(record.get(field), f"{prefix}.{field}")
+
+
 def validate_spatial_layout_document(value: Any) -> None:
     """Validate persisted spatial data without repairing or silently rewriting it.
 
@@ -214,6 +251,7 @@ def validate_spatial_layout_document(value: Any) -> None:
         if device.get("swing") is not None:
             _require_non_empty_string(device.get("swing"), f"{prefix}.swing")
 
+    _validate_engineering_sync(value.get("engineering_sync"), room_ids)
     _validate_view(value.get("view"))
 
 

@@ -106,7 +106,7 @@ class RunHistory:
         analysis_id: str,
         analysis_name: str,
         run: AnalysisRun,
-    ) -> RunHistoryEntry:
+    ) -> RunHistorySummary:
         if not isinstance(analysis_id, str) or not analysis_id.strip():
             raise ValueError("analysis_id must be a non-empty string")
         if not isinstance(analysis_name, str) or not analysis_name.strip():
@@ -122,7 +122,7 @@ class RunHistory:
         )
         self._next_sequence += 1
         self._entries.append(entry)
-        return copy.deepcopy(entry)
+        return entry.summary()
 
     def summaries(self) -> tuple[RunHistorySummary, ...]:
         return tuple(entry.summary() for entry in self._entries)

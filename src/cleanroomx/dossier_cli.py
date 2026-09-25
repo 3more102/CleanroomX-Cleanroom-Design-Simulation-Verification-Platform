@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 
+from .strict_json import load_strict_json
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
@@ -27,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     manifest_path = Path(args.manifest)
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload = load_strict_json(manifest_path)
     try:
         run = run_analysis(
             "dossier",

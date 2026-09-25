@@ -38,6 +38,23 @@ class AnalysisRun:
         return asdict(self)
 
 
+class ExternalDependencyChangedError(RuntimeError):
+    """Raised when file-backed engineering inputs are not revision-stable."""
+
+    def __init__(self, changes: list[dict]) -> None:
+        self.changes = tuple(copy.deepcopy(changes))
+        labels = [
+            f"{item['field']} ({item['declared_path']})"
+            for item in self.changes
+        ]
+        detail = ", ".join(labels) if labels else "unknown dependency"
+        super().__init__(
+            "External engineering input changed or became unavailable during "
+            "analysis execution; the result was discarded. Stabilize the referenced "
+            f"file(s) and run again: {detail}"
+        )
+
+
 def _spec(key, title, category, parser, runner, reporter, description):
     return AnalysisSpec(key, title, category, parser, runner, reporter, description)
 
@@ -524,6 +541,38 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+_DEPENDENCY_FINGERPRINT_ATTEMPTS = 3
+
+
+def _stable_file_fingerprint(path: Path) -> dict:
+    """Capture one stable content revision without accepting a torn read."""
+    last_before = None
+    last_after = None
+    for _ in range(_DEPENDENCY_FINGERPRINT_ATTEMPTS):
+        before = path.stat()
+        digest = _sha256_file(path)
+        after = path.stat()
+        last_before = before
+        last_after = after
+        if (
+            before.st_dev == after.st_dev
+            and before.st_ino == after.st_ino
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+        ):
+            return {
+                "size_bytes": after.st_size,
+                "mtime_ns": after.st_mtime_ns,
+                "sha256": digest,
+            }
+    assert last_before is not None and last_after is not None
+    raise RuntimeError(
+        "file changed while its revision fingerprint was being captured "
+        f"(size {last_before.st_size}->{last_after.st_size}, "
+        f"mtime_ns {last_before.st_mtime_ns}->{last_after.st_mtime_ns})"
+    )
+
+
 def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str, str]]:
     references: list[tuple[str, str]] = []
     if kind == "consistency":
@@ -551,12 +600,21 @@ def _capture_external_dependencies(
     records: list[dict] = []
     for field, declared_path in _external_dependency_references(kind, payload):
         path = _resolve_relative(base_dir, declared_path)
+        try:
+            fingerprint = _stable_file_fingerprint(path)
+        except (OSError, RuntimeError) as exc:
+            raise ExternalDependencyChangedError(
+                [{
+                    "field": field,
+                    "declared_path": declared_path,
+                    "status": "unavailable_or_unstable",
+                }]
+            ) from exc
         records.append(
             {
                 "field": field,
                 "declared_path": declared_path,
-                "size_bytes": path.stat().st_size,
-                "sha256": _sha256_file(path),
+                **fingerprint,
             }
         )
     return records
@@ -581,6 +639,7 @@ def _application_execution_provenance(
         stable = (
             before["sha256"] == after["sha256"]
             and before["size_bytes"] == after["size_bytes"]
+            and before["mtime_ns"] == after["mtime_ns"]
         )
         dependencies.append(
             {
@@ -590,6 +649,8 @@ def _application_execution_provenance(
                 "sha256_after": after["sha256"],
                 "size_bytes_before": before["size_bytes"],
                 "size_bytes_after": after["size_bytes"],
+                "mtime_ns_before": before["mtime_ns"],
+                "mtime_ns_after": after["mtime_ns"],
                 "stable_during_run": stable,
             }
         )
@@ -758,12 +819,31 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     )
     dependencies_after = _capture_external_dependencies(kind, payload, base)
     diagnostics = diagnostic_summary(normalized)
-    diagnostics["application_execution_provenance"] = _application_execution_provenance(
+    provenance = _application_execution_provenance(
         kind,
         input_sha256,
         dependencies_before,
         dependencies_after,
     )
+    if not provenance["external_dependencies_stable"]:
+        raise ExternalDependencyChangedError(
+            [
+                {
+                    "field": item["field"],
+                    "declared_path": item["declared_path"],
+                    "status": "changed_during_run",
+                    "sha256_before": item["sha256_before"],
+                    "sha256_after": item["sha256_after"],
+                    "size_bytes_before": item["size_bytes_before"],
+                    "size_bytes_after": item["size_bytes_after"],
+                    "mtime_ns_before": item["mtime_ns_before"],
+                    "mtime_ns_after": item["mtime_ns_after"],
+                }
+                for item in provenance["external_dependencies"]
+                if not item["stable_during_run"]
+            ]
+        )
+    diagnostics["application_execution_provenance"] = provenance
     return AnalysisRun(
         kind=kind,
         title=spec.title,

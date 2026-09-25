@@ -6,7 +6,15 @@ from typing import Any
 
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+DEVICE_TYPES = (
+    "door",
+    "supply",
+    "return",
+    "exhaust",
+    "ffu",
+    "equipment",
+    "sensor",
+)
 
 
 class SpatialLayoutFormatError(ValueError):
@@ -55,7 +63,9 @@ def validate_spatial_layout_document(value: Any) -> None:
 
     version = layout.get("version")
     if isinstance(version, bool) or not isinstance(version, int):
-        raise SpatialLayoutFormatError(f"{SPATIAL_METADATA_KEY}.version must be an integer")
+        raise SpatialLayoutFormatError(
+            f"{SPATIAL_METADATA_KEY}.version must be an integer"
+        )
     if version > SPATIAL_LAYOUT_VERSION:
         raise SpatialLayoutFormatError(
             f"unsupported future {SPATIAL_METADATA_KEY} version {version}; "
@@ -66,7 +76,11 @@ def validate_spatial_layout_document(value: Any) -> None:
             f"unsupported legacy {SPATIAL_METADATA_KEY} version {version}"
         )
 
-    _require_number(layout.get("grid_m"), f"{SPATIAL_METADATA_KEY}.grid_m", positive=True)
+    _require_number(
+        layout.get("grid_m"),
+        f"{SPATIAL_METADATA_KEY}.grid_m",
+        positive=True,
+    )
 
     rooms = _require_list(layout.get("rooms"), f"{SPATIAL_METADATA_KEY}.rooms")
     room_ids: set[str] = set()
@@ -75,7 +89,9 @@ def validate_spatial_layout_document(value: Any) -> None:
         room = _require_mapping(raw_room, path)
         room_id = _require_string(room.get("id"), f"{path}.id")
         if room_id in room_ids:
-            raise SpatialLayoutFormatError(f"duplicate room id in {SPATIAL_METADATA_KEY}: {room_id!r}")
+            raise SpatialLayoutFormatError(
+                f"duplicate room id in {SPATIAL_METADATA_KEY}: {room_id!r}"
+            )
         room_ids.add(room_id)
 
         _require_string(room.get("name"), f"{path}.name")
@@ -119,7 +135,14 @@ def validate_spatial_layout_document(value: Any) -> None:
         _require_number(device.get("z_m"), f"{path}.z_m")
 
     view = _require_mapping(layout.get("view"), f"{SPATIAL_METADATA_KEY}.view")
-    for key in ("pan_x", "pan_y", "azimuth_deg", "elevation_deg", "pan_3d_x", "pan_3d_y"):
+    for key in (
+        "pan_x",
+        "pan_y",
+        "azimuth_deg",
+        "elevation_deg",
+        "pan_3d_x",
+        "pan_3d_y",
+    ):
         if key in view:
             _require_number(view[key], f"{SPATIAL_METADATA_KEY}.view.{key}")
     for key in ("zoom_2d", "zoom_3d"):

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased transactional project edit history — 2026-09-25
+
+- Adds bounded model-level undo/redo for committed analysis JSON edits, add/remove/rename, imported inputs, and explicit spatial-to-analysis synchronization.
+- Restores analysis ids, selection/editor context, and raw editor drafts while keeping spatial geometry history independent; project-history replay never rewinds camera state or unrelated spatial metadata.
+- Clears cached analysis results on history restoration and resets history on project replacement or successful Save Project As, preventing stale engineering evidence and path-rebase ambiguity.
+- Makes editor commit transactional with project-metadata validation before authoritative input mutation, so an invalid project name cannot leave a partially committed analysis edit.
+- Keeps focused JSON text undo and spatial-canvas undo independent, blocks project history mutation while an analysis is running, preserves project schema version 1, and adds no runtime dependency.
+- Adds unit and GUI regression coverage for bounded history, snapshot isolation, redo invalidation, commit rollback, removed-analysis restoration, and metadata ownership boundaries.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

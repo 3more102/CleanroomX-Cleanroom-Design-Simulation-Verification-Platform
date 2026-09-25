@@ -704,6 +704,54 @@ def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeyp
 
 
 
+def test_export_portable_html_report_preserves_run_evidence(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app.status_var = Status()
+    payload = json.loads(
+        (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    run = run_analysis("fan_operating_point", payload)
+    analysis = AnalysisDocument(
+        id="fan",
+        name="Supply fan",
+        kind="fan_operating_point",
+        input=payload,
+    )
+    app.project = ProjectDocument(
+        name="Portable evidence",
+        description="Standalone review package",
+        analyses=[analysis],
+        active_analysis_id="fan",
+    )
+    app._runs_by_analysis = {"fan": run}
+    app.last_run = run
+    app.last_run_analysis_id = "fan"
+    output = tmp_path / "engineering-report.html"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(output),
+    )
+
+    app.export_report_html()
+
+    document = output.read_text(encoding="utf-8")
+    provenance = run.diagnostics["application_execution_provenance"]
+    assert document.startswith("<!doctype html>\n")
+    assert "CleanroomX Engineering Report" in document
+    assert provenance["input_sha256"] in document
+    assert 'id="cleanroomx-report-evidence"' in document
+    assert app.status_var.value == "Exported html report — engineering-report.html"
+
+
 def test_bundled_demo_project_is_self_contained_and_active_analysis_runs():
     path = gui_module.bundled_demo_project_path()
     assert path.is_file()

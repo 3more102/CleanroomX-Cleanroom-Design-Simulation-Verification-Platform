@@ -7,6 +7,8 @@ import cleanroomx.project_batch as project_batch
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.project_batch import (
     PROJECT_BATCH_SCHEMA,
+    ProjectAnalysisOutcome,
+    ProjectBatchRun,
     main,
     project_batch_exit_code,
     render_project_batch_markdown,
@@ -206,18 +208,32 @@ def test_project_batch_rejects_unknown_analysis_selection(tmp_path):
         raise AssertionError("unknown analysis selection should fail")
 
 
-def test_project_batch_markdown_escapes_untrusted_project_and_analysis_labels(tmp_path):
-    project = _project()
-    project.name = "Batch | Demo\n# injected"
-    project.analyses[0].name = "Room *A*\n## injected"
-    project.analyses[0].id = "room|a"
-    project.active_analysis_id = "room|a"
-    path = save_project_document(tmp_path / "batch.cleanroomx.json", project)
+def test_project_batch_markdown_escapes_untrusted_structure():
+    batch = ProjectBatchRun(
+        project_name="Demo\n# injected",
+        source_path="folder|name/project.md",
+        source_size_bytes=1,
+        source_sha256="a" * 64,
+        selected_analysis_ids=("id",),
+        outcomes=(
+            ProjectAnalysisOutcome(
+                analysis_id="id",
+                analysis_name="Room\n## injected",
+                kind="room_verification",
+                execution_state="error",
+                error_type="Bad*Type",
+                error_message="boom\n| injected | row |",
+            ),
+        ),
+        source_stable_during_run=True,
+    )
 
-    batch = run_project_file(path, analysis_ids=["room|a"])
-    text = render_project_batch_markdown(batch)
+    rendered = render_project_batch_markdown(batch)
 
-    assert "Batch \\| Demo<br># injected" in text
-    assert "Room \\*A\\*<br>## injected" in text
-    assert "\n# injected" not in text
-    assert "\n## injected" not in text
+    assert "\n# injected" not in rendered
+    assert "\n## injected" not in rendered
+    assert "\n| injected | row |" not in rendered
+    assert "Demo<br># injected" in rendered
+    assert "Room<br>## injected" in rendered
+    assert "folder\\|name/project.md" in rendered
+    assert "Bad\\*Type" in rendered

@@ -256,10 +256,7 @@ class CleanroomXApp:
         autosave_state = None
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
-            try:
-                autosave_state = manager.status().state
-            except Exception:
-                autosave_state = "unavailable"
+            autosave_state = manager.status().state
         return {
             "project_path": (
                 str(self.project_path.resolve(strict=False))
@@ -285,7 +282,12 @@ class CleanroomXApp:
             project_path=self.project_path,
             active_analysis_id=self.project.active_analysis_id,
         )
-        self.status_var.set("Unexpected application error — diagnostic evidence recorded")
+        try:
+            self.status_var.set(
+                "Unexpected application error — diagnostic evidence recorded"
+            )
+        except tk.TclError:
+            pass
         log_hint = (
             f"\n\nDiagnostic log: {self._diagnostic_log_path}"
             if self._diagnostic_log_path is not None
@@ -1502,12 +1504,23 @@ class CleanroomXApp:
         self._abandon_requested = False
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
+        log_event(
+            "analysis.started",
+            analysis_id=analysis_id,
+            analysis_kind=kind,
+        )
 
         def worker() -> None:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
                 self._queue.put(("success", generation, analysis_id, result))
             except Exception as exc:
+                log_exception(
+                    "analysis.worker_failed",
+                    *sys.exc_info(),
+                    analysis_id=analysis_id,
+                    analysis_kind=kind,
+                )
                 self._queue.put(("error", generation, analysis_id, str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -1537,12 +1550,18 @@ class CleanroomXApp:
                     self._abandon_requested = False
                     self._set_running(False)
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
+                    log_event("analysis.abandoned", analysis_id=analysis_id)
                     continue
                 self._set_running(False)
                 if kind == "error":
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
+                    log_event(
+                        "analysis.completed",
+                        analysis_id=analysis_id,
+                        analysis_status=payload.status,
+                    )
                     self._runs_by_analysis[analysis_id] = payload
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id

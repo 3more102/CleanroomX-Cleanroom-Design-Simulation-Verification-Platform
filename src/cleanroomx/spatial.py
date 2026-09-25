@@ -1169,13 +1169,6 @@ def pressure_overlay_state(
                 source = "spatial"
                 status = "spatial"
 
-        if pressure_value is None and target is not None:
-            configured = _geometry_number(target.get("observed_pressure_pa"))
-            if math.isfinite(configured):
-                pressure_value = configured
-                source = "configured"
-                status = "configured"
-
         evidence.append(
             {
                 "room_id": room["id"],

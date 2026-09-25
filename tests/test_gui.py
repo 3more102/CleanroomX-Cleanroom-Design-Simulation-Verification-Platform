@@ -9,6 +9,7 @@ import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.run_history import run_history_records
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -163,6 +164,70 @@ def test_completed_run_is_discarded_if_analysis_input_changed_during_execution()
     assert rendered == []
     assert "discarded" in app.status_var.value.lower()
     assert "inputs changed" in app.status_var.value.lower()
+
+
+def test_accepted_completed_run_is_recorded_in_persisted_audit_history():
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    analysis = AnalysisDocument(
+        id="a", name="Room", kind="room_verification", input=dict(payload)
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+    )
+    app._queue = queue.Queue()
+    app._queue.put(("success", 4, "a", run))
+    app._run_generation = 4
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    title_updates = []
+    app._render_run = lambda value: rendered.append(value)
+    app._update_title = lambda: title_updates.append(True)
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._runs_by_analysis == {"a": run}
+    assert app.last_run is run
+    assert rendered == [run]
+    assert title_updates == [True]
+    records = run_history_records(app.project.metadata)
+    assert len(records) == 1
+    assert records[0]["analysis_id"] == "a"
+    assert records[0]["analysis_name"] == "Room"
+    assert records[0]["input_snapshot"] == payload
+    assert records[0]["input_sha256"] == (
+        run.diagnostics["application_execution_provenance"]["input_sha256"]
+    )
 
 
 def test_result_export_refuses_stale_cached_run(monkeypatch):

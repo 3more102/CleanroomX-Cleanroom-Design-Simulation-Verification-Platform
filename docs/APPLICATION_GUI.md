@@ -58,6 +58,16 @@ Each artifact contains the recoverable project snapshot, the active raw editor d
 
 Current-session recovery artifacts are invalidated after an explicit save or an explicit discard. Recovery files from older sessions are not silently deleted by merely opening or saving the same project; the source comparison evidence remains available for the dedicated startup recovery workflow.
 
+### Startup crash recovery
+
+At normal GUI startup, CleanroomX scans the recovery directory before interactive work begins. If recoverable snapshots exist, the recovery chooser lists the project name, UTC recovery timestamp, stable project identity, original project path, and a fresh comparison against the source project. The comparison distinguishes an unchanged source, a changed source, a source whose modification time is newer than the recovery snapshot, a missing source, and work that had never been saved.
+
+**Inspect** opens the recovery envelope and retained snapshot read-only. **Discard** deletes only the selected recovery artifact after confirmation; it never deletes or rewrites the source project. **Continue Without Restoring** leaves recovery evidence in place. Malformed or unreadable recovery artifacts are reported and preserved rather than silently removed.
+
+**Restore Working Copy** validates the embedded cleanroomx.project document again, restores project metadata and the active editor draft, and marks the window as **[Recovered]**. A malformed JSON draft is restored as draft text while the last valid project-model input remains authoritative. Restored projects are deliberately protected: **Save** routes to **Save As**, and the first save cannot target the original source path. This keeps the saved project and recovered state as separate files when the source is changed or newer and prevents automatic overwrite of a newer project.
+
+The automated --smoke path skips the modal startup chooser so installed-build smoke tests remain deterministic; normal interactive startup performs the recovery scan.
+
 ## Operator workflow
 
 1. Create a new project or open an existing `.cleanroomx.json` project.

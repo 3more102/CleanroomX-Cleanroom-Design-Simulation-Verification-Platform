@@ -89,6 +89,10 @@ Example:
 }
 ```
 
+## Input contract
+
+Dossier manifests are fail-closed for field names. Unsupported top-level fields, unknown `consistency_checks` names, and unsupported options inside a known consistency check are rejected before referenced analyses run. This prevents misspelled source-list keys from silently omitting evidence and prevents misspelled options from silently falling back to defaults. Existing metadata fields (`project_reference`, `revision`, `prepared_by`, and `notes`) remain supported.
+
 ## Cross-module consistency
 
 The optional `verification_hvac_airflow` block reuses the v0.17 standalone consistency engine. It compares the verification project's `supply_airflow_m3_h` against the HVAC project's `cleanroom_airflow_m3_h` for exact matching room names.

@@ -157,9 +157,32 @@ def validate_spatial_layout_document(value: Any) -> None:
             )
         if room.get("pressure_pa") is not None:
             _require_finite_number(room.get("pressure_pa"), f"{prefix}.pressure_pa")
-        for field in ("classification", "analysis_room_name"):
+        for field in ("classification", "analysis_room_name", "notes"):
             if room.get(field) is not None:
                 _require_non_empty_string(room.get(field), f"{prefix}.{field}")
+        if room.get("metadata") is not None and not isinstance(room.get("metadata"), dict):
+            raise SpatialLayoutFormatError(f"{prefix}.metadata must be an object")
+        engineering_ref = room.get("engineering_ref")
+        if engineering_ref is not None:
+            if not isinstance(engineering_ref, dict):
+                raise SpatialLayoutFormatError(f"{prefix}.engineering_ref must be an object")
+            _require_non_empty_string(
+                engineering_ref.get("analysis_id"), f"{prefix}.engineering_ref.analysis_id"
+            )
+            _require_non_empty_string(
+                engineering_ref.get("room_name"), f"{prefix}.engineering_ref.room_name"
+            )
+            synced = engineering_ref.get("synced_geometry")
+            if synced is not None:
+                if not isinstance(synced, dict):
+                    raise SpatialLayoutFormatError(
+                        f"{prefix}.engineering_ref.synced_geometry must be an object"
+                    )
+                for field in ("length_m", "width_m", "height_m"):
+                    _require_positive_number(
+                        synced.get(field),
+                        f"{prefix}.engineering_ref.synced_geometry.{field}",
+                    )
 
     devices = value.get("devices", [])
     if not isinstance(devices, list):

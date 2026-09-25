@@ -1,6 +1,6 @@
 # CleanroomX Desktop Application
 
-CleanroomX v0.100 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
+CleanroomX v0.101 provides a Tkinter desktop application over the same parsers, solvers, uncertainty engines, consistency checks, and report generators used by the command-line workflows. The GUI is an application shell over the validated backend; it does not duplicate or replace the engineering calculation implementations.
 
 ## Install and launch
 
@@ -27,6 +27,14 @@ Open the self-contained demonstration project shipped inside the installed packa
 ```bash
 cleanroomx-gui --demo
 ```
+
+On Windows, a repository checkout can launch the current source tree without relying on the console-script PATH:
+
+```powershell
+.\start-cleanroomx.ps1
+```
+
+The launcher prefers `.venv\Scripts\python.exe`, sets the repository `src` directory for imports, and defaults to `--demo`, which exposes the synchronized **Design 2D + 3D** workspace. `.\start-cleanroomx.cmd` provides the same behavior from PowerShell, Command Prompt, or Explorer.
 
 Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
 

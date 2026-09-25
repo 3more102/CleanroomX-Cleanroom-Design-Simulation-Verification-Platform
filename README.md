@@ -65,6 +65,22 @@ cleanroomx-gui --demo
 
 From a repository checkout, `examples/gui_demo.cleanroomx.json` remains the editable source copy.
 
+### Windows checkout launcher
+
+From PowerShell in the repository root, use the PATH-independent launcher:
+
+```powershell
+.\start-cleanroomx.ps1
+```
+
+It prefers `.venv\Scripts\python.exe`, executes the current checkout directly from `src`, and opens the bundled demo by default so the synchronized **Design 2D + 3D** workspace is immediately available. The CMD wrapper is equivalent:
+
+```powershell
+.\start-cleanroomx.cmd
+```
+
+Normal GUI arguments pass through unchanged, for example `.\start-cleanroomx.ps1 --check`.
+
 For automated installation checks without a display:
 
 ```bash

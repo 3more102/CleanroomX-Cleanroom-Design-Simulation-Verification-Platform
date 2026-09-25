@@ -9,6 +9,13 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .spatial_engineering import (
+    engineering_mapping_diagnostics,
+    pressure_relationships,
+    resolve_room_mapping,
+    room_pressure_value,
+    room_reference,
+)
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_GEOMETRY_EPSILON_M,
@@ -97,9 +104,26 @@ def normalize_layout(value: Any) -> dict:
                 "length_m": _positive(raw.get("length_m"), 4.0),
                 "width_m": _positive(raw.get("width_m"), 4.0),
                 "height_m": _positive(raw.get("height_m"), 3.0),
+                "elevation_m": _finite_number(raw.get("elevation_m"), 0.0),
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+            for key in ("temperature_target_c", "humidity_target_percent"):
+                if raw.get(key) is not None:
+                    room[key] = _finite_number(raw.get(key), 0.0)
+            for key in ("classification", "notes"):
+                value = raw.get(key)
+                if value is not None and str(value).strip():
+                    room[key] = str(value).strip()
+            ref = raw.get("engineering_ref")
+            if isinstance(ref, dict):
+                analysis_id = str(ref.get("analysis_id") or "").strip()
+                room_name = str(ref.get("room_name") or "").strip()
+                if analysis_id and room_name:
+                    room["engineering_ref"] = {
+                        "analysis_id": analysis_id,
+                        "room_name": room_name,
+                    }
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -182,7 +206,11 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "elevation_m": 0.0,
         }
+        reference = room_reference(analysis, raw)
+        if reference is not None:
+            room["engineering_ref"] = reference
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
         layout["rooms"].append(room)
@@ -255,33 +283,47 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     if not rooms:
         return False
 
-    changed = False
-    if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
-        for key in ("name", "length_m", "width_m", "height_m"):
-            value = source[key]
-            if analysis.input.get(key) != value:
-                analysis.input[key] = value
-                changed = True
-        if "observed_pressure_pa" in analysis.input and "pressure_pa" in source:
-            if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
-                analysis.input["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-        return changed
-
-    if getattr(analysis, "kind", "") != "project_verification":
+    kind = getattr(analysis, "kind", "")
+    if kind not in {"room_verification", "project_verification"}:
         return False
-    raw_rooms = analysis.input.get("rooms")
+
+    raw_rooms = [analysis.input] if kind == "room_verification" else analysis.input.get("rooms")
     if not isinstance(raw_rooms, list):
         return False
 
     _require_unique_sync_names(rooms, source="the spatial layout")
     _require_unique_sync_names(raw_rooms, source="the active analysis")
-    by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
+
+    planned: list[tuple[dict, dict]] = []
     for source in rooms:
-        target = by_name.get(source["name"])
-        if target is None:
-            continue
+        target, state = resolve_room_mapping(source, analysis)
+        if state == "ambiguous":
+            raise SpatialSyncError(
+                f"Cannot synchronize spatial geometry because room {source['name']!r} "
+                "maps ambiguously in the active analysis."
+            )
+        if state == "missing_target":
+            raise SpatialSyncError(
+                f"Cannot synchronize spatial geometry because the mapped engineering "
+                f"room for {source['name']!r} is missing."
+            )
+        if target is not None:
+            planned.append((source, target))
+
+    if kind == "room_verification":
+        if len(planned) != 1:
+            if not planned:
+                return False
+            raise SpatialSyncError(
+                "Cannot synchronize a room-verification analysis from multiple mapped spatial rooms."
+            )
+
+    changed = False
+    for source, target in planned:
+        if kind == "room_verification":
+            if target.get("name") != source["name"]:
+                target["name"] = source["name"]
+                changed = True
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:
                 target[key] = source[key]

@@ -317,6 +317,169 @@ def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
     )
 
 
+def engineering_sync_diagnostics(layout: dict, analysis: Any) -> list[dict]:
+    """Describe room-to-engineering mapping state without mutating either model."""
+    rooms = normalize_layout(layout)["rooms"]
+    if not rooms:
+        return []
+
+    payload = getattr(analysis, "input", None)
+    kind = getattr(analysis, "kind", "")
+    if not isinstance(payload, dict) or kind not in {"room_verification", "project_verification"}:
+        return [
+            {
+                "room_id": room["id"],
+                "state": "unmapped",
+                "analysis_room_name": None,
+                "differences": [],
+                "message": "Active analysis does not expose verification room geometry.",
+            }
+            for room in rooms
+        ]
+
+    def differences(source: dict, target: dict, *, include_name: bool = False) -> list[dict]:
+        fields = ["length_m", "width_m", "height_m"]
+        if include_name:
+            fields.insert(0, "name")
+        result: list[dict] = []
+        for field in fields:
+            if target.get(field) != source.get(field):
+                result.append(
+                    {
+                        "field": field,
+                        "spatial": source.get(field),
+                        "engineering": target.get(field),
+                    }
+                )
+        if "observed_pressure_pa" in target and "pressure_pa" in source:
+            if target.get("observed_pressure_pa") != source.get("pressure_pa"):
+                result.append(
+                    {
+                        "field": "observed_pressure_pa",
+                        "spatial": source.get("pressure_pa"),
+                        "engineering": target.get("observed_pressure_pa"),
+                    }
+                )
+        return result
+
+    if kind == "room_verification":
+        records: list[dict] = []
+        target_name = str(payload.get("name") or "").strip() or None
+        for index, room in enumerate(rooms):
+            if index:
+                records.append(
+                    {
+                        "room_id": room["id"],
+                        "state": "unmapped",
+                        "analysis_room_name": None,
+                        "differences": [],
+                        "message": "Single-room verification maps only the first spatial room.",
+                    }
+                )
+                continue
+            delta = differences(room, payload, include_name=True)
+            state = "synchronized" if not delta else "conflicting"
+            records.append(
+                {
+                    "room_id": room["id"],
+                    "state": state,
+                    "analysis_room_name": target_name,
+                    "differences": delta,
+                    "message": (
+                        "Spatial geometry matches the active analysis."
+                        if state == "synchronized"
+                        else "Spatial and engineering room inputs differ."
+                    ),
+                }
+            )
+        return records
+
+    raw_rooms = payload.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return [
+            {
+                "room_id": room["id"],
+                "state": "unmapped",
+                "analysis_room_name": None,
+                "differences": [],
+                "message": "Active project verification has no room collection.",
+            }
+            for room in rooms
+        ]
+
+    analysis_name_counts: dict[str, int] = {}
+    targets: dict[str, dict] = {}
+    for target in raw_rooms:
+        if not isinstance(target, dict):
+            continue
+        name = str(target.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        analysis_name_counts[key] = analysis_name_counts.get(key, 0) + 1
+        targets.setdefault(key, target)
+
+    link_counts: dict[str, int] = {}
+    for room in rooms:
+        link = str(room.get("analysis_room_name") or room["name"]).strip().casefold()
+        link_counts[link] = link_counts.get(link, 0) + 1
+
+    records = []
+    for room in rooms:
+        link_name = str(room.get("analysis_room_name") or room["name"]).strip()
+        key = link_name.casefold()
+        if link_counts.get(key, 0) > 1:
+            records.append(
+                {
+                    "room_id": room["id"],
+                    "state": "conflicting",
+                    "analysis_room_name": link_name,
+                    "differences": [],
+                    "message": "Multiple spatial rooms map to the same analysis room.",
+                }
+            )
+            continue
+        if analysis_name_counts.get(key, 0) > 1:
+            records.append(
+                {
+                    "room_id": room["id"],
+                    "state": "conflicting",
+                    "analysis_room_name": link_name,
+                    "differences": [],
+                    "message": "The mapped analysis room name is duplicated.",
+                }
+            )
+            continue
+        target = targets.get(key)
+        if target is None:
+            records.append(
+                {
+                    "room_id": room["id"],
+                    "state": "unmapped",
+                    "analysis_room_name": link_name,
+                    "differences": [],
+                    "message": "No matching room exists in the active analysis.",
+                }
+            )
+            continue
+        delta = differences(room, target)
+        state = "synchronized" if not delta else "conflicting"
+        records.append(
+            {
+                "room_id": room["id"],
+                "state": state,
+                "analysis_room_name": link_name,
+                "differences": delta,
+                "message": (
+                    "Spatial geometry matches the active analysis."
+                    if state == "synchronized"
+                    else "Spatial and engineering room inputs differ."
+                ),
+            }
+        )
+    return records
+
+
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
@@ -692,6 +855,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
+        self._sync_var = tk.StringVar(value="Engineering sync: no room selected")
         self._metrics_var = tk.StringVar(value="0 rooms")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
@@ -804,7 +968,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._sync_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
@@ -824,7 +991,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -832,7 +999,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -1081,13 +1248,37 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _load_property_panel(self) -> None:
         item = self._selected_object()
+        sync_var = getattr(self, "_sync_var", None)
         if item is None:
             self._selection_var.set("No selection")
+            if sync_var is not None:
+                sync_var.set("Engineering sync: no room selected")
             for var in self._property_vars.values():
                 var.set("")
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+        if sync_var is not None:
+            if self.selected and self.selected.kind == "room":
+                diagnostic = next(
+                    (
+                        record
+                        for record in engineering_sync_diagnostics(
+                            self.layout, self._analysis_getter()
+                        )
+                        if record["room_id"] == item["id"]
+                    ),
+                    None,
+                )
+                if diagnostic is None:
+                    sync_var.set("Engineering sync: unavailable")
+                else:
+                    sync_var.set(
+                        f"Engineering sync: {diagnostic['state'].upper()} — "
+                        f"{diagnostic['message']}"
+                    )
+            else:
+                sync_var.set("Engineering sync: not applicable")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -1298,7 +1489,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(
+        self,
+    ) -> list[tuple[dict, dict, float | None, float | None, str]]:
         if not self._show_relationships.get():
             return []
         analysis = self._analysis_getter()
@@ -1314,7 +1507,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 key = str(name or "").strip().casefold()
                 if key and key not in rooms_by_name:
                     rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
+        relationships: list[
+            tuple[dict, dict, float | None, float | None, str]
+        ] = []
         for item in raw:
             if not isinstance(item, dict):
                 continue
@@ -1332,28 +1527,59 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if delta is not None
                 else None
             )
-            relationships.append((high, low, delta_value))
+            observed_delta = None
+            if high.get("pressure_pa") is not None and low.get("pressure_pa") is not None:
+                observed_delta = (
+                    _finite_number(high.get("pressure_pa"), 0.0)
+                    - _finite_number(low.get("pressure_pa"), 0.0)
+                )
+            if observed_delta is None:
+                state = "unavailable"
+            elif delta_value is None:
+                state = "available"
+            elif observed_delta + SPATIAL_GEOMETRY_EPSILON_M >= delta_value:
+                state = "pass"
+            else:
+                state = "fail"
+            relationships.append(
+                (high, low, delta_value, observed_delta, state)
+            )
         return relationships
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        colors = {
+            "pass": "#15803d",
+            "fail": "#b91c1c",
+            "available": "#7c3aed",
+            "unavailable": "#64748b",
+        }
+        for high, low, min_delta, observed_delta, state in self._pressure_relationships():
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            color = colors[state]
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                arrow="last", width=2, dash=(6, 3), fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                if observed_delta is None and min_delta is not None:
+                    label = f"Δ unavailable / target ≥ {min_delta:g} Pa"
+                elif observed_delta is not None and min_delta is not None:
+                    label = f"Δ {observed_delta:g} Pa / target ≥ {min_delta:g} Pa"
+                elif observed_delta is not None:
+                    label = f"Δ {observed_delta:g} Pa"
+                else:
+                    label = "Pressure unavailable"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
 

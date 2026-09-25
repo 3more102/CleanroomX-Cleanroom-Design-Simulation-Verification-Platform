@@ -1,0 +1,35 @@
+{
+  "schema": "cleanroomx.parameter-sweep",
+  "schema_version": 1,
+  "name": "Room airflow and pressure sweep",
+  "analysis_kind": "room_verification",
+  "base_input": {
+    "name": "Example cleanroom",
+    "length_m": 6.0,
+    "width_m": 4.0,
+    "height_m": 3.0,
+    "supply_airflow_m3_h": 1800.0,
+    "min_ach": 20.0,
+    "min_pressure_pa": 10.0,
+    "observed_pressure_pa": 14.0,
+    "particle_requirements": [
+      {
+        "size_um": 0.5,
+        "max_concentration_per_m3": 400000.0,
+        "observed_concentration_per_m3": 120000.0
+      }
+    ]
+  },
+  "parameters": [
+    {
+      "path": ["supply_airflow_m3_h"],
+      "values": [1200.0, 1800.0, 2400.0]
+    },
+    {
+      "path": ["observed_pressure_pa"],
+      "values": [8.0, 14.0]
+    }
+  ],
+  "max_cases": 20,
+  "fail_fast": false
+}

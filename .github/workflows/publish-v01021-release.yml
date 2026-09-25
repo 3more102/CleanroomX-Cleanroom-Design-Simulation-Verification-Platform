@@ -61,6 +61,7 @@ jobs:
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1551'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1552'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1554'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1561'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F '3D Fit derives zoom and both pan axes from real room floor/ceiling geometry'
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence'
 

@@ -17,7 +17,7 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 
 ## Desktop data flow
 
-A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available.
+A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available. Each completed `AnalysisRun` owns a deep-copied submitted-input snapshot. Exported `cleanroomx.analysis-run` documents are versioned and carry a canonical SHA-256 over the complete bundle contents plus a cross-check from the embedded input snapshot to the existing application-execution provenance hash. Verification is read-only and does not re-run engineering solvers.
 
 Result ownership remains tied to the analysis id so stale results are not silently reassigned after edits, deletion, or analysis switching. Project saves serialize schema version 1, validate the resulting document, and use an atomic replacement.
 

@@ -199,7 +199,12 @@ def _require_array(value: Any, path: str) -> list:
 def _require_string(value: Any, path: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise SpatialLayoutFormatError(f"{path} must be a non-empty string")
-    return value.strip()
+    stripped = value.strip()
+    if stripped != value:
+        raise SpatialLayoutFormatError(
+            f"{path} must not have leading or trailing whitespace"
+        )
+    return value
 
 
 def _require_number(value: Any, path: str, *, positive: bool = False) -> float:
@@ -237,10 +242,9 @@ def validate_persisted_spatial_layout(value: Any) -> None:
             f"unsupported legacy spatial layout version {version}"
         )
 
-    if "grid_m" in layout:
-        _require_number(layout["grid_m"], "spatial_layout.grid_m", positive=True)
+    _require_number(layout.get("grid_m"), "spatial_layout.grid_m", positive=True)
 
-    rooms = _require_array(layout.get("rooms", []), "spatial_layout.rooms")
+    rooms = _require_array(layout.get("rooms"), "spatial_layout.rooms")
     room_ids: set[str] = set()
     for index, raw_room in enumerate(rooms):
         path = f"spatial_layout.rooms[{index}]"
@@ -260,7 +264,7 @@ def validate_persisted_spatial_layout(value: Any) -> None:
         if "pressure_pa" in room:
             _require_number(room["pressure_pa"], f"{path}.pressure_pa")
 
-    devices = _require_array(layout.get("devices", []), "spatial_layout.devices")
+    devices = _require_array(layout.get("devices"), "spatial_layout.devices")
     device_ids: set[str] = set()
     for index, raw_device in enumerate(devices):
         path = f"spatial_layout.devices[{index}]"
@@ -271,7 +275,7 @@ def validate_persisted_spatial_layout(value: Any) -> None:
                 f"{path}.id duplicates device id {device_id!r}"
             )
         device_ids.add(device_id)
-        device_type = _require_string(device.get("type"), f"{path}.type").lower()
+        device_type = _require_string(device.get("type"), f"{path}.type")
         if device_type not in DEVICE_TYPES:
             raise SpatialLayoutFormatError(
                 f"{path}.type must be one of {', '.join(DEVICE_TYPES)}"
@@ -288,22 +292,28 @@ def validate_persisted_spatial_layout(value: Any) -> None:
         _require_number(device.get("y_m"), f"{path}.y_m")
         _require_number(device.get("z_m"), f"{path}.z_m")
 
-    if "view" in layout:
-        view = _require_object(layout["view"], "spatial_layout.view")
-        positive_view_fields = {"zoom_2d", "zoom_3d"}
-        for key in (
-            "zoom_2d",
-            "pan_x",
-            "pan_y",
-            "azimuth_deg",
-            "elevation_deg",
-            "zoom_3d",
-            "pan_3d_x",
-            "pan_3d_y",
-        ):
-            if key in view:
-                _require_number(
-                    view[key],
-                    f"spatial_layout.view.{key}",
-                    positive=key in positive_view_fields,
-                )
+    view = _require_object(layout.get("view"), "spatial_layout.view")
+    for key in ("pan_x", "pan_y", "azimuth_deg", "pan_3d_x", "pan_3d_y"):
+        _require_number(view.get(key), f"spatial_layout.view.{key}")
+
+    zoom_2d = _require_number(
+        view.get("zoom_2d"), "spatial_layout.view.zoom_2d", positive=True
+    )
+    zoom_3d = _require_number(
+        view.get("zoom_3d"), "spatial_layout.view.zoom_3d", positive=True
+    )
+    elevation = _require_number(
+        view.get("elevation_deg"), "spatial_layout.view.elevation_deg"
+    )
+    if not 0.2 <= zoom_2d <= 8.0:
+        raise SpatialLayoutFormatError(
+            "spatial_layout.view.zoom_2d must be between 0.2 and 8.0"
+        )
+    if not 0.2 <= zoom_3d <= 8.0:
+        raise SpatialLayoutFormatError(
+            "spatial_layout.view.zoom_3d must be between 0.2 and 8.0"
+        )
+    if not 5.0 <= elevation <= 75.0:
+        raise SpatialLayoutFormatError(
+            "spatial_layout.view.elevation_deg must be between 5.0 and 75.0"
+        )

@@ -43,6 +43,7 @@ def allocate_unique_identifier(
     used_ids: set[str],
     *,
     reserved_ids: Iterable[str] = (),
+    next_suffixes: dict[str, int] | None = None,
 ) -> str:
     """Allocate a stable identifier while preserving explicitly reserved ids.
 
@@ -50,18 +51,22 @@ def allocate_unique_identifier(
     No clock, randomness, process state, or hash randomization participates.
     """
     base = _identifier_text(preferred) or "item"
-    blocked = set(reserved_ids)
+    blocked = reserved_ids if isinstance(reserved_ids, (set, frozenset)) else set(reserved_ids)
     if base not in used_ids and base not in blocked:
         used_ids.add(base)
+        if next_suffixes is not None:
+            next_suffixes.setdefault(base, 2)
         return base
 
-    suffix = 2
+    suffix = next_suffixes.get(base, 2) if next_suffixes is not None else 2
     while True:
         candidate = f"{base}-{suffix}"
+        suffix += 1
         if candidate not in used_ids and candidate not in blocked:
             used_ids.add(candidate)
+            if next_suffixes is not None:
+                next_suffixes[base] = suffix
             return candidate
-        suffix += 1
 
 
 def _raw_sequence(
@@ -121,7 +126,7 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
                     f"spatial_layout.rooms[{index}] must be an object"
                 )
             continue
-        record = deepcopy(raw)
+        record = raw
         explicit = _identifier_text(record.get("id"))
         if explicit is not None:
             if strict and explicit in room_reserved:
@@ -132,6 +137,7 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
         room_records.append(record)
 
     room_used: set[str] = set()
+    room_next_suffixes: dict[str, int] = {}
     migrated_rooms: list[dict] = []
     for index, record in enumerate(room_records):
         name = str(record.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
@@ -145,6 +151,7 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
                 preferred,
                 room_used,
                 reserved_ids=room_reserved,
+                next_suffixes=room_next_suffixes,
             )
         record["id"] = room_id
         migrated_rooms.append(record)
@@ -171,6 +178,7 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
         device_records.append(record)
 
     device_used: set[str] = set()
+    device_next_suffixes: dict[str, int] = {}
     migrated_devices: list[dict] = []
     for record in device_records:
         device_type = str(record.get("type") or "equipment").lower()
@@ -185,6 +193,7 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
                 preferred,
                 device_used,
                 reserved_ids=device_reserved,
+                next_suffixes=device_next_suffixes,
             )
         record["id"] = device_id
         room_id = _identifier_text(record.get("room_id"))

@@ -265,3 +265,40 @@ def test_startup_recovery_takes_precedence_over_requested_project(monkeypatch):
 
     assert gui_module.main(["requested.cleanroomx.json"]) == 0
     assert events == ["recovery", "mainloop"]
+
+
+
+def test_recovered_first_save_refuses_original_source_path(tmp_path, monkeypatch):
+    source, artifact, recovery_dir = _make_recovery(tmp_path, '{"value": 2}')
+    source_before = source.read_bytes()
+    app = _app_for_restore(recovery_dir)
+    app.restore_recovery_path(artifact)
+
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(source),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "save_project_document",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("recovered first save must not overwrite source")
+        ),
+    )
+
+    app.save_project_as()
+
+    assert app.project_path is None
+    assert app._recovery_source_path == source.resolve()
+    assert artifact.exists()
+    assert source.read_bytes() == source_before
+    assert warnings
+    assert "different file" in warnings[0][1]
+    assert "both versions" in warnings[0][1]

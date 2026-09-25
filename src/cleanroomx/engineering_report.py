@@ -219,6 +219,12 @@ def verify_engineering_report_payload(payload: dict[str, Any]) -> bool:
         return False
     if not isinstance(payload.get("input"), dict):
         return False
+    try:
+        actual_input_sha256 = sha256(_canonical_bytes(payload["input"])).hexdigest()
+    except (TypeError, ValueError):
+        return False
+    if not hmac.compare_digest(input_sha256.lower(), actual_input_sha256):
+        return False
     if not isinstance(payload.get("result"), dict):
         return False
     if not isinstance(payload.get("diagnostics"), dict):

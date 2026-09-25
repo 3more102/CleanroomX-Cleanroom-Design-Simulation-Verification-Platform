@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased startup crash recovery — 2026-09-25
+
+- Detects preserved recovery artifacts at desktop startup and presents an explicit recovery chooser instead of silently restoring or overwriting project files.
+- Shows recovery timestamp, project identity, original project path, and current source comparison state (unchanged, changed, newer, missing, or unsaved) before an operator acts.
+- Adds inspect, discard, and restore-working-copy actions; malformed or unreadable artifacts are reported and preserved rather than deleted automatically.
+- Validates the embedded project document again before restore and restores the raw active-editor draft, including malformed JSON drafts retained by autosave.
+- Opens every restored snapshot as a visibly marked protected working copy. Save routes to Save As, and the first recovered save cannot target the original source path, preserving both versions when source state is uncertain or newer.
+- Keeps original project files untouched during scan, inspect, restore, and discard; only an explicitly selected recovery artifact is deleted by the discard path.
+- Adds backend and GUI regressions for recovery validation, safe artifact deletion, protected restore state, Save-As routing, original-path overwrite prevention, startup selection, and visible recovered-state marking.
+
 ## Unreleased autosave and crash-recovery foundation — 2026-09-25
 
 - Adds a dedicated recovery-autosave service that writes only separate recovery artifacts; it never overwrites the user's explicitly saved `.cleanroomx.json` file.

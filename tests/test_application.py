@@ -14,6 +14,7 @@ from cleanroomx.application import (
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
+    verify_analysis_run_bundle,
 )
 
 
@@ -190,6 +191,57 @@ def test_application_execution_provenance_hashes_inline_input_canonically():
     assert first_provenance["external_dependency_count"] == 0
     assert first_provenance["external_dependencies_stable"] is True
 
+
+
+def test_run_bundle_captures_immutable_input_and_verifies():
+    payload = _example("basic_room.json")
+    submitted = json.loads(json.dumps(payload))
+
+    run = run_analysis("room_verification", payload)
+    payload["name"] = "mutated after execution"
+
+    bundle = run.to_dict()
+    verification = verify_analysis_run_bundle(bundle)
+
+    assert bundle["schema"] == "cleanroomx.analysis-run"
+    assert bundle["schema_version"] == 1
+    assert bundle["input_snapshot"] == submitted
+    assert run.input_snapshot == submitted
+    assert len(bundle["integrity"]["sha256"]) == 64
+    assert verification["status"] == "ok"
+    assert verification["analysis_kind"] == "room_verification"
+    assert verification["input_sha256"] == run.diagnostics[
+        "application_execution_provenance"
+    ]["input_sha256"]
+    assert verification["bundle_sha256"] == bundle["integrity"]["sha256"]
+
+
+def test_run_bundle_verification_detects_document_tampering():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["status"] = "tampered"
+
+    with pytest.raises(ValueError, match="content has changed"):
+        verify_analysis_run_bundle(bundle)
+
+
+def test_run_bundle_verification_detects_input_provenance_mismatch_even_if_resigned():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["input_snapshot"]["name"] = "different submitted input"
+
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="input snapshot does not match"):
+        verify_analysis_run_bundle(bundle)
 
 
 def test_rebase_analysis_file_references_preserves_consistency_referents(tmp_path):

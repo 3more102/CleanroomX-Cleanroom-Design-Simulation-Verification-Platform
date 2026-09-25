@@ -65,6 +65,7 @@ jobs:
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1565'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1585'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'autosave completion-callback race fix is merged'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'deterministic gesture-origin drag translation is independent of intermediate mouse-motion event sampling'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'deterministic spatial drag uses immutable gesture-start origins'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F '3D Fit derives zoom and both pan axes from real room floor/ceiling geometry'
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence'

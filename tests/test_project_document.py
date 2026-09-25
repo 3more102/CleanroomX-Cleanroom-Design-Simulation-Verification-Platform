@@ -85,6 +85,16 @@ def test_project_loader_rejects_future_schema():
         })
 
 
+def test_project_loader_rejects_boolean_schema_version():
+    with pytest.raises(ProjectFormatError, match="schema_version must be an integer"):
+        project_from_dict({
+            "schema": PROJECT_SCHEMA,
+            "schema_version": True,
+            "project": {"name": "Boolean version"},
+            "analyses": [],
+        })
+
+
 def test_project_loader_rejects_duplicate_analysis_ids():
     with pytest.raises(ProjectFormatError, match="unique"):
         project_from_dict({
@@ -116,3 +126,124 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+def test_project_loader_rejects_duplicate_object_keys(tmp_path):
+    path = tmp_path / "duplicate.cleanroomx.json"
+    path.write_text(
+        '{"schema":"cleanroomx.project","schema_version":1,'
+        '"project":{"name":"Duplicate keys","metadata":{}},'
+        '"analyses":[{"id":"a","name":"A","kind":"room_verification",'
+        '"input":{"airflow_m3_h":1000,"airflow_m3_h":2000}}],'
+        '"active_analysis_id":"a"}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectFormatError, match="duplicate JSON object key 'airflow_m3_h'"):
+        load_project_document(path)
+
+
+def test_project_loader_rejects_non_string_object_keys_without_coercion():
+    data = {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {"name": "Bad keys", "metadata": {1: "silently-coerced-before"}},
+        "analyses": [],
+    }
+
+    with pytest.raises(ProjectFormatError, match=r"\$\.project\.metadata.*string object keys"):
+        project_from_dict(data)
+
+
+def test_project_loader_rejects_python_tuple_instead_of_silently_serializing_array():
+    data = {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {"name": "Tuple input"},
+        "analyses": [{
+            "id": "a",
+            "name": "A",
+            "kind": "room_verification",
+            "input": {"values": (1, 2)},
+        }],
+        "active_analysis_id": "a",
+    }
+
+    with pytest.raises(
+        ProjectFormatError,
+        match=r"\$\.analyses\[0\]\.input\.values.*tuple",
+    ):
+        project_from_dict(data)
+
+
+def test_project_loader_detaches_nested_state_from_caller():
+    data = {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {
+            "name": "Detached",
+            "metadata": {"audit": {"revision": 1}},
+        },
+        "analyses": [{
+            "id": "a",
+            "name": "A",
+            "kind": "room_verification",
+            "input": {"room": {"airflow_m3_h": 100.0}},
+        }],
+        "active_analysis_id": "a",
+    }
+
+    project = project_from_dict(data)
+    data["project"]["metadata"]["audit"]["revision"] = 99
+    data["analyses"][0]["input"]["room"]["airflow_m3_h"] = 999.0
+
+    assert project.metadata["audit"]["revision"] == 1
+    assert project.analyses[0].input["room"]["airflow_m3_h"] == 100.0
+
+
+def test_project_to_dict_returns_detached_strict_json_snapshot():
+    project = ProjectDocument(
+        name="Detached",
+        metadata={"audit": {"revision": 1}},
+        analyses=[AnalysisDocument(
+            id="a",
+            name="A",
+            kind="room_verification",
+            input={"room": {"airflow_m3_h": 100.0}},
+        )],
+        active_analysis_id="a",
+    )
+
+    snapshot = project.to_dict()
+    snapshot["project"]["metadata"]["audit"]["revision"] = 2
+    snapshot["analyses"][0]["input"]["room"]["airflow_m3_h"] = 200.0
+
+    assert project.metadata["audit"]["revision"] == 1
+    assert project.analyses[0].input["room"]["airflow_m3_h"] == 100.0
+
+
+def test_project_to_dict_rejects_cycles_with_location():
+    metadata = {}
+    metadata["self"] = metadata
+    project = ProjectDocument(name="Cycle", metadata=metadata)
+
+    with pytest.raises(ProjectFormatError, match=r"\$\.project\.metadata\.self.*cyclic"):
+        project.to_dict()
+
+
+def test_save_rejects_non_json_state_before_replacing_existing_file(tmp_path):
+    target = tmp_path / "protected.cleanroomx.json"
+    target.write_text("existing project bytes\n", encoding="utf-8")
+    project = ProjectDocument(name="Invalid", metadata={"bad": {1: "value"}})
+
+    with pytest.raises(ProjectFormatError, match="string object keys"):
+        save_project_document(target, project)
+
+    assert target.read_text(encoding="utf-8") == "existing project bytes\n"
+
+
+def test_project_rejects_unpaired_unicode_surrogate_before_utf8_write():
+    project = ProjectDocument(name="Unicode", metadata={"label": "\ud800"})
+
+    with pytest.raises(ProjectFormatError, match="valid UTF-8 text"):
+        project.to_dict()

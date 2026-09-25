@@ -731,6 +731,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._mapping_var = tk.StringVar(value="Engineering mapping: —")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._metrics_var = tk.StringVar(value="0 rooms")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
@@ -775,7 +776,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Engineering → geometry",
+            command=self.sync_from_analysis,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Geometry → engineering",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
 
@@ -844,7 +850,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._mapping_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
@@ -864,7 +873,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -872,7 +881,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )

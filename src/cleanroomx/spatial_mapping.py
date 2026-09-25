@@ -243,9 +243,16 @@ def push_layout_to_analysis(layout: dict, analysis: Any) -> bool:
             continue
         expected_analysis_id = str(room.get("analysis_id") or "").strip()
         if expected_analysis_id and analysis_id and expected_analysis_id != analysis_id:
-            continue
+            raise SpatialMappingError(
+                f"Spatial room {room.get('name')!r} is mapped to analysis "
+                f"{expected_analysis_id!r}, not active analysis {analysis_id!r}."
+            )
         matches = targets.get(ref, [])
         if len(matches) != 1:
+            if room.get("analysis_room_name"):
+                raise SpatialMappingError(
+                    f"Linked analysis room {ref!r} does not exist uniquely in the active analysis."
+                )
             continue
         target = matches[0]
         for key in DIMENSION_KEYS:
@@ -296,8 +303,18 @@ def pull_analysis_to_layout(layout: dict, analysis: Any) -> bool:
         if not isinstance(room, dict):
             continue
         ref = _effective_room_ref(room, analysis, targets)
+        expected_analysis_id = str(room.get("analysis_id") or "").strip()
+        if expected_analysis_id and analysis_id and expected_analysis_id != analysis_id:
+            raise SpatialMappingError(
+                f"Spatial room {room.get('name')!r} is mapped to analysis "
+                f"{expected_analysis_id!r}, not active analysis {analysis_id!r}."
+            )
         matches = targets.get(ref, []) if ref else []
         if len(matches) != 1:
+            if room.get("analysis_room_name"):
+                raise SpatialMappingError(
+                    f"Linked analysis room {ref!r} does not exist uniquely in the active analysis."
+                )
             continue
         target = matches[0]
         for key in DIMENSION_KEYS:

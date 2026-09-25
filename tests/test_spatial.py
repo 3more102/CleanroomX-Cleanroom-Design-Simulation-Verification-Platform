@@ -8,6 +8,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    spatial_layout_schedule_csv,
     spatial_layout_summary,
     spatial_layout_svg,
     sync_layout_to_analysis,
@@ -240,6 +241,75 @@ def test_spatial_layout_summary_reports_operator_metrics_and_unassigned_devices(
     assert summary["unassigned_device_count"] == 1
     assert summary["extents_m"] == {"width": 11, "height": 5}
 
+
+
+
+def test_spatial_layout_schedule_csv_exports_room_and_device_engineering_records():
+    import csv
+    import io
+
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process, ISO 7",
+                "x_m": -1,
+                "y_m": 2,
+                "length_m": 6,
+                "width_m": 5,
+                "height_m": 3,
+                "pressure_pa": 25,
+            }
+        ],
+        "devices": [
+            {
+                "id": "ffu-1",
+                "type": "ffu",
+                "name": 'FFU "A"',
+                "room_id": "process",
+                "x_m": 1,
+                "y_m": 4,
+                "z_m": 3,
+            },
+            {
+                "id": "sensor-1",
+                "type": "sensor",
+                "name": "DP-1",
+                "room_id": None,
+                "x_m": 9,
+                "y_m": 4,
+                "z_m": 1.5,
+            },
+        ],
+    }
+
+    exported = spatial_layout_schedule_csv(layout)
+    rows = list(csv.DictReader(io.StringIO(exported)))
+
+    assert exported == spatial_layout_schedule_csv(layout)
+    assert exported.endswith("\n")
+    assert [row["record_type"] for row in rows] == ["room", "device", "device"]
+    assert rows[0]["name"] == "Process, ISO 7"
+    assert rows[0]["area_m2"] == "30"
+    assert rows[0]["volume_m3"] == "90"
+    assert rows[0]["pressure_pa"] == "25"
+    assert rows[1]["name"] == 'FFU "A"'
+    assert rows[1]["device_type"] == "ffu"
+    assert rows[1]["room_name"] == "Process, ISO 7"
+    assert rows[1]["z_m"] == "3"
+    assert rows[2]["room_id"] == ""
+    assert rows[2]["room_name"] == ""
+
+
+def test_spatial_layout_schedule_csv_handles_empty_layout():
+    import csv
+    import io
+
+    exported = spatial_layout_schedule_csv({})
+    rows = list(csv.DictReader(io.StringIO(exported)))
+
+    assert rows == []
+    assert exported.startswith("record_type,id,name,device_type,room_id,room_name,")
 
 
 def test_spatial_layout_svg_exports_valid_deterministic_vector_plan():

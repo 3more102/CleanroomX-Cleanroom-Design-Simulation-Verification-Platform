@@ -50,11 +50,11 @@ Project saves are validated before writing and use an atomic temporary-file repl
 
 ### External-change write protection
 
-When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
+When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. The project parser and SHA-256 identity now consume the same stable byte snapshot, so the revision always attests to the bytes that were actually parsed. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
 
 If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
 
-For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
+For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit. Atomic text persistence is emitted as explicit UTF-8 bytes for cross-platform byte stability. After a successful guarded save, the tracked revision is derived from those committed bytes rather than from a post-save re-read; if another process changes the path immediately afterward, that later content is therefore still recognized as external on the next save.
 
 ## Recovery autosave
 

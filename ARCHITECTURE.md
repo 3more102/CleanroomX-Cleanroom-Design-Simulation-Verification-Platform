@@ -7,7 +7,8 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 ## Layers
 
 1. **Engineering backends** — calculation, solver, uncertainty, qualification, HVAC, fan/network, dossier, consistency, and report modules under `src/cleanroomx/`.
-2. **Application service registry** — `src/cleanroomx/application.py` defines the desktop workflow catalog and validates unique workflow keys, parser/runner contracts for ordinary workflows, custom `consistency`/`dossier` adapters, and callable parser/runner/reporter targets.
+2. **Application service registry** — `src/cleanroomx/application.py` defines the desktop workflow catalog and validates unique workflow keys, parser/runner contracts for ordinary workflows, custom `consistency`/`dossier` adapters, and callable parser/runner/reporter targets. The registry combines built-in workflows with valid version-1 installed analysis plugins.
+2a. **Plugin boundary** — `src/cleanroomx/plugins.py` owns the dependency-free `cleanroomx.analysis_plugins` entry-point contract, deterministic discovery, API-version validation, origin metadata, collision rejection, and isolation of plugin discovery failures. Plugin parser input and reporter result arguments cross deep-copy ownership boundaries. Plugins are trusted Python code, not sandboxed content.
 3. **Project persistence** — `src/cleanroomx/project.py` implements the `cleanroomx.project` schema, strict JSON validation, supported legacy migration, duplicate-id and active-analysis checks, and atomic temporary-file replacement on save.
 4. **Recovery persistence** — `src/cleanroomx/autosave.py` owns separate versioned recovery artifacts, source-file fingerprints, bounded rotation, asynchronous write/coalescing, validated restore/discard operations, and recovery scanning. It never writes the explicit project path.
 5. **Recovery UI** — `src/cleanroomx/recovery_ui.py` provides startup recovery discovery, evidence inspection, explicit discard, and restore selection without owning project-save semantics.
@@ -17,7 +18,7 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 
 ## Desktop data flow
 
-A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available.
+A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to an application-registry entry. Built-in and plugin workflows pass through declared parser and runner functions; consistency and dossier retain their explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available. Missing plugin analysis kinds fail closed during project validation rather than being substituted with another implementation.
 
 Result ownership remains tied to the analysis id, and each cached result is bound to the canonical SHA-256 of the exact submitted analysis input already recorded in execution provenance. Cache restore, worker completion, and result/report export fail closed when the current analysis kind or input hash no longer matches that provenance, so missed mutation notifications cannot silently expose stale engineering evidence. Project saves serialize schema version 1, validate the resulting document, and use an atomic replacement.
 
@@ -30,3 +31,13 @@ Startup restoration keeps save ownership equally explicit. A recovery is parsed 
 ## Engineering boundary
 
 CleanroomX produces screening and numerical/provenance evidence. It does not by itself establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance. Applicable requirements and acceptance criteria remain external project inputs.
+
+
+## Analysis extension compatibility
+
+Plugin analysis keys are persisted through the existing `AnalysisDocument.kind`
+field and are therefore part of the project compatibility contract. Valid plugin
+runs record plugin API version, entry-point identity, distribution name, and
+distribution version in application execution provenance. Plugin API v1 is
+intentionally narrow: parser, runner, and optional reporter bindings. Host-managed
+external dependency declarations are not part of v1.

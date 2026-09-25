@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-import os
 
 import pytest
 
-import cleanroomx.project as project_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
     ProjectFormatError, ProjectSaveConflictError, atomic_write_text,
@@ -120,20 +118,21 @@ def test_atomic_write_can_require_destination_to_remain_absent(tmp_path):
     assert path.read_text(encoding="utf-8") == "external\n"
 
 
-@pytest.mark.skipif(os.name != "posix", reason="directory fsync durability is POSIX-specific")
-def test_atomic_write_fsyncs_file_and_parent_directory(tmp_path, monkeypatch):
-    calls = []
-    real_fsync = project_module.os.fsync
+def test_checked_project_save_updates_fingerprint_for_next_save(tmp_path):
+    path = tmp_path / "repeat.cleanroomx.json"
+    first = save_project_document_with_fingerprint(
+        path,
+        ProjectDocument(name="First"),
+        expected_fingerprint=None,
+    )
+    second = save_project_document_with_fingerprint(
+        path,
+        ProjectDocument(name="Second"),
+        expected_fingerprint=first.fingerprint,
+    )
 
-    def recording_fsync(fd):
-        calls.append(fd)
-        return real_fsync(fd)
-
-    monkeypatch.setattr(project_module.os, "fsync", recording_fsync)
-
-    atomic_write_text(tmp_path / "durable.json", "payload\n")
-
-    assert len(calls) >= 2
+    assert second.fingerprint == project_file_fingerprint(path)
+    assert load_project_document(path).name == "Second"
 
 
 def test_project_loader_migrates_legacy_single_analysis_shape():

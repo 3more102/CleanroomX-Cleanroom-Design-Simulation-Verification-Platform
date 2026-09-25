@@ -617,6 +617,9 @@ class CleanroomXApp:
         artifact = getattr(self, "_restored_recovery_artifact", None)
         if artifact is None:
             return
+        if not artifact.exists():
+            self._restored_recovery_artifact = None
+            return
         try:
             discard_recovery_artifact(artifact, recovery_dir=artifact.parent)
         except FileNotFoundError:
@@ -890,7 +893,7 @@ class CleanroomXApp:
         self.autosave_status_var.set("Autosave: recovered copy")
         self._update_title()
 
-    def show_recovery_center(self) -> bool:
+    def show_recovery_center(self, *, announce_empty: bool = True) -> bool:
         try:
             scan = scan_recovery_artifacts(self._autosave_manager.recovery_dir)
         except OSError as exc:
@@ -901,7 +904,8 @@ class CleanroomXApp:
             )
             return False
         if not scan.candidates and not scan.issues:
-            self.status_var.set("No recoverable sessions found.")
+            if announce_empty:
+                self.status_var.set("No recoverable sessions found.")
             return False
 
         dialog = RecoveryCenter(self.root, scan)
@@ -926,7 +930,7 @@ class CleanroomXApp:
         return True
 
     def offer_startup_recovery(self) -> bool:
-        return self.show_recovery_center()
+        return self.show_recovery_center(announce_empty=False)
 
     def new_project(self) -> None:
         if self._running:

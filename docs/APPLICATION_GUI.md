@@ -90,7 +90,7 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 
 ### Persisted analysis run history
 
-Every fresh desktop run that is accepted after the existing analysis-id and input-freshness checks is appended to a bounded project audit ledger. Abandoned runs, deleted-analysis results, stale results, and failed computations are not recorded as successful completed runs. Recording a run makes the project dirty so normal save/recovery protection applies.
+Every fresh desktop run that is accepted after the existing analysis-id and input-freshness checks is appended to a bounded project audit ledger. The analysis worker prepares hashes for potentially large result, diagnostic, report, and plot payloads before returning to the Tk event thread; the UI thread performs freshness acceptance and the metadata commit. Abandoned runs, deleted-analysis results, stale results, and failed computations are not recorded as successful completed runs. Recording a run makes the project dirty so normal save/recovery protection applies.
 
 Use **Analysis → Run History…** to inspect retained records. Each record stores the analysis identity and status, exact input snapshot, application execution provenance, and SHA-256 identities for the normalized result, diagnostics, Markdown report, and optional plot. File-backed consistency/dossier records therefore retain the dependency revision evidence captured by the execution layer. The history keeps the most recent 50 records by default; when older records are pruned, an anchor digest preserves the chain relationship to the retained prefix.
 

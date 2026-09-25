@@ -654,6 +654,31 @@ def test_python_tree_fingerprint_is_deterministic_and_content_sensitive(tmp_path
     assert changed["sha256"] != first["sha256"]
 
 
+def test_python_tree_fingerprint_cache_reuses_only_unchanged_manifest(tmp_path):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    first = application_module._fingerprint_python_tree(root)
+    first_cache = application_module._hash_python_tree_manifest.cache_info()
+
+    second = application_module._fingerprint_python_tree(root)
+    second_cache = application_module._hash_python_tree_manifest.cache_info()
+
+    assert second == first
+    assert second_cache.hits == first_cache.hits + 1
+    assert second_cache.misses == first_cache.misses
+
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    changed = application_module._fingerprint_python_tree(root)
+    changed_cache = application_module._hash_python_tree_manifest.cache_info()
+
+    assert changed["sha256"] != first["sha256"]
+    assert changed_cache.misses == second_cache.misses + 1
+
+
 def test_custom_adapter_binding_is_explicit_in_provenance(tmp_path):
     _copy_example(tmp_path, "facility_project.json")
     _copy_example(tmp_path, "consistency_hvac_demo.json")

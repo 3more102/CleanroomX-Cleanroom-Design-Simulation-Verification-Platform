@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .persistence import atomic_write_text
 from .fan_network import solve_fan_driven_parallel_network
 from .fan_network_io import load_fan_driven_parallel_network_study
 from .fan_network_report import markdown_fan_driven_parallel_network_report
@@ -31,7 +32,7 @@ def main() -> int:
         else markdown_fan_driven_parallel_network_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0 if result["status"] == "solved" else 2

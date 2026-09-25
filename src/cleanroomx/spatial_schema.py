@@ -97,9 +97,10 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
     """Return a version-1 layout with deterministic, unique persistent identities.
 
     Unknown top-level and per-item fields are preserved. In strict mode malformed
-    persisted collection shapes are rejected instead of being silently discarded.
-    Missing/duplicate identities are repaired deterministically so repeated loads
-    of the same bytes produce the same model identity graph.
+    persisted collection shapes and duplicate explicit identities are rejected
+    instead of being silently discarded or ambiguously rebound. Missing identities,
+    and duplicates in tolerant in-memory normalization, are repaired deterministically
+    so repeated normalization of the same bytes produces the same identity graph.
     """
     if not isinstance(value, dict):
         if strict:

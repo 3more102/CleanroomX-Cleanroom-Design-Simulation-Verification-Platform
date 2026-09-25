@@ -8,6 +8,12 @@ The current release line is **CleanroomX v0.100.0**, built directly on the verif
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
 
+### Unreleased persisted analysis run history
+
+The desktop now retains bounded analysis-run evidence in project metadata instead of losing all completed results when the application closes. Accepted runs preserve the exact submitted input snapshot, result/report/diagnostics/plot payload, and existing execution provenance. Per-entry and whole-history SHA-256 checks fail closed on corruption, and reopening restores only the latest run whose kind and canonical input identity still match the current analysis.
+
+The history is capped at 25 records globally, 5 per analysis, and 8 MiB. Stale and removed-analysis records remain audit evidence but are not rendered as current. **Export Run History JSON...** writes only validated history through the existing atomic export path. The project schema remains version 1; no solver equations, numerical tolerances, or engineering acceptance semantics change.
+
 ### Network-state replay provenance ladder
 
 | Version | Audited state |

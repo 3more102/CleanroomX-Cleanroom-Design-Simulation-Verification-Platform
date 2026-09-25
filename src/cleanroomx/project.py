@@ -18,6 +18,7 @@ from .persistence import (
     AtomicWriteDurabilityError,
     atomic_write_text as _shared_atomic_write_text,
 )
+from .run_history import RunHistoryIntegrityError, validate_run_history
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
@@ -453,6 +454,11 @@ def project_from_dict(data: dict) -> ProjectDocument:
         validate_project_spatial_metadata(metadata)
     except SpatialLayoutFormatError as exc:
         raise ProjectFormatError(f"invalid project spatial metadata: {exc}") from exc
+
+    try:
+        validate_run_history(metadata)
+    except RunHistoryIntegrityError as exc:
+        raise ProjectFormatError(f"invalid project run history: {exc}") from exc
 
     raw_analyses = data.get("analyses", [])
     if not isinstance(raw_analyses, list):

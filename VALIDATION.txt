@@ -52,6 +52,23 @@ conclusion SUCCESS
 Merged main commit:
 e528c694debbf6a3263693669f5acb6026f1951f
 
+PR #479 — Fix v0.102.1 autosave completion race on current main
+Exact tested PR head:
+4a802f43be7bc891e2c4de90b631ddea7c1fa9e4
+PR CI run #1565
+run id 36184210616
+conclusion SUCCESS
+Merged main commit:
+54fc239853cf4a2ab92b7686169e07acab34b8dd
+PR #479 full suite:
+1002 passed on Python 3.11, 3.12, and 3.13
+PR #479 application/desktop gate:
+292 passed
+PR #479 Release 2 consolidation gate:
+132 passed
+PASS - Windows launcher smoke
+PASS - Python 3.13 installed Tk/Xvfb GUI smoke
+
 PASS - Python 3.11/3.12/3.13 full CI jobs for the final PR closures
 PASS - windows-latest PowerShell/CMD checkout launcher smoke
 PASS - clean wheel build/install and installed application checks

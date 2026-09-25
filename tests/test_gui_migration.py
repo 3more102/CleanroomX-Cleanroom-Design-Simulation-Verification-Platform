@@ -166,3 +166,68 @@ def test_migrated_save_as_preserves_original_and_writes_current_schema(
     assert app._migration_source_path is None
     assert app._project_migration_info is None
     assert app._has_unsaved_changes() is False
+
+def test_current_schema_project_open_remains_clean(tmp_path):
+    source = tmp_path / "current.cleanroomx.json"
+    source.write_text(
+        json.dumps(
+            {
+                "schema": PROJECT_SCHEMA,
+                "schema_version": PROJECT_SCHEMA_VERSION,
+                "project": {
+                    "name": "Current Project",
+                    "description": "",
+                    "metadata": {},
+                },
+                "analyses": [],
+                "active_analysis_id": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    app = _app()
+
+    app.load_project_path(source)
+
+    assert app.project.name == "Current Project"
+    assert app._migration_source_path is None
+    assert app._project_migration_info.migrated is False
+    assert app._has_unsaved_changes() is False
+    assert app.status_var.value == "Opened current.cleanroomx.json"
+    assert "Migrated copy" not in app.root.last_title
+
+
+def test_failed_migrated_save_as_keeps_source_protection(tmp_path, monkeypatch):
+    source = tmp_path / "legacy.cleanroomx.json"
+    source_before = _write_legacy_project(source)
+    destination = tmp_path / "migrated.cleanroomx.json"
+    app = _app()
+    app.load_project_path(source)
+    errors = []
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "save_project_document_guarded",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    app.save_project_as()
+
+    assert source.read_bytes() == source_before
+    assert not destination.exists()
+    assert app.project_path == source
+    assert app._migration_source_path == source.resolve()
+    assert app._project_migration_info.migrated is True
+    assert app._has_unsaved_changes() is True
+    assert errors == [("Save failed", "disk full")]
+

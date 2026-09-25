@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial data integrity — 2026-09-25
+
+- Adds a GUI-independent persisted spatial-layout integrity contract for layout version, room/device identity, room references, finite coordinates, positive dimensions/grid size, and supported persisted viewport bounds.
+- Makes project load and save fail closed on future spatial-layout versions, duplicate room/device ids, dangling device-to-room references, and invalid spatial numerics instead of silently normalizing corrupted or unknown data.
+- Keeps project schema version 1 and the existing metadata location; valid version-1 spatial projects remain compatible without migration.
+- Makes forgiving spatial normalization deterministic for duplicate/missing ids, including colliding analysis-derived room names, while preserving already-valid stable ids.
+- Adds persistence-boundary and deterministic-identity regressions and places spatial tests in the desktop CI regression gate.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

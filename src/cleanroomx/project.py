@@ -5,11 +5,11 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
-import tempfile
-from typing import Any, Callable
+from typing import Any
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .persistence import atomic_write_text
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -310,41 +310,6 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
-def _atomic_write_text(
-    path: str | Path,
-    text: str,
-    *,
-    before_replace: Callable[[], None] | None = None,
-) -> Path:
-    destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
-        ) as handle:
-            temp_path = Path(handle.name)
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-        if before_replace is not None:
-            before_replace()
-        temp_path.replace(destination)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-    return destination
-
-
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
-    return _atomic_write_text(path, text)
-
-
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
     """Save a project atomically without an external-revision precondition."""
     return atomic_write_text(path, _project_document_text(project))
@@ -366,7 +331,7 @@ def save_project_document_guarded(
 
     assert_unchanged()
     text = _project_document_text(project)
-    saved_path = _atomic_write_text(
+    saved_path = atomic_write_text(
         destination,
         text,
         before_replace=assert_unchanged,

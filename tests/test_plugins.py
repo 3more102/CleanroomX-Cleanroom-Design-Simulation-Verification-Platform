@@ -199,6 +199,98 @@ def test_plugin_analysis_runs_through_shared_application_pipeline(monkeypatch):
     }
 
 
+def test_plugin_parser_cannot_mutate_submitted_project_payload(monkeypatch):
+    def mutating_parser(payload: dict) -> dict:
+        payload["value"] = 999.0
+        payload["nested"]["changed"] = True
+        return {"value": 4.0}
+
+    origin = PluginOrigin(
+        entry_point_name="mutating_plugin",
+        entry_point_value="cleanroomx_mutating:registration",
+        distribution_name="cleanroomx-mutating",
+        distribution_version="1.0",
+    )
+    spec = application.AnalysisSpec(
+        key="mutating_plugin",
+        title="Mutating plugin",
+        category="Plugin tests",
+        parser=mutating_parser,
+        runner=_runner,
+        reporter=None,
+        description="Mutation isolation test.",
+        source="plugin",
+        plugin_api_version=PLUGIN_API_VERSION,
+        plugin_origin=origin,
+    )
+    monkeypatch.setattr(application, "_ANALYSES", application._ANALYSES + (spec,))
+    monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
+    payload = {"value": 2.0, "nested": {"changed": False}}
+
+    run = application.run_analysis("mutating_plugin", payload)
+
+    assert payload == {"value": 2.0, "nested": {"changed": False}}
+    assert run.result["doubled"] == pytest.approx(8.0)
+    assert application.analysis_run_matches_input(run, "mutating_plugin", payload)
+
+
+def test_plugin_reporter_cannot_mutate_normalized_result(monkeypatch):
+    def mutating_reporter(result: dict) -> str:
+        result["doubled"] = -1
+        return "# Mutating reporter\n"
+
+    origin = PluginOrigin(
+        entry_point_name="report_plugin",
+        entry_point_value="cleanroomx_report:registration",
+        distribution_name="cleanroomx-report",
+        distribution_version="1.0",
+    )
+    spec = application.AnalysisSpec(
+        key="report_plugin",
+        title="Report plugin",
+        category="Plugin tests",
+        parser=_parser,
+        runner=_runner,
+        reporter=mutating_reporter,
+        description="Reporter isolation test.",
+        source="plugin",
+        plugin_api_version=PLUGIN_API_VERSION,
+        plugin_origin=origin,
+    )
+    monkeypatch.setattr(application, "_ANALYSES", application._ANALYSES + (spec,))
+    monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
+
+    run = application.run_analysis("report_plugin", {"value": 3.0})
+
+    assert run.result["doubled"] == pytest.approx(6.0)
+
+
+def test_plugin_reporter_must_return_text(monkeypatch):
+    origin = PluginOrigin(
+        entry_point_name="bad_report_plugin",
+        entry_point_value="cleanroomx_bad_report:registration",
+        distribution_name="cleanroomx-bad-report",
+        distribution_version="1.0",
+    )
+    spec = application.AnalysisSpec(
+        key="bad_report_plugin",
+        title="Bad report plugin",
+        category="Plugin tests",
+        parser=_parser,
+        runner=_runner,
+        reporter=lambda result: {"not": "markdown"},
+        description="Reporter contract test.",
+        source="plugin",
+        plugin_api_version=PLUGIN_API_VERSION,
+        plugin_origin=origin,
+    )
+    monkeypatch.setattr(application, "_ANALYSES", application._ANALYSES + (spec,))
+    monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
+
+    with pytest.raises(TypeError, match="reporter must return Markdown text"):
+        application.run_analysis("bad_report_plugin", {"value": 3.0})
+
+
 def test_plugin_analysis_can_be_persisted_when_registered(monkeypatch):
     from cleanroomx.project import project_from_dict
 

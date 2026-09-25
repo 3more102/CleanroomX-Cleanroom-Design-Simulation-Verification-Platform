@@ -36,6 +36,10 @@ Statuses are:
 - `fail`: at least one shared-room airflow value exceeds the configured tolerance, or identical room sets were required and differ;
 - `not_comparable`: there are no exact room-name matches and identical room sets were not required.
 
+## Desktop/project input contract
+
+When this workflow is configured as a CleanroomX project analysis, its JSON payload accepts only `verification_project`, `hvac_project`, `room_airflow_abs_tolerance_m3_h`, and `require_same_room_set`. Unsupported or misspelled fields are rejected before defaults are applied. For example, `require_same_room_sets` is an error rather than silently behaving as `require_same_room_set=false`.
+
 ## JSON and file output
 
     cleanroomx-consistency examples/facility_project.json examples/consistency_hvac_demo.json --format json

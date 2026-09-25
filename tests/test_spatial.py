@@ -286,7 +286,7 @@ def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_en
     assert room["length_m"] == 7.5
     assert room["width_m"] == 5.5
     assert room["height_m"] == 3.2
-    assert room["observed_pressure_pa"] == 32
+    assert room["observed_pressure_pa"] == 30
     assert room["supply_airflow_m3_h"] == 2700
     assert room["min_ach"] == 25
     assert analysis.input["pressure_cascade"][0]["min_delta_pa"] == 10
@@ -1110,7 +1110,7 @@ def test_room_verification_dimension_sync_preserves_engineering_room_identity():
     assert analysis.input["length_m"] == 5.0
     assert analysis.input["width_m"] == 4.5
     assert analysis.input["height_m"] == 3.2
-    assert analysis.input["observed_pressure_pa"] == 18.0
+    assert analysis.input["observed_pressure_pa"] == 15.0
     assert layout["engineering_sync"]["rooms"][0]["analysis_room_name"] == "Engineering Room A"
 
 def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
@@ -1163,8 +1163,7 @@ def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
     assert status["rooms"][0]["state"] == "conflicting"
     assert "mapping changed" in status["rooms"][0]["message"]
 
-
-def test_pressure_relationship_status_uses_supplied_pressure_and_explicit_cascade():
+def test_pressure_relationship_status_uses_only_supplied_pressure_and_explicit_cascade():
     root = Path(__file__).resolve().parents[1]
     payload = json.loads(
         (root / "src" / "cleanroomx" / "demo" / "gui_demo.cleanroomx.json").read_text(
@@ -1197,3 +1196,41 @@ def test_pressure_relationship_status_uses_supplied_pressure_and_explicit_cascad
         None,
         "unavailable",
     )
+
+
+def test_dimension_sync_never_overwrites_engineering_pressure_evidence():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                }
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "analysis_room_name": "Process",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 7.0,
+                "width_m": 5.5,
+                "height_m": 3.2,
+                "pressure_pa": 99.0,
+            }
+        ]
+    }
+
+    assert sync_layout_to_analysis(layout, analysis) is True
+    assert analysis.input["rooms"][0]["observed_pressure_pa"] == 30.0
+

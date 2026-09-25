@@ -208,6 +208,29 @@ def test_recovery_integrity_rejects_parseable_tampering(tmp_path):
     assert "integrity check failed" in scan.issues[0].error
 
 
+def test_schema_v2_recovery_requires_integrity_metadata(tmp_path):
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(None)
+        manager.request_autosave(_snapshot(_project()), source_path=None)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload.pop("integrity")
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="integrity metadata is required"):
+        load_recovery_artifact(artifact_path)
+
+
 def test_legacy_schema_v1_recovery_remains_readable_but_unverified(tmp_path):
     recovery_dir = tmp_path / "recovery"
     manager = AutosaveManager(recovery_dir, session_id="legacy-source")

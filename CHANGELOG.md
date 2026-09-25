@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased durable atomic persistence hardening — 2026-09-25
+
+- Hardens the shared project/export/recovery atomic writer so persisted text is encoded as exact UTF-8 bytes without platform newline translation.
+- Preserves existing POSIX permission bits across same-directory replacement instead of inheriting the temporary file mode.
+- Fsyncs the temporary file before rename and fsyncs the parent directory on POSIX filesystems that support directory fsync, reducing the power-loss window where a completed rename may not be durable.
+- Reads the committed file back through the stable revision fingerprint path and rejects a write when byte size or SHA-256 does not match the requested payload.
+- Returns the exact verified post-commit revision from guarded project saves, keeping later optimistic write protection bound to the bytes CleanroomX actually committed.
+- Adds failure-injection, deterministic-byte, directory-sync invocation, permission-preservation, and temp-cleanup regressions without changing project schema version, solver equations, numerical tolerances, or engineering acceptance semantics.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

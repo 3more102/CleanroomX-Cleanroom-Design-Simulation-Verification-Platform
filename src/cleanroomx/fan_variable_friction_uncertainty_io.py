@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from .input_json import load_strict_json
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_variable_friction_uncertainty import (
     FanCurveScenario,
@@ -365,5 +365,5 @@ def load_fan_variable_friction_loop_uncertainty(
     path: str | Path,
 ) -> FanVariableFrictionLoopUncertaintyStudy:
     return fan_variable_friction_loop_uncertainty_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_strict_json(path)
     )

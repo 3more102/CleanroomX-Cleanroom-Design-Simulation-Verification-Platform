@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from .input_json import load_strict_json
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from .loop_resistance import (
     LoopedDuctResistanceInput,
@@ -73,5 +73,5 @@ def looped_flow_network_from_dict(data: dict) -> LoopedFlowNetwork:
 
 def load_looped_flow_network(path: str | Path) -> LoopedFlowNetwork:
     return looped_flow_network_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_strict_json(path)
     )

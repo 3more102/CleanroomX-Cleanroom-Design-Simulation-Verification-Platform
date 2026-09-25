@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from .input_json import load_strict_json
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_loop_network import FanLoopNetworkStudy
 from .loop_network_io import looped_flow_network_from_dict
@@ -25,5 +25,5 @@ def fan_loop_network_study_from_dict(data: dict) -> FanLoopNetworkStudy:
 
 def load_fan_loop_network_study(path: str | Path) -> FanLoopNetworkStudy:
     return fan_loop_network_study_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_strict_json(path)
     )

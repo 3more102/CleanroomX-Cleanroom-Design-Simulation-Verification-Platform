@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased strict engineering JSON input boundary — 2026-09-25
+
+- Routes every file-based engineering analysis loader and dossier manifest through one shared strict UTF-8 JSON parser.
+- Rejects non-standard `NaN`, `Infinity`, and `-Infinity` constants before domain parsing or numerical execution, preventing non-finite values from bypassing inconsistent downstream validation paths.
+- Preserves ordinary JSON syntax-error behavior and file I/O exceptions; finite JSON numbers and literal strings such as `"NaN"` remain valid.
+- Adds cross-workflow regression coverage for every public file loader without changing solver equations, engineering tolerances, project schema, or persisted project compatibility.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

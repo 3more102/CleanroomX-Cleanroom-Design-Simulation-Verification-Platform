@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from .input_json import load_strict_json
 from .qualification_models import (
     MeasurementCheck,
     PressureCascadeCheck,
@@ -57,5 +57,5 @@ def qualification_uncertainty_from_dict(data: dict) -> QualificationUncertaintyS
 
 
 def load_qualification_uncertainty(path: str | Path) -> QualificationUncertaintySpec:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_strict_json(path)
     return qualification_uncertainty_from_dict(data)

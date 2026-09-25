@@ -6,6 +6,9 @@ CleanroomX v0.100.0 is a local Python desktop/CLI engineering application. It is
 
 ## Input and registry handling
 
+All file-based engineering JSON entry points use the shared strict JSON reader. Non-standard numeric constants (`NaN`, `Infinity`, and `-Infinity`) are rejected before workflow-specific parsing or solver execution, so external JSON cannot introduce non-finite values through Python's permissive default decoder.
+
+
 Desktop project and analysis inputs use strict JSON. Project loading rejects malformed JSON and non-finite constants such as `NaN` and `Infinity`. Project schema, version, analysis kinds, ids, and active-analysis references are validated before use.
 
 Application workflow bindings are fixed in `src/cleanroomx/application.py`. The v0.100 registry check rejects duplicate workflow keys, requires parser/runner targets for ordinary workflows, preserves explicit custom adapters for consistency and dossier, and verifies that every declared target resolves to a callable. Project files select a declared analysis kind rather than arbitrary Python modules or function names.

@@ -15,6 +15,10 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
 8. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
 
+## Engineering JSON ingestion
+
+External analysis files and dossier manifests pass through `src/cleanroomx/input_json.py` before workflow-specific model construction. The shared parser keeps standard JSON syntax behavior but rejects non-standard `NaN`/`Infinity` constants at the I/O boundary, so every file-backed workflow receives only standards-compliant JSON numeric literals or fails before engineering execution.
+
 ## Desktop data flow
 
 A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available.

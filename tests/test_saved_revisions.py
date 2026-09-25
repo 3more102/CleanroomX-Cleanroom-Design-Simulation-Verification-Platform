@@ -208,6 +208,28 @@ def test_external_change_before_archive_uses_existing_write_conflict_contract(tm
     assert not revisions.exists() or list(revisions.iterdir()) == []
 
 
+def test_malformed_external_change_before_archive_is_a_write_conflict(tmp_path):
+    revisions = tmp_path / "revisions"
+    target = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project("Opened"),
+    )
+    expected = capture_project_file_revision(target)
+    malformed = b"{externally replaced but malformed"
+    target.write_bytes(malformed)
+
+    with pytest.raises(ProjectWriteConflictError):
+        save_project_document_guarded_with_revision(
+            target,
+            _project("Window edit"),
+            expected_revision=expected,
+            revision_dir=revisions,
+        )
+
+    assert target.read_bytes() == malformed
+    assert not revisions.exists() or list(revisions.iterdir()) == []
+
+
 def test_external_change_after_archive_is_still_blocked(tmp_path, monkeypatch):
     revisions = tmp_path / "revisions"
     target = save_project_document(

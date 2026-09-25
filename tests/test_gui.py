@@ -879,8 +879,6 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app.autosave_status_var.value == "Autosave: clean"
 
 
-
-
 def test_save_project_blocks_external_file_change_without_losing_either_version(
     tmp_path, monkeypatch
 ):
@@ -966,3 +964,62 @@ def test_save_project_blocks_external_file_change_without_losing_either_version(
     assert captured["title"] == "Save conflict"
     assert "Save Project As" in captured["message"]
     assert captured["parent"] is app.root
+
+
+
+def test_save_project_as_current_path_uses_same_external_change_guard(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    source = save_project_document(
+        tmp_path / "save-as-conflict.cleanroomx.json",
+        ProjectDocument(name="Opened"),
+    )
+    opened_project, opened_fingerprint = load_project_document_with_fingerprint(source)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = opened_project
+    app.project_path = source
+    app._project_source_fingerprint = opened_fingerprint
+    app._editor_analysis_id = None
+    app.name_var = Value("Local work")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app._recovery_source_path = None
+    app._restored_recovery_artifact = None
+
+    save_project_document(source, ProjectDocument(name="External edit"))
+    external_bytes = source.read_bytes()
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(source),
+    )
+    captured = {}
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message}
+        ),
+    )
+
+    app.save_project_as()
+
+    assert source.read_bytes() == external_bytes
+    assert load_project_document(source).name == "External edit"
+    assert app.project.name == "Local work"
+    assert app.project_path == source
+    assert app.status_var.value == "Save conflict — project not overwritten"
+    assert captured["title"] == "Save conflict"

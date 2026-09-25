@@ -295,6 +295,48 @@ def resolve_room_overlaps(rooms: list[dict]) -> list[dict]:
     return moves
 
 
+def next_room_overlap_conflict(
+    rooms: list[dict], cursor: Any = -1
+) -> dict | None:
+    """Return the next overlap conflict in stable pair order for operator review.
+
+    The returned record is a copy enriched with a zero-based cursor, total
+    conflict count, and human-readable room names. The input is never mutated.
+    """
+
+    conflicts = room_overlap_conflicts(rooms)
+    if not conflicts:
+        return None
+
+    try:
+        previous = int(cursor)
+    except (TypeError, ValueError):
+        previous = -1
+    index = (previous + 1) % len(conflicts)
+
+    room_names = {
+        str(room.get("id") or ""): str(
+            room.get("name") or room.get("id") or "Unnamed room"
+        )
+        for room in rooms
+        if isinstance(room, dict)
+    }
+    conflict = copy.deepcopy(conflicts[index])
+    conflict.update(
+        {
+            "index": index,
+            "count": len(conflicts),
+            "room_a_name": room_names.get(
+                conflict["room_a_id"], conflict["room_a_id"] or "Unnamed room"
+            ),
+            "room_b_name": room_names.get(
+                conflict["room_b_id"], conflict["room_b_id"] or "Unnamed room"
+            ),
+        }
+    )
+    return conflict
+
+
 def spatial_layout_summary(value: Any) -> dict:
     """Return operator-facing spatial metrics without changing the stored model."""
     layout = normalize_layout(value)
@@ -992,6 +1034,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._alignment_guides: list[dict] = []
         self._show_clearances = tk.BooleanVar(value=True)
         self._show_conflicts = tk.BooleanVar(value=True)
+        self._conflict_cursor = -1
 
         self._build()
         self.refresh()
@@ -1051,6 +1094,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="Conflicts",
             variable=self._show_conflicts,
             command=self.redraw,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Next conflict",
+            command=self.select_next_overlap_conflict,
         ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
@@ -1212,6 +1260,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _commit_layout(self, message: str) -> None:
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        self._conflict_cursor = -1
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
         if self.selected and not self._selected_object():
             self.selected = None
@@ -1446,6 +1495,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._reassign_selected_device_room()
         self._load_property_panel()
         self._persist("Nudged spatial item", history_before=before)
+
+    def select_next_overlap_conflict(self) -> None:
+        conflict = next_room_overlap_conflict(
+            self.layout["rooms"], self._conflict_cursor
+        )
+        if conflict is None:
+            self._conflict_cursor = -1
+            self._status_setter("No room overlap conflicts to review")
+            return
+
+        self._conflict_cursor = conflict["index"]
+        target_room_id = conflict["room_b_id"] or conflict["room_a_id"]
+        if target_room_id:
+            self.selected = _Hit("room", target_room_id)
+        self._show_conflicts.set(True)
+        self._load_property_panel()
+        self.redraw()
+
+        target_name = (
+            conflict["room_b_name"]
+            if target_room_id == conflict["room_b_id"]
+            else conflict["room_a_name"]
+        )
+        self._status_setter(
+            f"Conflict {conflict['index'] + 1}/{conflict['count']}: "
+            f"{conflict['room_a_name']} ↔ {conflict['room_b_name']} · "
+            f"{conflict['area_m2']:.2f} m² overlap; selected {target_name}"
+        )
 
     def resolve_selected_overlap(self) -> None:
         if self.selected is None or self.selected.kind != "room":

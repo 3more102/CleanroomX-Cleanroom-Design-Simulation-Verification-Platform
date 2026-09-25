@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    load_project_document_with_fingerprint,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -872,3 +878,91 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+
+def test_save_project_blocks_external_file_change_without_losing_either_version(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    class Text:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self, *args):
+            return self.value
+
+    source = save_project_document(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(
+            name="Demo",
+            analyses=[
+                AnalysisDocument(
+                    id="a",
+                    name="A",
+                    kind="room_verification",
+                    input={"value": 1},
+                )
+            ],
+            active_analysis_id="a",
+        ),
+    )
+    opened_project, opened_fingerprint = load_project_document_with_fingerprint(source)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = opened_project
+    app.project_path = source
+    app._project_source_fingerprint = opened_fingerprint
+    app._editor_analysis_id = "a"
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.input_text = Text('{"value": 1}')
+    app.status_var = Value("")
+    app._baseline_state = app._project_state_signature()
+
+    app.input_text.value = '{"value": 2}'
+
+    external_project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 99},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    save_project_document(source, external_project)
+    external_bytes = source.read_bytes()
+
+    captured = {}
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.save_project()
+
+    assert source.read_bytes() == external_bytes
+    assert load_project_document(source).analysis_by_id("a").input == {"value": 99}
+    assert app.project.analysis_by_id("a").input == {"value": 2}
+    assert app._has_unsaved_changes() is True
+    assert app.status_var.value == "Save conflict — project not overwritten"
+    assert captured["title"] == "Save conflict"
+    assert "Save Project As" in captured["message"]
+    assert captured["parent"] is app.root

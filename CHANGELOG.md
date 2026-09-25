@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased deterministic spatial identity — 2026-09-25
+
+- Replaces random repair IDs in spatial normalization with deterministic unique allocation while preserving already-valid persisted room and device IDs.
+- Enforces unique device IDs as well as room IDs, eliminating ambiguous selection and history lookup for malformed or legacy spatial metadata.
+- Normalizes device room references consistently and keeps duplicate room-ID references bound to the preserved first occurrence instead of assigning a random target.
+- Makes analysis-derived room identities deterministic and unique even when room names repeat or contain no identifier-safe characters.
+- Adds repeatability, duplicate-ID, missing-ID, reference-normalization, and persisted-stabilization regressions without changing project schema version or engineering solver behavior.
+
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

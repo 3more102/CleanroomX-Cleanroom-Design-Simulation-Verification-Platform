@@ -1,0 +1,111 @@
+name: Publish CleanroomX v0.102.0
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish immutable v0.102.0 release
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.102.0
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out exact successful CI commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Qualify current main and immutable tag
+        id: closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Immutable release tag ${TAG} already exists at ${existing_sha}; no publication work is required."
+            exit 0
+          fi
+
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Successful CI commit ${TARGET_SHA} is stale; current main is ${current_main_sha}."
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+            echo "Successful CI commit is current main and is eligible for v0.102.0 publication."
+          fi
+
+      - name: Verify validated release identity
+        if: steps.closure.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git show "${TARGET_SHA}:pyproject.toml" | grep -E '^version = "0\.102\.0"$')" = 'version = "0.102.0"'
+          test "$(git show "${TARGET_SHA}:src/cleanroomx/__init__.py" | grep -E '^__version__ = "0\.102\.0"$')" = '__version__ = "0.102.0"'
+          git show "${TARGET_SHA}:examples/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.102.0"'
+          git show "${TARGET_SHA}:src/cleanroomx/demo/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.102.0"'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'Release: CleanroomX v0.102.0'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1503'
+          git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.102.0 Synchronized Spatial Release Test Evidence'
+
+      - name: Publish tag and GitHub Release
+        if: steps.closure.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
+            echo "Main advanced to ${current_main_sha}; skip stale publication for ${TARGET_SHA}."
+            exit 0
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            echo "Release ${TAG} already exists at ${existing_sha}; immutable release is unchanged."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            remote_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${remote_sha}" = "${TARGET_SHA}"
+          else
+            git tag "${TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          cat > /tmp/release-notes.md <<EOF
+          CleanroomX v0.102.0 is the synchronized 2D/3D spatial closure on the verified Release 2 baseline.
+
+          Validated functional baseline:
+          - PR #442 exact tested head: db9169555127b1799f261f31113d18cdaf2518ed
+          - Merged main commit: 2c8d0696170080d5c333ff1fc809f671aec1ac1d
+          - Exact tested/merged tree: af3c534599ee0921f8f21c8a14bd7b6b3e209258
+          - PR CI #1503 / 36168565655: success
+          - Focused spatial gate: 41 passed
+          - Python 3.11 / 3.12 / 3.13 complete suite: 985 passed each
+          - Windows PowerShell/CMD checkout launcher smoke: passed
+          - Clean wheel install, CLI, packaged demo, project-batch, and Python 3.13 Tk/Xvfb GUI smoke: passed
+
+          v0.102.0 adds persisted spatial/engineering synchronization provenance, deterministic room-level sync states, fail-closed ambiguity handling, persistence validation, mapping preflight before mutation, and focused spatial transform coverage while retaining the synchronized 2D/3D workspace.
+
+          The already-published v0.101.0 release remains immutable. No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion was intentionally changed.
+
+          See TEST_EVIDENCE.md, VALIDATION.txt, CHANGELOG.md, ARCHITECTURE.md, docs/LAYOUT_2D_3D.md, MIGRATIONS.md, ROLLBACK.md, and SECURITY.md.
+          EOF
+
+          gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.102.0" --notes-file /tmp/release-notes.md

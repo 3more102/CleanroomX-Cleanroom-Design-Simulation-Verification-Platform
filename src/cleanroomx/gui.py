@@ -1057,7 +1057,30 @@ class CleanroomXApp:
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
-    def _report_external_save_conflict(self, path: Path) -> None:
+    def _report_external_save_conflict(
+        self,
+        path: Path,
+        conflict: ProjectWriteConflictError | None = None,
+    ) -> None:
+        if conflict is not None and conflict.phase == "post_write":
+            self.status_var.set(
+                f"Save not verified: {path.name} changed during commit. "
+                "Use Save Project As or reopen."
+            )
+            messagebox.showwarning(
+                "Save verification failed",
+                (
+                    f"CleanroomX could not verify that {path.name} still contains "
+                    "the exact bytes it committed. The file changed during or "
+                    "immediately after the atomic save.\n\n"
+                    "Your in-memory work has not been marked clean. Use Save Project "
+                    "As to preserve it separately, or reopen the project to inspect "
+                    "the current on-disk file."
+                ),
+                parent=self.root,
+            )
+            return
+
         self.status_var.set(
             f"Save blocked: {path.name} changed on disk. Use Save Project As or reopen."
         )
@@ -1095,8 +1118,8 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
-        except ProjectWriteConflictError:
-            self._report_external_save_conflict(self.project_path)
+        except ProjectWriteConflictError as exc:
+            self._report_external_save_conflict(self.project_path, exc)
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
@@ -1179,8 +1202,8 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
-        except ProjectWriteConflictError:
-            self._report_external_save_conflict(destination)
+        except ProjectWriteConflictError as exc:
+            self._report_external_save_conflict(destination, exc)
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)

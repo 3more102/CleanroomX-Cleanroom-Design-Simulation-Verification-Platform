@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    project_file_sha256,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -727,3 +733,93 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+
+def _conflict_test_app(path, project, baseline_sha256):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.project_path = path
+    app._project_source_sha256 = baseline_sha256
+    app._editor_analysis_id = None
+    app.name_var = Value(project.name)
+    app.description_var = Value(project.description)
+    app.status_var = Value("")
+    app._capture_saved_state = lambda: None
+    app._notify_explicit_save = lambda saved_path: None
+    return app
+
+
+def test_save_project_external_change_cancel_preserves_disk_version(tmp_path, monkeypatch):
+    path = tmp_path / "conflict.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Original"))
+    baseline = project_file_sha256(path)
+    save_project_document(path, ProjectDocument(name="External"))
+
+    app = _conflict_test_app(path, ProjectDocument(name="Local"), baseline)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesnocancel",
+        lambda *args, **kwargs: None,
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "External"
+    assert "cancelled" in app.status_var.value.lower()
+
+
+def test_save_project_external_change_explicit_overwrite_is_guarded(tmp_path, monkeypatch):
+    path = tmp_path / "conflict.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Original"))
+    baseline = project_file_sha256(path)
+    save_project_document(path, ProjectDocument(name="External"))
+
+    app = _conflict_test_app(path, ProjectDocument(name="Local"), baseline)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesnocancel",
+        lambda *args, **kwargs: True,
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "Local"
+    assert app._project_source_sha256 == project_file_sha256(path)
+    assert "saved" in app.status_var.value.lower()
+
+
+def test_load_project_path_rejects_file_changed_during_open(tmp_path, monkeypatch):
+    path = tmp_path / "racy.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Original"))
+    original_sha = project_file_sha256(path)
+    replacement = ProjectDocument(name="Changed")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Untouched")
+    calls = {"count": 0}
+    real_digest = gui_module.project_file_sha256
+
+    def changing_digest(target):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            save_project_document(path, replacement)
+        return real_digest(target)
+
+    monkeypatch.setattr(gui_module, "project_file_sha256", changing_digest)
+
+    with pytest.raises(OSError, match="changed while it was being opened"):
+        app.load_project_path(path)
+
+    assert original_sha != project_file_sha256(path)
+    assert app.project.name == "Untouched"

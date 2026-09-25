@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased verified saved-project revisions — 2026-09-25
+
+- Preserves the previous valid explicit project state before each changed guarded overwrite in a bounded per-project revision history.
+- Stores exact prior project bytes with source-path, byte-size, application-version, UTC timestamp, and SHA-256 evidence; malformed or corrupted revision artifacts are reported and preserved rather than trusted.
+- Re-reads every guarded project save after atomic replacement and verifies stable content identity plus the parsed project model before accepting the save as successful.
+- Rolls back a failed post-write verification only when the destination can still be proven to contain CleanroomX's own attempted write; a later external edit is never overwritten by rollback.
+- Adds **File → Saved Revisions…** to browse verified saved states and restore one only as a separate project copy, preserving the current source project.
+- Retains the external-change optimistic write guard, recovery autosave workflow, project schema version 1, solver equations, numerical tolerances, and engineering acceptance semantics.
+- Adds revision integrity, bounded-history, write-failure, rollback, restore-round-trip, destination-preservation, corruption, and desktop workflow regression coverage.
+
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import errno
 from hashlib import sha256
 import json
 import os
@@ -13,6 +14,9 @@ from .application import ANALYSIS_SPECS
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
+PROJECT_INTEGRITY_ALGORITHM = "sha256"
+PROJECT_INTEGRITY_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+PROJECT_INTEGRITY_SCOPE = "cleanroomx.project.without-integrity.v1"
 
 
 class ProjectFormatError(ValueError):
@@ -83,6 +87,78 @@ class ProjectDocument:
             if item.id == analysis_id:
                 return item
         raise KeyError(analysis_id)
+
+
+def _project_content_without_integrity(data: dict[str, Any]) -> dict[str, Any]:
+    content = dict(data)
+    content.pop("integrity", None)
+    return content
+
+
+def project_payload_sha256(data: dict[str, Any]) -> str:
+    """Return a canonical SHA-256 identity for a persisted project envelope."""
+
+    canonical = json.dumps(
+        _project_content_without_integrity(data),
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _attach_project_integrity(data: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(data)
+    payload["integrity"] = {
+        "algorithm": PROJECT_INTEGRITY_ALGORITHM,
+        "canonicalization": PROJECT_INTEGRITY_CANONICALIZATION,
+        "scope": PROJECT_INTEGRITY_SCOPE,
+        "sha256": project_payload_sha256(payload),
+    }
+    return payload
+
+
+def project_file_dict(project: ProjectDocument) -> dict[str, Any]:
+    """Return the persisted project envelope, including integrity evidence."""
+
+    return _attach_project_integrity(project.to_dict())
+
+
+def _validate_project_integrity(data: dict[str, Any]) -> None:
+    integrity = data.get("integrity")
+    if integrity is None:
+        # Existing schema-v1 projects written before integrity hardening remain valid.
+        return
+    if not isinstance(integrity, dict):
+        raise ProjectFormatError("project integrity block must be an object")
+    if integrity.get("algorithm") != PROJECT_INTEGRITY_ALGORITHM:
+        raise ProjectFormatError(
+            f"project integrity algorithm must be {PROJECT_INTEGRITY_ALGORITHM!r}"
+        )
+    if integrity.get("canonicalization") != PROJECT_INTEGRITY_CANONICALIZATION:
+        raise ProjectFormatError(
+            "unsupported project integrity canonicalization "
+            f"{integrity.get('canonicalization')!r}"
+        )
+    if integrity.get("scope") != PROJECT_INTEGRITY_SCOPE:
+        raise ProjectFormatError(
+            f"project integrity scope must be {PROJECT_INTEGRITY_SCOPE!r}"
+        )
+    recorded = integrity.get("sha256")
+    if (
+        not isinstance(recorded, str)
+        or len(recorded) != 64
+        or any(character not in "0123456789abcdef" for character in recorded)
+    ):
+        raise ProjectFormatError(
+            "project integrity sha256 must be 64 lowercase hexadecimal characters"
+        )
+    if recorded != project_payload_sha256(data):
+        raise ProjectFormatError(
+            "project integrity check failed: SHA-256 mismatch; "
+            "the file may be corrupted or externally modified"
+        )
 
 
 def _reject_json_constant(value: str):
@@ -162,6 +238,7 @@ def project_from_dict(data: dict) -> ProjectDocument:
     except (TypeError, ValueError) as exc:
         raise ProjectFormatError("project must contain only strict JSON values") from exc
     data = _migrate_legacy(data)
+    _validate_project_integrity(data)
 
     if data.get("schema") != PROJECT_SCHEMA:
         raise ProjectFormatError(f"project schema must be {PROJECT_SCHEMA!r}")
@@ -303,11 +380,37 @@ def load_project_document_with_revision(
 
 
 def _project_document_text(project: ProjectDocument) -> str:
-    data = project.to_dict()
+    data = project_file_dict(project)
     project_from_dict(data)
     return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Persist a replaced directory entry where the platform supports it."""
+
+    if os.name == "nt":
+        return
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    descriptor = None
+    try:
+        descriptor = os.open(directory, flags)
+        os.fsync(descriptor)
+    except OSError as exc:
+        unsupported = {
+            errno.EINVAL,
+            getattr(errno, "ENOTSUP", -1),
+            getattr(errno, "EOPNOTSUPP", -1),
+        }
+        if exc.errno not in unsupported:
+            raise
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def _atomic_write_text(
@@ -333,6 +436,7 @@ def _atomic_write_text(
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        _fsync_directory(destination.parent)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -345,9 +449,30 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return _atomic_write_text(path, text)
 
 
+def _verify_saved_project(
+    path: str | Path,
+    project: ProjectDocument,
+) -> ProjectFileRevision:
+    """Read a completed save through the strict loader and bind its stable revision."""
+
+    try:
+        persisted, revision = load_project_document_with_revision(path)
+    except (OSError, ProjectFormatError) as exc:
+        raise ProjectFormatError(
+            f"saved project failed read-back verification: {exc}"
+        ) from exc
+    if persisted != project:
+        raise ProjectFormatError(
+            "saved project failed read-back verification: content mismatch"
+        )
+    return revision
+
+
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
     """Save a project atomically without an external-revision precondition."""
-    return atomic_write_text(path, _project_document_text(project))
+    saved_path = atomic_write_text(path, _project_document_text(project))
+    _verify_saved_project(saved_path, project)
+    return saved_path
 
 
 def save_project_document_guarded(
@@ -371,4 +496,5 @@ def save_project_document_guarded(
         text,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    saved_revision = _verify_saved_project(saved_path, project)
+    return saved_path, saved_revision

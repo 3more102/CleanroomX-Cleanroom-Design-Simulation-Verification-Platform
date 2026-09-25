@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 import copy
 import math
 import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, messagebox, ttk
 
 
 SPATIAL_METADATA_KEY = "spatial_layout"
@@ -287,6 +288,157 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def spatial_layout_svg(
+    value: Any,
+    *,
+    pixels_per_m: float = 80.0,
+    padding_m: float = 0.5,
+) -> str:
+    """Render the canonical 2D spatial model as deterministic standalone SVG."""
+
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    devices = layout["devices"]
+    scale = max(10.0, _positive(pixels_per_m, 80.0))
+    padding = max(0.0, _finite_number(padding_m, 0.5))
+
+    xs: list[float] = []
+    ys: list[float] = []
+    for room in rooms:
+        xs.extend((room["x_m"], room["x_m"] + room["length_m"]))
+        ys.extend((room["y_m"], room["y_m"] + room["width_m"]))
+    for device in devices:
+        xs.append(device["x_m"])
+        ys.append(device["y_m"])
+
+    if xs and ys:
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+    else:
+        min_x, min_y, max_x, max_y = 0.0, 0.0, 10.0, 8.0
+
+    width_m = max(1.0, max_x - min_x + 2.0 * padding)
+    height_m = max(1.0, max_y - min_y + 2.0 * padding)
+    width_px = width_m * scale
+    height_px = height_m * scale
+
+    def sx(x_m: float) -> float:
+        return (x_m - min_x + padding) * scale
+
+    def sy(y_m: float) -> float:
+        return (y_m - min_y + padding) * scale
+
+    def num(value: float) -> str:
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+
+    pressures = [
+        room.get("pressure_pa")
+        for room in rooms
+        if room.get("pressure_pa") is not None
+    ]
+    pmin = min(pressures) if pressures else None
+    pmax = max(pressures) if pressures else None
+    symbols = {
+        "door": "D",
+        "supply": "S",
+        "return": "R",
+        "exhaust": "E",
+        "ffu": "F",
+        "equipment": "Q",
+        "sensor": "●",
+    }
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        (
+            '<svg xmlns="http://www.w3.org/2000/svg" '
+            f'width="{num(width_px)}" height="{num(height_px)}" '
+            f'viewBox="0 0 {num(width_px)} {num(height_px)}">'
+        ),
+        "  <title>CleanroomX 2D spatial plan</title>",
+        '  <rect width="100%" height="100%" fill="#ffffff"/>',
+        '  <g id="rooms">',
+    ]
+
+    for room in rooms:
+        x = sx(room["x_m"])
+        y = sy(room["y_m"])
+        width = room["length_m"] * scale
+        height = room["width_m"] * scale
+        fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+        room_id = escape(str(room["id"]), quote=True)
+        room_name = escape(str(room["name"]))
+        pressure_text = (
+            ""
+            if room.get("pressure_pa") is None
+            else f" · {room['pressure_pa']:g} Pa"
+        )
+        label = escape(
+            f"{room['length_m']:g} × {room['width_m']:g} m{pressure_text}"
+        )
+        cx = x + width / 2.0
+        cy = y + height / 2.0
+        lines.extend(
+            [
+                (
+                    f'    <rect x="{num(x)}" y="{num(y)}" '
+                    f'width="{num(width)}" height="{num(height)}" '
+                    f'fill="{fill}" stroke="#34495e" stroke-width="2" '
+                    f'data-room-id="{room_id}"/>'
+                ),
+                (
+                    f'    <text x="{num(cx)}" y="{num(cy - 6)}" '
+                    'text-anchor="middle" font-family="sans-serif" '
+                    f'font-size="13" font-weight="700">{room_name}</text>'
+                ),
+                (
+                    f'    <text x="{num(cx)}" y="{num(cy + 12)}" '
+                    'text-anchor="middle" font-family="sans-serif" '
+                    f'font-size="11">{label}</text>'
+                ),
+            ]
+        )
+    lines.append("  </g>")
+    lines.append('  <g id="devices">')
+
+    for device in devices:
+        x = sx(device["x_m"])
+        y = sy(device["y_m"])
+        device_id = escape(str(device["id"]), quote=True)
+        device_type = escape(str(device["type"]), quote=True)
+        name = escape(str(device["name"]))
+        symbol = escape(symbols.get(device["type"], "?"))
+        title = escape(
+            f"{device['name']} · {device['type']} · z={device['z_m']:g} m"
+        )
+        lines.extend(
+            [
+                (
+                    f'    <g data-device-id="{device_id}" '
+                    f'data-device-type="{device_type}">'
+                ),
+                (
+                    f'      <circle cx="{num(x)}" cy="{num(y)}" r="7" '
+                    'fill="#ffffff" stroke="#2c3e50" stroke-width="2"/>'
+                ),
+                (
+                    f'      <text x="{num(x)}" y="{num(y + 4)}" '
+                    'text-anchor="middle" font-family="sans-serif" '
+                    f'font-size="10" font-weight="700">{symbol}</text>'
+                ),
+                f"      <title>{title}</title>",
+                (
+                    f'      <text x="{num(x + 10)}" y="{num(y - 10)}" '
+                    'font-family="sans-serif" font-size="10">'
+                    f"{name}</text>"
+                ),
+                "    </g>",
+            ]
+        )
+    lines.extend(["  </g>", "</svg>", ""])
+    return "\n".join(lines)
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -352,6 +504,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Export SVG", command=self.export_svg).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=(6, 2)
         )
@@ -492,6 +645,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change()
         self._status_setter(message)
         self.redraw()
+
+    def export_svg(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export 2D plan as SVG",
+            defaultextension=".svg",
+            initialfile="cleanroomx-plan.svg",
+            filetypes=(("SVG vector drawing", "*.svg"), ("All files", "*.*")),
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(spatial_layout_svg(self.layout))
+        except OSError as exc:
+            messagebox.showerror(
+                "Export SVG",
+                f"Could not export the 2D plan:\n{exc}",
+                parent=self,
+            )
+            return
+        self._status_setter(f"Exported 2D plan SVG: {path}")
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:

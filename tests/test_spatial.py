@@ -295,3 +295,187 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
     }
 
     assert validate_layout(layout) == []
+
+
+def test_normalize_layout_repairs_identity_deterministically_and_idempotently():
+    raw = {
+        "rooms": [
+            {
+                "name": "Missing",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "room-1",
+                "name": "Explicit",
+                "x_m": 10,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "dup",
+                "name": "First duplicate id",
+                "x_m": 20,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "dup",
+                "name": "Second duplicate id",
+                "x_m": 30,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "device-explicit",
+                "type": "sensor",
+                "name": "First sensor",
+                "room_id": "dup",
+                "x_m": 21,
+                "y_m": 1,
+                "z_m": 1,
+            },
+            {
+                "id": "device-explicit",
+                "type": "sensor",
+                "name": "Second sensor",
+                "room_id": "dup",
+                "x_m": 22,
+                "y_m": 1,
+                "z_m": 1,
+            },
+            {
+                "type": "equipment",
+                "name": "Missing device id",
+                "room_id": "room-1",
+                "x_m": 11,
+                "y_m": 1,
+                "z_m": 0,
+            },
+        ],
+    }
+
+    first_issues: list[dict] = []
+    second_issues: list[dict] = []
+    first = normalize_layout(raw, issues=first_issues)
+    second = normalize_layout(raw, issues=second_issues)
+
+    assert first == second
+    assert first_issues == second_issues
+    assert normalize_layout(first) == first
+    assert [room["id"] for room in first["rooms"]] == [
+        "room-1-2",
+        "room-1",
+        "dup",
+        "dup-2",
+    ]
+    assert [device["id"] for device in first["devices"]] == [
+        "device-explicit",
+        "device-explicit-2",
+        "device-3",
+    ]
+    assert len({room["id"] for room in first["rooms"]}) == len(first["rooms"])
+    assert len({device["id"] for device in first["devices"]}) == len(first["devices"])
+
+    codes = [issue["code"] for issue in first_issues]
+    assert codes.count("missing_room_id_repaired") == 1
+    assert codes.count("duplicate_room_id_repaired") == 1
+    assert codes.count("duplicate_device_id_repaired") == 1
+    assert codes.count("missing_device_id_repaired") == 1
+    assert codes.count("ambiguous_device_room_reference") == 2
+
+
+def test_normalize_layout_preserves_explicit_ids_reserved_for_later_entries():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {"name": "Missing", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"id": "room-1", "name": "Reserved", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"id": "dup", "name": "Duplicate A", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"id": "dup", "name": "Duplicate B", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"id": "dup-2", "name": "Reserved suffix", "length_m": 4, "width_m": 4, "height_m": 3},
+            ]
+        }
+    )
+
+    assert [room["id"] for room in layout["rooms"]] == [
+        "room-1-2",
+        "room-1",
+        "dup",
+        "dup-3",
+        "dup-2",
+    ]
+
+
+def test_validate_layout_reports_ambiguous_room_reference_after_duplicate_id_repair():
+    issues = validate_layout(
+        {
+            "rooms": [
+                {
+                    "id": "room",
+                    "name": "A",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                },
+                {
+                    "id": "room",
+                    "name": "B",
+                    "x_m": 10,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                },
+            ],
+            "devices": [
+                {
+                    "id": "sensor",
+                    "type": "sensor",
+                    "name": "Pressure sensor",
+                    "room_id": "room",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 1,
+                }
+            ],
+        }
+    )
+
+    codes = [issue["code"] for issue in issues]
+    assert "duplicate_room_id_repaired" in codes
+    assert "ambiguous_device_room_reference" in codes
+    assert "orphan_device_room" not in codes
+
+
+def test_derive_layout_duplicate_room_names_get_unique_stable_ids():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "Process", "length_m": 5, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+
+    first = derive_layout_from_analysis(analysis)
+    second = derive_layout_from_analysis(analysis)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == ["process", "process-2"]

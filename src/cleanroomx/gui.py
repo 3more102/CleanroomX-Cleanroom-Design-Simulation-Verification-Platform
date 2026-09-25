@@ -41,6 +41,7 @@ from .project import (
     save_project_document,
     save_project_document_guarded,
 )
+from .project_validation import validate_project as validate_project_document
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
@@ -259,6 +260,7 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Remove Analysis", command=self.remove_analysis)
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Validate Input", command=self.validate_current)
+        analysis_menu.add_command(label="Validate Project", command=self.validate_project)
         analysis_menu.add_command(label="Run Analysis", accelerator="F5", command=self.run_current)
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
@@ -1353,6 +1355,58 @@ class CleanroomXApp:
         self.refresh_structure(silent=True)
         self.status_var.set(f"Input valid — {analysis.name}")
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
+
+    def validate_project(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Project validation is unavailable until the current analysis finishes or is abandoned.",
+                parent=self.root,
+            )
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+            report = validate_project_document(
+                self.project,
+                base_dir=self._base_dir(),
+            )
+        except Exception as exc:
+            self.status_var.set("Project validation failed")
+            messagebox.showerror(
+                "Project validation failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        payload = json.dumps(
+            report.to_dict(),
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        ) + "\n"
+        self._set_text(self.diagnostics_text, payload)
+        self.notebook.select(self.diagnostics_text.master)
+
+        summary = (
+            f"Project validation {report.status.upper()} — "
+            f"{report.analyses_checked} analyses, "
+            f"{report.error_count} error(s), {report.warning_count} warning(s)"
+        )
+        self.status_var.set(summary)
+        self._update_title()
+        if report.status == "pass":
+            messagebox.showinfo("Project validation", summary, parent=self.root)
+        else:
+            messagebox.showwarning(
+                "Project validation",
+                summary + "\n\nSee the Diagnostics tab for details.",
+                parent=self.root,
+            )
 
     def run_current(self) -> None:
         if self._running:

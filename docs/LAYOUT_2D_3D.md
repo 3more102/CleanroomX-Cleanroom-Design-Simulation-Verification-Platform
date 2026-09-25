@@ -14,16 +14,16 @@ version-1 layouts that predate floor metadata are defaulted to a metric `Floor 1
 Floor data includes a stable ID, floor name, elevation, default ceiling height, and metric units.
 Rooms have stable IDs, X/Y position, length, width, height, floor elevation, optional pressure,
 optional project-defined classification text, and an optional `analysis_room_name` link.
-Devices use stable IDs and support doors, supply diffusers, return grilles, exhaust grilles,
-FFUs, equipment, sensors, and transfer openings. Door/transfer records may carry width, height,
-wall side, orientation, and swing metadata.
+Devices use stable IDs and support doors, windows, generic openings, supply diffusers, return
+grilles, exhaust grilles, FFUs, equipment, sensors, and transfer openings. Wall-opening records
+may carry width, height, wall side, orientation, and swing metadata.
 
 ## 2D editor
 
 Open **Design 2D + 3D** in the desktop application. The 2D side supports:
 
 - room creation, selection, drag movement, corner-handle resizing, deletion, and property editing;
-- placed doors, supply, return, exhaust, FFU, equipment, sensor, and transfer objects;
+- placed doors, windows, generic openings, supply, return, exhaust, FFU, equipment, sensor, and transfer objects;
 - configurable metric grid spacing through **Floor…** and independently switchable snap-to-grid;
 - zoom, pan, fit-to-view, coordinate feedback, selection highlighting, and project-wide undo/redo;
 - optional labels, device visibility, pressure overlay, and pressure-cascade relationship arrows;
@@ -57,9 +57,25 @@ copy the spatial room length, width, height, and an already-supported observed p
 Other engineering inputs are preserved.
 
 A room can keep a stable `analysis_room_name` even when its display name changes. Duplicate
-links and links to a missing analysis room are rejected instead of being applied ambiguously.
-After synchronization, the affected analysis must be validated/run again; prior results are not
-treated as current.
+links and links to a missing analysis room are rejected before any engineering room is mutated,
+so a failed push cannot leave a partially synchronized analysis.
+
+The inspector reports `synchronized`, `geometry newer`, `engineering newer`, `conflicting`,
+or `unmapped` state. Directional "newer" state is reported only when a persisted baseline proves
+which side changed. A layout derived from engineering data has such provenance, and an explicit
+successful push/pull refreshes it. Merely opening an older layout whose dimensions happen to
+match the analysis does not manufacture synchronization provenance; a later divergence is then
+reported as conflicting rather than guessed.
+
+Use the explicit engineering-to-layout pull when engineering geometry is authoritative. Push and
+pull update only mapped geometry and supported observed-pressure fields; unrelated engineering
+inputs are preserved. After a spatial-to-engineering synchronization, the affected analysis must
+be validated/run again; prior results are not treated as current.
+
+Pressure overlays prefer a fresh completed verification result when one is available. Otherwise
+they show only configured observed pressure. Cascade arrows preserve the explicit configured
+requirement and use result-backed pass/fail evidence when available; unresolved evidence remains
+visibly unavailable rather than being inferred.
 
 ## Persistence and validation
 

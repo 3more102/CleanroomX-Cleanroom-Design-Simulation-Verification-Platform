@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     resize_room,
+    resize_room_with_devices,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
@@ -537,3 +538,83 @@ def test_resize_room_rejects_unknown_handle_without_mutation():
 
     assert resize_room(room, "center", 8.0, 8.0) is False
     assert room == before
+
+
+def test_resize_room_with_devices_preserves_relative_positions_and_unrelated_devices():
+    room = {
+        "id": "process",
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 4.0,
+        "width_m": 2.0,
+    }
+    devices = [
+        {
+            "id": "ffu-1",
+            "room_id": "process",
+            "x_m": 3.0,
+            "y_m": 3.0,
+        },
+        {
+            "id": "free-1",
+            "room_id": "other",
+            "x_m": 10.0,
+            "y_m": 11.0,
+        },
+    ]
+
+    assert resize_room_with_devices(room, devices, "se", 9.0, 6.0) is True
+    assert room["length_m"] == 8.0
+    assert room["width_m"] == 4.0
+    assert devices[0]["x_m"] == 5.0
+    assert devices[0]["y_m"] == 4.0
+    assert devices[1]["x_m"] == 10.0
+    assert devices[1]["y_m"] == 11.0
+
+
+def test_resize_room_with_devices_tracks_origin_changes_from_northwest_handle():
+    room = {
+        "id": "process",
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 4.0,
+        "width_m": 2.0,
+    }
+    devices = [
+        {
+            "id": "sensor-1",
+            "room_id": "process",
+            "x_m": 2.0,
+            "y_m": 2.5,
+        }
+    ]
+
+    assert resize_room_with_devices(room, devices, "nw", 0.0, 1.0) is True
+    assert room["x_m"] == 0.0
+    assert room["y_m"] == 1.0
+    assert room["length_m"] == 5.0
+    assert room["width_m"] == 3.0
+    assert math.isclose(devices[0]["x_m"], 1.25)
+    assert math.isclose(devices[0]["y_m"], 1.75)
+
+
+def test_resize_room_with_devices_noop_does_not_move_devices():
+    room = {
+        "id": "process",
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 4.0,
+        "width_m": 2.0,
+    }
+    devices = [
+        {
+            "id": "sensor-1",
+            "room_id": "process",
+            "x_m": 2.0,
+            "y_m": 2.5,
+        }
+    ]
+    before = dict(devices[0])
+
+    assert resize_room_with_devices(room, devices, "se", 5.0, 4.0) is False
+    assert devices[0] == before

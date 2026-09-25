@@ -80,6 +80,8 @@ The spatial workspace also exposes an operator scene summary with room/device co
 
 Spatial design edits have a bounded 100-step **Undo/Redo** history. Use the toolbar or **Ctrl+Z / Ctrl+Y**. **Duplicate** or **Ctrl+D** clones the selected room/device with a small grid offset and a new stable ID. Arrow keys nudge the current selection by one configured grid interval when snapping is enabled, or by 0.1 m when snapping is disabled. View-only navigation such as pan/zoom/rotate is not inserted into the edit history.
 
+Use **Measure** (or press **M** while the 2D canvas has focus) to inspect CAD distances without modifying the spatial model. Click two points to display total distance plus signed ΔX/ΔY; the live preview and final measurement follow the current grid-snap setting. Press **Esc** to clear the measurement. Measurement state is view-only and is neither persisted nor added to undo/redo history.
+
 Use **Export SVG** to save the canonical 2D spatial model as a standalone vector drawing. The export preserves room geometry, names, dimensions, supplied pressure labels, device positions/types, and metadata identifiers without changing the project or analysis inputs. The SVG is generated directly from the normalized spatial model and requires no third-party graphics dependency.
 
 Use **Export CSV** to produce a deterministic engineering schedule from the same canonical model. Room records include coordinates, dimensions, calculated area and volume, and supplied pressure; device records include type, assigned room, and XYZ coordinates. CSV quoting is standards-compliant, unassigned devices remain explicit, and the export does not mutate the project or analysis inputs.

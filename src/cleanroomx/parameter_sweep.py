@@ -352,14 +352,21 @@ def _dependency_revision(run: AnalysisRun) -> tuple[tuple[Any, ...], ...]:
     for item in dependencies:
         if not isinstance(item, dict) or item.get("stable_during_run") is not True:
             raise RuntimeError("analysis run has unstable external dependency provenance")
-        revision.append(
-            (
-                item.get("field"),
-                item.get("declared_path"),
-                item.get("sha256_after"),
-                item.get("size_bytes_after"),
-            )
-        )
+        field = item.get("field")
+        declared_path = item.get("declared_path")
+        digest = item.get("sha256_after")
+        size_bytes = item.get("size_bytes_after")
+        if (
+            not isinstance(field, str)
+            or not isinstance(declared_path, str)
+            or not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest.lower())
+            or type(size_bytes) is not int
+            or size_bytes < 0
+        ):
+            raise RuntimeError("analysis run has malformed external dependency provenance")
+        revision.append((field, declared_path, digest.lower(), size_bytes))
     return tuple(sorted(revision, key=lambda item: (str(item[0]), str(item[1]))))
 
 

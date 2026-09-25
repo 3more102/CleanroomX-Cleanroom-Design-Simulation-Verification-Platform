@@ -155,7 +155,7 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_name = str(raw.get("name") or device_type.upper()).strip() or device_type.upper()
+            device_name = str(raw.get("name") or device_type.upper())
             device_id = _normalized_unique_id(
                 raw.get("id"),
                 _device_id(device_name, device_type),

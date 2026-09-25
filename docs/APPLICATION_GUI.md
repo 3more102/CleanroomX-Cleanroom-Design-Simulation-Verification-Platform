@@ -114,6 +114,8 @@ For `consistency` and `dossier`, those external dependencies are guarded as engi
 
 Cached desktop results are also bound to the canonical SHA-256 of the exact submitted analysis input. Before a cached result is restored, before a completed background run is accepted, and before result/run-bundle/report export, CleanroomX compares that recorded identity with the current analysis kind and input. A mismatch clears the cached result and requires a rerun. The existing immediate invalidation hooks remain in place, but the provenance check is the final fail-closed boundary if a mutation path misses an invalidation notification.
 
+Once a completed run is accepted, its result, diagnostics/provenance, and plot data are held as recursively immutable snapshots. Rendering and export therefore cannot accidentally modify the cached engineering evidence, and aliases retained by a backend cannot change it after completion. Run-bundle serialization uses a detached ordinary JSON copy, preserving the existing export shape without exposing the cache for mutation.
+
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
 ## Validation and automated smoke

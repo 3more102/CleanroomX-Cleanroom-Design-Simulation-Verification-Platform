@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from hashlib import sha256
 import json
 import re
 
@@ -112,6 +113,34 @@ def test_engineering_report_payload_detects_tampering():
     assert verify_engineering_report_payload(payload) is True
 
     payload["result"]["ach_1_h"] = 999
+    assert verify_engineering_report_payload(payload) is False
+
+
+def test_engineering_report_payload_rejects_rehashed_input_identity_mismatch():
+    input_payload, run = _run()
+    payload = build_engineering_report_payload(
+        run,
+        project_name="Facility",
+        project_description="",
+        analysis_id="room-a",
+        analysis_name="Room A",
+        analysis_kind="room_verification",
+        input_payload=input_payload,
+    )
+
+    payload["input"]["supply_airflow_m3_h"] += 1.0
+    unsigned = copy.deepcopy(payload)
+    unsigned.pop("integrity")
+    payload["integrity"]["sha256"] = sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
     assert verify_engineering_report_payload(payload) is False
 
 

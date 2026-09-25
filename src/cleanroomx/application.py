@@ -15,6 +15,12 @@ import tempfile
 from typing import Any, Callable
 
 from . import __version__
+from .input_contracts import (
+    DOSSIER_LIST_PATH_KEYS as _DOSSIER_LIST_PATH_KEYS,
+    DOSSIER_SINGLE_PATH_KEYS as _DOSSIER_SINGLE_PATH_KEYS,
+    validate_consistency_input_contract,
+    validate_dossier_input_contract,
+)
 from .plugins import (
     PLUGIN_API_VERSION,
     PluginOrigin,
@@ -803,6 +809,7 @@ def _resolve_relative(base_dir: Path | None, path_value: str) -> Path:
 
 
 def _validate_consistency(payload: dict, base_dir: Path | None) -> None:
+    validate_consistency_input_contract(payload)
     for key in ("verification_project", "hvac_project"):
         value = payload.get(key)
         if not isinstance(value, str) or not value.strip():
@@ -815,19 +822,6 @@ def _validate_consistency(payload: dict, base_dir: Path | None) -> None:
         raise ValueError("room_airflow_abs_tolerance_m3_h must be >= 0")
     if not isinstance(payload.get("require_same_room_set", False), bool):
         raise ValueError("require_same_room_set must be a boolean")
-
-
-_DOSSIER_SINGLE_PATH_KEYS = ("verification_project", "hvac_project")
-_DOSSIER_LIST_PATH_KEYS = (
-    "recovery_tests", "qualification_analyses", "uncertainty_rooms",
-    "thermal_uncertainty_analyses", "psychrometric_uncertainty_analyses",
-    "fan_operating_point_studies", "fan_system_uncertainty_analyses",
-    "fan_duct_network_studies", "fan_parallel_network_studies",
-    "fan_loop_network_studies", "fan_loop_uncertainty_analyses",
-    "damper_studies", "fan_speed_studies", "fan_loop_speed_studies",
-    "fan_variable_friction_loop_studies", "fan_variable_friction_speed_studies",
-    "fan_variable_friction_uncertainty_analyses",
-)
 
 
 
@@ -1485,6 +1479,7 @@ def _application_execution_provenance(
 
 
 def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
+    validate_dossier_input_contract(payload)
     if not isinstance(payload.get("name"), str) or not payload["name"].strip():
         raise ValueError("dossier name must be a non-empty string")
 

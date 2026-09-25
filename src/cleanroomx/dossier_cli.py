@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
+import sys
 
+from .application import (
+    ExternalDependencyChangedError,
+    ExternalDependencySnapshotError,
+    run_analysis,
+)
 from .project import atomic_write_text
-from .dossier import build_dossier
-from .dossier_report import markdown_dossier_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,12 +26,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    result = build_dossier(args.manifest)
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_dossier_report(result)
-    )
+    manifest_path = Path(args.manifest)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        run = run_analysis(
+            "dossier",
+            payload,
+            base_dir=manifest_path.resolve().parent,
+        )
+    except (ExternalDependencyChangedError, ExternalDependencySnapshotError) as exc:
+        print(f"cleanroomx-dossier: {exc}", file=sys.stderr)
+        return 3
+
+    result = run.result
+    text = json.dumps(result, indent=2) if args.format == "json" else run.markdown
     if args.output:
         atomic_write_text(args.output, text)
     else:

@@ -14,7 +14,12 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .project import atomic_write_text
+from .project import (
+    ProjectDocument,
+    ProjectFormatError,
+    atomic_write_text,
+    project_from_dict,
+)
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
@@ -57,6 +62,20 @@ class RecoveryScanIssue:
 class RecoveryScan:
     candidates: tuple[RecoveryCandidate, ...]
     issues: tuple[RecoveryScanIssue, ...]
+
+
+@dataclass(frozen=True)
+class RecoveryRestore:
+    """Validated recovery state prepared for an explicit user restore."""
+
+    path: Path
+    project_identity: str
+    saved_at_utc: str
+    source_path: Path | None
+    source_relation: str
+    source_is_newer: bool
+    project: ProjectDocument
+    ui_state: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -294,6 +313,81 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
 
     candidates.sort(key=lambda item: item.saved_at_utc, reverse=True)
     return RecoveryScan(candidates=tuple(candidates), issues=tuple(issues))
+
+
+def _validated_recovery_ui_state(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RecoveryFormatError("snapshot.ui_state must be an object")
+
+    expected_types: dict[str, tuple[type, ...]] = {
+        "name_text": (str,),
+        "description_text": (str,),
+        "editor_analysis_id": (str, type(None)),
+        "editor_text": (str,),
+        "editor_json_valid": (bool,),
+    }
+    for key, allowed in expected_types.items():
+        if key in value and not isinstance(value[key], allowed):
+            allowed_text = " or ".join(item.__name__ for item in allowed)
+            raise RecoveryFormatError(
+                f"snapshot.ui_state.{key} must be {allowed_text}"
+            )
+    return dict(value)
+
+
+def prepare_recovery_restore(path: str | Path) -> RecoveryRestore:
+    """Validate a recovery artifact and return a safe in-memory restore payload.
+
+    This function never writes either the source project or the recovery artifact.
+    Source comparison is refreshed at restore time so the caller can preserve a
+    newer or otherwise changed project file.
+    """
+
+    artifact_path = Path(path)
+    recovery = load_recovery_artifact(artifact_path)
+    snapshot = recovery["snapshot"]
+
+    project_data = snapshot.get("project")
+    if not isinstance(project_data, dict):
+        raise RecoveryFormatError("snapshot.project must be an object")
+    try:
+        project = project_from_dict(project_data)
+    except ProjectFormatError as exc:
+        raise RecoveryFormatError(
+            f"recoverable project snapshot is invalid: {exc}"
+        ) from exc
+
+    ui_state = _validated_recovery_ui_state(snapshot.get("ui_state", {}))
+    relation, is_newer, source_path = _compare_source(recovery)
+    return RecoveryRestore(
+        path=artifact_path,
+        project_identity=recovery["project_identity"],
+        saved_at_utc=recovery["saved_at_utc"],
+        source_path=source_path,
+        source_relation=relation,
+        source_is_newer=is_newer,
+        project=project,
+        ui_state=ui_state,
+    )
+
+
+def discard_recovery_artifact(
+    path: str | Path,
+    *,
+    recovery_dir: str | Path | None = None,
+) -> Path:
+    """Delete exactly one recovery artifact without touching a project file."""
+
+    directory = (
+        Path(recovery_dir) if recovery_dir is not None else default_recovery_dir()
+    ).expanduser().resolve(strict=False)
+    target = Path(path).expanduser().resolve(strict=False)
+    if target.parent != directory:
+        raise ValueError("recovery artifact is outside the configured recovery directory")
+    if not target.name.endswith(".recovery.json"):
+        raise ValueError("recovery artifact must end with .recovery.json")
+    target.unlink(missing_ok=True)
+    return target
 
 
 class AutosaveManager:

@@ -123,28 +123,42 @@ class AnalysisPicker(tk.Toplevel):
         frame.pack(fill="both", expand=True, padx=12, pady=6)
         self.tree = ttk.Treeview(
             frame,
-            columns=("category", "description"),
+            columns=("category", "source", "description"),
             show="tree headings",
             height=14,
         )
         self.tree.heading("#0", text="Analysis")
         self.tree.heading("category", text="Category")
+        self.tree.heading("source", text="Implementation")
         self.tree.heading("description", text="Description")
         self.tree.column("#0", width=230, stretch=False)
         self.tree.column("category", width=110, stretch=False)
-        self.tree.column("description", width=460, stretch=True)
+        self.tree.column("source", width=180, stretch=False)
+        self.tree.column("description", width=420, stretch=True)
         scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
 
         for item in analysis_catalog():
+            source = "Built-in"
+            plugin = item.get("plugin")
+            if isinstance(plugin, dict):
+                identity = (
+                    plugin.get("distribution_name")
+                    or plugin.get("entry_point_name")
+                    or item["key"]
+                )
+                version = plugin.get("distribution_version")
+                source = f"Plugin: {identity}" + (
+                    f" {version}" if version else ""
+                )
             self.tree.insert(
                 "",
                 "end",
                 iid=item["key"],
                 text=item["title"],
-                values=(item["category"], item["description"]),
+                values=(item["category"], source, item["description"]),
             )
 
         buttons = ttk.Frame(self)
@@ -159,7 +173,7 @@ class AnalysisPicker(tk.Toplevel):
             self.tree.selection_set(first[0])
             self.tree.focus(first[0])
 
-        self.geometry("850x470")
+        self.geometry("1020x470")
 
     def _accept(self) -> None:
         selection = self.tree.selection()
@@ -1728,7 +1742,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
-    validate_application_registry()
+    registry = validate_application_registry()
     project_path = bundled_demo_project_path() if args.demo else args.project
 
     root = tk.Tk()
@@ -1736,6 +1750,21 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if not args.smoke and registry["plugin_issue_count"]:
+        issues = registry["plugin_issues"]
+        lines = [
+            f"{item['entry_point_name'] or '<unnamed>'}: {item['error']}"
+            for item in issues[:8]
+        ]
+        if len(issues) > 8:
+            lines.append(f"... and {len(issues) - 8} more issue(s)")
+        messagebox.showwarning(
+            "CleanroomX plugin issues",
+            "Some installed analysis plugins were disabled. Built-in workflows "
+            "remain available.\n\n" + "\n".join(lines)
+            + "\n\nRun cleanroomx-gui --check for machine-readable details.",
+            parent=root,
+        )
     recovered_at_startup = False
     if not args.smoke:
         recovered_at_startup = app.offer_startup_recovery()

@@ -7,6 +7,24 @@
 - Uses `math.fsum` for pressure-path, continuity, airflow, surplus, and capacity aggregation where composition is order-sensitive.
 - Preserves existing result shapes, project schema, equations, tolerances, units, and dependencies.
 
+## Unreleased protected legacy migration saves — 2026-09-25
+
+- Adds explicit migration provenance for both supported legacy project shapes without changing existing loader return contracts.
+- Opens migrated legacy files as visibly unsaved converted copies while preserving the original file as path context.
+- Routes the first normal Save through Save As and refuses the original legacy source as that first destination, preventing destructive one-way replacement.
+- Keeps the original source protected after cancelled or failed saves; protection clears only after a validated schema-v1 copy is committed elsewhere.
+- Preserves project schema version 1, additive-field migration behavior, solver equations, tolerances, and engineering acceptance semantics.
+
+
+## Unreleased lossless project extension round trips — 2026-09-25
+
+- Preserves unrecognized additive strict-JSON fields at the project-document top level, nested project block, and individual analysis records across load/edit/save cycles.
+- Keeps CleanroomX-owned schema/model fields authoritative when extension maps contain colliding reserved keys.
+- Carries unconsumed additive fields through supported legacy migrations where their source scope has a lossless schema-v1 destination, without inventing semantics for pre-schema fields.
+- Retains strict-JSON validation, so non-finite or non-serializable extension values cannot bypass project-save validation.
+- Preserves project schema version 1, existing constructor compatibility, solver equations, numerical tolerances, and analysis semantics.
+
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.
@@ -77,10 +95,10 @@
 
 ## Unreleased spatial transactional edit history — 2026-09-25
 
-- Adds bounded model-level **Undo/Redo** for spatial room/device property edits, creation, deletion, and drag movement; a complete drag gesture is coalesced into one history entry.
+- Consolidates spatial room/device edits into the same bounded application-wide **Undo/Redo** transaction stream used for project and analysis edits; a complete drag gesture is coalesced into one transaction.
 - Restores room/device selection with each edit while deliberately preserving the current 2D/3D camera state, so geometry undo does not rewind the operator's viewport.
 - Clears redo history after divergent edits and resets history when the active project object is replaced, preventing edits from one project being replayed into another.
-- Adds toolbar controls plus Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z shortcuts on the spatial canvases, with enabled/disabled state derived from the real history stacks.
+- Spatial toolbar controls and Ctrl+Z/Ctrl+Y/Ctrl+Shift+Z delegate to the single project transaction history; there is no independent spatial undo stack.
 - Adds regression coverage for bounded history, no-op suppression, snapshot isolation, redo invalidation, model restoration, selection restoration, and viewport preservation.
 
 ## Unreleased spatial workspace safety pass — 2026-09-25
@@ -1151,3 +1169,15 @@
 - Added optional FFU/filter-unit sizing.
 - Added a separate HVAC CLI, JSON project loader, Markdown reporting, tests, and documentation.
 - Preserved the existing particle, room, and pressure-cascade verification architecture.
+
+## Unreleased — Release 2 architecture consolidation
+
+- Consolidates durable verified atomic persistence behind one shared persistence layer, including durable creation of previously missing nested parent directories.
+- Adds versioned crash-recovery integrity evidence while preserving legacy v1 recovery readability as unverified evidence.
+- Adds guarded saved-project revision history with migration-aware stable source revision tracking.
+- Consolidates project, analysis, and spatial edits into one bounded transactional Undo/Redo stream.
+- Makes completed analysis runs immutable snapshots and preserves exact submitted-input, implementation, runtime, and external-dependency provenance.
+- Adds a bounded integrity-checked persisted analysis run-history ledger.
+- Adds analysis plugin API v1 with deterministic discovery and built-in-key collision protection.
+- Adds integrity-checked portable project bundles and self-contained verified portable engineering HTML reports.
+- Adds Release 2 regression/performance gates while preserving existing solver equations, tolerances, and acceptance semantics.

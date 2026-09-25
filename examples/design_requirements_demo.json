@@ -1,0 +1,34 @@
+{
+  "name": "CleanroomX Design Requirements Demo",
+  "reference_profiles": [
+    {
+      "id": "project-urs-iso7",
+      "title": "Demo project URS profile",
+      "source": "Demo project requirement set; not a standards substitute",
+      "values": {
+        "min_ach": 30,
+        "temperature_c": {"min": 20, "max": 22},
+        "relative_humidity_percent": {"min": 40, "max": 55},
+        "filtration_requirement": "HEPA filtration per project requirement",
+        "supply_return_strategy": "ceiling supply / low return"
+      }
+    }
+  ],
+  "rooms": [
+    {
+      "name": "Process",
+      "profile_id": "project-urs-iso7",
+      "classification": "ISO 7 (project designation)",
+      "intended_process": "Controlled electronics assembly demo",
+      "dimensions_m": {"length": 6, "width": 4, "height": 3},
+      "occupancy": 4,
+      "occupant_sensible_w_per_person": 75,
+      "equipment_sensible_load_w": 8000,
+      "process_sensible_load_w": 500,
+      "pressure_target_pa": 15,
+      "recovery_target_minutes": 15,
+      "contamination_assumptions": ["Demo occupant/process source assumptions require project validation"],
+      "operating_mode": "occupied"
+    }
+  ]
+}

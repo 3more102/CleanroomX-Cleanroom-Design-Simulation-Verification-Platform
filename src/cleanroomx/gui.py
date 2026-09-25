@@ -37,7 +37,7 @@ from .project import (
     atomic_write_text,
     capture_project_file_revision,
     load_project_document,
-    load_project_document_with_revision,
+    load_project_document_with_revision_info,
     new_project,
     save_project_document,
     save_project_document_guarded,
@@ -187,6 +187,8 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
+        self._migration_source_path: Path | None = None
+        self._project_migration_info = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
@@ -934,6 +936,8 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
+        self._migration_source_path = None
+        self._project_migration_info = None
         self._begin_autosave_project(recovered.source_path)
 
         ui_state = recovered.ui_state
@@ -1027,6 +1031,8 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
+        self._migration_source_path = None
+        self._project_migration_info = None
         self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
@@ -1059,21 +1065,40 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
-        project, project_revision = load_project_document_with_revision(project_path)
+        (
+            project,
+            project_revision,
+            migration_info,
+        ) = load_project_document_with_revision_info(project_path)
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
         self._project_file_revision = project_revision
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
+        self._project_migration_info = migration_info
+        self._migration_source_path = (
+            project_path.resolve(strict=False) if migration_info.migrated else None
+        )
         self._begin_autosave_project(project_path)
         self.name_var.set(project.name)
         self.description_var.set(project.description)
         self._clear_run_cache()
         self._refresh_analysis_list()
-        self._capture_saved_state()
-        self.status_var.set(f"Opened {project_path.name}")
-        self._update_title()
+        if migration_info.migrated:
+            # The in-memory model is current schema, but the source file is not.
+            # Keep the conversion explicitly unsaved so an ordinary Save cannot
+            # silently replace the only legacy copy.
+            self._baseline_state = "__cleanroomx_migrated_copy_requires_save_as__"
+            self.status_var.set(
+                "Legacy project migrated in memory — use Save Project As to preserve "
+                "the original source file."
+            )
+            self._update_title()
+        else:
+            self._capture_saved_state()
+            self.status_var.set(f"Opened {project_path.name}")
+            self._update_title()
 
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()
@@ -1083,7 +1108,9 @@ class CleanroomXApp:
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
             return
-        if self.project_path is not None:
+        if getattr(self, "_migration_source_path", None) is not None:
+            suffix = f" — Migrated copy of {self.project_path.name}"
+        elif self.project_path is not None:
             suffix = f" — {self.project_path.name}"
         elif getattr(self, "_restored_recovery_artifact", None) is not None:
             suffix = " — Recovered copy"
@@ -1118,6 +1145,9 @@ class CleanroomXApp:
             messagebox.showerror("Cannot save", str(exc), parent=self.root)
             return
         if self.project_path is None:
+            self.save_project_as()
+            return
+        if getattr(self, "_migration_source_path", None) is not None:
             self.save_project_as()
             return
 
@@ -1162,6 +1192,23 @@ class CleanroomXApp:
             return
 
         destination = Path(path)
+        migration_source = getattr(self, "_migration_source_path", None)
+        if (
+            migration_source is not None
+            and destination.resolve(strict=False)
+            == migration_source.resolve(strict=False)
+        ):
+            messagebox.showwarning(
+                "Preserve legacy project",
+                (
+                    "A migrated legacy project must be saved to a different file first. "
+                    "The original legacy file is preserved so the pre-migration source "
+                    "remains available for rollback or comparison."
+                ),
+                parent=self.root,
+            )
+            return
+
         recovery_source = getattr(self, "_recovery_source_path", None)
         restored_artifact = getattr(self, "_restored_recovery_artifact", None)
         if (
@@ -1225,6 +1272,8 @@ class CleanroomXApp:
         self.project_path = saved_path
         self._project_file_revision = saved_revision
         self._recovery_source_path = None
+        self._migration_source_path = None
+        self._project_migration_info = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()
         if editor_id is not None:

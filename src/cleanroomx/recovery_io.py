@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .strict_json import load_strict_json
 
 from .recovery_models import RecoverySample, RecoveryTestSpec
 
@@ -22,5 +23,5 @@ def recovery_test_from_dict(data: dict) -> RecoveryTestSpec:
 
 
 def load_recovery_test(path: str | Path) -> RecoveryTestSpec:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_strict_json(path)
     return recovery_test_from_dict(data)

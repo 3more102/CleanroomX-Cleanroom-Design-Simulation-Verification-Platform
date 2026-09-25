@@ -9,7 +9,6 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
-from .spatial_history import SpatialEditHistory, SpatialHistoryState
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_GEOMETRY_EPSILON_M,
@@ -531,6 +530,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        on_history_record: Callable[
+            [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
+            bool,
+        ] | None = None,
+        on_undo_requested: Callable[[], bool] | None = None,
+        on_redo_requested: Callable[[], bool] | None = None,
     ):
         super().__init__(master)
         self._project_getter = project_getter
@@ -538,6 +543,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
         self._status_setter = status_setter
+        self._on_history_record = on_history_record
+        self._on_undo_requested = on_undo_requested
+        self._on_redo_requested = on_redo_requested
 
         self.layout = empty_layout()
         self.selected: _Hit | None = None
@@ -551,8 +559,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
-        self._history = SpatialEditHistory(limit=100)
-        self._history_project_token: int | None = None
+        self._history_can_undo = False
+        self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
 
         self._build()
@@ -690,11 +698,6 @@ class SpatialDesignWorkspace(ttk.Frame):
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
-        project_token = id(project)
-        if project_token != self._history_project_token:
-            self._history.clear()
-            self._history_project_token = project_token
-            self._drag_history_before = None
         self.layout = ensure_project_layout(project, analysis)
         if self.selected and not self._selected_object():
             self.selected = None
@@ -712,48 +715,44 @@ class SpatialDesignWorkspace(ttk.Frame):
         snapshot.pop("view", None)
         return snapshot
 
-    def _restore_history_state(self, state: SpatialHistoryState) -> None:
-        view = copy.deepcopy(self.layout.get("view", {}))
-        restored = copy.deepcopy(state.layout)
-        restored["view"] = view
-        project = self._project_getter()
-        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(restored)
-        self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        self.selected = _Hit(*state.selection) if state.selection is not None else None
+    def history_selection(self) -> tuple[str, str] | None:
+        return self._selection_state()
+
+    def restore_history_selection(
+        self, selection: tuple[str, str] | None
+    ) -> None:
+        self.selected = _Hit(*selection) if selection is not None else None
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
-        self._on_change()
-        self._update_history_controls()
         self.redraw()
+
+    def set_history_availability(self, can_undo: bool, can_redo: bool) -> None:
+        self._history_can_undo = bool(can_undo)
+        self._history_can_redo = bool(can_redo)
+        self._update_history_controls()
 
     def _update_history_controls(self) -> None:
         if hasattr(self, "_undo_button"):
-            self._undo_button.configure(state="normal" if self._history.can_undo else "disabled")
+            self._undo_button.configure(
+                state="normal" if self._history_can_undo else "disabled"
+            )
         if hasattr(self, "_redo_button"):
-            self._redo_button.configure(state="normal" if self._history.can_redo else "disabled")
+            self._redo_button.configure(
+                state="normal" if self._history_can_redo else "disabled"
+            )
 
     def undo_edit(self) -> bool:
-        restored = self._history.undo()
-        if restored is None:
-            self._status_setter("Nothing to undo in the spatial workspace")
-            self._update_history_controls()
+        if self._on_undo_requested is None:
+            self._status_setter("Project undo is unavailable")
             return False
-        state, description = restored
-        self._restore_history_state(state)
-        self._status_setter(f"Undo: {description}")
-        return True
+        return bool(self._on_undo_requested())
 
     def redo_edit(self) -> bool:
-        restored = self._history.redo()
-        if restored is None:
-            self._status_setter("Nothing to redo in the spatial workspace")
-            self._update_history_controls()
+        if self._on_redo_requested is None:
+            self._status_setter("Project redo is unavailable")
             return False
-        state, description = restored
-        self._restore_history_state(state)
-        self._status_setter(f"Redo: {description}")
-        return True
+        return bool(self._on_redo_requested())
 
     def _on_undo_shortcut(self, event=None):
         self.undo_edit()
@@ -773,13 +772,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        if history_before is not None:
-            self._history.record(
-                before_layout=history_before,
-                before_selection=selection_before,
-                after_layout=self._history_layout(),
-                after_selection=self._selection_state(),
-                description=message,
+        if history_before is not None and self._on_history_record is not None:
+            self._on_history_record(
+                history_before,
+                selection_before,
+                self._history_layout(),
+                self._selection_state(),
+                message,
             )
         self._on_change()
         self._status_setter(message)

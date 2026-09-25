@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased durable output persistence — 2026-09-25
+
+- Routes every CLI file report through the shared atomic persistence primitive instead of direct truncating `Path.write_text()` calls.
+- Extends the shared writer with parent-directory fsync on POSIX filesystems that support it, after file fsync and atomic same-directory replacement.
+- Surfaces genuine post-replace directory-sync I/O failures explicitly so callers do not mistake an unconfirmed durable publication for a fully confirmed save.
+- Adds regression coverage for publication-order directory synchronization and post-replace durability-failure semantics without changing engineering calculations or project schema.
+
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

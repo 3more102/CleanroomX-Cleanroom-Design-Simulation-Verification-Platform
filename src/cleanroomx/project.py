@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import errno
 import json
 import os
 from pathlib import Path
@@ -204,8 +205,47 @@ def load_project_document(path: str | Path) -> ProjectDocument:
     return project_from_dict(data)
 
 
+_UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
+    errno.EINVAL,
+    getattr(errno, "ENOTSUP", errno.EINVAL),
+    getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+}
+
+
+def _fsync_parent_directory(directory: Path) -> None:
+    """Flush a published directory entry where directory fsync is supported."""
+    if os.name == "nt":
+        return
+
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        directory_fd = os.open(directory, flags)
+    except OSError as exc:
+        if exc.errno in _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS:
+            return
+        raise
+
+    try:
+        try:
+            os.fsync(directory_fd)
+        except OSError as exc:
+            if exc.errno not in _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS:
+                raise
+    finally:
+        os.close(directory_fd)
+
+
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    """Atomically replace a UTF-8 text file and harden publication durability.
+
+    File contents are flushed before the same-directory replace. On POSIX
+    systems, the parent directory is then fsynced when the filesystem supports
+    it so the rename itself is not left only in volatile directory metadata.
+
+    If the post-replace directory sync raises a real I/O error, the exception
+    is propagated with an explicit message. At that point the destination has
+    already been atomically published with the new contents.
+    """
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -221,6 +261,13 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             os.fsync(handle.fileno())
 
         temp_path.replace(destination)
+        try:
+            _fsync_parent_directory(destination.parent)
+        except OSError as exc:
+            raise OSError(
+                f"file was atomically replaced at {destination}, "
+                "but parent-directory durability sync failed"
+            ) from exc
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

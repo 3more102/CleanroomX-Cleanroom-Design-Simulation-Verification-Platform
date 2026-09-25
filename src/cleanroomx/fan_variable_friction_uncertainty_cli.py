@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from .project import atomic_write_text
 from .fan_variable_friction_uncertainty import (
     analyze_fan_variable_friction_loop_uncertainty,
 )
@@ -47,7 +47,7 @@ def main() -> int:
         else markdown_fan_variable_friction_loop_uncertainty_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0 if result["status"] == "complete" else 2

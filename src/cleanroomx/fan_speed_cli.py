@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from .project import atomic_write_text
 from .fan_speed import analyze_fan_speed_study
 from .fan_speed_io import load_fan_speed_study
 from .fan_speed_report import markdown_fan_speed_report
@@ -33,7 +33,7 @@ def main() -> int:
         else markdown_fan_speed_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0 if result["status"] == "screening_complete" else 2

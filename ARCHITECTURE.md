@@ -28,3 +28,20 @@ Startup restoration keeps save ownership equally explicit. A recovery is parsed 
 ## Engineering boundary
 
 CleanroomX produces screening and numerical/provenance evidence. It does not by itself establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance. Applicable requirements and acceptance criteria remain external project inputs.
+
+
+## Persistence durability
+
+All operator-authored text outputs now share `atomic_write_text()`, including explicit
+project saves, GUI exports, recovery artifacts, and CLI report files. The writer
+creates a same-directory temporary file, flushes and fsyncs its contents, atomically
+replaces the destination, and then attempts to fsync the parent directory on POSIX
+filesystems that support directory synchronization. This removes direct truncating
+CLI writes and prevents partially written report files from replacing a previously
+valid output.
+
+A real post-replace directory-sync I/O failure is surfaced explicitly. In that case
+the new destination bytes have already been atomically published, but crash durability
+of the directory entry could not be confirmed. Windows keeps the existing atomic
+same-directory replacement behavior because Python does not expose portable directory
+fsync semantics there.

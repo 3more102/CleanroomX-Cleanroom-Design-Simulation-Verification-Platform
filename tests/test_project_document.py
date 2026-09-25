@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
     ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
@@ -51,6 +52,44 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
         atomic_write_text(target, "payload\n")
 
     assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_syncs_parent_directory_after_publication(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    calls = []
+
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_parent_directory",
+        lambda directory: calls.append(directory),
+    )
+
+    atomic_write_text(target, "payload\n")
+
+    assert calls == [tmp_path]
+    assert target.read_text(encoding="utf-8") == "payload\n"
+
+
+def test_atomic_write_text_reports_post_replace_directory_sync_failure(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_text("old\n", encoding="utf-8")
+
+    def fail_directory_sync(directory):
+        raise OSError("simulated directory fsync failure")
+
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_parent_directory",
+        fail_directory_sync,
+    )
+
+    with pytest.raises(OSError, match="parent-directory durability sync failed"):
+        atomic_write_text(target, "new\n")
+
+    assert target.read_text(encoding="utf-8") == "new\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

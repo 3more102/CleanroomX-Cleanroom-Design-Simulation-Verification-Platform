@@ -872,3 +872,11 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+def test_gui_json_parser_rejects_duplicate_keys():
+    with pytest.raises(ValueError, match="duplicate JSON object key.*pressure_pa"):
+        _strict_json_loads('{"pressure_pa": 10, "pressure_pa": 20}')
+
+
+def test_gui_json_parser_rejects_numeric_overflow():
+    with pytest.raises(ValueError, match="non-finite JSON number.*1e400"):
+        _strict_json_loads('{"value": 1e400}')

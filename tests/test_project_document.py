@@ -121,7 +121,6 @@ def test_project_loader_reports_invalid_json(tmp_path):
         load_project_document(path)
 
 
-
 def test_checked_project_save_rejects_external_content_change_and_preserves_disk(tmp_path):
     path, opened_fingerprint = save_project_document_with_fingerprint(
         tmp_path / "conflict.cleanroomx.json",
@@ -178,7 +177,7 @@ def test_checked_project_save_uses_content_identity_not_mtime_only(tmp_path):
         expected_fingerprint=opened_fingerprint,
     )
 
-    assert saved_path == path.resolve()
+    assert saved_path == path
     assert load_project_document(path).name == "Local edit"
     assert saved_fingerprint["sha256"] == project_file_fingerprint(path)["sha256"]
 

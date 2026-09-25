@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import ceil, sqrt
 from time import perf_counter
 
 from cleanroomx.spatial import (
@@ -9,24 +10,49 @@ from cleanroomx.spatial import (
 )
 
 
-def _grid(side: int) -> list[dict]:
+CASES = (
+    ("small", 100, 250),
+    ("medium", 500, 1_250),
+    ("large", 1_000, 2_500),
+)
+
+
+def _grid(count: int) -> list[dict]:
     room_size_m = 4.0
+    columns = max(1, ceil(sqrt(count)))
     rooms = []
-    for row in range(side):
-        for column in range(side):
-            index = row * side + column
-            rooms.append(
-                {
-                    "id": f"room-{index}",
-                    "name": f"Room {index}",
-                    "x_m": column * room_size_m,
-                    "y_m": row * room_size_m,
-                    "length_m": room_size_m,
-                    "width_m": room_size_m,
-                    "height_m": 3.0,
-                }
-            )
+    for index in range(count):
+        row, column = divmod(index, columns)
+        rooms.append(
+            {
+                "id": f"room-{index}",
+                "name": f"Room {index}",
+                "x_m": column * room_size_m,
+                "y_m": row * room_size_m,
+                "length_m": room_size_m,
+                "width_m": room_size_m,
+                "height_m": 3.0,
+            }
+        )
     return rooms
+
+
+def _devices(rooms: list[dict], count: int) -> list[dict]:
+    devices = []
+    for index in range(count):
+        room = rooms[index % len(rooms)]
+        devices.append(
+            {
+                "id": f"device-{index}",
+                "type": "sensor" if index % 2 == 0 else "equipment",
+                "name": f"Device {index}",
+                "room_id": room["id"],
+                "x_m": room["x_m"] + room["length_m"] / 2,
+                "y_m": room["y_m"] + room["width_m"] / 2,
+                "z_m": min(1.5, room["height_m"]),
+            }
+        )
+    return devices
 
 
 def _naive_overlap_records(rooms: list[dict]) -> list[tuple[int, int, list[float]]]:
@@ -57,27 +83,29 @@ def _timed(callable_):
 
 
 def main() -> int:
-    print("CleanroomX spatial validation benchmark")
-    print("layout,rooms,sweep_s,naive_s,full_validate_s,speedup")
-    for label, side in (
-        ("small", 10),
-        ("medium", 25),
-        ("large", 40),
-        ("stress", 50),
-    ):
-        rooms = _grid(side)
-        layout = {"rooms": rooms, "devices": []}
+    print("CleanroomX Release 2 spatial validation benchmark")
+    print(
+        "layout,rooms,devices,sweep_s,naive_s,full_validate_s,"
+        "overlap_speedup"
+    )
+    for label, room_count, device_count in CASES:
+        rooms = _grid(room_count)
+        devices = _devices(rooms, device_count)
+        layout = {"rooms": rooms, "devices": devices}
         sweep_seconds, sweep = _timed(lambda: _room_overlap_records(rooms))
         naive_seconds, naive = _timed(lambda: _naive_overlap_records(rooms))
         full_seconds, issues = _timed(lambda: validate_layout(layout))
         if sweep != naive:
             raise RuntimeError(f"{label} overlap result differs from reference scan")
         if issues:
-            raise RuntimeError(f"{label} touching-room grid unexpectedly produced warnings")
+            raise RuntimeError(
+                f"{label} valid synthetic project unexpectedly produced warnings: "
+                f"{issues[:3]!r}"
+            )
         speedup = naive_seconds / max(sweep_seconds, 1e-12)
         print(
-            f"{label},{len(rooms)},{sweep_seconds:.6f},{naive_seconds:.6f},"
-            f"{full_seconds:.6f},{speedup:.2f}x"
+            f"{label},{len(rooms)},{len(devices)},{sweep_seconds:.6f},"
+            f"{naive_seconds:.6f},{full_seconds:.6f},{speedup:.2f}x"
         )
     return 0
 

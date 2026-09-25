@@ -698,3 +698,39 @@ def test_packaged_gui_demo_contains_explicit_spatial_design():
     assert [room["pressure_pa"] for room in layout["rooms"]] == [30.0, 16.0, 8.0]
     device_types = {device["type"] for device in layout["devices"]}
     assert {"door", "supply", "return", "ffu", "equipment", "transfer"} <= device_types
+
+
+
+def test_validate_layout_reports_opening_height_and_wall_association_problems():
+    layout = {
+        "rooms": [
+            {
+                "id": "r1",
+                "name": "Room",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            }
+        ],
+        "devices": [
+            {
+                "id": "d1",
+                "type": "door",
+                "name": "Door",
+                "room_id": "r1",
+                "x_m": 2,
+                "y_m": 1,
+                "z_m": 1.5,
+                "width_m": 0.9,
+                "height_m": 2.1,
+                "wall_side": "south",
+            }
+        ],
+    }
+
+    codes = {issue["code"] for issue in validate_layout(layout)}
+
+    assert "opening_above_room" in codes
+    assert "opening_off_wall" in codes

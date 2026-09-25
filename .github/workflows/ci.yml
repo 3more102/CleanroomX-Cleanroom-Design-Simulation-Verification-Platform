@@ -82,6 +82,8 @@ jobs:
           tests/test_application.py
           tests/test_application_all_workflows.py
           tests/test_project_document.py
+          tests/test_project_io_stability.py
+          tests/test_project_write_guard.py
           tests/test_autosave.py
           tests/test_crash_recovery.py
           tests/test_recovery_diff.py
@@ -90,6 +92,9 @@ jobs:
           tests/test_gui_recovery.py
       - name: Run complete test suite
         run: python -m pytest -q
+      - name: Benchmark durable project I/O
+        if: matrix.python-version == '3.13'
+        run: python benchmarks/project_io.py --output /tmp/cleanroomx-project-io-benchmark.json
       - name: Build wheel and verify installed application
         run: |
           rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env

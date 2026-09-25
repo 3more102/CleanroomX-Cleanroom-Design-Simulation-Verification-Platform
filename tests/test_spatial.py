@@ -10,10 +10,12 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    orbit_camera_angles,
     resize_room,
     room_clearance_dimensions,
     snap_room_translation,
     SpatialEditHistory,
+    spatial_3d_camera_preset,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
     spatial_layout_svg,
@@ -104,6 +106,31 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["grid_m"] == 0.5
     assert math.isfinite(layout["view"]["zoom_2d"])
     assert layout["view"]["elevation_deg"] == 5
+
+
+def test_orbit_camera_angles_wraps_azimuth_and_applies_drag_sensitivity():
+    azimuth, elevation = orbit_camera_angles(
+        350.0,
+        20.0,
+        40.0,
+        -20.0,
+        sensitivity_deg_per_px=0.5,
+    )
+
+    assert azimuth == 10.0
+    assert elevation == 30.0
+
+
+def test_orbit_camera_angles_clamps_elevation_to_supported_view_range():
+    assert orbit_camera_angles(10.0, 70.0, 0.0, -1000.0)[1] == 75.0
+    assert orbit_camera_angles(10.0, 10.0, 0.0, 1000.0)[1] == 5.0
+
+
+def test_spatial_3d_camera_presets_are_case_insensitive_and_deterministic():
+    assert spatial_3d_camera_preset("Iso") == (35.0, 28.0)
+    assert spatial_3d_camera_preset(" FRONT ") == (0.0, 8.0)
+    assert spatial_3d_camera_preset("right") == (90.0, 8.0)
+    assert spatial_3d_camera_preset("TOP") == (0.0, 75.0)
 
 
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():

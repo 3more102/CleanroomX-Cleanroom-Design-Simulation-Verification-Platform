@@ -532,6 +532,9 @@ class AutosaveManager:
                     artifact.unlink(missing_ok=True)
                 except OSError as exc:
                     stale_cleanup_failure = exc
+                    self._artifacts_by_identity.setdefault(
+                        request.project_identity, set()
+                    ).add(artifact)
 
             if stale_cleanup_failure is not None:
                 self._set_status_locked(

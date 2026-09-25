@@ -65,6 +65,29 @@ def test_normalize_layout_repairs_room_and_device_ids_deterministically():
     assert len(device_ids) == len(set(device_ids))
 
 
+def test_large_duplicate_name_layout_has_unique_deterministic_ids():
+    raw = {
+        "version": 1,
+        "rooms": [{"name": "Repeated"} for _ in range(5000)],
+        "devices": [{"type": "sensor", "name": "Repeated"} for _ in range(5000)],
+    }
+
+    normalized = normalize_layout(raw)
+
+    room_ids = [room["id"] for room in normalized["rooms"]]
+    device_ids = [device["id"] for device in normalized["devices"]]
+    assert len(set(room_ids)) == 5000
+    assert len(set(device_ids)) == 5000
+    assert room_ids[:3] == ["repeated", "repeated-2", "repeated-3"]
+    assert room_ids[-1] == "repeated-5000"
+    assert device_ids[:3] == [
+        "device-repeated",
+        "device-repeated-2",
+        "device-repeated-3",
+    ]
+    assert device_ids[-1] == "device-repeated-5000"
+
+
 def test_derive_layout_from_duplicate_room_names_has_stable_unique_ids():
     analysis = AnalysisDocument(
         id="verification",

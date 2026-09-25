@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 from typing import Any, Callable
 
@@ -217,18 +218,19 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _project_document_from_bytes(payload: bytes) -> ProjectDocument:
+    text = payload.decode("utf-8")
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
     return project_from_dict(data)
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    return _project_document_from_bytes(Path(path).read_bytes())
 
 
 def _normalized_project_path(path: str | Path) -> Path:
@@ -284,22 +286,58 @@ def project_file_revision_matches(
     return expected.size == current.size and expected.sha256 == current.sha256
 
 
+def _read_stable_project_bytes(
+    path: str | Path,
+    *,
+    attempts: int,
+) -> tuple[bytes, ProjectFileRevision]:
+    """Read one stable file snapshot and bind its revision to those exact bytes."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
+    source = _normalized_project_path(path)
+    normalized = os.path.normcase(str(source))
+    last_error: OSError | None = None
+
+    for _attempt in range(attempts):
+        try:
+            before = source.stat()
+            if not stat.S_ISREG(before.st_mode):
+                raise OSError(f"project path is not a regular file: {source}")
+            payload = source.read_bytes()
+            after = source.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+
+        if (
+            os.path.samestat(before, after)
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+            and len(payload) == after.st_size
+        ):
+            return payload, ProjectFileRevision(
+                path=normalized,
+                exists=True,
+                size=len(payload),
+                mtime_ns=after.st_mtime_ns,
+                sha256=sha256(payload).hexdigest(),
+            )
+
+        last_error = OSError(f"project file changed while opening: {source}")
+
+    assert last_error is not None
+    raise last_error
+
+
 def load_project_document_with_revision(
     path: str | Path,
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
-    source = _normalized_project_path(path)
-    for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        project = load_project_document(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return project, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
+    """Load and revision-bind the exact same stable project bytes."""
+    payload, revision = _read_stable_project_bytes(path, attempts=attempts)
+    return _project_document_from_bytes(payload), revision
 
 
 def _project_document_text(project: ProjectDocument) -> str:

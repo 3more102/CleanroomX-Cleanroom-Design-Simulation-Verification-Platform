@@ -1060,6 +1060,10 @@ def pressure_overlay_state(
                 pressure = configured
                 source = "configured"
                 status = "configured"
+            elif room.get("pressure_pa") is not None:
+                pressure = _optional_finite(room.get("pressure_pa"))
+                source = "spatial"
+                status = mapping_state
             pressure_target = _optional_finite(target.get("min_pressure_pa"))
         elif room.get("pressure_pa") is not None:
             pressure = _optional_finite(room.get("pressure_pa"))

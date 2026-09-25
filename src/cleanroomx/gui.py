@@ -39,9 +39,11 @@ from .project import (
     load_project_document,
     load_project_document_with_revision,
     new_project,
+    project_from_dict,
     save_project_document,
     save_project_document_guarded,
 )
+from .project_history import ProjectEditHistory, ProjectEditState
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
@@ -193,6 +195,7 @@ class CleanroomXApp:
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
+        self._project_history = ProjectEditHistory(limit=100)
         self._autosave_interval_seconds = max(0.0, float(autosave_interval_seconds))
         self._autosave_interval_ms = (
             max(1000, int(self._autosave_interval_seconds * 1000))
@@ -254,6 +257,22 @@ class CleanroomXApp:
         file_menu.add_command(label="Exit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
 
+        edit_menu = tk.Menu(menubar, tearoff=False)
+        edit_menu.add_command(
+            label="Undo Project Edit",
+            accelerator="Ctrl+Z",
+            command=self.undo_project_edit,
+        )
+        self._undo_project_menu_index = edit_menu.index("end")
+        edit_menu.add_command(
+            label="Redo Project Edit",
+            accelerator="Ctrl+Y",
+            command=self.redo_project_edit,
+        )
+        self._redo_project_menu_index = edit_menu.index("end")
+        menubar.add_cascade(label="Edit", menu=edit_menu)
+        self._edit_menu = edit_menu
+
         analysis_menu = tk.Menu(menubar, tearoff=False)
         analysis_menu.add_command(label="Add Analysis...", command=self.add_analysis)
         analysis_menu.add_command(label="Rename Analysis...", command=self.rename_analysis)
@@ -289,7 +308,11 @@ class CleanroomXApp:
         self.root.bind("<Control-n>", lambda event: self.new_project())
         self.root.bind("<Control-o>", lambda event: self.open_project())
         self.root.bind("<Control-s>", lambda event: self.save_project())
+        self.root.bind("<Control-z>", self._on_project_undo_shortcut)
+        self.root.bind("<Control-y>", self._on_project_redo_shortcut)
+        self.root.bind("<Control-Shift-Z>", self._on_project_redo_shortcut)
         self.root.bind("<F5>", lambda event: self.run_current())
+        self._update_project_history_controls()
 
     def _build_layout(self) -> None:
         metadata = ttk.Frame(self.root, padding=(8, 8, 8, 4))
@@ -528,7 +551,203 @@ class CleanroomXApp:
         except KeyError:
             return None
 
-    def _commit_editor(self, analysis: AnalysisDocument | None = None) -> AnalysisDocument:
+    def _project_edit_state(
+        self,
+        *,
+        editor_text_from_model: bool = False,
+    ) -> ProjectEditState:
+        editor_id = getattr(self, "_editor_analysis_id", None)
+        editor_text = ""
+        if editor_id is not None:
+            if editor_text_from_model:
+                try:
+                    editor = self.project.analysis_by_id(editor_id)
+                except KeyError:
+                    editor = None
+                if editor is not None:
+                    editor_text = json.dumps(
+                        editor.input,
+                        indent=2,
+                        ensure_ascii=False,
+                        sort_keys=False,
+                    )
+            elif hasattr(self, "input_text"):
+                editor_text = self.input_text.get("1.0", "end-1c")
+        return ProjectEditState(
+            analyses=[copy.deepcopy(item.to_dict()) for item in self.project.analyses],
+            active_analysis_id=self.project.active_analysis_id,
+            editor_analysis_id=editor_id,
+            editor_text=editor_text,
+        )
+
+    def _project_history_before(
+        self,
+        *,
+        editor_text_from_model: bool = False,
+    ) -> ProjectEditState | None:
+        if getattr(self, "_project_history", None) is None:
+            return None
+        return self._project_edit_state(editor_text_from_model=editor_text_from_model)
+
+    def _record_project_edit(
+        self,
+        before: ProjectEditState | None,
+        description: str,
+    ) -> bool:
+        history = getattr(self, "_project_history", None)
+        if history is None or before is None:
+            return False
+        recorded = history.record(
+            before=before,
+            after=self._project_edit_state(),
+            description=description,
+        )
+        self._update_project_history_controls()
+        return recorded
+
+    def _clear_project_history(self) -> None:
+        history = getattr(self, "_project_history", None)
+        if history is not None:
+            history.clear()
+        self._update_project_history_controls()
+
+    def _update_project_history_controls(self) -> None:
+        menu = getattr(self, "_edit_menu", None)
+        history = getattr(self, "_project_history", None)
+        if menu is None or history is None:
+            return
+        menu.entryconfigure(
+            self._undo_project_menu_index,
+            label=(
+                f"Undo {history.undo_description}"
+                if history.can_undo
+                else "Undo Project Edit"
+            ),
+            state="normal" if history.can_undo else "disabled",
+        )
+        menu.entryconfigure(
+            self._redo_project_menu_index,
+            label=(
+                f"Redo {history.redo_description}"
+                if history.can_redo
+                else "Redo Project Edit"
+            ),
+            state="normal" if history.can_redo else "disabled",
+        )
+
+    def _restore_project_edit_state(self, state: ProjectEditState) -> None:
+        data = self.project.to_dict()
+        data["analyses"] = copy.deepcopy(state.analyses)
+        ids = {
+            item.get("id")
+            for item in state.analyses
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        active = state.active_analysis_id if state.active_analysis_id in ids else None
+        if active is None and state.editor_analysis_id in ids:
+            active = state.editor_analysis_id
+        if active is None and state.analyses:
+            candidate = state.analyses[0].get("id")
+            active = candidate if isinstance(candidate, str) else None
+        data["active_analysis_id"] = active
+        restored = project_from_dict(data)
+
+        self.project.analyses = restored.analyses
+        self.project.active_analysis_id = restored.active_analysis_id
+        self._clear_run_cache()
+
+        editor_id = state.editor_analysis_id if state.editor_analysis_id in ids else active
+        self._refresh_analysis_list(select_id=editor_id)
+        if editor_id is not None and state.editor_analysis_id == editor_id:
+            self._editor_analysis_id = editor_id
+            self.input_text.delete("1.0", "end")
+            self.input_text.insert("1.0", state.editor_text)
+            self.input_text.edit_modified(False)
+            self.refresh_structure(silent=True)
+        self._update_title()
+
+    def undo_project_edit(self) -> bool:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before undoing project edits.",
+                parent=self.root,
+            )
+            return False
+        current = self._editor_analysis()
+        if current is not None:
+            try:
+                self._commit_editor(current)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot undo project edit",
+                    f"Fix the current analysis input before undoing.\n\n{exc}",
+                    parent=self.root,
+                )
+                return False
+        restored = self._project_history.undo()
+        if restored is None:
+            self.status_var.set("Nothing to undo in the project")
+            self._update_project_history_controls()
+            return False
+        state, description = restored
+        self._restore_project_edit_state(state)
+        self._update_project_history_controls()
+        self.status_var.set(f"Undo: {description}")
+        return True
+
+    def redo_project_edit(self) -> bool:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before redoing project edits.",
+                parent=self.root,
+            )
+            return False
+        current = self._editor_analysis()
+        if current is not None:
+            try:
+                self._commit_editor(current)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot redo project edit",
+                    f"Fix the current analysis input before redoing.\n\n{exc}",
+                    parent=self.root,
+                )
+                return False
+        restored = self._project_history.redo()
+        if restored is None:
+            self.status_var.set("Nothing to redo in the project")
+            self._update_project_history_controls()
+            return False
+        state, description = restored
+        self._restore_project_edit_state(state)
+        self._update_project_history_controls()
+        self.status_var.set(f"Redo: {description}")
+        return True
+
+    def _on_project_undo_shortcut(self, event=None):
+        if event is not None and getattr(event, "widget", None) is getattr(
+            self, "input_text", None
+        ):
+            return None
+        self.undo_project_edit()
+        return "break"
+
+    def _on_project_redo_shortcut(self, event=None):
+        if event is not None and getattr(event, "widget", None) is getattr(
+            self, "input_text", None
+        ):
+            return None
+        self.redo_project_edit()
+        return "break"
+
+    def _commit_editor(
+        self,
+        analysis: AnalysisDocument | None = None,
+        *,
+        record_history: bool = True,
+    ) -> AnalysisDocument:
         analysis = analysis or self._editor_analysis() or self._current_analysis()
         if analysis is None:
             raise ValueError("select or add an analysis first")
@@ -540,13 +759,24 @@ class CleanroomXApp:
             ) from exc
         if not isinstance(payload, dict):
             raise ValueError("analysis input must be a JSON object")
+
+        before = (
+            self._project_history_before(editor_text_from_model=True)
+            if record_history and payload != analysis.input
+            else None
+        )
+
+        # Validate/synchronize project metadata before mutating the authoritative
+        # analysis input so a metadata failure cannot leave a partial transaction.
+        self._sync_metadata()
         analysis.input = payload
         cached_run = getattr(self, "_runs_by_analysis", {}).get(analysis.id)
         if cached_run is not None and not analysis_run_matches_input(
             cached_run, analysis.kind, payload
         ):
             self._invalidate_last_run_for(analysis.id)
-        self._sync_metadata()
+        if before is not None:
+            self._record_project_edit(before, f"Edit {analysis.name} input")
         return analysis
 
     def _sync_metadata(self) -> None:
@@ -874,8 +1104,10 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
+        before = self._project_history_before()
+        commit_before = self._project_history_before(editor_text_from_model=True)
         try:
-            self._commit_editor(analysis)
+            self._commit_editor(analysis, record_history=False)
         except Exception as exc:
             messagebox.showerror(
                 "Cannot synchronize geometry",
@@ -884,6 +1116,7 @@ class CleanroomXApp:
             )
             return
         if analysis.kind not in {"room_verification", "project_verification"}:
+            self._record_project_edit(commit_before, f"Edit {analysis.name} input")
             messagebox.showinfo(
                 "Spatial synchronization",
                 "Geometry synchronization currently targets room-verification and "
@@ -894,10 +1127,12 @@ class CleanroomXApp:
             return
         changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
         if not changed:
+            self._record_project_edit(commit_before, f"Edit {analysis.name} input")
             self.status_var.set("Spatial geometry already matches the active analysis")
             return
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
+        self._record_project_edit(before, f"Synchronize geometry to {analysis.name}")
         self._update_title()
         self.status_var.set(
             f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
@@ -948,6 +1183,7 @@ class CleanroomXApp:
             else self.project.description
         )
         self._clear_run_cache()
+        self._clear_project_history()
         self._refresh_analysis_list()
 
         editor_id = ui_state.get("editor_analysis_id")
@@ -1031,6 +1267,7 @@ class CleanroomXApp:
         self.name_var.set(self.project.name)
         self.description_var.set("")
         self._clear_run_cache()
+        self._clear_project_history()
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set("New project")
@@ -1070,6 +1307,7 @@ class CleanroomXApp:
         self.name_var.set(project.name)
         self.description_var.set(project.description)
         self._clear_run_cache()
+        self._clear_project_history()
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set(f"Opened {project_path.name}")
@@ -1232,6 +1470,7 @@ class CleanroomXApp:
                 self._load_analysis_into_editor(self.project.analysis_by_id(editor_id))
             except KeyError:
                 self._refresh_analysis_list()
+        self._clear_project_history()
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self._discard_restored_recovery()
@@ -1242,10 +1481,12 @@ class CleanroomXApp:
         if self._running:
             messagebox.showwarning("Analysis running", "Abandon the current run first.")
             return
+        before = self._project_history_before()
+        commit_before = self._project_history_before(editor_text_from_model=True)
         previous = self._editor_analysis()
         if previous is not None:
             try:
-                self._commit_editor(previous)
+                self._commit_editor(previous, record_history=False)
             except Exception as exc:
                 messagebox.showerror(
                     "Cannot add analysis",
@@ -1256,6 +1497,8 @@ class CleanroomXApp:
         picker = AnalysisPicker(self.root)
         self.root.wait_window(picker)
         if picker.result is None:
+            if previous is not None:
+                self._record_project_edit(commit_before, f"Edit {previous.name} input")
             return
         kind = picker.result
         spec = ANALYSIS_SPECS[kind]
@@ -1270,6 +1513,7 @@ class CleanroomXApp:
         self.project.analyses.append(analysis)
         self.project.active_analysis_id = analysis_id
         self._refresh_analysis_list(select_id=analysis_id)
+        self._record_project_edit(before, f"Add {analysis.name}")
         self._update_title()
 
     def rename_analysis(self) -> None:
@@ -1283,8 +1527,13 @@ class CleanroomXApp:
             "Rename analysis", "Analysis name", initialvalue=analysis.name, parent=self.root
         )
         if value and value.strip():
-            analysis.name = value.strip()
+            renamed = value.strip()
+            if renamed == analysis.name:
+                return
+            before = self._project_history_before()
+            analysis.name = renamed
             self.analysis_tree.item(analysis.id, text=analysis.name)
+            self._record_project_edit(before, f"Rename analysis to {analysis.name}")
             self._update_title()
 
     def remove_analysis(self) -> None:
@@ -1300,12 +1549,14 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
+        before = self._project_history_before()
         self._invalidate_last_run_for(analysis.id)
         self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
         self.project.active_analysis_id = (
             self.project.analyses[0].id if self.project.analyses else None
         )
         self._refresh_analysis_list()
+        self._record_project_edit(before, f"Remove {analysis.name}")
         self._update_title()
 
     def import_input_json(self) -> None:
@@ -1337,9 +1588,11 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
+        before = self._project_history_before()
         analysis.input = payload
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
+        self._record_project_edit(before, f"Import input for {analysis.name}")
         self.status_var.set(f"Imported {source_path.name}")
         self._update_title()
 

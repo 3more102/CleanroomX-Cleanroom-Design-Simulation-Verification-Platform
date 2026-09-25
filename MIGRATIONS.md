@@ -35,3 +35,20 @@ For controlled archival workflows, retain a copy of the original legacy file bef
 ## v0.100 path-context behavior
 
 Project schema version remains **1**. v0.100 does not introduce a schema migration. When a project is saved into a different directory, relative consistency/dossier file references are rebased so they continue to identify the same external files. Imported consistency/dossier JSON is rebased from the source JSON directory into the current project context; when no project base exists, relative references are converted to absolute paths. Cached analysis results are cleared when **Save Project As** changes the project base directory.
+
+## Recovery artifact compatibility
+
+Recovery autosaves use a separate schema and do not alter the `cleanroomx.project` project-file schema.
+
+New recovery artifacts are written as:
+
+- schema: `cleanroomx.autosave`
+- schema version: `2`
+- integrity algorithm: `sha256`
+- canonicalization: `canonical-json-excluding-integrity-v1`
+
+The SHA-256 digest covers the canonical JSON representation of every recovery-envelope field except the `integrity` block itself. A version-2 artifact with a missing, unsupported, malformed, or mismatched integrity record is rejected and reported by recovery scanning; it is not restored or silently deleted.
+
+Recovery schema version 1 remains readable without an integrity record so recovery data created by earlier CleanroomX v0.100 builds is not stranded. Unsupported future recovery versions continue to fail closed.
+
+This recovery-schema change does not migrate or rewrite explicit project files, and restoring a recovery still opens an unsaved copy rather than overwriting its recorded source project.

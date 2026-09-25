@@ -27,6 +27,14 @@
 - Hardens discard operations so only validated recovery artifacts inside the configured recovery directory can be deleted.
 - Adds focused restore/discard/source-preservation/startup-precedence regressions without changing project schema version, solver equations, tolerances, or engineering acceptance semantics.
 
+## Unreleased self-verifying analysis run bundles — 2026-09-25
+
+- Makes exported analysis run bundles schema-versioned and self-contained with an immutable submitted-input snapshot, normalized result, report, diagnostics, plot data, and CleanroomX version.
+- Adds canonical whole-bundle SHA-256 integrity evidence and read-only verification that detects post-export modification without re-running engineering solvers.
+- Cross-checks the embedded input snapshot against the existing application-execution provenance hash so a re-signed but inconsistent snapshot is rejected.
+- Adds **Verify Run Bundle JSON...** to the desktop File menu with explicit success/failure reporting.
+- Keeps project schema version, solver equations, tolerances, acceptance semantics, and external dependency handling unchanged.
+
 ## Unreleased semantic recovery comparison — 2026-09-25
 
 - Adds a deterministic, read-only semantic comparison between each recovery artifact and the current source project before restoration.

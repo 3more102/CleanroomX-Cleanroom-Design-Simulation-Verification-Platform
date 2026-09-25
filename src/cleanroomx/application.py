@@ -1616,13 +1616,11 @@ def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
 def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
     from .dossier import build_dossier
 
-    # Validation rejects relative references when no base directory is available.
-    # Absolute references are location-independent, so an unsaved desktop project
-    # can execute them using a temporary manifest outside the project tree.
+    # Execution rewrites every file-backed dossier dependency to a verified
+    # absolute private snapshot before this runner is called. Keep the temporary
+    # manifest outside the source/project directory so read-only inputs remain
+    # executable and analysis never mutates the engineering-input location.
     temp_dir = None
-    if base_dir is not None:
-        base_dir.mkdir(parents=True, exist_ok=True)
-        temp_dir = base_dir
 
     handle = tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", suffix=".json",

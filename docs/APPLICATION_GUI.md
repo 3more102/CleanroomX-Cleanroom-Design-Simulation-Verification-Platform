@@ -48,6 +48,16 @@ Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stor
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
+## Recovery autosave
+
+The desktop application maintains crash-recovery autosaves separately from explicit project files. By default, a dirty project is sampled every 60 seconds; use `--autosave-interval-seconds N` to change the interval or `0` to disable recovery autosave. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
+
+Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned `cleanroomx.autosave` recovery envelope in the per-user recovery directory using the same atomic-write primitive as project persistence. Writes run on a single background worker, identical snapshots are suppressed, newer pending edits are coalesced, and history is bounded per project identity.
+
+Each artifact contains the recoverable project snapshot, the active raw editor draft, application version, recovery timestamp, project identity, and a source-file fingerprint containing path, size, modification time, and SHA-256. A malformed JSON editor draft is preserved as raw text without being promoted into the authoritative project model. The recovery scanner reports malformed artifacts explicitly and classifies the source project as unchanged, changed, missing, or newer. This foundation never automatically overwrites a newer project file.
+
+Current-session recovery artifacts are invalidated after an explicit save or an explicit discard. Recovery files from older sessions are not silently deleted by merely opening or saving the same project; the source comparison evidence remains available for the dedicated startup recovery workflow.
+
 ## Operator workflow
 
 1. Create a new project or open an existing `.cleanroomx.json` project.

@@ -592,3 +592,104 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
 
     assert not destination.exists()
     assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
+
+def test_bundle_extraction_fsyncs_staged_directories_before_publish(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    synced: list[Path] = []
+    monkeypatch.setattr(
+        bundle_module,
+        "_fsync_directory",
+        lambda path: synced.append(Path(path)),
+    )
+
+    destination = tmp_path / "durable"
+    extracted = extract_project_bundle(bundle, destination)
+
+    assert extracted.is_file()
+    assert synced[-1] == tmp_path
+    assert any(path.name == "dependencies" for path in synced)
+    assert any(
+        path.parent == tmp_path
+        and path.name.startswith(".durable.")
+        and path.name.endswith(".tmp")
+        for path in synced
+    )
+
+
+def test_bundle_extraction_staged_directory_fsync_failure_does_not_publish(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    original_fsync = bundle_module._fsync_directory
+
+    def fail_dependency_directory(path):
+        directory = Path(path)
+        if directory.name == "dependencies":
+            raise OSError("simulated staged directory fsync failure")
+        return original_fsync(directory)
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_fsync_directory",
+        fail_dependency_directory,
+    )
+    destination = tmp_path / "extracted"
+
+    with pytest.raises(
+        ProjectBundleError,
+        match="staged bundle extraction could not be made durable",
+    ):
+        extract_project_bundle(bundle, destination)
+
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
+def test_bundle_extraction_reports_post_publish_directory_fsync_failure(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    original_fsync = bundle_module._fsync_directory
+
+    def fail_publish_parent(path):
+        directory = Path(path)
+        if directory == tmp_path:
+            raise OSError("simulated publish directory fsync failure")
+        return original_fsync(directory)
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_fsync_directory",
+        fail_publish_parent,
+    )
+    destination = tmp_path / "extracted"
+
+    with pytest.raises(bundle_module.ProjectBundleDurabilityError) as error:
+        extract_project_bundle(bundle, destination)
+
+    assert error.value.committed is True
+    assert error.value.path == destination
+    assert (destination / "project.cleanroomx.json").is_file()
+    assert not list(tmp_path.glob(".extracted.*.tmp"))

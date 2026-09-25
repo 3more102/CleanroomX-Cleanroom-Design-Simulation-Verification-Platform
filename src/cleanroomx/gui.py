@@ -43,6 +43,7 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .run_history import AnalysisRunHistory, RunHistoryIntegrityError
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -190,6 +191,7 @@ class CleanroomXApp:
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
+        self._run_history = AnalysisRunHistory()
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
@@ -262,6 +264,7 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Validate Input", command=self.validate_current)
         analysis_menu.add_command(label="Run Analysis", accelerator="F5", command=self.run_current)
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
+        analysis_menu.add_command(label="Run History...", command=self.show_run_history)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -456,6 +459,9 @@ class CleanroomXApp:
 
     def _clear_run_cache(self) -> None:
         self._runs_by_analysis.clear()
+        history = getattr(self, "_run_history", None)
+        if history is not None:
+            history.clear()
         self._clear_rendered_run()
 
     def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
@@ -1301,6 +1307,9 @@ class CleanroomXApp:
         ):
             return
         self._invalidate_last_run_for(analysis.id)
+        history = getattr(self, "_run_history", None)
+        if history is not None:
+            history.clear_analysis(analysis.id)
         self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
         self.project.active_analysis_id = (
             self.project.analyses[0].id if self.project.analyses else None
@@ -1467,12 +1476,22 @@ class CleanroomXApp:
                             "run the analysis again."
                         )
                         continue
+                    history_note = ""
+                    history = getattr(self, "_run_history", None)
+                    if history is not None:
+                        try:
+                            history_entry = history.record(analysis_id, payload)
+                        except RunHistoryIntegrityError:
+                            history_note = " — history retention failed integrity validation"
+                        else:
+                            if history_entry is None:
+                                history_note = " — run too large for bounded history"
                     self._runs_by_analysis[analysis_id] = payload
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
                     self.status_var.set(
-                        f"Completed — {payload.title} — status: {payload.status}"
+                        f"Completed — {payload.title} — status: {payload.status}{history_note}"
                     )
         except queue.Empty:
             pass
@@ -1572,6 +1591,207 @@ class CleanroomXApp:
             px, py = point(marker["x"], marker["y"])
             canvas.create_oval(px - 6, py - 6, px + 6, py + 6, width=2)
             canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
+
+    def show_run_history(self) -> None:
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None:
+            messagebox.showinfo(
+                "Run history",
+                "Add or select an analysis first.",
+                parent=self.root,
+            )
+            return
+        history = getattr(self, "_run_history", None)
+        entries = history.entries_for(analysis.id) if history is not None else ()
+        if not entries:
+            messagebox.showinfo(
+                "Run history",
+                "No retained runs are available for the selected analysis.",
+                parent=self.root,
+            )
+            return
+
+        comparison_payload: dict | None
+        if self._editor_analysis_id == analysis.id:
+            try:
+                draft = _strict_json_loads(self.input_text.get("1.0", "end-1c"))
+                comparison_payload = draft if isinstance(draft, dict) else None
+            except (TypeError, ValueError, json.JSONDecodeError):
+                comparison_payload = None
+        else:
+            comparison_payload = analysis.input
+
+        window = tk.Toplevel(self.root)
+        window.title(f"Run History — {analysis.name}")
+        window.geometry("1100x720")
+        window.minsize(820, 520)
+        window.transient(self.root)
+
+        outer = ttk.Frame(window, padding=10)
+        outer.pack(fill="both", expand=True)
+        ttk.Label(
+            outer,
+            text=(
+                f"{analysis.name} — retained in-session runs "
+                "(historical evidence is never treated as the current result)"
+            ),
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        paned = ttk.Panedwindow(outer, orient="horizontal")
+        paned.pack(fill="both", expand=True)
+
+        left = ttk.Frame(paned)
+        right = ttk.Frame(paned)
+        paned.add(left, weight=1)
+        paned.add(right, weight=3)
+
+        listbox = tk.Listbox(left, exportselection=False, width=38)
+        list_scroll = ttk.Scrollbar(left, orient="vertical", command=listbox.yview)
+        listbox.configure(yscrollcommand=list_scroll.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        list_scroll.pack(side="right", fill="y")
+
+        notebook = ttk.Notebook(right)
+        notebook.pack(fill="both", expand=True)
+
+        def add_readonly_tab(title: str) -> tk.Text:
+            frame = ttk.Frame(notebook)
+            notebook.add(frame, text=title)
+            widget = tk.Text(frame, wrap="none", state="disabled")
+            yscroll = ttk.Scrollbar(frame, orient="vertical", command=widget.yview)
+            xscroll = ttk.Scrollbar(frame, orient="horizontal", command=widget.xview)
+            widget.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+            widget.grid(row=0, column=0, sticky="nsew")
+            yscroll.grid(row=0, column=1, sticky="ns")
+            xscroll.grid(row=1, column=0, sticky="ew")
+            frame.rowconfigure(0, weight=1)
+            frame.columnconfigure(0, weight=1)
+            return widget
+
+        summary_text = add_readonly_tab("Summary")
+        result_text = add_readonly_tab("Result")
+        report_text = add_readonly_tab("Report")
+        diagnostics_text = add_readonly_tab("Diagnostics")
+
+        selected_run: dict[str, AnalysisRun | None] = {"run": None}
+        selected_entry = {"value": None}
+
+        def set_readonly(widget: tk.Text, value: str) -> None:
+            widget.configure(state="normal")
+            widget.delete("1.0", "end")
+            widget.insert("1.0", value)
+            widget.configure(state="disabled")
+
+        freshness: dict[int, bool] = {}
+        for entry in entries:
+            try:
+                run = history.load(entry.sequence)
+                is_current = (
+                    comparison_payload is not None
+                    and analysis_run_matches_input(
+                        run, analysis.kind, comparison_payload
+                    )
+                )
+            except (KeyError, RunHistoryIntegrityError):
+                is_current = False
+            freshness[entry.sequence] = is_current
+            marker = "CURRENT" if is_current else "HISTORICAL"
+            listbox.insert(
+                "end",
+                (
+                    f"#{entry.sequence}  {marker}  {entry.status}  "
+                    f"{entry.input_sha256[:12]}…"
+                ),
+            )
+
+        def render_selected(event=None) -> None:
+            selection = listbox.curselection()
+            if not selection:
+                return
+            entry = entries[selection[0]]
+            selected_entry["value"] = entry
+            try:
+                run = history.load(entry.sequence)
+            except (KeyError, RunHistoryIntegrityError) as exc:
+                selected_run["run"] = None
+                set_readonly(summary_text, f"History integrity error: {exc}\n")
+                set_readonly(result_text, "")
+                set_readonly(report_text, "")
+                set_readonly(diagnostics_text, "")
+                return
+            selected_run["run"] = run
+            state = "current input" if freshness.get(entry.sequence) else "historical input"
+            summary = {
+                "sequence": entry.sequence,
+                "recorded_at_utc": entry.recorded_at_utc,
+                "analysis_id": entry.analysis_id,
+                "analysis_kind": entry.kind,
+                "status": entry.status,
+                "relationship_to_editor": state,
+                "input_sha256": entry.input_sha256,
+                "run_bundle_sha256": entry.bundle_sha256,
+                "retained_size_bytes": entry.size_bytes,
+            }
+            set_readonly(
+                summary_text,
+                json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
+            )
+            set_readonly(
+                result_text,
+                json.dumps(run.result, indent=2, ensure_ascii=False, allow_nan=False)
+                + "\n",
+            )
+            set_readonly(report_text, run.markdown)
+            set_readonly(
+                diagnostics_text,
+                json.dumps(
+                    run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False
+                )
+                + "\n",
+            )
+
+        listbox.bind("<<ListboxSelect>>", render_selected)
+
+        buttons = ttk.Frame(outer)
+        buttons.pack(fill="x", pady=(8, 0))
+
+        def export_selected() -> None:
+            run = selected_run["run"]
+            entry = selected_entry["value"]
+            if run is None or entry is None:
+                return
+            path = filedialog.asksaveasfilename(
+                parent=window,
+                title="Export historical run bundle",
+                defaultextension=".json",
+                initialfile=f"run-{entry.sequence}.json",
+                filetypes=[("JSON files", "*.json")],
+            )
+            if path:
+                self._write_export_file(
+                    path,
+                    json.dumps(
+                        run.to_dict(),
+                        indent=2,
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    )
+                    + "\n",
+                    label="Historical run bundle",
+                )
+
+        ttk.Button(
+            buttons,
+            text="Export Selected Run Bundle...",
+            command=export_selected,
+        ).pack(side="right")
+        ttk.Button(buttons, text="Close", command=window.destroy).pack(
+            side="right", padx=(0, 8)
+        )
+
+        listbox.selection_set(0)
+        render_selected()
 
     def export_result_json(self) -> None:
         run = self._current_fresh_run()

@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    load_project_document_with_revision,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -872,3 +878,109 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+def test_gui_save_conflict_preserves_external_file_and_local_dirty_state(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    class Text:
+        def get(self, *args):
+            return '{"value": 2}'
+
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(
+            name="Demo",
+            analyses=[
+                AnalysisDocument(
+                    id="a",
+                    name="A",
+                    kind="room_verification",
+                    input={"value": 1},
+                )
+            ],
+            active_analysis_id="a",
+        ),
+    )
+    project, revision = load_project_document_with_revision(path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = project
+    app.project_path = path
+    app._project_revision = revision
+    app._editor_analysis_id = "a"
+    app.input_text = Text()
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+    captured_saved_state = []
+    explicit_saves = []
+    app._capture_saved_state = lambda: captured_saved_state.append(True)
+    app._notify_explicit_save = lambda saved_path: explicit_saves.append(saved_path)
+
+    save_project_document(path, ProjectDocument(name="External revision"))
+
+    warning = {}
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warning.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "External revision"
+    assert app.project.analysis_by_id("a").input == {"value": 2}
+    assert captured_saved_state == []
+    assert explicit_saves == []
+    assert warning["title"] == "Save conflict"
+    assert "did not overwrite" in warning["message"]
+    assert "not overwritten" in app.status_var.value
+
+
+def test_gui_successful_save_advances_tracked_project_revision(tmp_path):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "demo.cleanroomx.json",
+        ProjectDocument(name="Demo"),
+    )
+    project, revision = load_project_document_with_revision(path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = project
+    app.project_path = path
+    app._project_revision = revision
+    app._editor_analysis_id = None
+    app.name_var = Value("Demo")
+    app.description_var = Value("updated")
+    app.status_var = Value("")
+    app.root = object()
+    app._capture_saved_state = lambda: None
+    app._notify_explicit_save = lambda saved_path: None
+
+    app.save_project()
+
+    assert app._project_revision != revision
+    assert load_project_document(path).description == "updated"

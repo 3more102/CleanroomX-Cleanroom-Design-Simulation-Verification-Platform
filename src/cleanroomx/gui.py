@@ -814,6 +814,7 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
         self._begin_autosave_project(None)
@@ -849,6 +850,7 @@ class CleanroomXApp:
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
         project = load_project_document(project_path)
+        self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
         self._begin_autosave_project(project_path)

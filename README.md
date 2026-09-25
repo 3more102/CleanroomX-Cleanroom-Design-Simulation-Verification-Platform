@@ -1,12 +1,12 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.101 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.100.0**, built directly on the verified v0.99.1 `main` lineage. It preserves the validated solver/provenance backend and adds desktop execution-integrity evidence, portable external-file references, atomic project/export writes, backend-derived fan/system plotting, and the self-contained installed demonstration.
+The current release-candidate line is **CleanroomX v0.101.0 (Release 2)**, built from the CI-green consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding the Release 2 project-model, persistence, recovery, history, plugin, immutable run-evidence, portable-bundle, reporting, precision, and numerical-integrity hardening. The published `v0.100.0` tag remains immutable at its original validated commit; v0.101.0 is the new release identity for the completed Release 2 tree.
 
-CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
+CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
 
 ### Network-state replay provenance ladder
 
@@ -28,7 +28,12 @@ CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
 | v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
 | v0.100 | execution provenance, portable path context, atomic exports, fan/system plot evidence, and consolidated installed-desktop release |
+| v0.101 | Release 2 architecture consolidation, durable project lifecycle, immutable analysis evidence, portable bundles/reports, precision hardening, and final numerical-integrity gates |
 
+
+### v0.101 Release 2
+
+v0.101 assigns a new immutable release identity to the completed Release 2 tree instead of moving the already-published v0.100.0 tag. Release 2 consolidates durable verified persistence, guarded project revisions, crash recovery, bounded project/spatial undo-redo, analysis plugin API v1, immutable run snapshots and history, dependency freshness tracking, verified portable project bundles, self-contained engineering HTML reports, precision-safe HVAC composition, explicit verification completeness, Markdown report hardening, and foundational finite-number validation. The version-closure change itself does not alter solver equations, numerical tolerances, no-extrapolation/root-selection behavior, or engineering acceptance semantics.
 
 ### v0.100 consolidated desktop release
 

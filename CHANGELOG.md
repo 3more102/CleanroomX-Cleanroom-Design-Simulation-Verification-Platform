@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.102.1 final spatial cascade closure — 2026-09-25
+
+- Completes pressure-cascade visualization by computing observed room-to-room Δp only from supplied spatial room pressures and rendering explicit pass/fail/available/unavailable state against the active analysis's configured minimum delta.
+- Renders the same pressure-cascade relationship state in both synchronized 2D and 3D views.
+- Opens the source and packaged demo on the verification analysis so room mappings and cascade relationships are visible immediately.
+- Strengthens the installed Tk/Xvfb smoke gate to require representative three-room geometry plus rendered 2D rooms, 3D rooms, and pressure-cascade relationships in both views.
+- Keeps the published v0.102.0 tag immutable; this patch changes no solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion.
+
 ## v0.102.0 synchronized 2D/3D spatial closure — 2026-09-25
 
 - Ships the completed synchronized **Design 2D + 3D** workspace from one canonical spatial model: floor metadata, room elevations/classification/stable analysis links, doors and transfer openings, device placement, resize/drag/nudge, view toggles, deterministic metrics, and explicit pressure-cascade relationships.

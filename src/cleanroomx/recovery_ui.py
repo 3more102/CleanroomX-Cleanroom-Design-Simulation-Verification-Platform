@@ -11,6 +11,7 @@ from .autosave import (
     discard_recovery_artifact,
     load_recovery_artifact,
 )
+from .recovery_diff import compare_recovery_to_source, format_recovery_comparison
 
 
 _RELATION_LABELS = {
@@ -66,6 +67,8 @@ class RecoveryInspection:
     editor_analysis_id: str | None
     editor_json_valid: bool | None
     editor_text: str
+    source_comparison_summary: str
+    source_comparison_details: tuple[str, ...]
 
 
 def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
@@ -104,6 +107,8 @@ def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
     if not isinstance(project_name, str) or not project_name:
         project_name = candidate.project_name
     source_path = str(candidate.source_path) if candidate.source_path else "Not yet saved"
+    comparison = compare_recovery_to_source(candidate)
+    comparison_summary, comparison_details = format_recovery_comparison(comparison)
     return RecoveryInspection(
         project_name=project_name,
         project_identity=candidate.project_identity,
@@ -116,6 +121,8 @@ def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
         editor_analysis_id=editor_id,
         editor_json_valid=editor_valid,
         editor_text=editor_text,
+        source_comparison_summary=comparison_summary,
+        source_comparison_details=comparison_details,
     )
 
 
@@ -123,8 +130,8 @@ class RecoveryInspectDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, candidate: RecoveryCandidate):
         super().__init__(parent)
         self.title("Inspect recovery")
-        self.geometry("760x580")
-        self.minsize(620, 430)
+        self.geometry("820x700")
+        self.minsize(680, 500)
         self.transient(parent)
         self.grab_set()
 
@@ -140,7 +147,7 @@ class RecoveryInspectDialog(tk.Toplevel):
         ttk.Label(
             header,
             text=recovery_safety_message(candidate),
-            wraplength=710,
+            wraplength=770,
         ).pack(anchor="w", pady=(6, 0))
 
         details = ttk.LabelFrame(self, text="Recovery evidence", padding=10)
@@ -167,7 +174,7 @@ class RecoveryInspectDialog(tk.Toplevel):
             ttk.Label(details, text=label + ":", font=("TkDefaultFont", 9, "bold")).grid(
                 row=row, column=0, sticky="nw", padx=(0, 8), pady=2
             )
-            ttk.Label(details, text=value, wraplength=540).grid(
+            ttk.Label(details, text=value, wraplength=590).grid(
                 row=row, column=1, sticky="nw", pady=2
             )
         details.columnconfigure(1, weight=1)
@@ -175,7 +182,24 @@ class RecoveryInspectDialog(tk.Toplevel):
         analyses_frame = ttk.LabelFrame(self, text="Recovered analyses", padding=8)
         analyses_frame.pack(fill="x", padx=12, pady=(0, 10))
         analyses_text = ", ".join(inspection.analysis_names) or "No analyses"
-        ttk.Label(analyses_frame, text=analyses_text, wraplength=700).pack(anchor="w")
+        ttk.Label(analyses_frame, text=analyses_text, wraplength=760).pack(anchor="w")
+
+        comparison_frame = ttk.LabelFrame(
+            self, text="Recovery vs current source", padding=8
+        )
+        comparison_frame.pack(fill="x", padx=12, pady=(0, 10))
+        ttk.Label(
+            comparison_frame,
+            text=inspection.source_comparison_summary,
+            font=("TkDefaultFont", 9, "bold"),
+            wraplength=760,
+        ).pack(anchor="w")
+        for line in inspection.source_comparison_details:
+            ttk.Label(
+                comparison_frame,
+                text="• " + line,
+                wraplength=750,
+            ).pack(anchor="w", pady=(2, 0))
 
         draft_frame = ttk.LabelFrame(self, text="Recovered editor draft", padding=8)
         draft_frame.pack(fill="both", expand=True, padx=12, pady=(0, 10))

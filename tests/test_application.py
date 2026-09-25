@@ -184,7 +184,7 @@ def test_run_analysis_rejects_parser_input_mutation_without_touching_caller(
     runner_called = False
 
     def parser(run_payload):
-        run_payload["value"] = 2
+        run_payload["injected_non_json_value"] = object()
         return run_payload
 
     def runner(parsed):

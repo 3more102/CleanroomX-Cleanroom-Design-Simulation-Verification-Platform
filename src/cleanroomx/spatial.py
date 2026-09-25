@@ -177,6 +177,79 @@ def room_overlap_conflicts(rooms: list[dict]) -> list[dict]:
     return conflicts
 
 
+def nearest_nonoverlap_room_position(
+    room: dict, rooms: list[dict]
+) -> tuple[float, float]:
+    """Return the nearest deterministic conflict-free XY position for a room.
+
+    Candidate positions are formed from the current coordinates and every
+    neighboring room boundary. Positive-area overlap is forbidden while edge
+    and corner touching remain valid. Ties are resolved deterministically.
+    """
+
+    room_id = room.get("id")
+    x0 = _finite_number(room.get("x_m"), 0.0)
+    y0 = _finite_number(room.get("y_m"), 0.0)
+    length_m = _positive(room.get("length_m"), 0.0)
+    width_m = _positive(room.get("width_m"), 0.0)
+    epsilon = 1e-9
+
+    blockers = [
+        other
+        for other in rooms
+        if isinstance(other, dict)
+        and other is not room
+        and not (room_id is not None and other.get("id") == room_id)
+    ]
+
+    def overlaps_at(x_m: float, y_m: float) -> bool:
+        x1 = x_m + length_m
+        y1 = y_m + width_m
+        for other in blockers:
+            ox0 = _finite_number(other.get("x_m"), 0.0)
+            oy0 = _finite_number(other.get("y_m"), 0.0)
+            ox1 = ox0 + _positive(other.get("length_m"), 0.0)
+            oy1 = oy0 + _positive(other.get("width_m"), 0.0)
+            if min(x1, ox1) - max(x_m, ox0) > epsilon and min(y1, oy1) - max(y_m, oy0) > epsilon:
+                return True
+        return False
+
+    if not overlaps_at(x0, y0):
+        return x0, y0
+
+    x_candidates = {x0}
+    y_candidates = {y0}
+    for other in blockers:
+        ox0 = _finite_number(other.get("x_m"), 0.0)
+        oy0 = _finite_number(other.get("y_m"), 0.0)
+        ox1 = ox0 + _positive(other.get("length_m"), 0.0)
+        oy1 = oy0 + _positive(other.get("width_m"), 0.0)
+        x_candidates.update((ox0 - length_m, ox1))
+        y_candidates.update((oy0 - width_m, oy1))
+
+    best: tuple[tuple[float, float, float, float, float, float], float, float] | None = None
+    for candidate_x in sorted(x_candidates):
+        for candidate_y in sorted(y_candidates):
+            if overlaps_at(candidate_x, candidate_y):
+                continue
+            dx = candidate_x - x0
+            dy = candidate_y - y0
+            score = (
+                dx * dx + dy * dy,
+                abs(dx) + abs(dy),
+                abs(dx),
+                abs(dy),
+                candidate_x,
+                candidate_y,
+            )
+            if best is None or score < best[0]:
+                best = (score, candidate_x, candidate_y)
+
+    if best is None:
+        return x0, y0
+    return best[1], best[2]
+
+
 def spatial_layout_summary(value: Any) -> dict:
     """Return operator-facing spatial metrics without changing the stored model."""
     layout = normalize_layout(value)
@@ -936,6 +1009,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
+            text="Resolve overlap",
+            command=self.resolve_selected_overlap,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
             text="Sync dimensions to active analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
@@ -1318,6 +1396,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._reassign_selected_device_room()
         self._load_property_panel()
         self._persist("Nudged spatial item", history_before=before)
+
+    def resolve_selected_overlap(self) -> None:
+        if self.selected is None or self.selected.kind != "room":
+            self._status_setter("Select a room to resolve overlap conflicts")
+            return
+        room = self._selected_object()
+        if room is None:
+            return
+        target_x, target_y = nearest_nonoverlap_room_position(
+            room, self.layout["rooms"]
+        )
+        dx = target_x - room["x_m"]
+        dy = target_y - room["y_m"]
+        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+            self._status_setter("Selected room has no overlap conflicts")
+            return
+        before = self._snapshot_layout()
+        if not self._translate_selected(dx, dy):
+            return
+        self._alignment_guides = []
+        self._load_property_panel()
+        self._persist("Resolved selected room overlap", history_before=before)
 
     def _bounds(self) -> tuple[float, float, float, float]:
         rooms = self.layout["rooms"]

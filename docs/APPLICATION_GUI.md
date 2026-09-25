@@ -82,7 +82,7 @@ Use **Export SVG** to save the canonical 2D spatial model as a standalone vector
 
 Use **Export CSV** to produce a deterministic engineering schedule from the same canonical model. Room records include coordinates, dimensions, calculated area and volume, and supplied pressure; device records include type, assigned room, and XYZ coordinates. CSV quoting is standards-compliant, unassigned devices remain explicit, and the export does not mutate the project or analysis inputs.
 
-Use **Export DXF** for downstream CAD exchange. CleanroomX writes a dependency-free AutoCAD 2000 ASCII DXF in metres, with room boundaries, room labels/dimensions/pressure, device markers/labels, layer separation, and CleanroomX IDs plus room height/device elevation preserved as DXF comments. The export is deterministic and does not alter the project or solver inputs.
+Use **Export DXF** for downstream CAD exchange. CleanroomX writes a dependency-free AutoCAD 2007 ASCII DXF in metres, with room boundaries, room labels/dimensions/pressure, device markers/labels, layer separation, and CleanroomX IDs plus room height/device elevation preserved as DXF comments. The export is deterministic and does not alter the project or solver inputs.
 
 For room-verification and multi-room project-verification analyses, **Sync dimensions to active analysis** explicitly copies room dimensions (and an existing observed-pressure field when present) from the spatial model into the analysis JSON. Other engineering fields such as airflow, ACH requirements, particle requirements, and pressure-cascade criteria are preserved. Results for a synchronized analysis are invalidated and must be validated/run again.
 

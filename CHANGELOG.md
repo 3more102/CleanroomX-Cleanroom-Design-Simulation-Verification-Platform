@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased immutable application-run snapshots — 2026-09-25
+
+- Makes completed `AnalysisRun` result, diagnostics/provenance, and plot graphs recursively immutable after construction so cached engineering evidence cannot be changed through retained aliases or extension code.
+- Breaks aliases to backend-returned dictionaries/lists when the run snapshot is created; later source mutation cannot change the accepted run.
+- Keeps JSON/export compatibility through `AnalysisRun.to_dict()`, which returns detached ordinary mutable containers rather than exposing the cached snapshot.
+- Preserves analysis inputs, solver equations, acceptance semantics, project schema, run-bundle field names, and GUI workflows.
+- Adds regressions for nested mutation rejection, source-alias isolation, strict JSON serialization, and detached export copies.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

@@ -63,9 +63,11 @@ jobs:
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1554'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1561'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1565'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1585'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'autosave completion-callback race fix is merged'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F '3D Fit derives zoom and both pan axes from real room floor/ceiling geometry'
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence'
+          git show "${TARGET_SHA}:FINAL_RELEASE_GATE.md" | grep -F '# CleanroomX v0.102.1 Final Combined Release Gate'
 
       - name: Publish tag and GitHub Release
         if: steps.closure.outputs.publish == 'true'
@@ -116,9 +118,13 @@ jobs:
           - final functional spatial merge commit: e528c694debbf6a3263693669f5acb6026f1951f
           - PR #479 autosave-race head: 4a802f43be7bc891e2c4de90b631ddea7c1fa9e4
           - PR #479 CI #1565 / 36184210616: success; 1002 passed on Python 3.11/3.12/3.13
-          - final functional v0.102.1 merge commit: 54fc239853cf4a2ab92b7686169e07acab34b8dd
+          - final functional v0.102.1 merge commit after autosave closure: 54fc239853cf4a2ab92b7686169e07acab34b8dd
+          - PR #487 deterministic-drag head: 3823a4e34d0cf855a374e1a9773dc6d059d644e5
+          - PR #487 CI #1585 / 36185323572: success; 1008 passed on Python 3.11/3.12/3.13
+          - final functional runtime baseline after #487: 89eaf6b1548ca0748dd72431eecc101bddec9af9
+          - immutable publication target: ${TARGET_SHA}
 
-          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D Fit derive zoom and pan from real room floor/ceiling geometry; adds explicit 2D viewport reset and Shift+left-drag 3D orbit; closes the autosave completion-callback race; and strengthens the installed demo smoke.
+          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D Fit derive zoom and pan from real room floor/ceiling geometry; adds explicit 2D viewport reset and Shift+left-drag 3D orbit; closes the autosave completion-callback race; makes snapped 2D drag translation deterministic from immutable gesture-start coordinates with no-op drag suppression; and strengthens the installed demo smoke.
 
           The successful current-main CI that triggers this publisher is the release gate for the exact tagged commit. Published v0.100.0, v0.101.0, and v0.102.0 remain unchanged.
 

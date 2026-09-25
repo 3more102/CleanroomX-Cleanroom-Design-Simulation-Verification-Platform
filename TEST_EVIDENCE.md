@@ -1,8 +1,23 @@
-# CleanroomX v0.102.0 Synchronized Spatial Release Test Evidence
+# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline
 
 Validation date: 2026-09-25
+
+## v0.102.1 final production closure
+
+- PR **#467 — Close final CleanroomX spatial production gaps**
+- Exact tested PR head: `4be4fb840480df7a5f1e0313a73830313150d9dd`
+- PR CI run **#1540** / id `36170548238`: **success**
+- Merged `main` commit: `9a9caedb46b80d376c21f36e3b10f46b05e00764`
+- Post-merge `main` CI run **#1550** / id `36171324227`: **success**
+- Python 3.11, 3.12, and 3.13 complete CI jobs: **success**
+- Windows PowerShell/CMD checkout launcher smoke: **success**
+- Clean wheel build/install and installed application checks: **success**
+- Python 3.13 performance evidence and installed Tk/Xvfb demo smoke: **success**
+
+This patch release preserves the published `v0.102.0` tag and assigns a truthful new package/release identity to the final post-v0.102 spatial closure. The closure makes geometry synchronization dimension-only, preserves engineering pressure evidence, renders supplied-pressure cascade state in both 2D and 3D, centralizes viewport transforms, and strengthens the installed GUI smoke. No validated solver equation or engineering acceptance criterion is intentionally changed.
+
 
 ## v0.102.0 final synchronized spatial baseline
 

@@ -8,7 +8,10 @@ import pytest
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
+    RecoveryFormatError,
+    discard_recovery_artifact,
     load_recovery_artifact,
+    prepare_recovery_restore,
     scan_recovery_artifacts,
 )
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
@@ -205,3 +208,89 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
         assert not (tmp_path / "recovery").exists()
     finally:
         manager.shutdown(wait=True)
+
+
+
+def test_prepare_recovery_restore_validates_project_and_preserves_source(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    before = source.read_bytes()
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="restore-session")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(
+            _snapshot(_project(), marker=7),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+
+        restored = prepare_recovery_restore(artifact_path)
+
+        assert restored.project.name == "Autosave Demo"
+        assert restored.project_identity == manager.current_identity
+        assert restored.source_path == source.resolve()
+        assert restored.source_relation == "source_unchanged"
+        assert restored.source_is_newer is False
+        assert restored.ui_state["marker"] == 7
+        assert source.read_bytes() == before
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_prepare_recovery_restore_rejects_invalid_project_snapshot(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="restore-session")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = load_recovery_artifact(artifact_path)
+    payload["snapshot"]["project"].pop("schema")
+    artifact_path.write_text(
+        __import__("json").dumps(payload, indent=2),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="project snapshot is invalid"):
+        prepare_recovery_restore(artifact_path)
+
+
+def test_discard_recovery_artifact_never_deletes_source_project(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    source_before = source.read_bytes()
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="discard-session")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None and artifact_path.exists()
+    finally:
+        manager.shutdown(wait=True)
+
+    discard_recovery_artifact(artifact_path, recovery_dir=recovery_dir)
+
+    assert not artifact_path.exists()
+    assert source.exists()
+    assert source.read_bytes() == source_before
+
+
+def test_discard_recovery_artifact_refuses_paths_outside_recovery_directory(tmp_path):
+    recovery_dir = tmp_path / "recovery"
+    recovery_dir.mkdir()
+    outside = tmp_path / "outside.recovery.json"
+    outside.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside"):
+        discard_recovery_artifact(outside, recovery_dir=recovery_dir)
+
+    assert outside.exists()

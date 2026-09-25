@@ -56,7 +56,15 @@ Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned
 
 Each artifact contains the recoverable project snapshot, the active raw editor draft, application version, recovery timestamp, project identity, and a source-file fingerprint containing path, size, modification time, and SHA-256. A malformed JSON editor draft is preserved as raw text without being promoted into the authoritative project model. The recovery scanner reports malformed artifacts explicitly and classifies the source project as unchanged, changed, missing, or newer. This foundation never automatically overwrites a newer project file.
 
-Current-session recovery artifacts are invalidated after an explicit save or an explicit discard. Recovery files from older sessions are not silently deleted by merely opening or saving the same project; the source comparison evidence remains available for the dedicated startup recovery workflow.
+Current-session recovery artifacts are invalidated after an explicit save or an explicit discard. Recovery files from older sessions are not silently deleted by merely opening or saving the same project.
+
+### Startup recovery
+
+On normal interactive startup, CleanroomX scans the recovery directory before opening a command-line project argument. If recovery data exists, **Recovery Center** lists the project name, exact UTC recovery timestamp, source comparison state, and original source path. **Inspect…** shows the project identity, application version, recovered analysis list, and raw editor draft. Malformed/unreadable recovery artifacts are reported and preserved.
+
+**Restore as Unsaved Copy** never writes or rebinds the original project file. The recovered project opens dirty with **Save Project As** required. If the recovery came from a saved project, CleanroomX retains that original path only as read/context so relative consistency/dossier references still resolve correctly. This keeps the newer/changed original and recovered work separate. After a successful Save As, the new explicit file is durable before the restored recovery artifact is removed.
+
+**Discard Recovery** deletes only the selected validated artifact inside the recovery directory and never modifies the source project. The same Recovery Center remains available from the File menu. Automated `--smoke` launch deliberately skips the interactive startup chooser.
 
 ## Operator workflow
 

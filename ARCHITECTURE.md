@@ -30,3 +30,12 @@ Startup restoration keeps save ownership equally explicit. A recovery is parsed 
 ## Engineering boundary
 
 CleanroomX produces screening and numerical/provenance evidence. It does not by itself establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance. Applicable requirements and acceptance criteria remain external project inputs.
+
+
+## Portable project bundle boundary
+
+Portable project packaging lives in `project_bundle.py` and remains outside the project schema. It snapshots a validated `ProjectDocument`, discovers external file ownership through the existing application dependency registry, rewrites only the package copy to bundle-relative paths, and publishes a deterministic ZIP after exact dependency hashing.
+
+Verification treats the manifest, project document, dependency bytes, and source archive revision as one integrity boundary. Extraction is transactional: validated members are copied into a private sibling staging directory, re-hashed during copy, and the directory is renamed into place only after the archive revision is rechecked and the extracted schema-v1 project can be loaded. Archive paths are never trusted as filesystem paths and `extractall()` is not used.
+
+The desktop and `cleanroomx-project-bundle` CLI call the same domain service. Existing project files, project schema version 1, analysis APIs, cached-result freshness guards, and solver semantics are unchanged.

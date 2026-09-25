@@ -1,0 +1,55 @@
+{
+  "name": "Cleanroom pressure-cascade demonstration",
+  "nodes": [
+    {
+      "name": "Process",
+      "supply_m3_h": 1200.0,
+      "return_m3_h": 900.0
+    },
+    {
+      "name": "Airlock",
+      "supply_m3_h": 600.0,
+      "return_m3_h": 500.0
+    },
+    {
+      "name": "Corridor",
+      "fixed_pressure_pa": 0.0
+    }
+  ],
+  "paths": [
+    {
+      "name": "Process-Airlock closed door leakage",
+      "start_node": "Process",
+      "end_node": "Airlock",
+      "kind": "door",
+      "model": "power_law",
+      "coefficient_m3_s_pa_n": 0.01,
+      "exponent": 0.65,
+      "linearization_pressure_pa": 0.01
+    },
+    {
+      "name": "Airlock-Corridor leakage",
+      "start_node": "Airlock",
+      "end_node": "Corridor",
+      "kind": "undercut",
+      "model": "power_law",
+      "coefficient_m3_s_pa_n": 0.012,
+      "exponent": 0.65,
+      "linearization_pressure_pa": 0.01
+    }
+  ],
+  "targets": [
+    {
+      "name": "Process positive to Airlock",
+      "high_node": "Process",
+      "low_node": "Airlock",
+      "minimum_delta_pa": 5.0
+    },
+    {
+      "name": "Airlock positive to Corridor",
+      "high_node": "Airlock",
+      "low_node": "Corridor",
+      "minimum_delta_pa": 2.0
+    }
+  ]
+}

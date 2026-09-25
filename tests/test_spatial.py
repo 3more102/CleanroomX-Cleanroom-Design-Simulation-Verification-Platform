@@ -550,3 +550,25 @@ def test_workspace_validation_retains_first_load_identity_warning():
     ]
     assert workspace._validation_var.value == "Spatial checks: 1 warning(s)"
     assert statuses[-1] == "Spatial checks: Review the repaired room assignment."
+
+
+def test_workspace_persist_does_not_clear_identity_repair_warning():
+    project = ProjectDocument(name="Identity warning")
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = normalize_layout({})
+    workspace._project_getter = lambda: project
+    warning = {
+        "code": "ambiguous_device_room_reference",
+        "severity": "warning",
+        "item_ids": ["sensor", "room", "room-2"],
+        "message": "Review the repaired room assignment.",
+    }
+    workspace._normalization_issues = [warning]
+    workspace._on_change = lambda: None
+    workspace._status_setter = lambda message: None
+    workspace._update_history_controls = lambda: None
+    workspace.redraw = lambda: None
+
+    workspace._persist("Fit spatial views")
+
+    assert workspace._normalization_issues == [warning]

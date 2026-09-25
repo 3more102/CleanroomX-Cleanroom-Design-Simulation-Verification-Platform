@@ -17,6 +17,7 @@ from .spatial_integrity import (
 )
 from .spatial_transforms import (
     BASE_2D_PIXELS_PER_M,
+    fit_3d_zoom,
     model_to_screen_2d,
     project_3d,
     screen_to_model_2d,
@@ -1881,7 +1882,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+        model_height = max(
+            (
+                room.get("floor_elevation_m", self.layout["floor"]["elevation_m"])
+                + room["height_m"]
+                - self.layout["floor"]["elevation_m"]
+                for room in self.layout["rooms"]
+            ),
+            default=self.layout["floor"]["default_ceiling_height_m"],
+        )
+        self.layout["view"]["zoom_3d"] = fit_3d_zoom(
+            width_m,
+            height_m,
+            model_height,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+        )
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
         self._persist("Fit spatial views")
 
     def _result_payload(self) -> dict | None:

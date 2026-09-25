@@ -20,6 +20,8 @@ Schema version 1 is the current desktop project format. Supported legacy formats
 
 If a migrated project must return to its original legacy representation, restore the archived original file. CleanroomX does not synthesize reverse migrations to historical legacy shapes.
 
+Normal project saves verify staged and committed bytes and synchronize the containing directory on POSIX before reporting durable success. This hardening does not create a separate previous-explicit-save backup generation; recovery autosaves remain the product's independent unsaved-work recovery channel. Preserve externally archived project revisions when formal historical rollback is required.
+
 ## Result rollback
 
 Generated JSON/Markdown results are derived artifacts. If the application version changes, regenerate results from preserved source inputs using the selected validated version rather than editing generated evidence by hand.

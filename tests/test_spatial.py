@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     nearest_nonoverlap_room_position,
+    next_room_overlap_conflict,
     resolve_room_overlaps,
     resize_room,
     room_clearance_dimensions,
@@ -717,6 +718,72 @@ def test_resolve_room_overlaps_is_deterministic():
     ]
 
     assert resolve_room_overlaps(rooms) == resolve_room_overlaps(rooms)
+
+
+def test_next_room_overlap_conflict_cycles_stably_and_labels_rooms():
+    rooms = [
+        {
+            "id": "a",
+            "name": "Airlock",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+        },
+        {
+            "id": "b",
+            "name": "Process",
+            "x_m": 2.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+        },
+        {
+            "id": "c",
+            "name": "Pack",
+            "x_m": 1.0,
+            "y_m": 2.0,
+            "length_m": 2.0,
+            "width_m": 4.0,
+        },
+    ]
+
+    first = next_room_overlap_conflict(rooms)
+    second = next_room_overlap_conflict(rooms, first["index"])
+    third = next_room_overlap_conflict(rooms, second["index"])
+    wrapped = next_room_overlap_conflict(rooms, third["index"])
+
+    assert (first["room_a_id"], first["room_b_id"]) == ("a", "b")
+    assert (first["room_a_name"], first["room_b_name"]) == ("Airlock", "Process")
+    assert (first["index"], first["count"]) == (0, 3)
+    assert (second["room_a_id"], second["room_b_id"]) == ("a", "c")
+    assert (third["room_a_id"], third["room_b_id"]) == ("b", "c")
+    assert wrapped == first
+
+
+def test_next_room_overlap_conflict_is_non_mutating_and_returns_none_when_clear():
+    rooms = [
+        {
+            "id": "a",
+            "name": "A",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
+        {
+            "id": "b",
+            "name": "B",
+            "x_m": 2.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
+    ]
+    before = [dict(room) for room in rooms]
+
+    assert next_room_overlap_conflict(rooms, cursor="bad") is None
+    assert rooms == before
 
 
 def test_spatial_layout_summary_counts_room_overlap_conflicts():

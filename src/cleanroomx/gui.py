@@ -15,6 +15,7 @@ from . import __version__
 from .autosave import (
     DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
     AutosaveManager,
+    RecoveryFormatError,
     discard_recovery_artifact,
     prepare_recovery_restore,
     scan_recovery_artifacts,
@@ -726,7 +727,7 @@ class CleanroomXApp:
             return
         try:
             self.restore_recovery_path(dialog.result_path)
-        except Exception as exc:
+        except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
             messagebox.showerror(
                 "Recovery failed",
                 str(exc),

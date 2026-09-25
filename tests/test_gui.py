@@ -11,10 +11,12 @@ from cleanroomx.gui import (
     CleanroomXApp,
     _strict_json_loads,
     analysis_matches_filter,
+    evaluate_pressure_cascade_visuals,
     extract_pressure_cascade,
     extract_room_visuals,
     flatten_json,
     main,
+    room_visual_engineering_metrics,
     unit_hint,
 )
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
@@ -75,6 +77,8 @@ def test_extract_room_visuals_preserves_real_dimensions_and_engineering_metadata
             "y_m": -2.0,
             "airflow_m3_h": 2700.0,
             "pressure_pa": 30.0,
+            "min_ach": None,
+            "min_pressure_pa": None,
         }
     ]
 
@@ -95,6 +99,86 @@ def test_extract_room_visuals_marks_display_defaults_when_geometry_is_missing():
     assert rooms[0]["width_m"] == 4.0
     assert rooms[0]["height_m"] == 3.0
     assert rooms[0]["airflow_m3_h"] == 900.0
+    assert rooms[0]["min_ach"] is None
+    assert rooms[0]["min_pressure_pa"] is None
+
+
+def test_room_visual_engineering_metrics_reports_pass_fail_and_unknown():
+    rooms = extract_room_visuals(
+        {
+            "rooms": [
+                {
+                    "name": "Passing",
+                    "length_m": 6,
+                    "width_m": 5,
+                    "height_m": 3,
+                    "supply_airflow_m3_h": 2700,
+                    "min_ach": 25,
+                    "observed_pressure_pa": 30,
+                    "min_pressure_pa": 20,
+                },
+                {
+                    "name": "Failing",
+                    "length_m": 6,
+                    "width_m": 5,
+                    "height_m": 3,
+                    "supply_airflow_m3_h": 900,
+                    "min_ach": 25,
+                    "observed_pressure_pa": 10,
+                    "min_pressure_pa": 20,
+                },
+                {
+                    "name": "Unknown",
+                    "supply_airflow_m3_h": 900,
+                    "min_ach": 20,
+                },
+            ]
+        }
+    )
+
+    passing = room_visual_engineering_metrics(rooms[0])
+    failing = room_visual_engineering_metrics(rooms[1])
+    unknown = room_visual_engineering_metrics(rooms[2])
+
+    assert passing["ach"] == pytest.approx(30.0)
+    assert passing["ach_status"] == "pass"
+    assert passing["pressure_status"] == "pass"
+    assert passing["status"] == "pass"
+
+    assert failing["ach"] == pytest.approx(10.0)
+    assert failing["ach_status"] == "fail"
+    assert failing["pressure_status"] == "fail"
+    assert failing["status"] == "fail"
+
+    assert unknown["ach"] is None
+    assert unknown["ach_status"] == "unknown"
+    assert unknown["status"] == "unknown"
+
+
+def test_pressure_cascade_visual_status_uses_observed_differential_pressure():
+    rooms = extract_room_visuals(
+        {
+            "rooms": [
+                {"name": "High", "length_m": 4, "width_m": 4, "height_m": 3, "supply_airflow_m3_h": 960, "observed_pressure_pa": 30},
+                {"name": "Mid", "length_m": 4, "width_m": 4, "height_m": 3, "supply_airflow_m3_h": 960, "observed_pressure_pa": 18},
+                {"name": "Low", "length_m": 4, "width_m": 4, "height_m": 3, "supply_airflow_m3_h": 960},
+            ]
+        }
+    )
+    links = [
+        {"higher_pressure_room": "High", "lower_pressure_room": "Mid", "min_delta_pa": 10.0},
+        {"higher_pressure_room": "Mid", "lower_pressure_room": "High", "min_delta_pa": 10.0},
+        {"higher_pressure_room": "Mid", "lower_pressure_room": "Low", "min_delta_pa": 5.0},
+    ]
+
+    evaluated = evaluate_pressure_cascade_visuals(rooms, links)
+
+    assert evaluated[0]["observed_delta_pa"] == pytest.approx(12.0)
+    assert evaluated[0]["status"] == "pass"
+    assert evaluated[1]["observed_delta_pa"] == pytest.approx(-12.0)
+    assert evaluated[1]["status"] == "fail"
+    assert evaluated[2]["observed_delta_pa"] is None
+    assert evaluated[2]["status"] == "unknown"
 
 
 def test_room_layout_uses_declared_coordinates_only_when_complete():

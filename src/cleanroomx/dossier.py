@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Iterable
 
+from .input_contracts import validate_dossier_input_contract
+
 
 def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
@@ -751,6 +753,9 @@ def build_dossier(manifest_path: str | Path) -> dict:
 
     manifest_path = Path(manifest_path)
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("dossier manifest must contain a JSON object")
+    validate_dossier_input_contract(data)
     name = str(data.get("name", "")).strip()
     if not name:
         raise ValueError("dossier name cannot be empty")
@@ -974,16 +979,6 @@ def build_dossier(manifest_path: str | Path) -> dict:
                 "verification_hvac_airflow consistency requires both "
                 "verification_project and hvac_project"
             )
-        allowed_keys = {
-            "room_airflow_abs_tolerance_m3_h",
-            "require_same_room_set",
-        }
-        unknown_keys = set(consistency_config) - allowed_keys
-        if unknown_keys:
-            raise ValueError(
-                "unsupported verification_hvac_airflow option(s): "
-                + ", ".join(sorted(unknown_keys))
-            )
         consistency = analyze_project_consistency(
             verification_project,
             hvac_project,
@@ -1020,13 +1015,6 @@ def build_dossier(manifest_path: str | Path) -> dict:
             raise ValueError(
                 "hvac_fan_operating_airflow consistency requires at least one "
                 "fan operating-point or fan-speed study"
-            )
-        allowed_keys = {"airflow_abs_tolerance_m3_h"}
-        unknown_keys = set(fan_airflow_config) - allowed_keys
-        if unknown_keys:
-            raise ValueError(
-                "unsupported hvac_fan_operating_airflow option(s): "
-                + ", ".join(sorted(unknown_keys))
             )
         fan_airflow_consistency = analyze_hvac_fan_airflow_consistency(
             hvac,

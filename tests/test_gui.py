@@ -872,3 +872,72 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+def test_validate_project_renders_complete_preflight_in_diagnostics(monkeypatch):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Diagnostics:
+        def __init__(self):
+            self.master = object()
+
+    class Notebook:
+        def select(self, target):
+            self.selected = target
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Preflight",
+        analyses=[
+            AnalysisDocument(
+                id="bad",
+                name="Broken room",
+                kind="room_verification",
+                input={"name": "Broken"},
+            )
+        ],
+        active_analysis_id="bad",
+    )
+    app.project_path = None
+    app._recovery_source_path = None
+    app._editor_analysis_id = None
+    app._running = False
+    app.name_var = Value("Preflight")
+    app.description_var = Value("")
+    app.status_var = Status()
+    app.root = object()
+    app.diagnostics_text = Diagnostics()
+    app.notebook = Notebook()
+    rendered = {}
+    app._set_text = lambda widget, value: rendered.setdefault("diagnostics", value)
+    app._update_title = lambda: None
+    messages = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: messages.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: messages.append((title, message)),
+    )
+
+    app.validate_project()
+
+    payload = json.loads(rendered["diagnostics"])
+    assert payload["status"] == "fail"
+    assert payload["summary"]["analyses_checked"] == 1
+    assert payload["summary"]["invalid_analyses"] == 1
+    assert app.notebook.selected is app.diagnostics_text.master
+    assert "FAIL" in app.status_var.value
+    assert messages and messages[0][0] == "Project validation"

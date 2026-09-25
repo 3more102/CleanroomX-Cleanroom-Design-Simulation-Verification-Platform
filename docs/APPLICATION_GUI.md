@@ -56,6 +56,10 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+The write itself is verified in phases. CleanroomX flushes and fsyncs a same-directory staging file, reads it back and checks its exact UTF-8 byte count and SHA-256 before replacing the destination, then synchronizes the containing directory on POSIX and verifies the committed bytes. Project saves perform one additional final revision verification before the UI reports success. Stable revision capture also requires the same filesystem device/inode before and after hashing, so a same-size/same-timestamp file replacement is not mistaken for a stable read.
+
+If replacement succeeds but directory synchronization fails, CleanroomX reports that the bytes may already be visible but crash/power-loss durability was not confirmed. If committed or final project-save verification detects different bytes, the save is reported as failed and the in-memory project remains available for another Save As. CleanroomX does not overwrite a newly detected external revision in an attempt to roll it back.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

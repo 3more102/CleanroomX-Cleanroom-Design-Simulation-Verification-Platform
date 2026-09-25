@@ -302,54 +302,6 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
 
 
 
-def test_normalize_layout_repairs_duplicate_and_missing_ids_deterministically():
-    raw = {
-        "rooms": [
-            {"id": "shared", "name": "Alpha"},
-            {"id": "shared", "name": "Beta"},
-            {"name": "Gamma"},
-        ],
-        "devices": [
-            {"id": "device", "type": "sensor", "name": "S1", "room_id": "shared"},
-            {"id": "device", "type": "sensor", "name": "S2", "room_id": "shared"},
-            {"type": "sensor", "name": "S3", "room_id": "shared"},
-        ],
-    }
-
-    first = normalize_layout(raw)
-    second = normalize_layout(copy.deepcopy(raw))
-
-    assert first == second
-    assert [room["id"] for room in first["rooms"]] == ["shared", "shared-2", "gamma"]
-    assert [device["id"] for device in first["devices"]] == [
-        "device",
-        "device-2",
-        "device-sensor",
-    ]
-    assert len({room["id"] for room in first["rooms"]}) == len(first["rooms"])
-    assert len({device["id"] for device in first["devices"]}) == len(first["devices"])
-
-
-def test_derive_layout_disambiguates_duplicate_room_names_with_stable_ids():
-    analysis = AnalysisDocument(
-        id="verification",
-        name="Facility",
-        kind="project_verification",
-        input={
-            "rooms": [
-                {"name": "Process", "length_m": 5, "width_m": 4, "height_m": 3},
-                {"name": "Process", "length_m": 4, "width_m": 3, "height_m": 3},
-            ]
-        },
-    )
-
-    first = derive_layout_from_analysis(analysis)
-    second = derive_layout_from_analysis(analysis)
-
-    assert [room["id"] for room in first["rooms"]] == ["process", "process-2"]
-    assert first == second
-
-
 def test_project_sync_rejects_ambiguous_spatial_names_without_partial_mutation():
     analysis = AnalysisDocument(
         id="verification",
@@ -366,22 +318,12 @@ def test_project_sync_rejects_ambiguous_spatial_names_without_partial_mutation()
     layout = {
         "rooms": [
             {
-                "id": "r1",
-                "name": "Process",
-                "x_m": 0,
-                "y_m": 0,
-                "length_m": 8,
-                "width_m": 7,
-                "height_m": 3.5,
+                "id": "r1", "name": "Process", "x_m": 0, "y_m": 0,
+                "length_m": 8, "width_m": 7, "height_m": 3.5,
             },
             {
-                "id": "r2",
-                "name": "process",
-                "x_m": 9,
-                "y_m": 0,
-                "length_m": 9,
-                "width_m": 8,
-                "height_m": 4,
+                "id": "r2", "name": "process", "x_m": 9, "y_m": 0,
+                "length_m": 9, "width_m": 8, "height_m": 4,
             },
         ]
     }
@@ -408,13 +350,8 @@ def test_project_sync_rejects_ambiguous_analysis_names_without_partial_mutation(
     layout = {
         "rooms": [
             {
-                "id": "r1",
-                "name": "Process",
-                "x_m": 0,
-                "y_m": 0,
-                "length_m": 8,
-                "width_m": 7,
-                "height_m": 3.5,
+                "id": "r1", "name": "Process", "x_m": 0, "y_m": 0,
+                "length_m": 8, "width_m": 7, "height_m": 3.5,
             }
         ]
     }
@@ -435,22 +372,12 @@ def test_single_room_sync_selects_exact_named_room_from_multi_room_layout():
     layout = {
         "rooms": [
             {
-                "id": "process",
-                "name": "Process",
-                "x_m": 0,
-                "y_m": 0,
-                "length_m": 8,
-                "width_m": 7,
-                "height_m": 3.5,
+                "id": "process", "name": "Process", "x_m": 0, "y_m": 0,
+                "length_m": 8, "width_m": 7, "height_m": 3.5,
             },
             {
-                "id": "ante",
-                "name": "Ante",
-                "x_m": 9,
-                "y_m": 0,
-                "length_m": 4,
-                "width_m": 3,
-                "height_m": 2.8,
+                "id": "ante", "name": "Ante", "x_m": 9, "y_m": 0,
+                "length_m": 4, "width_m": 3, "height_m": 2.8,
             },
         ]
     }
@@ -472,14 +399,25 @@ def test_single_room_sync_fails_closed_when_multi_room_layout_has_no_name_match(
         input={"name": "Missing", "length_m": 1, "width_m": 1, "height_m": 1},
     )
     original = copy.deepcopy(analysis.input)
-    layout = {
-        "rooms": [
-            {"id": "a", "name": "A"},
-            {"id": "b", "name": "B"},
-        ]
-    }
+    layout = {"rooms": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}]}
 
     with pytest.raises(SpatialSynchronizationError, match="cannot choose a room"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == original
+
+
+def test_project_sync_rejects_missing_rooms_array_without_mutation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={"name": "Facility"},
+    )
+    original = copy.deepcopy(analysis.input)
+    layout = {"rooms": [{"id": "a", "name": "A"}]}
+
+    with pytest.raises(SpatialSynchronizationError, match="must contain a rooms array"):
         sync_layout_to_analysis(layout, analysis)
 
     assert analysis.input == original

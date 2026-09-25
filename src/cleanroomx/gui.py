@@ -1374,13 +1374,16 @@ class CleanroomXApp:
                 lambda: sync_layout_to_analysis(self.spatial_workspace.layout, analysis),
             )
         except SpatialSyncError as exc:
-            self.status_var.set("Spatial synchronization blocked by ambiguous room names")
+            self.status_var.set("Spatial synchronization blocked by a mapping conflict")
             messagebox.showwarning(
                 "Cannot synchronize geometry",
                 str(exc),
                 parent=self.root,
             )
             return
+        # Synchronization also records a common geometry baseline used to prove
+        # later geometry-newer / engineering-newer states without guessing.
+        self.spatial_workspace.refresh()
         if not changed:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return

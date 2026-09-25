@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.102.0 synchronized 2D/3D spatial closure — 2026-09-25
+
+- Ships the completed synchronized **Design 2D + 3D** workspace from one canonical spatial model: floor metadata, room elevations/classification/stable analysis links, doors and transfer openings, device placement, resize/drag/nudge, view toggles, deterministic metrics, and explicit pressure-cascade relationships.
+- Keeps spatial editing separate from solver execution and requires explicit geometry-to-analysis synchronization; ambiguous or missing explicit analysis-room links fail closed.
+- Preserves legacy version-1 spatial layouts through deterministic defaults and strengthens persistence-boundary validation for floor, opening, geometry, view-toggle, ID, and room-reference integrity.
+- Upgrades the packaged/source demo and dedicated 2D/3D documentation so the installed application opens with representative Process / Preparation / Ante geometry and placed cleanroom objects.
+- Verified spatial-code baseline: main commit `d4b8f6294dd7deed207935423a52cf5f19a035eb`, GitHub Actions CI run **#1493 / 36167376732**, with **973 passed** on Python 3.11, 3.12, and 3.13; Windows PowerShell/CMD launcher smoke, clean-wheel installation, representative CLI smoke, performance evidence, and Python 3.13 Tk/Xvfb desktop demo smoke all succeeded.
+- Assigns a new release identity instead of moving the already-published `v0.101.0` tag. No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion is intentionally changed.
+
 ## v0.101.0 Release 2 closure — 2026-09-25
 
 - Assigns a new package/release identity to the completed Release 2 tree instead of moving or rewriting the already-published `v0.100.0` tag.

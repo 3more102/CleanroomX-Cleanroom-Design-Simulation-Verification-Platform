@@ -5,6 +5,7 @@ import math
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    SpatialDesignWorkspace,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -440,3 +441,112 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
     }
 
     assert validate_layout(layout) == []
+
+
+def test_generated_repairs_do_not_steal_first_duplicate_explicit_id():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {"name": "Room", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"id": "room", "name": "Explicit A", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"id": "room", "name": "Explicit B", "length_m": 4, "width_m": 4, "height_m": 3},
+            ]
+        }
+    )
+
+    assert [room["id"] for room in layout["rooms"]] == ["room-2", "room", "room-3"]
+
+
+def test_normalization_reports_generated_and_explicit_room_reference_ambiguity():
+    raw = {
+        "rooms": [
+            {
+                "name": "Room 1",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "room-1",
+                "name": "Explicit",
+                "x_m": 10,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "sensor",
+                "type": "sensor",
+                "name": "Pressure sensor",
+                "room_id": "room-1",
+                "x_m": 11,
+                "y_m": 1,
+                "z_m": 1,
+            }
+        ],
+    }
+
+    issues: list[dict] = []
+    layout = normalize_layout(raw, issues=issues)
+
+    assert [room["id"] for room in layout["rooms"]] == ["room-1-2", "room-1"]
+    codes = [issue["code"] for issue in issues]
+    assert codes.count("missing_room_id_repaired") == 1
+    assert codes.count("ambiguous_device_room_reference") == 1
+    assert "orphan_device_room" not in [
+        issue["code"] for issue in validate_layout(raw)
+    ]
+
+
+def test_normalization_reports_duplicate_device_id_repair():
+    issues: list[dict] = []
+    layout = normalize_layout(
+        {
+            "devices": [
+                {"id": "sensor", "type": "sensor", "name": "A"},
+                {"id": "sensor", "type": "sensor", "name": "B"},
+            ]
+        },
+        issues=issues,
+    )
+
+    assert [device["id"] for device in layout["devices"]] == ["sensor", "sensor-2"]
+    assert [issue["code"] for issue in issues].count("duplicate_device_id_repaired") == 1
+
+
+def test_workspace_validation_retains_first_load_identity_warning():
+    class Value:
+        def __init__(self):
+            self.value = None
+
+        def set(self, value):
+            self.value = value
+
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = normalize_layout({})
+    workspace._normalization_issues = [
+        {
+            "code": "ambiguous_device_room_reference",
+            "severity": "warning",
+            "item_ids": ["sensor", "room", "room-2"],
+            "message": "Review the repaired room assignment.",
+        }
+    ]
+    workspace._validation_issues = []
+    workspace._validation_var = Value()
+    statuses: list[str] = []
+    workspace._status_setter = statuses.append
+    workspace.redraw = lambda: None
+
+    workspace.report_validation()
+
+    assert [issue["code"] for issue in workspace._validation_issues] == [
+        "ambiguous_device_room_reference"
+    ]
+    assert workspace._validation_var.value == "Spatial checks: 1 warning(s)"
+    assert statuses[-1] == "Spatial checks: Review the repaired room assignment."

@@ -31,11 +31,14 @@ from .application import (
 )
 from .project import (
     AnalysisDocument,
+    ProjectConflictError,
     ProjectDocument,
+    ProjectFileRevision,
     atomic_write_text,
-    load_project_document,
+    load_project_document_with_revision,
     new_project,
-    save_project_document,
+    project_file_revision,
+    save_project_document_with_revision,
 )
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
@@ -179,6 +182,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_revision: ProjectFileRevision | None = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -891,6 +895,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = recovered.project
         self.project_path = None
+        self._project_revision = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -983,6 +988,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_revision = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -1017,10 +1023,11 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
-        project = load_project_document(project_path)
+        project, revision = load_project_document_with_revision(project_path)
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_revision = revision
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1061,11 +1068,36 @@ class CleanroomXApp:
         if self.project_path is None:
             self.save_project_as()
             return
+        expected_revision = getattr(self, "_project_revision", None)
+        if expected_revision is None:
+            try:
+                expected_revision = project_file_revision(self.project_path)
+            except OSError as exc:
+                messagebox.showerror("Save failed", str(exc), parent=self.root)
+                return
         try:
-            save_project_document(self.project_path, self.project)
+            _saved_path, revision = save_project_document_with_revision(
+                self.project_path,
+                self.project,
+                expected_revision=expected_revision,
+            )
+        except ProjectConflictError as exc:
+            self.status_var.set("Save conflict — project file was not overwritten")
+            messagebox.showwarning(
+                "Save conflict",
+                (
+                    f"{exc}\n\n"
+                    "Your edits are still open in CleanroomX. Reopen the changed "
+                    "project to use its newer contents, or use Save Project As to "
+                    "preserve this session separately."
+                ),
+                parent=self.root,
+            )
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._project_revision = revision
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
@@ -1123,14 +1155,45 @@ class CleanroomXApp:
                     target_base=destination.parent,
                 )
 
+        tracked_path = self.project_path
+        same_tracked_path = (
+            tracked_path is not None
+            and destination.resolve(strict=False)
+            == tracked_path.resolve(strict=False)
+        )
         try:
-            saved_path = save_project_document(destination, candidate)
+            expected_revision = (
+                getattr(self, "_project_revision", None)
+                if same_tracked_path
+                else project_file_revision(destination)
+            )
+            if expected_revision is None:
+                expected_revision = project_file_revision(destination)
+            saved_path, revision = save_project_document_with_revision(
+                destination,
+                candidate,
+                expected_revision=expected_revision,
+            )
+        except ProjectConflictError as exc:
+            self.status_var.set("Save conflict — project file was not overwritten")
+            messagebox.showwarning(
+                "Save conflict",
+                (
+                    f"{exc}\n\n"
+                    "The destination changed while CleanroomX was preparing the "
+                    "save. Choose another file or review the newer destination "
+                    "before trying again."
+                ),
+                parent=self.root,
+            )
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
         self.project = candidate
         self.project_path = saved_path
+        self._project_revision = revision
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

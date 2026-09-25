@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .persistence import atomic_write_text
+from .persistence import atomic_write_text, stable_file_sha256
 from .project import ProjectDocument, project_from_dict
 from .strict_json import StrictJSONError, strict_json_loads
 
@@ -217,26 +217,6 @@ def project_identity(path: str | Path | None, *, unsaved_id: str) -> str:
     return "file-" + sha256(normalized.encode("utf-8")).hexdigest()[:24]
 
 
-def _file_sha256(path: Path) -> tuple[os.stat_result, str]:
-    last_error: OSError | None = None
-    for _attempt in range(2):
-        before = path.stat()
-        digest = sha256()
-        try:
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            last_error = exc
-            continue
-        after = path.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return after, digest.hexdigest()
-        last_error = OSError(f"source changed while fingerprinting: {path}")
-    assert last_error is not None
-    raise last_error
-
-
 def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
     if path is None:
         return {
@@ -255,7 +235,7 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
             "mtime_ns": None,
             "sha256": None,
         }
-    stat, digest = _file_sha256(source)
+    stat, digest = stable_file_sha256(source)
     return {
         "path": str(source),
         "exists": True,
@@ -432,7 +412,7 @@ def quarantine_recovery_artifact(
             "refusing to quarantine a valid recovery artifact; use discard instead"
         )
 
-    stat_result, artifact_sha256 = _file_sha256(resolved_artifact)
+    stat_result, artifact_sha256 = stable_file_sha256(resolved_artifact)
     if stat_result.st_size < 0:
         raise OSError("invalid recovery artifact byte size")
 

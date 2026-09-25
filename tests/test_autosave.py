@@ -14,6 +14,7 @@ from cleanroomx.autosave import (
     RECOVERY_SCHEMA,
     load_recovery_artifact,
     scan_recovery_artifacts,
+    source_fingerprint,
 )
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 
@@ -293,6 +294,44 @@ def test_recovery_scan_detects_newer_changed_source(tmp_path):
     assert candidate.source_path == source.resolve()
     assert candidate.source_relation == "source_newer"
     assert candidate.source_is_newer is True
+
+
+def test_source_fingerprint_retries_when_path_is_replaced_during_hash(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "source.cleanroomx.json"
+    old_bytes = b"old-data"
+    new_bytes = b"new-data"
+    path.write_bytes(old_bytes)
+    original_stat = path.stat()
+
+    replacement = tmp_path / "replacement.tmp"
+    replacement.write_bytes(new_bytes)
+    os.utime(
+        replacement,
+        ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+    )
+
+    original_open = Path.open
+    read_count = 0
+
+    def replace_after_open(self, *args, **kwargs):
+        nonlocal read_count
+        handle = original_open(self, *args, **kwargs)
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == path and mode == "rb":
+            read_count += 1
+            if read_count == 1:
+                os.replace(replacement, path)
+        return handle
+
+    monkeypatch.setattr(Path, "open", replace_after_open)
+
+    fingerprint = source_fingerprint(path)
+
+    assert read_count == 2
+    assert fingerprint["size"] == len(new_bytes)
+    assert fingerprint["sha256"] == sha256(new_bytes).hexdigest()
 
 
 def test_recovery_scan_reports_malformed_artifacts_without_hiding_valid_ones(tmp_path):

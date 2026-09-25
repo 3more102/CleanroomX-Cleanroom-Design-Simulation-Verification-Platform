@@ -15,6 +15,7 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_transform import Viewport2D, fit_viewport
 
 
 class SpatialSyncError(ValueError):
@@ -52,6 +53,35 @@ def _unique_id(preferred: Any, used_ids: set[str], *, fallback: str) -> str:
     return candidate
 
 
+def _optional_finite(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _engineering_baseline(raw: dict) -> dict:
+    baseline = {
+        "length_m": _positive(raw.get("length_m"), 4.0),
+        "width_m": _positive(raw.get("width_m"), 4.0),
+        "height_m": _positive(raw.get("height_m"), 3.0),
+    }
+    pressure = _optional_finite(raw.get("observed_pressure_pa"))
+    if pressure is not None:
+        baseline["pressure_pa"] = pressure
+    return baseline
+
+
 def empty_layout() -> dict:
     return {
         "version": SPATIAL_LAYOUT_VERSION,
@@ -72,7 +102,15 @@ def empty_layout() -> dict:
 
 
 def normalize_layout(value: Any) -> dict:
+    """Return the current spatial schema without mutating the supplied document.
+
+    Spatial-v1 data is upgraded additively. Invalid interactive values are repaired
+    to safe editor defaults; the project persistence boundary remains strict and
+    rejects malformed persisted documents before this function is reached.
+    """
+
     source = value if isinstance(value, dict) else {}
+    source_version = source.get("version", 1)
     result = empty_layout()
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
 
@@ -84,11 +122,7 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = _unique_id(
-                raw.get("id"),
-                used_ids,
-                fallback=_room_id(name),
-            )
+            room_id = _unique_id(raw.get("id"), used_ids, fallback=_room_id(name))
             room = {
                 "id": room_id,
                 "name": name,
@@ -97,9 +131,46 @@ def normalize_layout(value: Any) -> dict:
                 "length_m": _positive(raw.get("length_m"), 4.0),
                 "width_m": _positive(raw.get("width_m"), 4.0),
                 "height_m": _positive(raw.get("height_m"), 3.0),
+                "elevation_m": _finite_number(raw.get("elevation_m"), 0.0),
             }
-            if raw.get("pressure_pa") is not None:
-                room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+            pressure = _optional_finite(raw.get("pressure_pa"))
+            if pressure is not None:
+                room["pressure_pa"] = pressure
+            for field in (
+                "pressure_target_pa",
+                "temperature_target_c",
+                "humidity_target_rh_pct",
+            ):
+                number = _optional_finite(raw.get(field))
+                if number is not None:
+                    room[field] = number
+            for field in ("classification", "notes"):
+                text = _optional_string(raw.get(field))
+                if text is not None:
+                    room[field] = text
+            engineering_ref = _optional_string(raw.get("engineering_ref"))
+            if engineering_ref is None and source_version == 1:
+                # v1 synchronization was name-based. Preserve that behavior while
+                # making the inferred mapping explicit in the v2 document.
+                engineering_ref = name
+            if engineering_ref is not None:
+                room["engineering_ref"] = engineering_ref
+            metadata = raw.get("metadata")
+            if isinstance(metadata, dict):
+                room["metadata"] = copy.deepcopy(metadata)
+            baseline = raw.get("engineering_baseline")
+            if isinstance(baseline, dict):
+                normalized_baseline: dict[str, float] = {}
+                for field in ("length_m", "width_m", "height_m"):
+                    if field in baseline:
+                        normalized_baseline[field] = _positive(
+                            baseline.get(field), room[field]
+                        )
+                baseline_pressure = _optional_finite(baseline.get("pressure_pa"))
+                if baseline_pressure is not None:
+                    normalized_baseline["pressure_pa"] = baseline_pressure
+                if normalized_baseline:
+                    room["engineering_baseline"] = normalized_baseline
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -114,24 +185,28 @@ def normalize_layout(value: Any) -> dict:
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
             device_id = _unique_id(
-                raw.get("id"),
-                used_device_ids,
-                fallback=f"device-{index + 1}",
+                raw.get("id"), used_device_ids, fallback=f"device-{index + 1}"
             )
             room_id = raw.get("room_id")
             if room_id is not None:
                 room_id = str(room_id).strip() or None
-            devices.append(
-                {
-                    "id": device_id,
-                    "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": room_id,
-                    "x_m": _finite_number(raw.get("x_m"), 0.0),
-                    "y_m": _finite_number(raw.get("y_m"), 0.0),
-                    "z_m": _finite_number(raw.get("z_m"), 0.0),
-                }
-            )
+            device = {
+                "id": device_id,
+                "type": device_type,
+                "name": str(raw.get("name") or device_type.upper()),
+                "room_id": room_id,
+                "x_m": _finite_number(raw.get("x_m"), 0.0),
+                "y_m": _finite_number(raw.get("y_m"), 0.0),
+                "z_m": _finite_number(raw.get("z_m"), 0.0),
+            }
+            for field in ("engineering_ref", "notes"):
+                text = _optional_string(raw.get(field))
+                if text is not None:
+                    device[field] = text
+            metadata = raw.get("metadata")
+            if isinstance(metadata, dict):
+                device["metadata"] = copy.deepcopy(metadata)
+            devices.append(device)
     result["devices"] = devices
 
     view = source.get("view", {})
@@ -142,7 +217,9 @@ def normalize_layout(value: Any) -> dict:
                 "pan_x": _finite_number(view.get("pan_x"), 0.0),
                 "pan_y": _finite_number(view.get("pan_y"), 0.0),
                 "azimuth_deg": _finite_number(view.get("azimuth_deg"), 35.0),
-                "elevation_deg": max(5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))),
+                "elevation_deg": max(
+                    5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))
+                ),
                 "zoom_3d": max(0.2, min(8.0, _positive(view.get("zoom_3d"), 1.0))),
                 "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
                 "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),

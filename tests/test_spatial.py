@@ -5,6 +5,7 @@ import math
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    _snap_coordinate,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -177,3 +178,12 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
         analysis,
     ) is False
     assert analysis.input == original
+
+
+
+def test_snap_coordinate_respects_grid_and_free_move_mode():
+    assert _snap_coordinate(1.24, 0.5, True) == 1.0
+    assert _snap_coordinate(1.26, 0.5, True) == 1.5
+    assert _snap_coordinate(-0.26, 0.5, True) == -0.5
+    assert _snap_coordinate(1.26, 0.5, False) == 1.26
+    assert _snap_coordinate(float("nan"), 0.5, False) == 0.0

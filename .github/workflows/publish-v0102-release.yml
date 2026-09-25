@@ -33,12 +33,16 @@ jobs:
         run: |
           set -euo pipefail
           current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          target_version="$(git show "${TARGET_SHA}:pyproject.toml" | sed -n 's/^version = "\\([^"]*\\)"$/\\1/p' | head -n1)"
           if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
             echo "publish=false" >> "${GITHUB_OUTPUT}"
             echo "Successful CI commit ${TARGET_SHA} is stale; current main is ${current_main_sha}."
+          elif [ "${target_version}" != "0.102.0" ]; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Current main is version ${target_version}; immutable v0.102.0 publisher is not applicable."
           else
             echo "publish=true" >> "${GITHUB_OUTPUT}"
-            echo "Successful CI commit is current main and is eligible for publication."
+            echo "Successful CI commit is current v0.102.0 main and is eligible for publication."
           fi
 
       - name: Verify v0.102.0 release identity

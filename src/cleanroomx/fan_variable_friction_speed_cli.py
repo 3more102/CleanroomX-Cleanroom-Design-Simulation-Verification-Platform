@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from .persistence import atomic_write_text
 from .fan_variable_friction_speed import (

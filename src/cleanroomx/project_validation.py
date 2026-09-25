@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .application import validate_analysis_input
 from .project import ProjectDocument, ProjectFormatError, project_from_dict
 from .spatial import (
@@ -13,6 +14,10 @@ from .spatial import (
     validate_layout,
     validate_layout_integrity,
 )
+
+
+PROJECT_VALIDATION_SCHEMA = "cleanroomx.project-validation"
+PROJECT_VALIDATION_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -64,6 +69,9 @@ class ProjectValidationReport:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "schema": PROJECT_VALIDATION_SCHEMA,
+            "schema_version": PROJECT_VALIDATION_SCHEMA_VERSION,
+            "cleanroomx_version": __version__,
             "project": self.project_name,
             "status": self.status,
             "passed": self.passed,

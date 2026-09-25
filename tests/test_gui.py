@@ -872,3 +872,261 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+def test_run_context_detects_project_analysis_and_base_changes(tmp_path):
+    analysis = AnalysisDocument(
+        id="a",
+        name="A",
+        kind="room_verification",
+        input={"value": 1},
+    )
+    project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = project
+    app.project_path = tmp_path / "one" / "demo.cleanroomx.json"
+    app._recovery_source_path = None
+
+    context = app._capture_run_context(
+        analysis,
+        payload={"value": 1},
+        base_dir=app._base_dir(),
+    )
+    assert app._run_context_matches_current(context) is True
+
+    analysis.input = {"value": 2}
+    assert app._run_context_matches_current(context) is False
+    analysis.input = {"value": 1}
+    assert app._run_context_matches_current(context) is True
+
+    app.project.active_analysis_id = None
+    assert app._run_context_matches_current(context) is False
+    app.project.active_analysis_id = "a"
+
+    app.project_path = tmp_path / "two" / "demo.cleanroomx.json"
+    assert app._run_context_matches_current(context) is False
+    app.project_path = tmp_path / "one" / "demo.cleanroomx.json"
+
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    assert app._run_context_matches_current(context) is False
+
+
+def test_poll_worker_accepts_result_only_for_current_run_context(tmp_path):
+    import queue
+
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Run:
+        title = "Room verification"
+        status = "pass"
+
+    analysis = AnalysisDocument(
+        id="a",
+        name="A",
+        kind="room_verification",
+        input={"value": 1},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+    )
+    app.project_path = tmp_path / "demo.cleanroomx.json"
+    app._recovery_source_path = None
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 3
+    app._queue = queue.Queue()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    rendered = []
+    app._render_run = lambda run: rendered.append(run)
+    app._active_run_context = app._capture_run_context(
+        analysis,
+        payload={"value": 1},
+        base_dir=app._base_dir(),
+    )
+
+    run = Run()
+    app._queue.put(("success", 3, "a", run))
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._active_run_context is None
+    assert app._runs_by_analysis == {"a": run}
+    assert app.last_run is run
+    assert app.last_run_analysis_id == "a"
+    assert rendered == [run]
+    assert "Completed" in app.status_var.value
+    assert app.root.delay == 100
+
+
+def test_poll_worker_discards_result_after_project_replacement(tmp_path):
+    import queue
+
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    original = ProjectDocument(
+        name="Original",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = original
+    app.project_path = tmp_path / "demo.cleanroomx.json"
+    app._recovery_source_path = None
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 4
+    app._queue = queue.Queue()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app._render_run = lambda run: pytest.fail("stale run must not be rendered")
+    app._active_run_context = app._capture_run_context(
+        original.analysis_by_id("a"),
+        payload={"value": 1},
+        base_dir=app._base_dir(),
+    )
+
+    # Simulate a project replacement that happens to reuse the same analysis ID,
+    # kind, payload, active selection, and base directory.
+    app.project = ProjectDocument(
+        name="Recovered copy",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._queue.put(("success", 4, "a", object()))
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._active_run_context is None
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+    assert "discarded" in app.status_var.value.lower()
+    assert "run again" in app.status_var.value.lower()
+
+
+def test_save_project_as_is_blocked_while_analysis_is_running(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app.root = object()
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: pytest.fail("Save As dialog must not open during a run"),
+    )
+
+    app.save_project_as()
+
+    assert warnings
+    assert warnings[0][0] == "Analysis running"
+    assert "project location" in warnings[0][1]
+
+
+def test_recovery_center_is_blocked_while_analysis_is_running(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app.root = object()
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "scan_recovery_artifacts",
+        lambda *args, **kwargs: pytest.fail("Recovery scan must not start during a run"),
+    )
+
+    assert app.show_recovery_center() is False
+    assert warnings
+    assert "Recovery Center" in warnings[0][1]
+
+
+def test_direct_project_replacement_apis_refuse_while_analysis_is_running(tmp_path):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+
+    with pytest.raises(RuntimeError, match="restore recovery"):
+        app.restore_recovery_path(tmp_path / "recovery.json")
+    with pytest.raises(RuntimeError, match="replace the project"):
+        app.load_project_path(tmp_path / "project.cleanroomx.json")

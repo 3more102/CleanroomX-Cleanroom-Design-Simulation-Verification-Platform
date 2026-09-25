@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .persistence import atomic_write_text
 from .dossier import build_dossier
 from .dossier_report import markdown_dossier_report
 
@@ -28,7 +29,7 @@ def main() -> int:
         else markdown_dossier_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 2 if result["executive_summary"]["state"] == "attention_required" else 0

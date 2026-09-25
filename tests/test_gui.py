@@ -906,6 +906,27 @@ def test_gui_demo_project_round_trips_and_active_analysis_runs():
     json.dumps(run.to_dict(), allow_nan=False)
 
 
+def test_gui_demo_opens_on_positioned_passing_engineering_visualization():
+    path = ROOT / "examples" / "gui_demo.cleanroomx.json"
+    project = load_project_document(path)
+    active = project.analysis_by_id(project.active_analysis_id)
+
+    assert active.id == "verification"
+    rooms = extract_room_visuals(active.input)
+    assert len(rooms) == 3
+    assert all(room["position_real"] for room in rooms)
+
+    metrics = [room_visual_engineering_metrics(room) for room in rooms]
+    assert all(item["status"] == "pass" for item in metrics)
+
+    cascade = evaluate_pressure_cascade_visuals(
+        rooms,
+        extract_pressure_cascade(active.input),
+    )
+    assert len(cascade) == 2
+    assert all(item["status"] == "pass" for item in cascade)
+
+
 def test_stale_result_is_invalidated_when_matching_analysis_input_changes():
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.last_run = object()

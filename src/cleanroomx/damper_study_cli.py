@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from .project import atomic_write_text
 from .damper_study import solve_loop_damper_study
 from .damper_study_io import load_loop_damper_study
 from .damper_study_report import markdown_loop_damper_study_report
@@ -35,7 +35,7 @@ def main() -> int:
         else markdown_loop_damper_study_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0

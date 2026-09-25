@@ -42,6 +42,7 @@ def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):
 
 def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeypatch):
     target = tmp_path / "export.json"
+    target.write_text("existing\n", encoding="utf-8")
 
     def fail_replace(self, destination):
         raise OSError("replace failed")
@@ -50,7 +51,7 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
     with pytest.raises(OSError, match="replace failed"):
         atomic_write_text(target, "payload\n")
 
-    assert not target.exists()
+    assert target.read_text(encoding="utf-8") == "existing\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

@@ -6,6 +6,7 @@ from typing import Any
 
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
+SPATIAL_GEOMETRY_EPSILON_M = 1e-9
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
 
 

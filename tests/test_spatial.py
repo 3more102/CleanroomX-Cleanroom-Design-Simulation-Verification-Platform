@@ -98,6 +98,121 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["view"]["elevation_deg"] == 5
 
 
+
+def test_normalize_layout_repairs_missing_and_duplicate_ids_deterministically():
+    raw = {
+        "rooms": [
+            {"name": "Process", "id": " process ", "length_m": 4, "width_m": 4, "height_m": 3},
+            {"name": "Duplicate", "id": "process", "length_m": 4, "width_m": 4, "height_m": 3},
+            {"name": "!!!", "length_m": 4, "width_m": 4, "height_m": 3},
+        ],
+        "devices": [
+            {
+                "id": " sensor ",
+                "type": "sensor",
+                "name": "Probe",
+                "room_id": " process ",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 1,
+            },
+            {
+                "id": "sensor",
+                "type": "sensor",
+                "name": "Probe",
+                "room_id": "process",
+                "x_m": 2,
+                "y_m": 2,
+                "z_m": 1,
+            },
+            {
+                "type": "ffu",
+                "name": "FFU 1",
+                "room_id": "",
+                "x_m": 0,
+                "y_m": 0,
+                "z_m": 3,
+            },
+        ],
+    }
+
+    first = normalize_layout(raw)
+    second = normalize_layout(raw)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == [
+        "process",
+        "process-2",
+        "room-3",
+    ]
+    assert [device["id"] for device in first["devices"]] == [
+        "sensor",
+        "sensor-2",
+        "device-ffu-1",
+    ]
+    assert first["devices"][0]["room_id"] == "process"
+    assert first["devices"][2]["room_id"] is None
+    assert len({room["id"] for room in first["rooms"]}) == len(first["rooms"])
+    assert len({device["id"] for device in first["devices"]}) == len(first["devices"])
+
+
+def test_derive_layout_assigns_unique_deterministic_ids_for_duplicate_room_names():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Duplicate names",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "Process", "length_m": 5, "width_m": 4, "height_m": 3},
+                {"name": "!!!", "length_m": 3, "width_m": 3, "height_m": 3},
+                {"name": "!!!", "length_m": 2, "width_m": 2, "height_m": 3},
+            ]
+        },
+    )
+
+    first = derive_layout_from_analysis(analysis)
+    second = derive_layout_from_analysis(analysis)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == [
+        "process",
+        "process-2",
+        "room-3",
+        "room-4",
+    ]
+    assert len({room["id"] for room in first["rooms"]}) == 4
+
+
+def test_ensure_project_layout_stabilizes_repaired_ids_after_first_normalization():
+    project = ProjectDocument(
+        name="Legacy spatial IDs",
+        metadata={
+            SPATIAL_METADATA_KEY: {
+                "rooms": [
+                    {"name": "A", "id": "same"},
+                    {"name": "B", "id": "same"},
+                    {"name": "C"},
+                ],
+                "devices": [
+                    {"type": "sensor", "name": "Probe"},
+                    {"type": "sensor", "name": "Probe"},
+                ],
+            }
+        },
+    )
+
+    first = ensure_project_layout(project)
+    persisted = project.metadata[SPATIAL_METADATA_KEY]
+    second = ensure_project_layout(project)
+
+    assert first == second == persisted
+    assert [room["id"] for room in persisted["rooms"]] == ["same", "same-2", "c"]
+    assert [device["id"] for device in persisted["devices"]] == [
+        "device-probe",
+        "device-probe-2",
+    ]
+
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():
     analysis = AnalysisDocument(
         id="verification",

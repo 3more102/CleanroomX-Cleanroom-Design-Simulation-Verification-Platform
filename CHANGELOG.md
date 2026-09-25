@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased verified project persistence — 2026-09-25
+
+- Parses each opened project from the same stable byte snapshot used to compute its SHA-256 file revision, removing the separate-read binding race in the external-write guard.
+- Includes file identity in stability checks so an atomic same-size/same-timestamp replacement is not accepted as one continuous read.
+- Verifies the post-replace file revision against the exact serialized UTF-8 bytes before returning a successful guarded save; a mismatched post-write file remains a conflict instead of becoming the new clean baseline.
+- Reuses the project revision-capture primitive for recovery source fingerprints, removing duplicate file-hashing logic while preserving recovery metadata shape.
+- Rejects malformed non-UTF-8 project files through the project-format error boundary and adds race/failure regression coverage without changing schema version or engineering calculations.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

@@ -197,7 +197,6 @@ def test_load_with_fingerprint_hashes_the_exact_parsed_project_bytes(tmp_path):
     assert fingerprint["sha256"] == project_file_fingerprint(path)["sha256"]
 
 
-
 def test_checked_project_save_rejects_destination_created_after_missing_baseline(
     tmp_path,
 ):

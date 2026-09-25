@@ -58,3 +58,13 @@ PR CI run #1503 / `36168565655` passed 985 tests on Python 3.11, 3.12, and
 Preserve published v0.100.0, v0.101.0, and v0.102.0 tags; rollback through normal
 revert and CI rather than moving release history.
 
+
+## v0.102.1 final spatial production closure anchor
+
+The final post-v0.102 spatial code baseline is `f595aaba6e7b8704beb62acc04f0eb4d036d8f09`.
+It includes PR #467 (tested head `4be4fb840480df7a5f1e0313a73830313150d9dd`,
+CI #1540 / `36170548238`) and PR #472 (tested head
+`8a34c3d649aee54c377b4194a6d619559d219421`, CI #1551 / `36171758793`).
+Both pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag only
+from a successful current-main CI commit; do not move v0.102.0 or any earlier tag.
+

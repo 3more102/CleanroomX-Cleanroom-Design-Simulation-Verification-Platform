@@ -1,8 +1,42 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.102.0
+Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
+
+FINAL v0.102.1 SPATIAL PRODUCTION BASELINE
+PR #467 — Close final CleanroomX spatial production gaps
+Exact tested PR head:
+4be4fb840480df7a5f1e0313a73830313150d9dd
+PR CI run #1540
+run id 36170548238
+conclusion SUCCESS
+Merged main commit:
+9a9caedb46b80d376c21f36e3b10f46b05e00764
+Post-merge main CI run #1550
+run id 36171324227
+conclusion SUCCESS
+
+PR #472 — Finish remaining CleanroomX spatial production capabilities
+Exact tested PR head:
+8a34c3d649aee54c377b4194a6d619559d219421
+PR CI run #1551
+run id 36171758793
+conclusion SUCCESS
+Merged main commit:
+f595aaba6e7b8704beb62acc04f0eb4d036d8f09
+
+PASS - Python 3.11/3.12/3.13 full CI jobs for both final PR closures
+PASS - windows-latest PowerShell/CMD checkout launcher smoke
+PASS - clean wheel build/install and installed application checks
+PASS - Python 3.13 performance evidence and installed Tk/Xvfb GUI demo smoke
+PASS - spatial-to-engineering synchronization is dimension-only
+PASS - engineering-to-spatial pull is dimension-only and preflighted atomically
+PASS - fresh current verification pressure is projected without being persisted into geometry
+PASS - synchronized 2D/3D pressure-cascade relationship rendering
+PASS - deterministic 2D/3D viewport transforms
+PASS - persisted window and generic-opening object types
+
 
 FINAL SYNCHRONIZED SPATIAL CLOSURE
 PR #442 — Complete spatial engineering synchronization state

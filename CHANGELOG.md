@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased strict engineering JSON ingestion — 2026-09-25
+
+- Routes every public file-backed engineering loader and dossier manifest through the existing canonical `cleanroomx.strict_json` parser.
+- Rejects malformed JSON, duplicate object keys, `NaN`, `Infinity`, `-Infinity`, and floating-point overflow before workflow model construction or solver execution.
+- Preserves ordinary finite standards-compliant JSON, file I/O behavior, project schema, solver equations, numerical tolerances, and engineering acceptance semantics.
+- Adds cross-workflow regression coverage across room/project, HVAC, recovery, uncertainty, qualification, duct/loop, fan/network, damper, and dossier loaders.
+
 ## Unreleased verification outcome integrity — 2026-09-25
 
 - Adds explicit aggregate `status` and `complete` fields to room and multi-room verification reports so `not_checked` evidence is no longer surfaced by the application as an ordinary pass.

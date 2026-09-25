@@ -761,7 +761,36 @@ def test_next_room_overlap_conflict_cycles_stably_and_labels_rooms():
     assert wrapped == first
 
 
-def test_next_room_overlap_conflict_is_non_mutating_and_returns_none_when_clear():
+def test_next_room_overlap_conflict_is_non_mutating_and_handles_invalid_cursor():
+    rooms = [
+        {
+            "id": "a",
+            "name": "A",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
+        {
+            "id": "b",
+            "name": "B",
+            "x_m": 1.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
+    ]
+    before = [dict(room) for room in rooms]
+
+    review = next_room_overlap_conflict(rooms, cursor="bad")
+
+    assert review is not None
+    assert review["index"] == 0
+    assert (review["room_a_id"], review["room_b_id"]) == ("a", "b")
+    assert rooms == before
+
+
+def test_next_room_overlap_conflict_returns_none_for_edge_touching_rooms():
     rooms = [
         {
             "id": "a",
@@ -780,10 +809,8 @@ def test_next_room_overlap_conflict_is_non_mutating_and_returns_none_when_clear(
             "width_m": 2.0,
         },
     ]
-    before = [dict(room) for room in rooms]
 
-    assert next_room_overlap_conflict(rooms, cursor="bad") is None
-    assert rooms == before
+    assert next_room_overlap_conflict(rooms) is None
 
 
 def test_spatial_layout_summary_counts_room_overlap_conflicts():

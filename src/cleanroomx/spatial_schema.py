@@ -277,7 +277,7 @@ def validate_persisted_spatial_layout(value: Any) -> None:
         if device_id in device_ids:
             raise SpatialLayoutFormatError(f"{path}.id duplicates device id {device_id!r}")
         device_ids.add(device_id)
-        device_type = _require_string(device.get("type"), f"{path}.type").lower()
+        device_type = _require_string(device.get("type"), f"{path}.type")
         if device_type not in DEVICE_TYPES:
             raise SpatialLayoutFormatError(
                 f"{path}.type must be one of {', '.join(DEVICE_TYPES)}"

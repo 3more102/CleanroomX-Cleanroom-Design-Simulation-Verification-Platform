@@ -6,7 +6,8 @@ import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
+    ProjectFormatError, ProjectWriteConflictError, atomic_write_text,
+    load_project_document, project_file_sha256, project_from_dict,
     save_project_document,
 )
 
@@ -116,3 +117,42 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+def test_atomic_write_guard_refuses_external_modification_and_cleans_temp(tmp_path):
+    target = tmp_path / "guarded.json"
+    target.write_text("original\n", encoding="utf-8")
+    expected = project_file_sha256(target)
+    target.write_text("external\n", encoding="utf-8")
+
+    with pytest.raises(ProjectWriteConflictError, match="changed on disk"):
+        atomic_write_text(target, "cleanroomx\n", expected_sha256=expected)
+
+    assert target.read_text(encoding="utf-8") == "external\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_guard_refuses_external_deletion(tmp_path):
+    target = tmp_path / "guarded.json"
+    target.write_text("original\n", encoding="utf-8")
+    expected = project_file_sha256(target)
+    target.unlink()
+
+    with pytest.raises(ProjectWriteConflictError, match="removed or moved"):
+        atomic_write_text(target, "cleanroomx\n", expected_sha256=expected)
+
+    assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_save_project_document_accepts_matching_source_digest(tmp_path):
+    path = tmp_path / "guarded.cleanroomx.json"
+    original = ProjectDocument(name="Original")
+    save_project_document(path, original)
+    expected = project_file_sha256(path)
+
+    updated = ProjectDocument(name="Updated")
+    save_project_document(path, updated, expected_sha256=expected)
+
+    assert load_project_document(path).name == "Updated"
+    assert project_file_sha256(path) != expected

@@ -521,7 +521,7 @@ def spatial_layout_schedule_csv(value: Any) -> str:
 
 
 def spatial_layout_dxf(value: Any) -> str:
-    """Export the canonical spatial model as deterministic ASCII DXF in metres."""
+    """Export the canonical spatial model as deterministic UTF-8 ASCII DXF."""
 
     layout = normalize_layout(value)
 
@@ -531,47 +531,53 @@ def spatial_layout_dxf(value: Any) -> str:
         return text or "0"
 
     def text_value(value: Any) -> str:
-        return str(value).replace("\r", " ").replace("\n", " ").replace("\t", " ").strip()
+        text = (
+            str(value)
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .replace("\t", " ")
+            .strip()
+        )
+        encoded = text.encode("utf-8")
+        if len(encoded) <= 255:
+            return text
+        return encoded[:255].decode("utf-8", errors="ignore")
 
     lines: list[str] = []
+    handle_value = 0x100
 
     def emit(code: int, value: Any) -> None:
         lines.extend((str(code), str(value)))
 
-    # AutoCAD 2000 ASCII DXF. $INSUNITS=6 declares metres.
+    def next_handle() -> str:
+        nonlocal handle_value
+        handle = f"{handle_value:X}"
+        handle_value += 1
+        return handle
+
+    def entity_start(entity_type: str, layer: str, subclass: str) -> None:
+        emit(0, entity_type)
+        emit(5, next_handle())
+        emit(100, "AcDbEntity")
+        emit(8, layer)
+        emit(100, subclass)
+
+    # AutoCAD 2007 ASCII DXF. AC1021 supports UTF-8; $INSUNITS=6 declares metres.
     emit(0, "SECTION")
     emit(2, "HEADER")
     emit(9, "$ACADVER")
-    emit(1, "AC1015")
+    emit(1, "AC1021")
     emit(9, "$INSUNITS")
     emit(70, 6)
     emit(0, "ENDSEC")
 
-    emit(0, "SECTION")
-    emit(2, "TABLES")
-    emit(0, "TABLE")
-    emit(2, "LAYER")
-    emit(70, 4)
-    for layer_name, color_index in (
-        ("ROOMS", 7),
-        ("ROOM_LABELS", 3),
-        ("DEVICES", 5),
-        ("DEVICE_LABELS", 2),
-    ):
-        emit(0, "LAYER")
-        emit(2, layer_name)
-        emit(70, 0)
-        emit(62, color_index)
-        emit(6, "CONTINUOUS")
-    emit(0, "ENDTAB")
-    emit(0, "ENDSEC")
-
+    # Autodesk permits omitted symbol tables; referenced layer names are created
+    # automatically by AutoCAD-based readers.
     emit(0, "SECTION")
     emit(2, "ENTITIES")
 
     def line_entity(layer: str, x1: float, y1: float, x2: float, y2: float) -> None:
-        emit(0, "LINE")
-        emit(8, layer)
+        entity_start("LINE", layer, "AcDbLine")
         emit(10, num(x1))
         emit(20, num(y1))
         emit(30, "0")
@@ -580,8 +586,7 @@ def spatial_layout_dxf(value: Any) -> str:
         emit(31, "0")
 
     def text_entity(layer: str, x: float, y: float, value: Any, height: float = 0.22) -> None:
-        emit(0, "TEXT")
-        emit(8, layer)
+        entity_start("TEXT", layer, "AcDbText")
         emit(10, num(x))
         emit(20, num(y))
         emit(30, "0")
@@ -614,8 +619,7 @@ def spatial_layout_dxf(value: Any) -> str:
         room_id = device.get("room_id")
         emit(999, f"CLEANROOMX_ROOM_ID={text_value(room_id) if room_id is not None else ''}")
         emit(999, f"CLEANROOMX_DEVICE_Z_M={num(device['z_m'])}")
-        emit(0, "CIRCLE")
-        emit(8, "DEVICES")
+        entity_start("CIRCLE", "DEVICES", "AcDbCircle")
         emit(10, num(device["x_m"]))
         emit(20, num(device["y_m"]))
         emit(30, "0")
@@ -631,6 +635,7 @@ def spatial_layout_dxf(value: Any) -> str:
     emit(0, "ENDSEC")
     emit(0, "EOF")
     return "\n".join(lines) + "\n"
+
 
 
 @dataclass

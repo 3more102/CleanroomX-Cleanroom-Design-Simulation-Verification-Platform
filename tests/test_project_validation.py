@@ -55,6 +55,10 @@ def test_project_validation_passes_all_valid_analyses_and_is_deterministic():
 
     assert report.status == "pass"
     assert report.passed is True
+    payload = report.to_dict()
+    assert payload["schema"] == "cleanroomx.project-validation"
+    assert payload["schema_version"] == 1
+    assert payload["cleanroomx_version"] == "0.100.0"
     assert report.analyses_checked == 2
     assert report.valid_analyses == 2
     assert report.invalid_analyses == 0
@@ -241,6 +245,9 @@ def test_project_validation_cli_returns_nonzero_and_strict_json_for_invalid_proj
     assert exit_code == 2
     output = capsys.readouterr().out
     payload = json.loads(output)
+    assert payload["schema"] == "cleanroomx.project-validation"
+    assert payload["schema_version"] == 1
+    assert payload["cleanroomx_version"] == "0.100.0"
     assert payload["status"] == "fail"
     assert payload["summary"]["invalid_analyses"] == 1
     json.dumps(payload, sort_keys=True, allow_nan=False)

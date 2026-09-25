@@ -45,7 +45,9 @@ state is rendered in both 2D and 3D. CleanroomX does not invent missing pressure
 The right side projects the same room footprints and heights into an interactive pure-Tk 3D
 view. It renders the floor plane, room top/wall geometry, room labels, and placed devices/openings.
 Mouse wheel zooms. Middle/right drag pans. The rotate, tilt, reset, and fit controls move the
-camera. Selecting a room or object in 3D selects the same canonical object used by the 2D editor.
+camera. **Fit** computes zoom and pan from every room corner at its real floor and ceiling elevation,
+so large or elevated layouts are recentered instead of merely resetting zoom. Selecting a room or
+object in 3D selects the same canonical object used by the 2D editor.
 
 Room floor elevation and room height control the vertical extrusion. Device Z is relative to its
 assigned room floor elevation. Door and transfer-opening height is rendered from the same device

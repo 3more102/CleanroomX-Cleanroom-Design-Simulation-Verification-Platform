@@ -454,7 +454,11 @@ class AutosaveManager:
                 snapshot_text=snapshot_text,
                 digest=digest,
             )
-            if self._future is not None and not self._future.done():
+            # A Future remains coordinator-owned until its completion callback
+            # finalizes state under this lock. Future.done() becomes true before
+            # callbacks are guaranteed to finish, so treating a merely-done Future
+            # as idle can let an older callback clear a newer request.
+            if self._future is not None:
                 self._pending_request = request
                 self._set_status_locked("saving", "Autosave queued")
                 return True
@@ -463,6 +467,8 @@ class AutosaveManager:
             return True
 
     def _submit_locked(self, request: _AutosaveRequest) -> None:
+        if self._future is not None or self._active_request is not None:
+            raise RuntimeError("autosave coordinator already owns an active write")
         self._active_request = request
         self._set_status_locked("saving", "Autosave saving")
         future = self._executor.submit(self._write_recovery, request)
@@ -523,6 +529,17 @@ class AutosaveManager:
             failure = exc
 
         with self._lock:
+            # Completion callbacks may mutate coordinator state only while they
+            # still own the tracked Future/request pair. A late callback can
+            # therefore never clear a newer autosave request.
+            if self._future is not future or self._active_request is not request:
+                if artifact is not None:
+                    try:
+                        artifact.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                return
+
             current_epoch = self._epochs.get(request.project_identity, 0)
             stale = request.epoch != current_epoch
             if stale and artifact is not None:
@@ -609,7 +626,11 @@ class AutosaveManager:
         deadline = time.monotonic() + timeout
         while True:
             with self._lock:
-                idle = self._future is None and self._pending_request is None
+                idle = (
+                    self._future is None
+                    and self._active_request is None
+                    and self._pending_request is None
+                )
                 failure = self._status if self._status.state == "failed" else None
             if idle:
                 if failure is not None:

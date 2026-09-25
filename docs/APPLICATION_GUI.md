@@ -80,6 +80,8 @@ For room-verification and multi-room project-verification analyses, **Sync dimen
 
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
 
+Use **File → Export Spatial Audit JSON...** to capture a deterministic engineering snapshot of the spatial design. The audit includes a SHA-256 identity over room/device engineering geometry, room floor-area and volume schedules, device assignment counts, supplied pressure range, and the current advisory spatial-validation findings. Camera position, pan/zoom state, and edit-grid spacing are deliberately excluded from the design fingerprint, so presentation-only changes do not create a new engineering identity.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.

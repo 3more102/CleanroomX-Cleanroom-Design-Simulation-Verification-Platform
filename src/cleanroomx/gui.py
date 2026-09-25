@@ -251,6 +251,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
+        file_menu.add_command(label="Export Portable HTML Report...", command=self.export_report_html)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)

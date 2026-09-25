@@ -506,6 +506,8 @@ def _revision_payload(
         # Save As may intentionally replace a non-CleanroomX target. Preserve guarded
         # overwrite semantics but do not mislabel arbitrary bytes as a project revision.
         return None
+    source_payload = json.loads(source_bytes.decode("utf-8"))
+    source_application_version = source_payload.get("application_version", "unknown")
     return {
         "schema": PROJECT_REVISION_SCHEMA,
         "schema_version": PROJECT_REVISION_SCHEMA_VERSION,
@@ -516,6 +518,7 @@ def _revision_payload(
             "size": len(source_bytes),
             "sha256": sha256(source_bytes).hexdigest(),
             "project_name": previous_project.name,
+            "application_version": str(source_application_version),
             "content_base64": base64.b64encode(source_bytes).decode("ascii"),
         },
     }
@@ -686,7 +689,12 @@ def load_project_revision(
         source_bytes=source_bytes,
         created_at_utc=data["created_at_utc"],
         source_sha256=actual_digest,
-        application_version=str(data.get("application_version", "unknown")),
+        application_version=str(
+            source.get(
+                "application_version",
+                data.get("application_version", "unknown"),
+            )
+        ),
         artifact_path=artifact_path,
     )
 
@@ -732,10 +740,18 @@ def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
 
 
 def _rotate_project_revisions(project_path: Path, limit: int) -> None:
+    """Best-effort retention cleanup; never invalidate an already committed save."""
     scan = scan_project_revisions(project_path)
+    removed = False
     for revision in scan.revisions[limit:]:
-        revision.path.unlink(missing_ok=True)
-    if len(scan.revisions) > limit:
+        try:
+            revision.path.unlink(missing_ok=True)
+        except OSError:
+            # Keeping an extra valid revision is safer than reporting a completed
+            # project save as failed because retention cleanup was unavailable.
+            continue
+        removed = True
+    if removed:
         _fsync_directory(project_revision_dir(project_path))
 
 

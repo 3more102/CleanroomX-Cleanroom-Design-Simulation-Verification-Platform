@@ -295,22 +295,35 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
 
     last_error: OSError | None = None
     for _attempt in range(3):
-        before = source.stat()
         digest = sha256()
         try:
             with source.open("rb") as handle:
+                before = os.fstat(handle.fileno())
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
+                after_handle = os.fstat(handle.fileno())
+            after_path = source.stat()
         except OSError as exc:
             last_error = exc
             continue
-        after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+        handle_stable = (
+            before.st_dev == after_handle.st_dev
+            and before.st_ino == after_handle.st_ino
+            and before.st_size == after_handle.st_size
+            and before.st_mtime_ns == after_handle.st_mtime_ns
+        )
+        path_still_same_file = (
+            after_handle.st_dev == after_path.st_dev
+            and after_handle.st_ino == after_path.st_ino
+            and after_handle.st_size == after_path.st_size
+            and after_handle.st_mtime_ns == after_path.st_mtime_ns
+        )
+        if handle_stable and path_still_same_file:
             return ProjectFileRevision(
                 path=normalized,
                 exists=True,
-                size=after.st_size,
-                mtime_ns=after.st_mtime_ns,
+                size=after_path.st_size,
+                mtime_ns=after_path.st_mtime_ns,
                 sha256=digest.hexdigest(),
             )
         last_error = OSError(f"project file changed while fingerprinting: {source}")

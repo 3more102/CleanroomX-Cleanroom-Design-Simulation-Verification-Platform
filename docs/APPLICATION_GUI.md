@@ -114,6 +114,18 @@ For `consistency` and `dossier`, those external dependencies are guarded as engi
 
 Cached desktop results are also bound to the canonical SHA-256 of the exact submitted analysis input. Before a cached result is restored, before a completed background run is accepted, and before result/run-bundle/report export, CleanroomX compares that recorded identity with the current analysis kind and input. A mismatch clears the cached result and requires a rerun. The existing immediate invalidation hooks remain in place, but the provenance check is the final fail-closed boundary if a mutation path misses an invalidation notification.
 
+### Persisted analysis run history
+
+After a completed background run passes the same exact-input freshness check, CleanroomX records it in the project's existing metadata block under the versioned `cleanroomx.analysis-run-history` schema. The record contains the analysis id/name/kind, exact submitted input snapshot, complete result, generated Markdown report, diagnostics, plot model, and the application execution provenance already produced by the backend service. Recording the run makes the project dirty; normal **Save Project** / **Save Project As** persists it, and recovery autosave also carries it while the project remains unsaved.
+
+Each entry has a canonical SHA-256 over its content and the ordered history container has a second SHA-256. On project open, CleanroomX validates both layers before trusting any historical result. It restores only the latest record whose analysis kind and canonical input SHA-256 still match the current analysis. Old records remain in the project when inputs change or an analysis is removed, but they are audit evidence only and are not rendered as current results.
+
+History is bounded to 25 records globally, 5 records per analysis, and 8 MiB of canonical serialized history. Oldest records are removed deterministically when limits are exceeded. If one completed run is itself too large for the embedded budget, the current session result remains usable and can still be exported with **Export Run Bundle JSON...**; the project history is left unchanged and the desktop reports that the history record was not written.
+
+If the persisted history is malformed, uses an unsupported future history schema, exceeds its recorded bounds, or fails either SHA-256 check, CleanroomX fails closed: no historical result is restored, invalid evidence is not overwritten by a new record, and **Export Run History JSON...** is blocked with an actionable error. The hashes provide deterministic content-integrity evidence, not source authenticity or a digital signature.
+
+**Export Run History JSON...** writes the validated history block with the existing atomic GUI export path. No solver is rerun during history restoration or export. For file-backed `consistency` and `dossier` analyses, historical provenance retains the before/after external dependency fingerprints; referenced files are not embedded.
+
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
 ## Validation and automated smoke

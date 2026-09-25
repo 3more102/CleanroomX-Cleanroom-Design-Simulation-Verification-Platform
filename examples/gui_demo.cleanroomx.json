@@ -201,6 +201,32 @@
           "show_labels": true,
           "show_devices": true,
           "show_relationships": true
+        },
+        "engineering_sync": {
+          "analysis_id": "verification",
+          "rooms": [
+            {
+              "room_id": "process",
+              "analysis_room_name": "Process",
+              "length_m": 6,
+              "width_m": 5,
+              "height_m": 3
+            },
+            {
+              "room_id": "preparation",
+              "analysis_room_name": "Preparation",
+              "length_m": 5,
+              "width_m": 4,
+              "height_m": 3
+            },
+            {
+              "room_id": "ante",
+              "analysis_room_name": "Ante",
+              "length_m": 4,
+              "width_m": 3,
+              "height_m": 3
+            }
+          ]
         }
       }
     }

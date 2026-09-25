@@ -23,6 +23,8 @@ from cleanroomx.spatial import (
     layout_metrics,
     normalize_layout,
     pressure_overlay_state,
+    pressure_relationships_state,
+    sync_analysis_to_layout,
     sync_layout_to_analysis,
     validate_layout,
 )
@@ -1161,3 +1163,217 @@ def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
     assert status["rooms"][0]["state"] == "conflicting"
     assert "mapping changed" in status["rooms"][0]["message"]
 
+
+
+def test_sync_analysis_to_layout_pulls_geometry_and_pressure_without_moving_rooms():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                }
+            ]
+        },
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process display",
+                    "analysis_room_name": "Process",
+                    "x_m": 12.0,
+                    "y_m": 7.0,
+                    "length_m": 7.0,
+                    "width_m": 4.0,
+                    "height_m": 2.8,
+                    "pressure_pa": 10.0,
+                }
+            ]
+        }
+    )
+
+    assert sync_analysis_to_layout(layout, analysis) is True
+
+    room = layout["rooms"][0]
+    assert (room["x_m"], room["y_m"]) == (12.0, 7.0)
+    assert (room["length_m"], room["width_m"], room["height_m"]) == (6.0, 5.0, 3.0)
+    assert room["pressure_pa"] == 30.0
+    assert layout["engineering_sync"]["analysis_id"] == "verification"
+    assert layout["engineering_sync"]["rooms"][0]["length_m"] == 6.0
+    assert engineering_sync_status(layout, analysis)["overall"] == "synchronized"
+
+
+def test_pressure_overlay_prefers_supplied_result_then_configured_observation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                    "min_pressure_pa": 20.0,
+                }
+            ],
+            "pressure_cascade": [],
+        },
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "analysis_room_name": "Process",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "pressure_pa": 5.0,
+                }
+            ]
+        }
+    )
+
+    configured = pressure_overlay_state(layout, analysis)
+    assert configured["rooms"][0]["pressure_pa"] == 30.0
+    assert configured["rooms"][0]["source"] == "configured"
+    assert configured["rooms"][0]["pressure_target_pa"] == 20.0
+
+    result = {
+        "rooms": [
+            {
+                "room": "Process",
+                "findings": [
+                    {
+                        "code": "PRESSURE",
+                        "status": "fail",
+                        "actual": 18.0,
+                        "limit": 20.0,
+                        "unit": "Pa",
+                    }
+                ],
+            }
+        ],
+        "pressure_cascade": [],
+    }
+    resolved = pressure_overlay_state(layout, analysis, result)
+    assert resolved["rooms"][0]["pressure_pa"] == 18.0
+    assert resolved["rooms"][0]["source"] == "result"
+    assert resolved["rooms"][0]["status"] == "fail"
+
+
+def test_pressure_relationship_projection_preserves_unavailable_and_result_states():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                },
+                {
+                    "name": "Ante",
+                    "length_m": 4.0,
+                    "width_m": 3.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 10.0,
+                },
+            ],
+            "pressure_cascade": [
+                {
+                    "higher_pressure_room": "Process",
+                    "lower_pressure_room": "Ante",
+                    "min_delta_pa": 15.0,
+                }
+            ],
+        },
+    )
+    layout = derive_layout_from_analysis(analysis)
+
+    unresolved = pressure_relationships_state(layout, analysis)
+    assert unresolved[0]["limit_pa"] == 15.0
+    assert unresolved[0]["actual_delta_pa"] is None
+    assert unresolved[0]["status"] == "unavailable"
+
+    result = {
+        "pressure_cascade": [
+            {
+                "higher_pressure_room": "Process",
+                "lower_pressure_room": "Ante",
+                "actual_delta_pa": 20.0,
+                "limit_pa": 15.0,
+                "status": "pass",
+            }
+        ]
+    }
+    resolved = pressure_relationships_state(layout, analysis, result)
+    assert resolved[0]["actual_delta_pa"] == 20.0
+    assert resolved[0]["limit_pa"] == 15.0
+    assert resolved[0]["status"] == "pass"
+    assert resolved[0]["source"] == "result"
+
+
+def test_window_and_generic_opening_are_first_class_spatial_devices():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "room",
+                    "name": "Room",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                }
+            ],
+            "devices": [
+                {
+                    "id": "window",
+                    "type": "window",
+                    "name": "Observation window",
+                    "room_id": "room",
+                    "x_m": 2.0,
+                    "y_m": 0.0,
+                    "z_m": 1.0,
+                    "wall_side": "south",
+                },
+                {
+                    "id": "opening",
+                    "type": "opening",
+                    "name": "Full-height opening",
+                    "room_id": "room",
+                    "x_m": 1.0,
+                    "y_m": 0.0,
+                    "z_m": 0.0,
+                    "wall_side": "south",
+                },
+            ],
+        }
+    )
+
+    assert [device["type"] for device in layout["devices"]] == ["window", "opening"]
+    assert layout["devices"][0]["width_m"] == 1.2
+    assert layout["devices"][0]["height_m"] == 1.2
+    assert layout["devices"][1]["width_m"] == 1.0
+    assert layout["devices"][1]["height_m"] == 2.1
+    assert validate_layout(layout) == []

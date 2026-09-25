@@ -196,7 +196,14 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
     changed = False
     if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
+        target_name = str(analysis.input.get("name") or "").strip()
+        matching_rooms = [room for room in rooms if room["name"] == target_name]
+        if len(matching_rooms) == 1:
+            source = matching_rooms[0]
+        elif len(rooms) == 1:
+            source = rooms[0]
+        else:
+            return False
         for key in ("name", "length_m", "width_m", "height_m"):
             value = source[key]
             if analysis.input.get(key) != value:
@@ -420,7 +427,92 @@ def spatial_issues(layout: dict) -> list[dict[str, Any]]:
                     ),
                 }
             )
+            continue
+
+        z_m = _finite_number(device.get("z_m"), 0.0)
+        if z_m < -1e-9:
+            issues.append(
+                {
+                    "code": "DEVICE_BELOW_FLOOR",
+                    "device_id": device["id"],
+                    "room_ids": [assigned_room["id"]],
+                    "message": (
+                        f"Device {device['name']!r} is at z={z_m:g} m, below the floor "
+                        f"of room {assigned_room['name']!r}."
+                    ),
+                }
+            )
+        elif z_m > assigned_room["height_m"] + 1e-9:
+            issues.append(
+                {
+                    "code": "DEVICE_ABOVE_CEILING",
+                    "device_id": device["id"],
+                    "room_ids": [assigned_room["id"]],
+                    "message": (
+                        f"Device {device['name']!r} is at z={z_m:g} m, above the "
+                        f"{assigned_room['height_m']:g} m ceiling of room "
+                        f"{assigned_room['name']!r}."
+                    ),
+                }
+            )
     return issues
+
+
+def spatial_sync_blockers(layout: dict, analysis: Any) -> list[str]:
+    """Return geometry-sync conditions that require explicit operator correction."""
+
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return ["No compatible active analysis is available for spatial synchronization."]
+
+    kind = getattr(analysis, "kind", "")
+    if kind not in {"room_verification", "project_verification"}:
+        return []
+
+    rooms = normalize_layout(layout)["rooms"]
+    if not rooms:
+        return ["The spatial layout has no rooms to synchronize."]
+
+    names: dict[str, int] = {}
+    for room in rooms:
+        names[room["name"]] = names.get(room["name"], 0) + 1
+    duplicate_layout_names = sorted(name for name, count in names.items() if count > 1)
+    blockers: list[str] = []
+    if duplicate_layout_names:
+        blockers.append(
+            "Spatial room names must be unique before synchronization: "
+            + ", ".join(repr(name) for name in duplicate_layout_names)
+            + "."
+        )
+
+    if kind == "room_verification":
+        target_name = str(analysis.input.get("name") or "").strip()
+        matches = [room for room in rooms if room["name"] == target_name]
+        if len(rooms) > 1 and len(matches) != 1:
+            blockers.append(
+                "The active single-room analysis cannot be mapped unambiguously. "
+                f"Rename exactly one spatial room to {target_name!r}, or reduce the layout "
+                "to a single room before synchronizing."
+            )
+        return blockers
+
+    raw_rooms = analysis.input.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return blockers
+    analysis_names = [
+        str(room.get("name") or "").strip()
+        for room in raw_rooms
+        if isinstance(room, dict)
+    ]
+    duplicate_analysis_names = sorted(
+        name for name in set(analysis_names) if name and analysis_names.count(name) > 1
+    )
+    if duplicate_analysis_names:
+        blockers.append(
+            "Analysis room names must be unique before spatial synchronization: "
+            + ", ".join(repr(name) for name in duplicate_analysis_names)
+            + "."
+        )
+    return blockers
 
 
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:

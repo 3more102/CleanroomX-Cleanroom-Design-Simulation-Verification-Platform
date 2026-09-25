@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import errno
 import json
 import os
 from pathlib import Path
@@ -352,13 +353,9 @@ def _project_document_text(project: ProjectDocument) -> str:
 
 
 _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
-    value
-    for value in (
-        getattr(os, "EINVAL", None),
-        getattr(os, "ENOTSUP", None),
-        getattr(os, "EOPNOTSUPP", None),
-    )
-    if isinstance(value, int)
+    errno.EINVAL,
+    getattr(errno, "ENOTSUP", errno.EINVAL),
+    getattr(errno, "EOPNOTSUPP", errno.EINVAL),
 }
 
 

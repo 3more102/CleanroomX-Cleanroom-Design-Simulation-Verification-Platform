@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import zipfile
@@ -280,6 +281,40 @@ def test_bundle_verifier_rejects_unmanifested_member(tmp_path):
 
     with pytest.raises(ProjectBundleError, match="member set does not match manifest"):
         inspect_project_bundle(unexpected)
+
+
+def test_bundle_verifier_rejects_unreferenced_manifest_dependency(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    valid = tmp_path / "valid.cleanroomx.zip"
+    export_project_bundle(valid, _consistency_project(), source_base=source)
+
+    hidden_payload = b'{"hidden":"unowned"}\n'
+    hidden_path = "dependencies/9999-unreferenced.json"
+    malicious = tmp_path / "unreferenced.cleanroomx.zip"
+
+    def transform(name: str, data: bytes):
+        if name != PROJECT_BUNDLE_MANIFEST:
+            return name, data
+        manifest = json.loads(data)
+        manifest["dependencies"].append(
+            {
+                "path": hidden_path,
+                "size_bytes": len(hidden_payload),
+                "sha256": hashlib.sha256(hidden_payload).hexdigest(),
+                "references": [],
+            }
+        )
+        return name, json.dumps(manifest).encode("utf-8")
+
+    _rewrite_zip(valid, malicious, transform)
+    with zipfile.ZipFile(malicious, "a", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr(hidden_path, hidden_payload)
+
+    with pytest.raises(ProjectBundleError, match="at least one project reference"):
+        inspect_project_bundle(malicious)
 
 
 def test_bundle_extraction_refuses_nonempty_destination_without_modifying_it(tmp_path):

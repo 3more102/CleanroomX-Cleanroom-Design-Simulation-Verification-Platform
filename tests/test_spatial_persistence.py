@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 
 import pytest
 
@@ -82,6 +83,10 @@ def test_spatial_layout_round_trip_preserves_stable_ids_and_references(tmp_path)
             "type must be one of",
         ),
         (
+            lambda layout: layout["devices"].append(copy.deepcopy(layout["devices"][0])),
+            "duplicate device id",
+        ),
+        (
             lambda layout: layout["devices"][0].__setitem__("room_id", "missing-room"),
             "references missing room id",
         ),
@@ -97,6 +102,22 @@ def test_project_save_rejects_corrupt_spatial_layout(mutator, message, tmp_path)
 
     with pytest.raises(ProjectFormatError, match=message):
         save_project_document(tmp_path / "bad.cleanroomx.json", project)
+
+
+def test_project_load_rejects_corrupt_spatial_layout_from_disk(tmp_path):
+    project = ProjectDocument(
+        name="Corrupt load",
+        metadata={SPATIAL_METADATA_KEY: _valid_layout()},
+    )
+    payload = project.to_dict()
+    payload["project"]["metadata"][SPATIAL_METADATA_KEY]["devices"][0]["room_id"] = (
+        "missing-room"
+    )
+    path = tmp_path / "corrupt.cleanroomx.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ProjectFormatError, match="references missing room id"):
+        load_project_document(path)
 
 
 def test_project_load_rejects_future_spatial_layout_version(tmp_path):

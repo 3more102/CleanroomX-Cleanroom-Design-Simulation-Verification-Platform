@@ -29,11 +29,11 @@ from .application import (
     validate_analysis_input,
     validate_application_registry,
 )
+from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
     ProjectWriteConflictError,
-    atomic_write_text,
     capture_project_file_revision,
     load_project_document,
     load_project_document_with_revision,

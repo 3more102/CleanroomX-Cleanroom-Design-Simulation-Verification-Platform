@@ -57,16 +57,39 @@ class _FrozenList(list):
         return self
 
 
-def _freeze_json_snapshot(value: Any) -> Any:
-    """Recursively copy JSON-compatible data into immutable container subclasses."""
+def _freeze_json_snapshot(
+    value: Any,
+    memo: dict[int, Any] | None = None,
+) -> Any:
+    """Recursively copy JSON-compatible data into immutable container subclasses.
+
+    A shared memo preserves aliases between result/diagnostic subtrees without
+    re-copying them. Strict JSON normalization already excludes reference cycles
+    from ordinary application runs.
+    """
+    if memo is None:
+        memo = {}
+
+    if isinstance(value, (dict, list, tuple)):
+        identity = id(value)
+        if identity in memo:
+            return memo[identity]
+
     if isinstance(value, dict):
-        return _FrozenDict(
-            (key, _freeze_json_snapshot(item)) for key, item in value.items()
+        frozen = _FrozenDict(
+            (key, _freeze_json_snapshot(item, memo))
+            for key, item in value.items()
         )
+        memo[id(value)] = frozen
+        return frozen
     if isinstance(value, list):
-        return _FrozenList(_freeze_json_snapshot(item) for item in value)
+        frozen = _FrozenList(_freeze_json_snapshot(item, memo) for item in value)
+        memo[id(value)] = frozen
+        return frozen
     if isinstance(value, tuple):
-        return tuple(_freeze_json_snapshot(item) for item in value)
+        frozen = tuple(_freeze_json_snapshot(item, memo) for item in value)
+        memo[id(value)] = frozen
+        return frozen
     return copy.deepcopy(value)
 
 
@@ -106,14 +129,17 @@ class AnalysisRun:
         # Frozen dataclass fields alone do not protect nested dictionaries/lists.
         # Snapshot each completed run so cached engineering evidence cannot be
         # altered through an alias or an extension retaining a field reference.
-        object.__setattr__(self, "result", _freeze_json_snapshot(self.result))
+        memo: dict[int, Any] = {}
         object.__setattr__(
-            self, "diagnostics", _freeze_json_snapshot(self.diagnostics)
+            self, "result", _freeze_json_snapshot(self.result, memo)
+        )
+        object.__setattr__(
+            self, "diagnostics", _freeze_json_snapshot(self.diagnostics, memo)
         )
         object.__setattr__(
             self,
             "plot",
-            None if self.plot is None else _freeze_json_snapshot(self.plot),
+            None if self.plot is None else _freeze_json_snapshot(self.plot, memo),
         )
 
     def to_dict(self) -> dict:

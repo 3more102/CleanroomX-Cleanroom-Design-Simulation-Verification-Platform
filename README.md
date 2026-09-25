@@ -711,6 +711,7 @@ The Release 2 integration branch consolidates the previously overlapping persist
 - guarded saved-project revisions and migration-aware source revision tracking;
 - one bounded project-wide Undo/Redo transaction stream for project, analysis, and spatial edits;
 - immutable analysis-run snapshots, exact-input provenance, external-dependency freshness checks, and integrity-checked persisted run history;
+- deterministic project-level headless batch execution with source-revision guards and per-analysis provenance;
 - versioned analysis plugin API v1;
 - integrity-checked portable project bundles and self-contained portable engineering HTML reports.
 

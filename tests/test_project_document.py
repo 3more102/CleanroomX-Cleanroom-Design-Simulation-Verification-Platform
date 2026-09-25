@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
     ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
@@ -37,6 +38,42 @@ def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):
     atomic_write_text(target, "new\n")
 
     assert target.read_text(encoding="utf-8") == "new\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_syncs_parent_directory_after_replace(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    synced = []
+
+    monkeypatch.setattr(
+        project_module,
+        "_sync_directory",
+        lambda directory: synced.append(directory),
+    )
+
+    atomic_write_text(target, "payload\n")
+
+    assert synced == [tmp_path]
+    assert target.read_text(encoding="utf-8") == "payload\n"
+
+
+def test_atomic_write_text_reports_committed_content_verification_failure(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    original_read_text = type(target).read_text
+
+    def corrupted_read_text(self, *args, **kwargs):
+        if self == target:
+            return "corrupted\n"
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(target), "read_text", corrupted_read_text)
+
+    with pytest.raises(OSError, match="verification failed"):
+        atomic_write_text(target, "payload\n")
+
+    assert target.read_bytes() == b"payload\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

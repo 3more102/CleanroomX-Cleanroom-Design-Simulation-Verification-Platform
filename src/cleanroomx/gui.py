@@ -42,6 +42,12 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .saved_revisions import (
+    restore_saved_revision_artifact,
+    save_project_document_guarded_with_revision,
+    scan_saved_revisions,
+)
+from .saved_revisions_ui import SavedVersionsCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -186,6 +192,7 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
+        self._restored_saved_revision_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
@@ -241,6 +248,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Open Project...", accelerator="Ctrl+O", command=self.open_project)
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
+        file_menu.add_command(label="Saved Versions...", command=self.show_saved_versions)
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
@@ -899,6 +907,7 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
+        self._restored_saved_revision_artifact = None
         self._begin_autosave_project(recovered.source_path)
 
         ui_state = recovered.ui_state
@@ -977,6 +986,69 @@ class CleanroomXApp:
             return False
         return True
 
+    def restore_saved_revision_path(self, path: str | Path) -> None:
+        restored = restore_saved_revision_artifact(path)
+        self._discard_current_autosave()
+        self.project = restored.project
+        self.project_path = None
+        self._project_file_revision = None
+        self._recovery_source_path = restored.source_path.resolve(strict=False)
+        self._restored_recovery_artifact = None
+        self._restored_saved_revision_artifact = restored.artifact_path
+        self._begin_autosave_project(self._recovery_source_path)
+        self.name_var.set(self.project.name)
+        self.description_var.set(self.project.description)
+        self._clear_run_cache()
+        self._refresh_analysis_list()
+        self._baseline_state = "__cleanroomx_saved_revision_requires_save_as__"
+        self.status_var.set(
+            "Restored saved version as an unsaved copy — use Save Project As to preserve it."
+        )
+        self.autosave_status_var.set("Autosave: saved-version copy")
+        self._update_title()
+
+    def show_saved_versions(self) -> bool:
+        source = self.project_path
+        if source is None and getattr(
+            self, "_restored_saved_revision_artifact", None
+        ) is not None:
+            source = getattr(self, "_recovery_source_path", None)
+        if source is None:
+            self.status_var.set("Save the project before browsing saved versions.")
+            return False
+        try:
+            scan = scan_saved_revisions(source)
+        except OSError as exc:
+            messagebox.showerror(
+                "Saved versions scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        if not scan.candidates and not scan.issues:
+            self.status_var.set(f"No saved versions found for {Path(source).name}.")
+            return False
+
+        dialog = SavedVersionsCenter(self.root, scan)
+        self.root.wait_window(dialog)
+        if dialog.result is None:
+            return False
+        if not self._confirm_project_replacement():
+            return False
+        try:
+            self.restore_saved_revision_path(dialog.result)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Saved version restore failed",
+                (
+                    f"{exc}\n\n"
+                    "The saved-version artifact and current project file were not changed."
+                ),
+                parent=self.root,
+            )
+            return False
+        return True
+
     def offer_startup_recovery(self) -> bool:
         return self.show_recovery_center(announce_empty=False)
 
@@ -992,6 +1064,7 @@ class CleanroomXApp:
         self._project_file_revision = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
+        self._restored_saved_revision_artifact = None
         self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
@@ -1031,6 +1104,7 @@ class CleanroomXApp:
         self._project_file_revision = project_revision
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
+        self._restored_saved_revision_artifact = None
         self._begin_autosave_project(project_path)
         self.name_var.set(project.name)
         self.description_var.set(project.description)
@@ -1052,6 +1126,8 @@ class CleanroomXApp:
             suffix = f" — {self.project_path.name}"
         elif getattr(self, "_restored_recovery_artifact", None) is not None:
             suffix = " — Recovered copy"
+        elif getattr(self, "_restored_saved_revision_artifact", None) is not None:
+            suffix = " — Saved-version copy"
         else:
             suffix = ""
         dirty = " *" if has_unsaved_changes else ""
@@ -1090,7 +1166,7 @@ class CleanroomXApp:
         try:
             if expected_revision is None:
                 expected_revision = capture_project_file_revision(self.project_path)
-            saved_path, saved_revision = save_project_document_guarded(
+            saved_path, saved_revision = save_project_document_guarded_with_revision(
                 self.project_path,
                 self.project,
                 expected_revision=expected_revision,
@@ -1129,16 +1205,19 @@ class CleanroomXApp:
         destination = Path(path)
         recovery_source = getattr(self, "_recovery_source_path", None)
         restored_artifact = getattr(self, "_restored_recovery_artifact", None)
+        restored_saved_revision = getattr(
+            self, "_restored_saved_revision_artifact", None
+        )
         if (
-            restored_artifact is not None
+            (restored_artifact is not None or restored_saved_revision is not None)
             and recovery_source is not None
             and destination.resolve(strict=False)
             == recovery_source.resolve(strict=False)
         ):
             messagebox.showwarning(
-                "Choose a different recovery file",
+                "Choose a different destination",
                 (
-                    "Recovered work must be saved to a different file first. "
+                    "Restored work must be saved to a different file first. "
                     "The original project is preserved so both versions remain "
                     "available for comparison."
                 ),
@@ -1174,7 +1253,7 @@ class CleanroomXApp:
             )
             if expected_revision is None:
                 expected_revision = capture_project_file_revision(destination)
-            saved_path, saved_revision = save_project_document_guarded(
+            saved_path, saved_revision = save_project_document_guarded_with_revision(
                 destination,
                 candidate,
                 expected_revision=expected_revision,
@@ -1200,6 +1279,7 @@ class CleanroomXApp:
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self._discard_restored_recovery()
+        self._restored_saved_revision_artifact = None
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
 

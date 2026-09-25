@@ -78,8 +78,6 @@ def test_tk_exception_boundary_records_traceback_and_surfaces_error(tmp_path, mo
     except RuntimeError:
         app._handle_tk_exception(*sys.exc_info())
 
-    for handler in gui_module.logging.getLogger("cleanroomx").handlers if hasattr(gui_module, "logging") else []:
-        handler.flush()
     records = [
         json.loads(line)
         for line in session.log_path.read_text(encoding="utf-8").splitlines()

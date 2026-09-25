@@ -8,7 +8,12 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    save_project_document_with_revision,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -872,3 +877,105 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+
+def test_save_project_blocks_external_file_change_and_preserves_disk_version(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    class Text:
+        def get(self, *args):
+            return '{"value": 2}'
+
+    path, opened_revision = save_project_document_with_revision(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(
+            name="Opened",
+            analyses=[
+                AnalysisDocument(
+                    id="a",
+                    name="A",
+                    kind="room_verification",
+                    input={"value": 1},
+                )
+            ],
+            active_analysis_id="a",
+        ),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(
+        name="Local",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app.project_path = path
+    app._project_file_revision = opened_revision
+    app._editor_analysis_id = "a"
+    app.input_text = Text()
+    app.name_var = Value("Local")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    captured_saved_state = []
+    notified_saves = []
+    recovery_checkpoints = []
+    app._capture_saved_state = lambda: captured_saved_state.append(True)
+    app._notify_explicit_save = lambda saved: notified_saves.append(saved)
+    app._schedule_recovery_checkpoint = lambda: recovery_checkpoints.append(True)
+
+    save_project_document_with_revision(
+        path,
+        ProjectDocument(
+            name="External edit",
+            analyses=[
+                AnalysisDocument(
+                    id="a",
+                    name="A",
+                    kind="room_verification",
+                    input={"external": True},
+                )
+            ],
+            active_analysis_id="a",
+        ),
+    )
+    external_bytes = path.read_bytes()
+
+    error = {}
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: error.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.save_project()
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path).name == "External edit"
+    assert app.project.analysis_by_id("a").input == {"value": 2}
+    assert captured_saved_state == []
+    assert notified_saves == []
+    assert recovery_checkpoints == [True]
+    assert error["title"] == "Project changed on disk"
+    assert "did not overwrite" in error["message"]
+    assert "Save Project As" in error["message"]
+    assert app.status_var.value == "Save blocked: project changed on disk"

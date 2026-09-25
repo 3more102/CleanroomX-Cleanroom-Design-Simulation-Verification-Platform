@@ -17,7 +17,7 @@ class SpatialLayoutFormatError(ValueError):
 def _finite_number(value: Any, default: float) -> float:
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return default
     return number if math.isfinite(number) else default
 
@@ -205,7 +205,10 @@ def _require_string(value: Any, path: str) -> str:
 def _require_number(value: Any, path: str, *, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise SpatialLayoutFormatError(f"{path} must be a finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise SpatialLayoutFormatError(f"{path} must be a finite number") from exc
     if not math.isfinite(number):
         raise SpatialLayoutFormatError(f"{path} must be a finite number")
     if positive and number <= 0:

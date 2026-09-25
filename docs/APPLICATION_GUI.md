@@ -80,6 +80,8 @@ For room-verification and multi-room project-verification analyses, **Sync dimen
 
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
 
+Spatial editing also runs non-blocking design guardrails. Overlapping room footprints and devices that are unassigned, outside their assigned room, or associated with a different room are reported in the workspace and highlighted in the 2D plan. Moving an assigned room carries its placed devices with it. Moving a device or editing its coordinates automatically updates its room association from the plan position. These checks are geometry-consistency warnings only; they do not alter engineering acceptance or solver results.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.

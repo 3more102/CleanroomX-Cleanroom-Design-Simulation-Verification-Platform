@@ -252,20 +252,6 @@ def load_project_document(path: str | Path) -> ProjectDocument:
 _ANY_FILE_STATE = object()
 
 
-def _fsync_directory(directory: Path) -> None:
-    """Durably commit a rename on POSIX filesystems that support directory fsync."""
-    if os.name != "posix":
-        return
-    flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        flags |= os.O_DIRECTORY
-    descriptor = os.open(directory, flags)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
 def _format_conflict(
     destination: Path,
     expected: ProjectFileFingerprint | None,
@@ -316,7 +302,6 @@ def atomic_write_text(
                 )
 
         temp_path.replace(destination)
-        _fsync_directory(destination.parent)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

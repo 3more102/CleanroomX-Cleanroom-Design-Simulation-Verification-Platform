@@ -234,7 +234,7 @@ def test_project_save_rejects_corrupt_in_memory_spatial_metadata_before_write(tm
     )
     path = tmp_path / "invalid.cleanroomx.json"
 
-    with pytest.raises(ProjectFormatError, match="devices\[0\]\.z_m must be a finite number"):
+    with pytest.raises(ProjectFormatError, match=r"devices\[0\]\.z_m must be a finite number"):
         save_project_document(path, project)
 
     assert not path.exists()

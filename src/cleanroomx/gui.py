@@ -181,10 +181,14 @@ class CleanroomXApp:
         self.run_state_var = tk.StringVar(value="READY")
         self.analysis_summary_var = tk.StringVar(value="0 analyses")
         self.active_workflow_var = tk.StringVar(value="No active analysis")
+        self.analysis_filter_var = tk.StringVar()
+        self.project_state_var = tk.StringVar(value="UNSAVED")
+        self._workspace_buttons: dict[str, ttk.Button] = {}
 
         self._configure_style()
         self._build_menu()
         self._build_layout()
+        self.analysis_filter_var.trace_add("write", self._on_analysis_filter_changed)
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.name_var.trace_add("write", lambda *_: self._update_title())
@@ -246,6 +250,9 @@ class CleanroomXApp:
             foreground=[("selected", "#102a43")],
         )
         style.configure("Status.TLabel", background="#d9e2ec", foreground="#243447", padding=(8, 4))
+        style.configure("StatusMeta.TLabel", background="#d9e2ec", foreground="#486581", padding=(8, 4), font=("Segoe UI", 8, "bold"))
+        style.configure("Workspace.TFrame", background="#e7edf4")
+        style.configure("WorkspaceHeader.TLabel", background="#e7edf4", foreground="#486581", font=("Segoe UI", 8, "bold"))
         style.configure(
             "RunState.TLabel",
             background="#d9e2ec",
@@ -414,6 +421,18 @@ class CleanroomXApp:
             justify="left",
         ).pack(anchor="w", pady=(1, 6))
 
+        filter_row = ttk.Frame(sidebar)
+        filter_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(filter_row, text="Filter").pack(side="left", padx=(0, 5))
+        filter_entry = ttk.Entry(filter_row, textvariable=self.analysis_filter_var)
+        filter_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            filter_row,
+            text="×",
+            width=3,
+            command=lambda: self.analysis_filter_var.set(""),
+        ).pack(side="left", padx=(4, 0))
+
         sidebar_actions = ttk.Frame(sidebar)
         sidebar_actions.pack(fill="x", pady=(0, 6))
         ttk.Button(sidebar_actions, text="Rename", command=self.rename_analysis).pack(
@@ -438,6 +457,21 @@ class CleanroomXApp:
 
         content = ttk.Frame(panes)
         panes.add(content, weight=4)
+
+        workspacebar = ttk.Frame(content, padding=(6, 4), style="Workspace.TFrame")
+        workspacebar.pack(fill="x", pady=(0, 4))
+        ttk.Label(workspacebar, text="WORKSPACE", style="WorkspaceHeader.TLabel").pack(
+            side="left", padx=(0, 8)
+        )
+        for title in ("Design 2D + 3D", "Input", "Results", "Report", "Diagnostics", "Plot"):
+            button = ttk.Button(
+                workspacebar,
+                text=title.replace(" 2D + 3D", ""),
+                command=lambda t=title: self._select_workspace_tab(t),
+            )
+            button.pack(side="left", padx=2)
+            self._workspace_buttons[title] = button
+
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
 
@@ -502,15 +536,24 @@ class CleanroomXApp:
         self.plot_canvas = tk.Canvas(self.plot_tab, highlightthickness=0, background="#ffffff")
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_workspace_tab_changed)
 
-        status = ttk.Label(
-            self.root,
+        status = ttk.Frame(self.root, style="Toolbar.TFrame")
+        status.pack(fill="x", side="bottom")
+        ttk.Label(
+            status,
             textvariable=self.status_var,
             anchor="w",
             relief="flat",
             style="Status.TLabel",
-        )
-        status.pack(fill="x", side="bottom")
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Label(
+            status,
+            textvariable=self.project_state_var,
+            anchor="e",
+            style="StatusMeta.TLabel",
+        ).pack(side="right")
+        self._on_workspace_tab_changed()
 
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)
@@ -530,6 +573,20 @@ class CleanroomXApp:
         wrap = "word" if self.wrap_outputs_var.get() else "none"
         for widget in (self.result_text, self.report_text, self.diagnostics_text):
             widget.configure(wrap=wrap)
+
+    def _select_workspace_tab(self, title: str) -> None:
+        for tab_id in self.notebook.tabs():
+            if self.notebook.tab(tab_id, "text") == title:
+                self.notebook.select(tab_id)
+                return
+
+    def _on_workspace_tab_changed(self, event=None) -> None:
+        current = self.notebook.select()
+        if not current:
+            return
+        title = self.notebook.tab(current, "text")
+        for tab_title, button in self._workspace_buttons.items():
+            button.configure(style="Accent.TButton" if tab_title == title else "TButton")
 
     def _set_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")
@@ -678,32 +735,65 @@ class CleanroomXApp:
             return not self._has_unsaved_changes()
         return True
 
-    def _refresh_analysis_list(self, select_id: str | None = None) -> None:
+    def _populate_analysis_tree(self, select_id: str | None = None) -> None:
+        query = self.analysis_filter_var.get().strip().lower()
+        self._selection_guard = True
+        try:
+            for item in self.analysis_tree.get_children():
+                self.analysis_tree.delete(item)
+            visible = 0
+            for analysis in self.project.analyses:
+                workflow = ANALYSIS_SPECS[analysis.kind].title
+                haystack = f"{analysis.name} {analysis.kind} {workflow}".lower()
+                if query and query not in haystack:
+                    continue
+                self.analysis_tree.insert(
+                    "",
+                    "end",
+                    iid=analysis.id,
+                    text=analysis.name,
+                    values=(workflow,),
+                )
+                visible += 1
+            if select_id and self.analysis_tree.exists(select_id):
+                self.analysis_tree.selection_set(select_id)
+                self.analysis_tree.focus(select_id)
+                self.analysis_tree.see(select_id)
+        finally:
+            self._selection_guard = False
+
         count = len(self.project.analyses)
-        if hasattr(self, "analysis_summary_var"):
-            self.analysis_summary_var.set(f"{count} analysis{'es' if count != 1 else ''}")
-        for item in self.analysis_tree.get_children():
-            self.analysis_tree.delete(item)
-        for analysis in self.project.analyses:
-            self.analysis_tree.insert(
-                "",
-                "end",
-                iid=analysis.id,
-                text=analysis.name,
-                values=(ANALYSIS_SPECS[analysis.kind].title,),
+        if query:
+            self.analysis_summary_var.set(
+                f"{count} analysis{'es' if count != 1 else ''} · {visible} shown"
             )
+        else:
+            self.analysis_summary_var.set(f"{count} analysis{'es' if count != 1 else ''}")
+
+    def _on_analysis_filter_changed(self, *_args) -> None:
+        if not hasattr(self, "analysis_tree"):
+            return
+        target = self._editor_analysis_id or self.project.active_analysis_id
+        self._populate_analysis_tree(select_id=target)
+
+    def _refresh_analysis_list(self, select_id: str | None = None) -> None:
         target = select_id or self.project.active_analysis_id
-        if target and self.analysis_tree.exists(target):
-            self.analysis_tree.selection_set(target)
-            self.analysis_tree.focus(target)
-            self.analysis_tree.see(target)
-            self._load_analysis_into_editor(self.project.analysis_by_id(target))
-        elif self.project.analyses:
-            first = self.project.analyses[0].id
-            self.project.active_analysis_id = first
-            self.analysis_tree.selection_set(first)
-            self.analysis_tree.focus(first)
-            self._load_analysis_into_editor(self.project.analyses[0])
+        self._populate_analysis_tree(select_id=target)
+        if target is not None:
+            try:
+                analysis = self.project.analysis_by_id(target)
+            except KeyError:
+                analysis = None
+            if analysis is not None:
+                self._load_analysis_into_editor(analysis)
+                if hasattr(self, "spatial_workspace"):
+                    self.spatial_workspace.refresh()
+                return
+        if self.project.analyses:
+            first = self.project.analyses[0]
+            self.project.active_analysis_id = first.id
+            self._populate_analysis_tree(select_id=first.id)
+            self._load_analysis_into_editor(first)
         else:
             self._editor_analysis_id = None
             if hasattr(self, "active_workflow_var"):
@@ -900,8 +990,17 @@ class CleanroomXApp:
         if not callable(title_method):
             return
         suffix = "" if self.project_path is None else f" — {self.project_path.name}"
-        dirty = " *" if self._has_unsaved_changes() else ""
+        is_dirty = self._has_unsaved_changes()
+        dirty = " *" if is_dirty else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        if hasattr(self, "project_state_var"):
+            if is_dirty:
+                state = "MODIFIED"
+            elif self.project_path is None:
+                state = "UNSAVED"
+            else:
+                state = f"SAVED · {self.project_path.name}"
+            self.project_state_var.set(state)
 
     def save_project(self) -> None:
         try:

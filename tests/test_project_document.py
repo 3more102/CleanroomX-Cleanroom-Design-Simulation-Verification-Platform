@@ -117,6 +117,7 @@ def test_project_loader_reports_invalid_json(tmp_path):
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
 
+
 def test_project_v1_round_trip_preserves_unknown_extension_fields(tmp_path):
     source = {
         "schema": PROJECT_SCHEMA,
@@ -247,6 +248,15 @@ def test_project_extension_fields_are_detached_from_parsed_source():
     source["vendor_document"]["nested"].append("mutated")
     source["project"]["vendor_project"]["nested"].append("mutated")
     source["analyses"][0]["vendor_analysis"]["nested"].append("mutated")
+
+    assert project.top_level_extension_fields["vendor_document"]["nested"] == ["original"]
+    assert project.project_extension_fields["vendor_project"]["nested"] == ["original"]
+    assert project.analyses[0].extension_fields["vendor_analysis"]["nested"] == ["original"]
+
+    encoded = project.to_dict()
+    encoded["vendor_document"]["nested"].append("serialized mutation")
+    encoded["project"]["vendor_project"]["nested"].append("serialized mutation")
+    encoded["analyses"][0]["vendor_analysis"]["nested"].append("serialized mutation")
 
     assert project.top_level_extension_fields["vendor_document"]["nested"] == ["original"]
     assert project.project_extension_fields["vendor_project"]["nested"] == ["original"]

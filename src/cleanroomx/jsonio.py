@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -9,9 +10,20 @@ def _reject_non_finite_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON constant is not allowed: {value}")
 
 
+def _parse_finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"JSON number is outside finite float range: {value}")
+    return parsed
+
+
 def strict_json_loads(text: str) -> Any:
-    """Parse standards-compliant JSON and reject NaN/Infinity extensions."""
-    return json.loads(text, parse_constant=_reject_non_finite_constant)
+    """Parse JSON without admitting non-finite runtime numeric values."""
+    return json.loads(
+        text,
+        parse_constant=_reject_non_finite_constant,
+        parse_float=_parse_finite_float,
+    )
 
 
 def load_strict_json(path: str | Path) -> Any:

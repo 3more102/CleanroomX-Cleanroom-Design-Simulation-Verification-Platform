@@ -88,6 +88,21 @@ def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
     return rows
 
 
+def _optional_finite_float(value, *, positive: bool = False) -> float | None:
+    """Return a finite numeric value, or None when visualization data is unusable."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    if positive and number <= 0:
+        return None
+    return number
+
+
 def analysis_matches_filter(analysis: AnalysisDocument, query: str) -> bool:
     """Case-insensitive sidebar filtering across analysis name, kind, and catalog title."""
     needle = query.strip().casefold()
@@ -131,11 +146,7 @@ def extract_pressure_cascade(payload: dict) -> list[dict]:
             continue
         if not isinstance(lower, str) or not lower.strip():
             continue
-        minimum = item.get("min_delta_pa")
-        try:
-            minimum_value = None if minimum is None else float(minimum)
-        except (TypeError, ValueError):
-            minimum_value = None
+        minimum_value = _optional_finite_float(item.get("min_delta_pa"), positive=True)
         links.append({
             "higher_pressure_room": higher.strip(),
             "lower_pressure_room": lower.strip(),
@@ -177,32 +188,27 @@ def extract_room_visuals(payload: dict) -> list[dict]:
         seen.add(name)
 
         def positive_number(key: str, fallback: float) -> tuple[float, bool]:
-            value = item.get(key)
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                return fallback, False
-            if not math.isfinite(number) or number <= 0:
-                return fallback, False
-            return number, True
+            number = _optional_finite_float(item.get(key), positive=True)
+            return (fallback, False) if number is None else (number, True)
 
         def finite_number(key: str) -> tuple[float | None, bool]:
-            value = item.get(key)
-            try:
-                number = float(value)
-            except (TypeError, ValueError):
-                return None, False
-            if not math.isfinite(number):
-                return None, False
-            return number, True
+            number = _optional_finite_float(item.get(key))
+            return number, number is not None
 
         length_m, length_real = positive_number("length_m", 4.0)
         width_m, width_real = positive_number("width_m", 4.0)
         height_m, height_real = positive_number("height_m", 3.0)
         x_m, x_real = finite_number("x_m")
         y_m, y_real = finite_number("y_m")
-        airflow = item.get("supply_airflow_m3_h", item.get("cleanroom_airflow_m3_h"))
-        pressure = item.get("observed_pressure_pa", item.get("pressure_pa"))
+        airflow = _optional_finite_float(
+            item.get("supply_airflow_m3_h", item.get("cleanroom_airflow_m3_h")),
+            positive=True,
+        )
+        pressure = _optional_finite_float(
+            item.get("observed_pressure_pa", item.get("pressure_pa"))
+        )
+        min_ach = _optional_finite_float(item.get("min_ach"), positive=True)
+        min_pressure = _optional_finite_float(item.get("min_pressure_pa"))
         rooms.append({
             "name": name,
             "length_m": length_m,
@@ -215,8 +221,97 @@ def extract_room_visuals(payload: dict) -> list[dict]:
             "y_m": y_m,
             "airflow_m3_h": airflow,
             "pressure_pa": pressure,
+            "min_ach": min_ach,
+            "min_pressure_pa": min_pressure,
         })
     return rooms
+
+
+def room_visual_engineering_metrics(room: dict) -> dict:
+    """Calculate visualization-only room requirement metrics without using display defaults."""
+    airflow = _optional_finite_float(room.get("airflow_m3_h"), positive=True)
+    min_ach = _optional_finite_float(room.get("min_ach"), positive=True)
+    pressure = _optional_finite_float(room.get("pressure_pa"))
+    min_pressure = _optional_finite_float(room.get("min_pressure_pa"))
+
+    ach = None
+    if (
+        room.get("dimensions_real")
+        and room.get("height_real")
+        and airflow is not None
+    ):
+        length = _optional_finite_float(room.get("length_m"), positive=True)
+        width = _optional_finite_float(room.get("width_m"), positive=True)
+        height = _optional_finite_float(room.get("height_m"), positive=True)
+        if length is not None and width is not None and height is not None:
+            volume = length * width * height
+            if volume > 0:
+                ach = airflow / volume
+
+    ach_status = "not_required"
+    if min_ach is not None:
+        ach_status = "unknown" if ach is None else ("pass" if ach >= min_ach else "fail")
+
+    pressure_status = "not_required"
+    if min_pressure is not None:
+        pressure_status = (
+            "unknown"
+            if pressure is None
+            else ("pass" if pressure >= min_pressure else "fail")
+        )
+
+    required_statuses = [
+        status
+        for status in (ach_status, pressure_status)
+        if status != "not_required"
+    ]
+    if any(status == "fail" for status in required_statuses):
+        status = "fail"
+    elif required_statuses and all(status == "pass" for status in required_statuses):
+        status = "pass"
+    else:
+        status = "unknown"
+
+    return {
+        "ach": ach,
+        "min_ach": min_ach,
+        "ach_status": ach_status,
+        "pressure_pa": pressure,
+        "min_pressure_pa": min_pressure,
+        "pressure_status": pressure_status,
+        "status": status,
+    }
+
+
+def evaluate_pressure_cascade_visuals(rooms: list[dict], links: list[dict]) -> list[dict]:
+    """Attach observed differential pressure and requirement state to cascade links."""
+    pressure_by_room = {
+        room["name"]: _optional_finite_float(room.get("pressure_pa"))
+        for room in rooms
+        if isinstance(room.get("name"), str)
+    }
+    evaluated: list[dict] = []
+    for link in links:
+        higher = link.get("higher_pressure_room")
+        lower = link.get("lower_pressure_room")
+        minimum = _optional_finite_float(link.get("min_delta_pa"), positive=True)
+        higher_pressure = pressure_by_room.get(higher)
+        lower_pressure = pressure_by_room.get(lower)
+        observed_delta = None
+        if higher_pressure is not None and lower_pressure is not None:
+            observed_delta = higher_pressure - lower_pressure
+
+        status = "unknown"
+        if observed_delta is not None and minimum is not None:
+            status = "pass" if observed_delta >= minimum else "fail"
+
+        evaluated.append({
+            **link,
+            "min_delta_pa": minimum,
+            "observed_delta_pa": observed_delta,
+            "status": status,
+        })
+    return evaluated
 
 
 class AnalysisPicker(tk.Toplevel):
@@ -1570,12 +1665,13 @@ class CleanroomXApp:
     ) -> None:
         if room is None:
             return
-        panel_width = 270
+        panel_width = 292
         x1 = width - 18
         x0 = max(18, x1 - panel_width)
         y0 = 54
         area = room["length_m"] * room["width_m"]
         volume = area * room["height_m"]
+        metrics = room_visual_engineering_metrics(room)
         lines = [
             room["name"],
             f'{room["length_m"]:.2f} × {room["width_m"]:.2f} × {room["height_m"]:.2f} m',
@@ -1585,9 +1681,36 @@ class CleanroomXApp:
         if room.get("position_real"):
             lines.append(f'Origin  ({room["x_m"]:.2f}, {room["y_m"]:.2f}) m')
         if room.get("airflow_m3_h") is not None:
-            lines.append(f'Airflow  {room["airflow_m3_h"]} m³/h')
-        if room.get("pressure_pa") is not None:
-            lines.append(f'Pressure  {room["pressure_pa"]} Pa')
+            lines.append(f'Airflow  {room["airflow_m3_h"]:g} m³/h')
+
+        ach = metrics["ach"]
+        min_ach = metrics["min_ach"]
+        if min_ach is not None:
+            if ach is None:
+                lines.append(f"ACH  unavailable  • min {min_ach:g}  • UNKNOWN")
+            else:
+                lines.append(
+                    f'ACH  {ach:.1f}  • min {min_ach:g}  • {metrics["ach_status"].upper()}'
+                )
+        elif ach is not None:
+            lines.append(f"ACH  {ach:.1f}")
+
+        pressure = metrics["pressure_pa"]
+        min_pressure = metrics["min_pressure_pa"]
+        if min_pressure is not None:
+            if pressure is None:
+                lines.append(f"Pressure  unavailable  • min {min_pressure:g} Pa  • UNKNOWN")
+            else:
+                lines.append(
+                    f'Pressure  {pressure:g} Pa  • min {min_pressure:g}  • '
+                    f'{metrics["pressure_status"].upper()}'
+                )
+        elif pressure is not None:
+            lines.append(f"Pressure  {pressure:g} Pa")
+
+        if metrics["status"] in {"pass", "fail"}:
+            lines.append(f'Room requirements  {metrics["status"].upper()}')
+
         y1 = min(height - 18, y0 + 34 + 22 * len(lines))
         canvas.create_rectangle(
             x0,
@@ -1607,12 +1730,19 @@ class CleanroomXApp:
             font=("Segoe UI", 8, "bold"),
         )
         for index, line in enumerate(lines):
+            fill = "#f8fafc" if index == 0 else "#cbd5e1"
+            if line.endswith("PASS"):
+                fill = "#86efac"
+            elif line.endswith("FAIL"):
+                fill = "#fca5a5"
+            elif line.endswith("UNKNOWN"):
+                fill = "#cbd5e1"
             canvas.create_text(
                 x0 + 14,
                 y0 + 34 + index * 22,
                 anchor="nw",
                 text=line,
-                fill="#f8fafc" if index == 0 else "#cbd5e1",
+                fill=fill,
                 font=("Segoe UI", 10, "bold" if index == 0 else "normal"),
             )
 
@@ -1676,19 +1806,24 @@ class CleanroomXApp:
         canvas.delete("all")
         width = max(canvas.winfo_width(), 640)
         height = max(canvas.winfo_height(), 420)
-        rooms = extract_room_visuals(self._visual_payload())
+        payload = self._visual_payload()
+        rooms = extract_room_visuals(payload)
         if not rooms:
             canvas.create_text(width / 2, height / 2 - 12, text="No room geometry found in the selected analysis.", fill="#e2e8f0", font=("Segoe UI", 13, "bold"))
             canvas.create_text(width / 2, height / 2 + 18, text="Use an analysis containing a rooms[] list to populate the 2D workspace.", fill="#94a3b8", font=("Segoe UI", 10))
             return
 
+        room_metrics = {
+            room["name"]: room_visual_engineering_metrics(room)
+            for room in rooms
+        }
         placed, fully_scaled = self._room_layout(rooms)
         declared_positions = all(room.get("position_real") for room in rooms)
         min_x = min(room["x"] for room in placed)
         min_y = min(room["y"] for room in placed)
         max_x = max(room["x"] + room["length_m"] for room in placed)
         max_y = max(room["y"] + room["width_m"] for room in placed)
-        pad = 52
+        pad = 68
         scale = min((width - 2 * pad) / max(max_x - min_x, 1.0), (height - 2 * pad) / max(max_y - min_y, 1.0))
         scale = max(8.0, min(scale, 95.0)) * self._visual_zoom
 
@@ -1711,21 +1846,36 @@ class CleanroomXApp:
             fill="#94a3b8",
             font=("Segoe UI", 9),
         )
+        canvas.create_text(
+            18,
+            38,
+            anchor="nw",
+            text="Requirement status: green PASS  •  red FAIL  •  blue UNKNOWN/not declared",
+            fill="#64748b",
+            font=("Segoe UI", 8),
+        )
         palette = ("#164e63", "#1e3a8a", "#3f3f46", "#14532d", "#581c87", "#7c2d12")
+        status_colors = {
+            "pass": "#22c55e",
+            "fail": "#ef4444",
+            "unknown": "#93c5fd",
+        }
         for index, room in enumerate(placed):
+            metrics = room_metrics[room["name"]]
             x0 = pad + (room["x"] - min_x) * scale
             y0 = pad + (room["y"] - min_y) * scale
             x1 = x0 + room["length_m"] * scale
             y1 = y0 + room["width_m"] * scale
             room_tag = f"room-2d-{index}"
             selected = room["name"] == self._selected_room_name
+            outline = "#facc15" if selected else status_colors[metrics["status"]]
             canvas.create_rectangle(
                 x0,
                 y0,
                 x1,
                 y1,
                 fill=palette[index % len(palette)],
-                outline="#facc15" if selected else "#93c5fd",
+                outline=outline,
                 width=4 if selected else 2,
                 tags=(room_tag,),
             )
@@ -1752,17 +1902,27 @@ class CleanroomXApp:
                 lambda event, room_name=room["name"]: self._select_visual_room(room_name),
             )
             meta = []
-            if room["airflow_m3_h"] is not None:
-                meta.append(f'Q {room["airflow_m3_h"]} m³/h')
+            if metrics["ach"] is not None:
+                meta.append(f'ACH {metrics["ach"]:.1f}')
+            elif room["airflow_m3_h"] is not None:
+                meta.append(f'Q {room["airflow_m3_h"]:g} m³/h')
             if room["pressure_pa"] is not None:
-                meta.append(f'P {room["pressure_pa"]} Pa')
+                meta.append(f'P {room["pressure_pa"]:g} Pa')
+            if metrics["status"] in {"pass", "fail"}:
+                meta.append(metrics["status"].upper())
             if meta:
                 canvas.create_text(
                     (x0 + x1) / 2,
                     min(y1 - 12, (y0 + y1) / 2 + 28),
                     text="  •  ".join(meta),
-                    fill="#bfdbfe",
-                    font=("Segoe UI", 8),
+                    fill=(
+                        "#86efac"
+                        if metrics["status"] == "pass"
+                        else "#fca5a5"
+                        if metrics["status"] == "fail"
+                        else "#bfdbfe"
+                    ),
+                    font=("Segoe UI", 8, "bold" if metrics["status"] != "unknown" else "normal"),
                     tags=(room_tag,),
                 )
 
@@ -1773,7 +1933,15 @@ class CleanroomXApp:
             )
             for room in placed
         }
-        pressure_links = extract_pressure_cascade(self._visual_payload())
+        pressure_links = evaluate_pressure_cascade_visuals(
+            rooms,
+            extract_pressure_cascade(payload),
+        )
+        cascade_colors = {
+            "pass": "#22c55e",
+            "fail": "#f87171",
+            "unknown": "#facc15",
+        }
         for link in pressure_links:
             start = centers.get(link["higher_pressure_room"])
             end = centers.get(link["lower_pressure_room"])
@@ -1781,24 +1949,33 @@ class CleanroomXApp:
                 continue
             sx, sy = start
             ex, ey = end
+            color = cascade_colors[link["status"]]
             canvas.create_line(
                 sx,
                 sy,
                 ex,
                 ey,
-                fill="#facc15",
-                width=2,
+                fill=color,
+                width=3 if link["status"] == "fail" else 2,
                 dash=(6, 4),
                 arrow="last",
                 arrowshape=(10, 12, 4),
             )
             minimum = link["min_delta_pa"]
-            label = "pressure cascade" if minimum is None else f"Δ ≥ {minimum:g} Pa"
+            observed = link["observed_delta_pa"]
+            if observed is not None and minimum is not None:
+                label = f'Δ {observed:g} Pa / min {minimum:g} • {link["status"].upper()}'
+            elif minimum is not None:
+                label = f"Δ unknown / min {minimum:g} Pa"
+            elif observed is not None:
+                label = f"Δ {observed:g} Pa"
+            else:
+                label = "pressure cascade"
             canvas.create_text(
                 (sx + ex) / 2,
                 (sy + ey) / 2 - 10,
                 text=label,
-                fill="#fde68a",
+                fill=color,
                 font=("Segoe UI", 8, "bold"),
             )
 
@@ -1819,6 +1996,10 @@ class CleanroomXApp:
             canvas.create_text(width / 2, height / 2 + 18, text="The preview activates when the selected analysis contains rooms[].", fill="#94a3b8", font=("Segoe UI", 10))
             return
 
+        room_metrics = {
+            room["name"]: room_visual_engineering_metrics(room)
+            for room in rooms
+        }
         placed, fully_scaled = self._room_layout(rooms)
         declared_positions = all(room.get("position_real") for room in rooms)
         iso_x = 0.74
@@ -1855,7 +2036,7 @@ class CleanroomXApp:
         max_ry = max(point[1] for point in raw_points)
         raw_w = max(max_rx - min_rx, 1.0)
         raw_h = max(max_ry - min_ry, 1.0)
-        scale = min((width - 150) / raw_w, (height - 130) / raw_h)
+        scale = min((width - 150) / raw_w, (height - 150) / raw_h)
         scale = max(7.0, min(scale, 55.0)) * self._visual_zoom
         origin_x = (width - (min_rx + max_rx) * scale) / 2
         origin_y = (height - (min_ry + max_ry) * scale) / 2
@@ -1868,6 +2049,11 @@ class CleanroomXApp:
             )
 
         palette = ("#0e7490", "#1d4ed8", "#52525b", "#15803d", "#7e22ce", "#c2410c")
+        status_colors = {
+            "pass": "#22c55e",
+            "fail": "#ef4444",
+            "unknown": "#60a5fa",
+        }
         ordered = sorted(
             enumerate(placed),
             key=lambda pair: rotate_xy(
@@ -1877,6 +2063,7 @@ class CleanroomXApp:
             reverse=True,
         )
         for index, room in ordered:
+            metrics = room_metrics[room["name"]]
             x, y = room["x"], room["y"]
             l, w, h = room["length_m"], room["width_m"], room["height_m"]
             p000 = project(x, y, 0)
@@ -1890,9 +2077,10 @@ class CleanroomXApp:
             base = palette[index % len(palette)]
             room_tag = f"room-3d-{index}"
             selected = room["name"] == self._selected_room_name
-            outline = "#facc15" if selected else "#60a5fa"
-            top_outline = "#facc15" if selected else "#bfdbfe"
-            side_width = 3 if selected else 1
+            requirement_outline = status_colors[metrics["status"]]
+            outline = "#facc15" if selected else requirement_outline
+            top_outline = "#fde047" if selected else requirement_outline
+            side_width = 3 if selected or metrics["status"] == "fail" else 1
             top_width = 4 if selected else 2
             canvas.create_polygon(
                 *p010, *p110, *p111, *p011,
@@ -1916,13 +2104,26 @@ class CleanroomXApp:
                 "<Button-1>",
                 lambda event, room_name=room["name"]: self._select_visual_room(room_name),
             )
+            meta = []
             if room["height_real"]:
+                meta.append(f"h={h:.2g} m")
+            if metrics["ach"] is not None:
+                meta.append(f'ACH={metrics["ach"]:.1f}')
+            if metrics["status"] in {"pass", "fail"}:
+                meta.append(metrics["status"].upper())
+            if meta:
                 canvas.create_text(
                     cx,
                     cy + 9,
-                    text=f'h={h:.2g} m',
-                    fill="#dbeafe",
-                    font=("Segoe UI", 8),
+                    text=" • ".join(meta),
+                    fill=(
+                        "#86efac"
+                        if metrics["status"] == "pass"
+                        else "#fca5a5"
+                        if metrics["status"] == "fail"
+                        else "#dbeafe"
+                    ),
+                    font=("Segoe UI", 8, "bold" if metrics["status"] != "unknown" else "normal"),
                     tags=(room_tag,),
                 )
 
@@ -1946,6 +2147,14 @@ class CleanroomXApp:
             text=note,
             fill="#94a3b8",
             font=("Segoe UI", 9),
+        )
+        canvas.create_text(
+            18,
+            38,
+            anchor="nw",
+            text="Requirement status: green PASS  •  red FAIL  •  blue UNKNOWN/not declared",
+            fill="#64748b",
+            font=("Segoe UI", 8),
         )
         selected_room = next(
             (room for room in rooms if room["name"] == self._selected_room_name),

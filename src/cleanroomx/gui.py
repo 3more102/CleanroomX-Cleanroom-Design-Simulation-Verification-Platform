@@ -12,7 +12,13 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__
-from .autosave import DEFAULT_AUTOSAVE_INTERVAL_SECONDS, AutosaveManager
+from .autosave import (
+    DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
+    AutosaveManager,
+    discard_recovery_artifact,
+    restore_recovery_artifact,
+    scan_recovery_artifacts,
+)
 from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
@@ -31,6 +37,7 @@ from .project import (
     new_project,
     save_project_document,
 )
+from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -169,6 +176,8 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._recovery_source_path: Path | None = None
+        self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
@@ -223,6 +232,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Open Project...", accelerator="Ctrl+O", command=self.open_project)
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
+        file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
         file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
@@ -503,7 +513,11 @@ class CleanroomXApp:
         self.project.description = self.description_var.get()
 
     def _base_dir(self) -> Path | None:
-        return None if self.project_path is None else self.project_path.parent
+        if self.project_path is not None:
+            return self.project_path.parent
+        if self._recovery_source_path is not None:
+            return self._recovery_source_path.parent
+        return None
 
     def _project_state_signature(self) -> str:
         data = copy.deepcopy(self.project.to_dict())
@@ -599,6 +613,24 @@ class CleanroomXApp:
         if manager is not None:
             manager.discard_current_recoveries()
 
+    def _discard_restored_recovery(self) -> None:
+        artifact = getattr(self, "_restored_recovery_artifact", None)
+        if artifact is None:
+            return
+        try:
+            discard_recovery_artifact(artifact, recovery_dir=artifact.parent)
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError) as exc:
+            self.status_var.set(f"Recovery cleanup failed: {exc}")
+            return
+        self._restored_recovery_artifact = None
+
+    def _autosave_source_path(self) -> Path | None:
+        if self.project_path is not None:
+            return self.project_path
+        return self._recovery_source_path
+
     def _autosave_tick(self) -> None:
         if not self._autosave_interval_ms:
             return
@@ -607,7 +639,7 @@ class CleanroomXApp:
                 snapshot = self._build_recovery_snapshot()
                 if self._autosave_manager.request_autosave(
                     snapshot,
-                    source_path=self.project_path,
+                    source_path=self._autosave_source_path(),
                 ):
                     self.autosave_status_var.set("Autosave: saving…")
             elif self._autosave_manager.status().state == "saved":
@@ -648,6 +680,7 @@ class CleanroomXApp:
             self.save_project()
             return not self._has_unsaved_changes()
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
@@ -808,6 +841,93 @@ class CleanroomXApp:
                 "", "end", iid=f"row-{index}", text=path, values=(display, unit)
             )
 
+    def restore_recovery_path(self, path: str | Path) -> None:
+        recovered = restore_recovery_artifact(path)
+        self._discard_current_autosave()
+        self.project = recovered.project
+        self.project_path = None
+        self._recovery_source_path = recovered.source_path
+        self._restored_recovery_artifact = recovered.artifact_path
+        self._begin_autosave_project(recovered.source_path)
+
+        ui_state = recovered.ui_state
+        name_text = ui_state.get("name_text")
+        description_text = ui_state.get("description_text")
+        self.name_var.set(
+            name_text if isinstance(name_text, str) else self.project.name
+        )
+        self.description_var.set(
+            description_text
+            if isinstance(description_text, str)
+            else self.project.description
+        )
+        self._clear_run_cache()
+        self._refresh_analysis_list()
+
+        editor_id = ui_state.get("editor_analysis_id")
+        editor_text = ui_state.get("editor_text")
+        if (
+            isinstance(editor_id, str)
+            and isinstance(editor_text, str)
+            and self.analysis_tree.exists(editor_id)
+        ):
+            self.project.active_analysis_id = editor_id
+            self.analysis_tree.selection_set(editor_id)
+            self.analysis_tree.focus(editor_id)
+            self.analysis_tree.see(editor_id)
+            self._editor_analysis_id = editor_id
+            self.input_text.delete("1.0", "end")
+            self.input_text.insert("1.0", editor_text)
+            self.input_text.edit_modified(False)
+            self.refresh_structure(silent=True)
+
+        # A recovered copy must require an explicit Save As even when its recovered
+        # model happens to equal the source project byte-for-byte.
+        self._baseline_state = "__cleanroomx_recovered_copy_requires_save_as__"
+        self.status_var.set(
+            "Recovered unsaved work — use Save Project As to preserve it separately."
+        )
+        self.autosave_status_var.set("Autosave: recovered copy")
+        self._update_title()
+
+    def show_recovery_center(self) -> bool:
+        try:
+            scan = scan_recovery_artifacts(self._autosave_manager.recovery_dir)
+        except OSError as exc:
+            messagebox.showerror(
+                "Recovery scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        if not scan.candidates and not scan.issues:
+            self.status_var.set("No recoverable sessions found.")
+            return False
+
+        dialog = RecoveryCenter(self.root, scan)
+        self.root.wait_window(dialog)
+        if dialog.result is None:
+            return False
+        if not self._confirm_project_replacement():
+            return False
+        try:
+            self.restore_recovery_path(dialog.result)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Recovery restore failed",
+                (
+                    f"{exc}\n\n"
+                    "The recovery artifact was preserved and the original project "
+                    "was not changed."
+                ),
+                parent=self.root,
+            )
+            return False
+        return True
+
+    def offer_startup_recovery(self) -> bool:
+        return self.show_recovery_center()
+
     def new_project(self) -> None:
         if self._running:
             messagebox.showwarning("Analysis running", "Abandon the current run first.")
@@ -817,6 +937,8 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._recovery_source_path = None
+        self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
@@ -853,6 +975,8 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._recovery_source_path = None
+        self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
         self.name_var.set(project.name)
         self.description_var.set(project.description)
@@ -866,7 +990,12 @@ class CleanroomXApp:
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
             return
-        suffix = "" if self.project_path is None else f" — {self.project_path.name}"
+        if self.project_path is not None:
+            suffix = f" — {self.project_path.name}"
+        elif self._restored_recovery_artifact is not None:
+            suffix = " — Recovered copy"
+        else:
+            suffix = ""
         dirty = " *" if self._has_unsaved_changes() else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
@@ -933,6 +1062,7 @@ class CleanroomXApp:
 
         self.project = candidate
         self.project_path = saved_path
+        self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()
         if editor_id is not None:
@@ -942,6 +1072,7 @@ class CleanroomXApp:
                 self._refresh_analysis_list()
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
+        self._discard_restored_recovery()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
 
@@ -1411,7 +1542,11 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
-    if project_path:
+    recovered_at_startup = False
+    if not args.smoke:
+        recovered_at_startup = app.offer_startup_recovery()
+
+    if project_path and not recovered_at_startup:
         try:
             app.load_project_path(project_path)
         except Exception as exc:

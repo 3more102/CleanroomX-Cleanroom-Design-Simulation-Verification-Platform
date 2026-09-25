@@ -133,8 +133,8 @@ def verify_analysis_run_bundle(document: dict) -> dict:
         raise ValueError("run bundle integrity check failed: content has changed")
 
     kind = document.get("kind")
-    if kind not in ANALYSIS_SPECS:
-        raise ValueError(f"run bundle contains unsupported analysis kind: {kind!r}")
+    if not isinstance(kind, str) or not kind:
+        raise ValueError("run bundle analysis kind must be a non-empty string")
     if not isinstance(document.get("title"), str) or not document["title"]:
         raise ValueError("run bundle title must be a non-empty string")
     if not isinstance(document.get("status"), str) or not document["status"]:

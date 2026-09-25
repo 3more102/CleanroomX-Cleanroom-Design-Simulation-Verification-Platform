@@ -44,7 +44,7 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 ## Project format
 
-Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
+Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON. Newly created analyses receive a full UUID-backed identity and are added through the project lifecycle contract, which checks live uniqueness before mutation. ID-based lookup and removal fail closed if an in-memory state is ever ambiguous instead of selecting or deleting an arbitrary matching analysis.
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import queue
 import threading
-import uuid
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -1259,17 +1258,21 @@ class CleanroomXApp:
             return
         kind = picker.result
         spec = ANALYSIS_SPECS[kind]
-        analysis_id = f"{kind}-{uuid.uuid4().hex[:8]}"
         payload = {"name": "New Dossier"} if kind == "dossier" else {}
-        analysis = AnalysisDocument(
-            id=analysis_id,
-            name=spec.title,
-            kind=kind,
-            input=payload,
-        )
-        self.project.analyses.append(analysis)
-        self.project.active_analysis_id = analysis_id
-        self._refresh_analysis_list(select_id=analysis_id)
+        try:
+            analysis = self.project.create_analysis(
+                kind=kind,
+                name=spec.title,
+                payload=payload,
+            )
+        except (TypeError, ValueError, RuntimeError) as exc:
+            messagebox.showerror(
+                "Cannot add analysis",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        self._refresh_analysis_list(select_id=analysis.id)
         self._update_title()
 
     def rename_analysis(self) -> None:
@@ -1300,11 +1303,16 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
-        self._invalidate_last_run_for(analysis.id)
-        self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
-        self.project.active_analysis_id = (
-            self.project.analyses[0].id if self.project.analyses else None
-        )
+        try:
+            removed = self.project.remove_analysis(analysis.id)
+        except (KeyError, ValueError) as exc:
+            messagebox.showerror(
+                "Cannot remove analysis",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        self._invalidate_last_run_for(removed.id)
         self._refresh_analysis_list()
         self._update_title()
 

@@ -1055,3 +1055,33 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+
+def test_gui_add_analysis_uses_project_lifecycle_identity(monkeypatch):
+    class Root:
+        def wait_window(self, picker):
+            return None
+
+    class Picker:
+        result = "room_verification"
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app._running = False
+    app.project = ProjectDocument(name="GUI lifecycle")
+    app._editor_analysis = lambda: None
+    selected: list[str] = []
+    app._refresh_analysis_list = lambda select_id=None: selected.append(select_id)
+    app._update_title = lambda: None
+
+    monkeypatch.setattr(gui_module, "AnalysisPicker", lambda root: Picker())
+
+    app.add_analysis()
+
+    assert len(app.project.analyses) == 1
+    created = app.project.analyses[0]
+    assert created.id.startswith("room_verification-")
+    assert len(created.id.removeprefix("room_verification-")) == 32
+    assert app.project.active_analysis_id == created.id
+    assert selected == [created.id]

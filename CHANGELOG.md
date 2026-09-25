@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased analysis lifecycle integrity — 2026-09-25
+
+- Moves desktop analysis creation/removal behind explicit `ProjectDocument` lifecycle methods instead of directly mutating the live analysis list.
+- Replaces 8-hex-character analysis IDs with full UUID-backed IDs for newly created analyses and still checks the live project for a collision before committing the object.
+- Makes ID lookup fail closed when corrupted in-memory state contains duplicate IDs, preventing arbitrary first-match ownership of edits, results, or deletion.
+- Makes removal transactional with respect to project invariants: invalid/ambiguous identity is rejected before list mutation, non-active removal preserves the active analysis, and active removal deterministically selects the first remaining analysis.
+- Adds collision-retry, duplicate-state, removal-state, GUI integration, and save/reload identity regressions without changing the project schema or any engineering calculation.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

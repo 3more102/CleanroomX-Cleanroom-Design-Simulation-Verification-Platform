@@ -35,8 +35,10 @@ association, opening dimensions/orientation/wall side/swing, room floor elevatio
 classification text, and analysis-room linkage.
 
 Pressure color is shown only when a room has a supplied pressure value. Relationship arrows are
-drawn only from the active analysis's explicit `pressure_cascade` records. CleanroomX does not
-invent missing pressure or airflow values.
+drawn only from the active analysis's explicit `pressure_cascade` records. When both linked rooms
+have supplied pressures, each relationship reports the observed pressure delta and marks the
+configured minimum relationship as pass or fail; missing pressure remains explicitly unavailable.
+CleanroomX does not invent missing pressure or airflow values.
 
 ## 3D viewer
 

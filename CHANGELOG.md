@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased durable persistence consolidation — 2026-09-25
+
+- Centralizes project saves, recovery artifacts, desktop exports, and CLI file outputs on one same-directory atomic persistence primitive instead of mixing atomic GUI writes with direct CLI truncating writes.
+- Syncs temporary file data before replacement, preserves an existing destination's permission mode, verifies the exact committed byte count and SHA-256 after replacement, and syncs the parent directory on POSIX before reporting success.
+- Preserves the project module's historical `atomic_write_text` import surface and the existing guarded-save pre-replace conflict hook.
+- Adds failure-injection coverage for file-sync failure, pre-replace guard failure, post-replace corruption detection, temporary-file cleanup, and permission preservation.
+- Does not change project schema version 1, solver equations, numerical tolerances, engineering acceptance semantics, or report content.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

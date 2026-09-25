@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 
 from .hvac_models import AirState
+from .numeric import finite_float, nonnegative_float
 
 MOLECULAR_MASS_RATIO_WATER_TO_DRY_AIR = 0.621945
 DRY_AIR_GAS_CONSTANT_KJ_KG_K = 0.287042
@@ -13,7 +14,7 @@ def saturation_vapor_pressure_kpa(dry_bulb_c: float) -> float:
 
     Uses e_w = 6.112 exp(17.62 t / (243.12 + t)) hPa for -45 to 60 C.
     """
-    t = float(dry_bulb_c)
+    t = finite_float(dry_bulb_c, "dry_bulb_c")
     if not -45.0 <= t <= 60.0:
         raise ValueError("dry_bulb_c must be between -45 and 60 C")
     return 0.6112 * math.exp((17.62 * t) / (243.12 + t))
@@ -63,8 +64,7 @@ def dew_point_c(state: AirState) -> float:
 
 
 def dry_air_mass_flow_kg_s(airflow_m3_h: float, state: AirState) -> float:
-    if airflow_m3_h < 0:
-        raise ValueError("airflow_m3_h must be >= 0")
+    airflow_m3_h = nonnegative_float(airflow_m3_h, "airflow_m3_h")
     return airflow_m3_h / 3600.0 / moist_air_specific_volume_m3_kg_da(state)
 
 

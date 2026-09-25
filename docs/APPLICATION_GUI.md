@@ -56,6 +56,14 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+### Saved project revisions
+
+Before a changed guarded overwrite of an existing valid CleanroomX project, the application preserves the exact previous project bytes in a bounded sidecar revision history. Each revision records the normalized source path, byte size, SHA-256 identity, CleanroomX version, and exact UTC timestamp. Identical saves do not generate redundant revisions. Corrupted or malformed revision artifacts are reported and preserved rather than silently accepted.
+
+After atomic replacement, CleanroomX reloads the project from disk and verifies both its stable SHA-256 content identity and parsed project model. If this verification fails, rollback to the prior bytes is attempted only while the destination can still be proven to contain CleanroomX's own attempted write. If another process changes the destination again, CleanroomX does not overwrite that external change and retains the prior saved revision as recovery evidence.
+
+Use **File → Saved Revisions…** to browse valid prior explicit saves. **Restore as Copy…** verifies the selected revision and requires a separate destination; it never overwrites the source project. If an existing restore destination is a valid CleanroomX project, that destination is itself preserved as a revision before replacement. Restore writes are guarded against destination races and verified after commit.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
@@ -82,7 +90,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Explicit project saves are externally guarded, revision-preserving, atomically replaced, and re-verified; filesystem errors are surfaced in the GUI.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 

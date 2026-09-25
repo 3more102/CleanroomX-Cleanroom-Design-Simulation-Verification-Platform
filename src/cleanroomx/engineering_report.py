@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone
 from hashlib import sha256
 import hmac
 from html import escape
@@ -14,6 +15,10 @@ from .application import AnalysisRun, analysis_run_is_current
 ENGINEERING_REPORT_SCHEMA = "cleanroomx.engineering-report"
 ENGINEERING_REPORT_SCHEMA_VERSION = 1
 ENGINEERING_REPORT_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+DEFAULT_REPORT_LIMITATIONS = (
+    "CleanroomX engineering output is screening and traceability evidence; it does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.",
+    "SHA-256 evidence detects content modification; it is not a digital signature or third-party certification.",
+)
 
 
 class EngineeringReportFreshnessError(ValueError):
@@ -41,6 +46,27 @@ def _canonical_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def _utc_timestamp(value: str | None) -> str:
+    text = value or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    if not isinstance(text, str) or not text:
+        raise ValueError("generated_at_utc must be a non-empty UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("generated_at_utc must be valid ISO-8601") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(None):
+        raise ValueError("generated_at_utc must use UTC")
+    return text
+
+
+def _sha256_text(value: str) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(ch in "0123456789abcdefABCDEF" for ch in value)
+    )
+
+
 def build_engineering_report_payload(
     run: AnalysisRun,
     *,
@@ -51,6 +77,8 @@ def build_engineering_report_payload(
     analysis_kind: str,
     input_payload: dict,
     base_dir=None,
+    generated_at_utc: str | None = None,
+    limitations: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Build deterministic report evidence from one exact completed analysis run.
 
@@ -80,18 +108,47 @@ def build_engineering_report_payload(
 
     provenance = run.diagnostics.get("application_execution_provenance", {})
     input_sha256 = provenance.get("input_sha256")
-    if not isinstance(input_sha256, str) or len(input_sha256) != 64:
+    if not _sha256_text(input_sha256):
         raise EngineeringReportFreshnessError(
             "analysis result is missing a valid canonical input identity"
         )
+
+    generated = _utc_timestamp(generated_at_utc)
+    selected_limitations = list(
+        DEFAULT_REPORT_LIMITATIONS if limitations is None else limitations
+    )
+    if not selected_limitations or any(
+        not isinstance(item, str) or not item.strip()
+        for item in selected_limitations
+    ):
+        raise ValueError("limitations must contain at least one non-empty string")
+
+    run_bundle = run.to_dict()
+    run_identity = run_bundle.get("integrity", {}).get("sha256")
+    if not _sha256_text(run_identity):
+        raise ValueError("analysis run bundle is missing a valid integrity identity")
+
+    project_identity_source = {
+        "project_name": project_name.strip(),
+        "project_description": project_description,
+        "analysis_id": analysis_id.strip(),
+        "analysis_name": analysis_name.strip(),
+        "analysis_kind": analysis_kind.strip(),
+        "input_sha256": input_sha256,
+    }
+    project_state_sha256 = sha256(
+        _canonical_bytes(project_identity_source)
+    ).hexdigest()
 
     core = {
         "schema": ENGINEERING_REPORT_SCHEMA,
         "schema_version": ENGINEERING_REPORT_SCHEMA_VERSION,
         "application_version": __version__,
+        "generated_at_utc": generated,
         "project": {
             "name": project_name.strip(),
             "description": project_description,
+            "state_sha256": project_state_sha256,
         },
         "analysis": {
             "id": analysis_id.strip(),
@@ -99,11 +156,14 @@ def build_engineering_report_payload(
             "kind": analysis_kind.strip(),
             "status": str(run.status),
             "input_sha256": input_sha256,
+            "run_sha256": run_identity,
         },
         "input": _strict_json_clone(input_payload),
         "result": _strict_json_clone(run.result),
         "diagnostics": _strict_json_clone(run.diagnostics),
+        "plot": None if run.plot is None else _strict_json_clone(run.plot),
         "backend_report_markdown": str(run.markdown),
+        "limitations": selected_limitations,
     }
     digest = sha256(_canonical_bytes(core)).hexdigest()
     return {
@@ -127,6 +187,10 @@ def verify_engineering_report_payload(payload: dict[str, Any]) -> bool:
         return False
     if not isinstance(payload.get("application_version"), str):
         return False
+    try:
+        _utc_timestamp(payload.get("generated_at_utc"))
+    except (TypeError, ValueError):
+        return False
     project = payload.get("project")
     analysis = payload.get("analysis")
     if not isinstance(project, dict) or not isinstance(analysis, dict):
@@ -135,11 +199,23 @@ def verify_engineering_report_payload(payload: dict[str, Any]) -> bool:
         return False
     if not isinstance(project.get("description"), str):
         return False
+    if not _sha256_text(project.get("state_sha256")):
+        return False
     for key in ("id", "name", "kind", "status"):
         if not isinstance(analysis.get(key), str) or not analysis[key]:
             return False
     input_sha256 = analysis.get("input_sha256")
-    if not isinstance(input_sha256, str) or len(input_sha256) != 64:
+    if not _sha256_text(input_sha256) or not _sha256_text(analysis.get("run_sha256")):
+        return False
+    identity_source = {
+        "project_name": project["name"],
+        "project_description": project["description"],
+        "analysis_id": analysis["id"],
+        "analysis_name": analysis["name"],
+        "analysis_kind": analysis["kind"],
+        "input_sha256": input_sha256,
+    }
+    if project["state_sha256"] != sha256(_canonical_bytes(identity_source)).hexdigest():
         return False
     if not isinstance(payload.get("input"), dict):
         return False
@@ -147,7 +223,16 @@ def verify_engineering_report_payload(payload: dict[str, Any]) -> bool:
         return False
     if not isinstance(payload.get("diagnostics"), dict):
         return False
+    if payload.get("plot") is not None and not isinstance(payload.get("plot"), dict):
+        return False
     if not isinstance(payload.get("backend_report_markdown"), str):
+        return False
+    limitations = payload.get("limitations")
+    if (
+        not isinstance(limitations, list)
+        or not limitations
+        or any(not isinstance(item, str) or not item.strip() for item in limitations)
+    ):
         return False
     integrity = payload.get("integrity")
     if not isinstance(integrity, dict):
@@ -238,6 +323,9 @@ footer { color: #667085; font-size: 12px; padding: 4px 2px 24px; }
     result_text = escape(_pretty_json(payload["result"]))
     diagnostics_text = escape(_pretty_json(payload["diagnostics"]))
     markdown_text = escape(payload["backend_report_markdown"])
+    limitations_html = "".join(
+        f"  <li>{escape(item)}</li>\n" for item in payload["limitations"]
+    )
     machine_json = _embedded_json(payload)
     description_html = (
         f'  <p>{escape(project["description"])}</p>\n'
@@ -265,6 +353,9 @@ footer { color: #667085; font-size: 12px; padding: 4px 2px 24px; }
         f'    <div class="card"><span class="label">Workflow</span><span class="value">{escape(analysis["kind"])}</span></div>\n'
         f'    <div class="card"><span class="label">Analysis ID</span><span class="value">{escape(analysis["id"])}</span></div>\n'
         f'    <div class="card"><span class="label">Input SHA-256</span><span class="value"><code>{escape(analysis["input_sha256"])}</code></span></div>\n'
+        f'    <div class="card"><span class="label">Run identity</span><span class="value"><code>{escape(analysis["run_sha256"])}</code></span></div>\n'
+        f'    <div class="card"><span class="label">Project state</span><span class="value"><code>{escape(project["state_sha256"])}</code></span></div>\n'
+        f'    <div class="card"><span class="label">Generated UTC</span><span class="value">{escape(payload["generated_at_utc"])}</span></div>\n'
         "  </div>\n"
         "</header>\n"
         "<section>\n"
@@ -286,6 +377,12 @@ footer { color: #667085; font-size: 12px; padding: 4px 2px 24px; }
         f"    <pre>{diagnostics_text}</pre>\n"
         "  </details>\n"
         "</section>\n"
+        "<section>\n"
+        "  <h2>Limitations</h2>\n"
+        "  <ul>\n"
+        f"{limitations_html}"
+        "  </ul>\n"
+        "</section>\n"
         "<footer>Self-contained CleanroomX engineering evidence. No external scripts, stylesheets, or network resources are required.</footer>\n"
         "</main>\n"
         '<script id="cleanroomx-report-evidence" type="application/json">\n'
@@ -306,6 +403,8 @@ def engineering_report_html(
     analysis_kind: str,
     input_payload: dict,
     base_dir=None,
+    generated_at_utc: str | None = None,
+    limitations: list[str] | tuple[str, ...] | None = None,
 ) -> str:
     """Build and render one verified portable engineering report."""
     payload = build_engineering_report_payload(
@@ -317,5 +416,70 @@ def engineering_report_html(
         analysis_kind=analysis_kind,
         input_payload=input_payload,
         base_dir=base_dir,
+        generated_at_utc=generated_at_utc,
+        limitations=limitations,
     )
     return render_engineering_report_html(payload)
+
+
+def render_engineering_report_markdown(payload: dict[str, Any]) -> str:
+    """Render the same verified report payload as portable Markdown."""
+    if not verify_engineering_report_payload(payload):
+        raise ValueError("engineering report payload failed integrity verification")
+    project = payload["project"]
+    analysis = payload["analysis"]
+    lines = [
+        f"# {analysis['name']} — CleanroomX Engineering Report",
+        "",
+        f"- Project: {project['name']}",
+        f"- Status: {analysis['status']}",
+        f"- Workflow: {analysis['kind']}",
+        f"- Analysis ID: {analysis['id']}",
+        f"- Generated UTC: {payload['generated_at_utc']}",
+        f"- Project state SHA-256: `{project['state_sha256']}`",
+        f"- Run SHA-256: `{analysis['run_sha256']}`",
+        f"- Input SHA-256: `{analysis['input_sha256']}`",
+        "",
+        "## Engineering report",
+        "",
+        payload["backend_report_markdown"].rstrip(),
+        "",
+        "## Limitations",
+        "",
+        *[f"- {item}" for item in payload["limitations"]],
+        "",
+        "## Traceability evidence",
+        "",
+        f"- Report payload SHA-256: `{payload['integrity']['sha256']}`",
+        "- Full input, result, diagnostics, plot evidence, implementation revision, and runtime metadata are retained in the verified report payload / run bundle.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def engineering_report_markdown(
+    run: AnalysisRun,
+    *,
+    project_name: str,
+    project_description: str,
+    analysis_id: str,
+    analysis_name: str,
+    analysis_kind: str,
+    input_payload: dict,
+    base_dir=None,
+    generated_at_utc: str | None = None,
+    limitations: list[str] | tuple[str, ...] | None = None,
+) -> str:
+    payload = build_engineering_report_payload(
+        run,
+        project_name=project_name,
+        project_description=project_description,
+        analysis_id=analysis_id,
+        analysis_name=analysis_name,
+        analysis_kind=analysis_kind,
+        input_payload=input_payload,
+        base_dir=base_dir,
+        generated_at_utc=generated_at_utc,
+        limitations=limitations,
+    )
+    return render_engineering_report_markdown(payload)

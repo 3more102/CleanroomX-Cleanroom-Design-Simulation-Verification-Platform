@@ -195,9 +195,22 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
     }
 
 
-def _artifact_filename(project_identity_value: str, recovery_id: str) -> str:
+def _session_filename_token(session_id: str) -> str:
+    """Return a filesystem-safe stable token for one autosave session."""
+    return sha256(session_id.encode("utf-8")).hexdigest()
+
+
+def _artifact_filename(
+    project_identity_value: str,
+    session_id: str,
+    recovery_id: str,
+) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    return f"{project_identity_value}-{stamp}-{recovery_id[:8]}.recovery.json"
+    session_token = _session_filename_token(session_id)
+    return (
+        f"{project_identity_value}-session-{session_token}-"
+        f"{stamp}-{recovery_id[:8]}.recovery.json"
+    )
 
 
 def _validate_recovery_payload(data: Any) -> dict[str, Any]:
@@ -362,7 +375,10 @@ class AutosaveManager:
     """Serialize recovery snapshots away from the Tk/UI thread.
 
     Explicit project files are never written by this class. Recovery artifacts are
-    separate JSON envelopes with bounded per-project history.
+    separate JSON envelopes with bounded per-project, per-session history so one
+    application session cannot prune another session's unsaved recovery evidence.
+    A completed write may rotate history only after its project epoch is revalidated,
+    so an invalidated in-flight request cannot evict an accepted recovery generation.
     """
 
     def __init__(
@@ -489,7 +505,9 @@ class AutosaveManager:
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(
-            request.project_identity, recovery_id
+            request.project_identity,
+            self.session_id,
+            recovery_id,
         )
         text = json.dumps(
             payload,
@@ -499,16 +517,33 @@ class AutosaveManager:
             allow_nan=False,
         ) + "\n"
         atomic_write_text(destination, text)
-        self._rotate_history(request.project_identity)
         return destination
 
     def _rotate_history(self, identity: str) -> None:
-        artifacts = sorted(
-            self.recovery_dir.glob(f"{identity}-*.recovery.json"),
-            key=lambda path: path.name,
-            reverse=True,
-        )
-        for stale in artifacts[self.history_limit :]:
+        """Prune only recovery generations owned by this manager's session.
+
+        Project identity alone is not a safe ownership boundary because multiple
+        CleanroomX processes can edit the same project concurrently. The filename
+        token narrows discovery to this session, then the recovery envelope is
+        validated before deletion so malformed or foreign evidence is preserved.
+        """
+        session_token = _session_filename_token(self.session_id)
+        owned: list[tuple[str, Path]] = []
+        pattern = f"{identity}-session-{session_token}-*.recovery.json"
+        for path in self.recovery_dir.glob(pattern):
+            try:
+                recovery = load_recovery_artifact(path)
+            except (OSError, RecoveryFormatError, TypeError, ValueError):
+                continue
+            if (
+                recovery.get("project_identity") != identity
+                or recovery.get("session_id") != self.session_id
+            ):
+                continue
+            owned.append((recovery["saved_at_utc"], path))
+
+        owned.sort(key=lambda item: (item[0], item[1].name), reverse=True)
+        for _saved_at, stale in owned[self.history_limit :]:
             stale.unlink(missing_ok=True)
 
     def _on_write_done(
@@ -526,24 +561,47 @@ class AutosaveManager:
         with self._lock:
             current_epoch = self._epochs.get(request.project_identity, 0)
             stale = request.epoch != current_epoch
+            stale_cleanup_failure: OSError | None = None
             if stale and artifact is not None:
                 try:
                     artifact.unlink(missing_ok=True)
-                except OSError:
-                    pass
-
-            if not stale:
-                if failure is None:
-                    self._last_saved_digest[request.project_identity] = request.digest
-                    assert artifact is not None
+                except OSError as exc:
+                    stale_cleanup_failure = exc
                     self._artifacts_by_identity.setdefault(
                         request.project_identity, set()
                     ).add(artifact)
-                    self._set_status_locked(
-                        "saved",
-                        "Autosave saved",
-                        artifact_path=artifact,
-                    )
+
+            if stale_cleanup_failure is not None:
+                self._set_status_locked(
+                    "failed",
+                    f"Autosave invalidated recovery cleanup failed: {stale_cleanup_failure}",
+                    artifact_path=artifact,
+                )
+            elif not stale:
+                if failure is None:
+                    assert artifact is not None
+                    self._last_saved_digest[request.project_identity] = request.digest
+                    self._artifacts_by_identity.setdefault(
+                        request.project_identity, set()
+                    ).add(artifact)
+                    try:
+                        # Retention is part of accepting this autosave generation.
+                        # Holding the lifecycle lock makes the epoch check and
+                        # history mutation atomic with respect to explicit save,
+                        # discard, and project-transition invalidation.
+                        self._rotate_history(request.project_identity)
+                    except OSError as exc:
+                        self._set_status_locked(
+                            "failed",
+                            f"Autosave recovery saved but history cleanup failed: {exc}",
+                            artifact_path=artifact,
+                        )
+                    else:
+                        self._set_status_locked(
+                            "saved",
+                            "Autosave saved",
+                            artifact_path=artifact,
+                        )
                 else:
                     self._set_status_locked(
                         "failed",
@@ -575,7 +633,10 @@ class AutosaveManager:
             sequence=self._sequence,
         )
 
-    def _clear_identity_locked(self, identity: str) -> None:
+    def _clear_identity_locked(
+        self,
+        identity: str,
+    ) -> tuple[tuple[Path, OSError], ...]:
         self._epochs[identity] = self._epochs.get(identity, 0) + 1
         self._last_saved_digest.pop(identity, None)
         if (
@@ -583,28 +644,67 @@ class AutosaveManager:
             and self._pending_request.project_identity == identity
         ):
             self._pending_request = None
-        artifacts = self._artifacts_by_identity.pop(identity, set())
-        for artifact in artifacts:
+
+        failures: list[tuple[Path, OSError]] = []
+        remaining: set[Path] = set()
+        for artifact in self._artifacts_by_identity.get(identity, set()):
             try:
                 artifact.unlink(missing_ok=True)
-            except OSError:
-                pass
+            except OSError as exc:
+                failures.append((artifact, exc))
+                remaining.add(artifact)
 
-    def discard_current_recoveries(self) -> None:
+        if remaining:
+            # Retain failed paths so a later save/discard can retry cleanup
+            # instead of silently orphaning a recovery artifact.
+            self._artifacts_by_identity[identity] = remaining
+        else:
+            self._artifacts_by_identity.pop(identity, None)
+        return tuple(failures)
+
+    def _set_cleanup_failure_locked(
+        self,
+        context: str,
+        failures: tuple[tuple[Path, OSError], ...] | list[tuple[Path, OSError]],
+    ) -> None:
+        artifact, exc = failures[0]
+        count = len(failures)
+        suffix = "" if count == 1 else f" ({count} artifacts could not be removed)"
+        self._set_status_locked(
+            "failed",
+            f"{context}{suffix}: {artifact}: {exc}",
+            artifact_path=artifact,
+        )
+
+    def discard_current_recoveries(self) -> AutosaveStatus:
         with self._lock:
-            self._clear_identity_locked(self._current_identity)
-            self._set_status_locked("idle", "Autosave recovery discarded")
+            failures = self._clear_identity_locked(self._current_identity)
+            if failures:
+                self._set_cleanup_failure_locked(
+                    "Autosave recovery discard incomplete",
+                    failures,
+                )
+            else:
+                self._set_status_locked("idle", "Autosave recovery discarded")
+            return self._status
 
-    def notify_explicit_save(self, source_path: str | Path) -> None:
+    def notify_explicit_save(self, source_path: str | Path) -> AutosaveStatus:
         with self._lock:
             previous = self._current_identity
             new_identity = project_identity(source_path, unsaved_id=self.session_id)
-            self._clear_identity_locked(previous)
+            failures = list(self._clear_identity_locked(previous))
             if new_identity != previous:
-                self._clear_identity_locked(new_identity)
+                failures.extend(self._clear_identity_locked(new_identity))
             self._current_identity = new_identity
             self._epochs.setdefault(new_identity, 0)
-            self._set_status_locked("idle", "Autosave clean after explicit save")
+            if failures:
+                self._set_cleanup_failure_locked(
+                    "Project saved, but autosave recovery cleanup is incomplete",
+                    failures,
+                )
+            else:
+                self._set_status_locked("idle", "Autosave clean after explicit save")
+            return self._status
 
     def wait_for_idle(self, timeout: float = 5.0) -> None:
         deadline = time.monotonic() + timeout

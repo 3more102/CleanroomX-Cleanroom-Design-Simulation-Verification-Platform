@@ -8,6 +8,7 @@ from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
     derive_layout_from_analysis,
+    duplicate_room_with_devices,
     ensure_project_layout,
     normalize_layout,
     resize_room,
@@ -618,3 +619,117 @@ def test_resize_room_with_devices_noop_does_not_move_devices():
 
     assert resize_room_with_devices(room, devices, "se", 5.0, 4.0) is False
     assert devices[0] == before
+
+
+
+def test_duplicate_room_with_devices_copies_assigned_devices_and_preserves_originals():
+    room = {
+        "id": "process",
+        "name": "Process",
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 4.0,
+        "width_m": 3.0,
+        "height_m": 2.8,
+    }
+    devices = [
+        {
+            "id": "ffu-1",
+            "type": "ffu",
+            "name": "FFU 1",
+            "room_id": "process",
+            "x_m": 2.0,
+            "y_m": 3.0,
+            "z_m": 2.8,
+        },
+        {
+            "id": "sensor-1",
+            "type": "sensor",
+            "name": "Sensor 1",
+            "room_id": "process",
+            "x_m": 4.0,
+            "y_m": 4.0,
+            "z_m": 2.5,
+        },
+        {
+            "id": "other-1",
+            "type": "equipment",
+            "name": "Other",
+            "room_id": "other",
+            "x_m": 10.0,
+            "y_m": 11.0,
+            "z_m": 0.0,
+        },
+    ]
+
+    room_before = dict(room)
+    devices_before = [dict(device) for device in devices]
+
+    duplicate, duplicated_devices = duplicate_room_with_devices(
+        room,
+        devices,
+        offset_m=0.5,
+    )
+
+    assert duplicate["id"] != room["id"]
+    assert duplicate["name"] == "Process Copy"
+    assert duplicate["x_m"] == 1.5
+    assert duplicate["y_m"] == 2.5
+    assert duplicate["length_m"] == 4.0
+    assert duplicate["width_m"] == 3.0
+    assert duplicate["height_m"] == 2.8
+
+    assert len(duplicated_devices) == 2
+    assert {device["name"] for device in duplicated_devices} == {
+        "FFU 1 Copy",
+        "Sensor 1 Copy",
+    }
+    assert all(device["room_id"] == duplicate["id"] for device in duplicated_devices)
+    assert {device["id"] for device in duplicated_devices}.isdisjoint(
+        {"ffu-1", "sensor-1", "other-1"}
+    )
+    copied_by_name = {device["name"]: device for device in duplicated_devices}
+    assert copied_by_name["FFU 1 Copy"]["x_m"] == 2.5
+    assert copied_by_name["FFU 1 Copy"]["y_m"] == 3.5
+    assert copied_by_name["FFU 1 Copy"]["z_m"] == 2.8
+    assert copied_by_name["Sensor 1 Copy"]["x_m"] == 4.5
+    assert copied_by_name["Sensor 1 Copy"]["y_m"] == 4.5
+    assert copied_by_name["Sensor 1 Copy"]["z_m"] == 2.5
+
+    assert room == room_before
+    assert devices == devices_before
+
+
+def test_duplicate_room_with_devices_handles_room_without_assigned_devices():
+    room = {
+        "id": "empty",
+        "name": "Empty",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 3.0,
+        "width_m": 2.0,
+        "height_m": 2.5,
+    }
+    devices = [
+        {
+            "id": "other-1",
+            "type": "equipment",
+            "name": "Other",
+            "room_id": "other",
+            "x_m": 8.0,
+            "y_m": 9.0,
+            "z_m": 0.0,
+        }
+    ]
+
+    duplicate, duplicated_devices = duplicate_room_with_devices(
+        room,
+        devices,
+        offset_m=1.0,
+    )
+
+    assert duplicate["name"] == "Empty Copy"
+    assert duplicate["x_m"] == 1.0
+    assert duplicate["y_m"] == 1.0
+    assert duplicated_devices == []
+    assert devices[0]["room_id"] == "other"

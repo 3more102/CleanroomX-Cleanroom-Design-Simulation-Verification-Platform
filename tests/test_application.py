@@ -224,6 +224,25 @@ def test_run_bundle_verification_detects_document_tampering():
         verify_analysis_run_bundle(bundle)
 
 
+def test_run_bundle_verification_rejects_missing_required_fields():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle.pop("result")
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="missing required field"):
+        verify_analysis_run_bundle(bundle)
+
+
 def test_run_bundle_verification_detects_input_provenance_mismatch_even_if_resigned():
     bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
     bundle["input_snapshot"]["name"] = "different submitted input"

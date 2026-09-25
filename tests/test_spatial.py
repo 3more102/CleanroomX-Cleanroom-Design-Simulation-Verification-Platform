@@ -301,7 +301,7 @@ def test_normalize_layout_repairs_identity_deterministically_and_idempotently():
     raw = {
         "rooms": [
             {
-                "name": "Missing",
+                "name": "Room 1",
                 "x_m": 0,
                 "y_m": 0,
                 "length_m": 4,
@@ -400,7 +400,7 @@ def test_normalize_layout_preserves_explicit_ids_reserved_for_later_entries():
     layout = normalize_layout(
         {
             "rooms": [
-                {"name": "Missing", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "Room 1", "length_m": 4, "width_m": 4, "height_m": 3},
                 {"id": "room-1", "name": "Reserved", "length_m": 4, "width_m": 4, "height_m": 3},
                 {"id": "dup", "name": "Duplicate A", "length_m": 4, "width_m": 4, "height_m": 3},
                 {"id": "dup", "name": "Duplicate B", "length_m": 4, "width_m": 4, "height_m": 3},
@@ -479,3 +479,37 @@ def test_derive_layout_duplicate_room_names_get_unique_stable_ids():
 
     assert first == second
     assert [room["id"] for room in first["rooms"]] == ["process", "process-2"]
+
+
+def test_normalize_layout_preserves_legacy_name_derived_room_reference():
+    raw = {
+        "rooms": [
+            {
+                "name": "Process Room",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            }
+        ],
+        "devices": [
+            {
+                "id": "sensor",
+                "type": "sensor",
+                "name": "Pressure sensor",
+                "room_id": "process-room",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 1,
+            }
+        ],
+    }
+
+    normalized = normalize_layout(raw)
+
+    assert normalized["rooms"][0]["id"] == "process-room"
+    assert normalized["devices"][0]["room_id"] == "process-room"
+    assert "orphan_device_room" not in [
+        issue["code"] for issue in validate_layout(normalized)
+    ]

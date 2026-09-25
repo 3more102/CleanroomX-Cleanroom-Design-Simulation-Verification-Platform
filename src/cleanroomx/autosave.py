@@ -14,13 +14,21 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .project import ProjectDocument, atomic_write_text, project_from_dict
+from .persistence import atomic_write_text, stable_file_sha256
+from .project import ProjectDocument, project_from_dict
+from .strict_json import StrictJSONError, strict_json_loads
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
-RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_SCHEMA_VERSION = 2
+RECOVERY_LEGACY_SCHEMA_VERSIONS = frozenset({1})
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
+RECOVERY_INTEGRITY_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+RECOVERY_QUARANTINE_SCHEMA = "cleanroomx.recovery-quarantine"
+RECOVERY_QUARANTINE_SCHEMA_VERSION = 1
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
+DEFAULT_RECOVERY_QUARANTINE_LIMIT = 20
 
 
 class RecoveryFormatError(ValueError):
@@ -45,6 +53,7 @@ class RecoveryCandidate:
     source_path: Path | None
     source_relation: str
     source_is_newer: bool
+    integrity_status: str = "legacy_unverified"
 
 
 @dataclass(frozen=True)
@@ -60,6 +69,16 @@ class RecoveryScan:
 
 
 @dataclass(frozen=True)
+class QuarantinedRecoveryArtifact:
+    path: Path
+    manifest_path: Path
+    original_name: str
+    quarantined_at_utc: str
+    reason: str
+    sha256: str
+
+
+@dataclass(frozen=True)
 class RecoveredProjectState:
     project: ProjectDocument
     ui_state: dict[str, Any]
@@ -67,6 +86,7 @@ class RecoveredProjectState:
     saved_at_utc: str
     project_identity: str
     artifact_path: Path
+    integrity_status: str = "legacy_unverified"
 
 
 @dataclass(frozen=True)
@@ -135,6 +155,57 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _recovery_integrity_sha256(data: dict[str, Any]) -> str:
+    covered = {key: value for key, value in data.items() if key != "integrity"}
+    canonical = _canonical_json(covered).encode("utf-8")
+    return sha256(canonical).hexdigest()
+
+
+def _recovery_integrity_block(data: dict[str, Any]) -> dict[str, str]:
+    return {
+        "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+        "canonicalization": RECOVERY_INTEGRITY_CANONICALIZATION,
+        "sha256": _recovery_integrity_sha256(data),
+    }
+
+
+def recovery_integrity_status(data: dict[str, Any]) -> str:
+    """Validate embedded recovery integrity and report its verification status."""
+    version = data.get("schema_version")
+    if version in RECOVERY_LEGACY_SCHEMA_VERSIONS:
+        return "legacy_unverified"
+
+    integrity = data.get("integrity")
+    if integrity is None:
+        raise RecoveryFormatError(
+            "recovery artifact is missing required integrity evidence"
+        )
+    if not isinstance(integrity, dict):
+        raise RecoveryFormatError("recovery integrity must be an object")
+    if integrity.get("algorithm") != RECOVERY_INTEGRITY_ALGORITHM:
+        raise RecoveryFormatError(
+            f"unsupported recovery integrity algorithm: {integrity.get('algorithm')!r}"
+        )
+    if integrity.get("canonicalization") != RECOVERY_INTEGRITY_CANONICALIZATION:
+        raise RecoveryFormatError(
+            "unsupported recovery integrity canonicalization: "
+            f"{integrity.get('canonicalization')!r}"
+        )
+    expected = integrity.get("sha256")
+    if (
+        not isinstance(expected, str)
+        or len(expected) != 64
+        or any(ch not in "0123456789abcdef" for ch in expected.lower())
+    ):
+        raise RecoveryFormatError("recovery integrity SHA-256 is malformed")
+    actual = _recovery_integrity_sha256(data)
+    if actual != expected.lower():
+        raise RecoveryFormatError(
+            "recovery artifact integrity check failed; content does not match SHA-256 evidence"
+        )
+    return "verified"
+
+
 def _normalized_source_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -144,26 +215,6 @@ def project_identity(path: str | Path | None, *, unsaved_id: str) -> str:
         return f"session-{unsaved_id}"
     normalized = os.path.normcase(str(_normalized_source_path(path)))
     return "file-" + sha256(normalized.encode("utf-8")).hexdigest()[:24]
-
-
-def _file_sha256(path: Path) -> tuple[os.stat_result, str]:
-    last_error: OSError | None = None
-    for _attempt in range(2):
-        before = path.stat()
-        digest = sha256()
-        try:
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            last_error = exc
-            continue
-        after = path.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return after, digest.hexdigest()
-        last_error = OSError(f"source changed while fingerprinting: {path}")
-    assert last_error is not None
-    raise last_error
 
 
 def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
@@ -184,7 +235,7 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
             "mtime_ns": None,
             "sha256": None,
         }
-    stat, digest = _file_sha256(source)
+    stat, digest = stable_file_sha256(source)
     return {
         "path": str(source),
         "exists": True,
@@ -194,9 +245,22 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
     }
 
 
-def _artifact_filename(project_identity_value: str, recovery_id: str) -> str:
+def _session_filename_token(session_id: str) -> str:
+    """Return a filesystem-safe stable token for one autosave session."""
+    return sha256(session_id.encode("utf-8")).hexdigest()
+
+
+def _artifact_filename(
+    project_identity_value: str,
+    session_id: str,
+    recovery_id: str,
+) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    return f"{project_identity_value}-{stamp}-{recovery_id[:8]}.recovery.json"
+    session_token = _session_filename_token(session_id)
+    return (
+        f"{project_identity_value}-session-{session_token}-"
+        f"{stamp}-{recovery_id[:8]}.recovery.json"
+    )
 
 
 def _validate_recovery_payload(data: Any) -> dict[str, Any]:
@@ -205,10 +269,12 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     if data.get("schema") != RECOVERY_SCHEMA:
         raise RecoveryFormatError(f"recovery schema must be {RECOVERY_SCHEMA!r}")
     version = data.get("schema_version")
-    if version != RECOVERY_SCHEMA_VERSION:
+    supported_versions = RECOVERY_LEGACY_SCHEMA_VERSIONS | {RECOVERY_SCHEMA_VERSION}
+    if not isinstance(version, int) or isinstance(version, bool) or version not in supported_versions:
+        supported = ", ".join(str(item) for item in sorted(supported_versions))
         raise RecoveryFormatError(
             f"unsupported recovery schema version {version!r}; "
-            f"expected {RECOVERY_SCHEMA_VERSION}"
+            f"supported versions are {supported}"
         )
     identity = data.get("project_identity")
     if not isinstance(identity, str) or not identity:
@@ -223,20 +289,20 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     snapshot = data.get("snapshot")
     if not isinstance(snapshot, dict):
         raise RecoveryFormatError("snapshot must be an object")
+    recovery_integrity_status(data)
     return data
 
 
 def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        data = strict_json_loads(source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise RecoveryFormatError(
             f"invalid recovery JSON at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except StrictJSONError as exc:
+        raise RecoveryFormatError(f"invalid strict recovery JSON: {exc}") from exc
     return _validate_recovery_payload(data)
 
 
@@ -265,6 +331,7 @@ def restore_recovery_artifact(path: str | Path) -> RecoveredProjectState:
         saved_at_utc=recovery["saved_at_utc"],
         project_identity=recovery["project_identity"],
         artifact_path=artifact_path,
+        integrity_status=recovery_integrity_status(recovery),
     )
 
 
@@ -273,10 +340,20 @@ def discard_recovery_artifact(
     *,
     recovery_dir: str | Path | None = None,
 ) -> None:
-    artifact_path = Path(path)
-    directory = (
-        Path(recovery_dir) if recovery_dir is not None else default_recovery_dir()
+    resolved_artifact, _directory = _resolve_recovery_artifact_path(
+        path, recovery_dir=recovery_dir
     )
+    load_recovery_artifact(resolved_artifact)
+    resolved_artifact.unlink()
+
+
+def _resolve_recovery_artifact_path(
+    path: str | Path,
+    *,
+    recovery_dir: str | Path | None = None,
+) -> tuple[Path, Path]:
+    artifact_path = Path(path)
+    directory = Path(recovery_dir) if recovery_dir is not None else default_recovery_dir()
     try:
         resolved_artifact = artifact_path.resolve(strict=True)
         resolved_directory = directory.resolve(strict=True)
@@ -286,10 +363,102 @@ def discard_recovery_artifact(
             "recovery artifact must be an existing file inside the recovery directory"
         ) from exc
     if not resolved_artifact.name.endswith(".recovery.json"):
-        raise RecoveryFormatError("refusing to discard a non-recovery file")
-    load_recovery_artifact(resolved_artifact)
-    resolved_artifact.unlink()
+        raise RecoveryFormatError("refusing to operate on a non-recovery file")
+    return resolved_artifact, resolved_directory
 
+
+def _rotate_quarantine(directory: Path, history_limit: int) -> None:
+    manifests: list[tuple[int, str, Path]] = []
+    for manifest in directory.glob("*.quarantined.manifest.json"):
+        try:
+            modified_ns = manifest.stat().st_mtime_ns
+        except OSError:
+            continue
+        manifests.append((modified_ns, manifest.name, manifest))
+    for _modified, _name, stale_manifest in sorted(manifests, reverse=True)[history_limit:]:
+        stale_artifact = stale_manifest.with_name(
+            stale_manifest.name[: -len(".manifest.json")]
+        )
+        try:
+            stale_artifact.unlink(missing_ok=True)
+            stale_manifest.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+def quarantine_recovery_artifact(
+    path: str | Path,
+    *,
+    recovery_dir: str | Path | None = None,
+    reason: str,
+    history_limit: int = DEFAULT_RECOVERY_QUARANTINE_LIMIT,
+) -> QuarantinedRecoveryArtifact:
+    """Move an invalid recovery aside without altering its suspect bytes."""
+    if isinstance(history_limit, bool) or not isinstance(history_limit, int) or history_limit < 1:
+        raise ValueError("history_limit must be at least 1")
+    reason_text = str(reason).strip()
+    if not reason_text:
+        raise ValueError("quarantine reason must be non-empty")
+
+    resolved_artifact, resolved_directory = _resolve_recovery_artifact_path(
+        path, recovery_dir=recovery_dir
+    )
+    try:
+        load_recovery_artifact(resolved_artifact)
+    except (OSError, RecoveryFormatError, TypeError, ValueError):
+        pass
+    else:
+        raise RecoveryFormatError(
+            "refusing to quarantine a valid recovery artifact; use discard instead"
+        )
+
+    stat_result, artifact_sha256 = stable_file_sha256(resolved_artifact)
+    if stat_result.st_size < 0:
+        raise OSError("invalid recovery artifact byte size")
+
+    quarantined_at_utc = _utc_now_text()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    token = uuid.uuid4().hex[:8]
+    quarantine_dir = _ensure_recovery_dir(resolved_directory / "quarantine")
+    quarantined_name = f"{resolved_artifact.name}.{stamp}-{token}.quarantined"
+    destination = quarantine_dir / quarantined_name
+    manifest_path = quarantine_dir / f"{quarantined_name}.manifest.json"
+    manifest = {
+        "schema": RECOVERY_QUARANTINE_SCHEMA,
+        "schema_version": RECOVERY_QUARANTINE_SCHEMA_VERSION,
+        "quarantined_at_utc": quarantined_at_utc,
+        "original_name": resolved_artifact.name,
+        "quarantined_name": quarantined_name,
+        "reason": reason_text,
+        "size_bytes": stat_result.st_size,
+        "sha256": artifact_sha256,
+    }
+    manifest_text = json.dumps(
+        manifest, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+    ) + "\n"
+
+    os.replace(resolved_artifact, destination)
+    try:
+        atomic_write_text(manifest_path, manifest_text)
+    except BaseException:
+        try:
+            os.replace(destination, resolved_artifact)
+        except OSError as rollback_error:
+            raise OSError(
+                "quarantine manifest write failed and rollback could not restore "
+                f"{resolved_artifact}: {rollback_error}"
+            ) from rollback_error
+        raise
+
+    _rotate_quarantine(quarantine_dir, history_limit)
+    return QuarantinedRecoveryArtifact(
+        path=destination,
+        manifest_path=manifest_path,
+        original_name=resolved_artifact.name,
+        quarantined_at_utc=quarantined_at_utc,
+        reason=reason_text,
+        sha256=artifact_sha256,
+    )
 
 def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:
     source = recovery["source"]
@@ -348,6 +517,7 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
                     source_path=source_path,
                     source_relation=relation,
                     source_is_newer=is_newer,
+                    integrity_status=recovery_integrity_status(recovery),
                 )
             )
         except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
@@ -361,7 +531,10 @@ class AutosaveManager:
     """Serialize recovery snapshots away from the Tk/UI thread.
 
     Explicit project files are never written by this class. Recovery artifacts are
-    separate JSON envelopes with bounded per-project history.
+    separate JSON envelopes with bounded per-project, per-session history so one
+    application session cannot prune another session's unsaved recovery evidence.
+    A completed write may rotate history only after its project epoch is revalidated,
+    so an invalidated in-flight request cannot evict an accepted recovery generation.
     """
 
     def __init__(
@@ -472,7 +645,7 @@ class AutosaveManager:
         )
 
     def _write_recovery(self, request: _AutosaveRequest) -> Path:
-        snapshot = json.loads(request.snapshot_text)
+        snapshot = strict_json_loads(request.snapshot_text)
         recovery_id = uuid.uuid4().hex
         payload = {
             "schema": RECOVERY_SCHEMA,
@@ -485,10 +658,13 @@ class AutosaveManager:
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
         }
+        payload["integrity"] = _recovery_integrity_block(payload)
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(
-            request.project_identity, recovery_id
+            request.project_identity,
+            self.session_id,
+            recovery_id,
         )
         text = json.dumps(
             payload,
@@ -497,17 +673,50 @@ class AutosaveManager:
             ensure_ascii=False,
             allow_nan=False,
         ) + "\n"
-        atomic_write_text(destination, text)
-        self._rotate_history(request.project_identity)
+        try:
+            atomic_write_text(destination, text)
+            persisted = load_recovery_artifact(destination)
+            if (
+                persisted.get("recovery_id") != recovery_id
+                or persisted.get("project_identity") != request.project_identity
+                or recovery_integrity_status(persisted) != "verified"
+            ):
+                raise RecoveryFormatError(
+                    "persisted recovery artifact identity or integrity does not match the write request"
+                )
+        except (OSError, RecoveryFormatError):
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
         return destination
 
     def _rotate_history(self, identity: str) -> None:
-        artifacts = sorted(
-            self.recovery_dir.glob(f"{identity}-*.recovery.json"),
-            key=lambda path: path.name,
-            reverse=True,
-        )
-        for stale in artifacts[self.history_limit :]:
+        """Prune only recovery generations owned by this manager's session.
+
+        Project identity alone is not a safe ownership boundary because multiple
+        CleanroomX processes can edit the same project concurrently. The filename
+        token narrows discovery to this session, then the recovery envelope is
+        validated before deletion so malformed or foreign evidence is preserved.
+        """
+        session_token = _session_filename_token(self.session_id)
+        owned: list[tuple[str, Path]] = []
+        pattern = f"{identity}-session-{session_token}-*.recovery.json"
+        for path in self.recovery_dir.glob(pattern):
+            try:
+                recovery = load_recovery_artifact(path)
+            except (OSError, RecoveryFormatError, TypeError, ValueError):
+                continue
+            if (
+                recovery.get("project_identity") != identity
+                or recovery.get("session_id") != self.session_id
+            ):
+                continue
+            owned.append((recovery["saved_at_utc"], path))
+
+        owned.sort(key=lambda item: (item[0], item[1].name), reverse=True)
+        for _saved_at, stale in owned[self.history_limit :]:
             stale.unlink(missing_ok=True)
 
     def _on_write_done(
@@ -525,24 +734,47 @@ class AutosaveManager:
         with self._lock:
             current_epoch = self._epochs.get(request.project_identity, 0)
             stale = request.epoch != current_epoch
+            stale_cleanup_failure: OSError | None = None
             if stale and artifact is not None:
                 try:
                     artifact.unlink(missing_ok=True)
-                except OSError:
-                    pass
-
-            if not stale:
-                if failure is None:
-                    self._last_saved_digest[request.project_identity] = request.digest
-                    assert artifact is not None
+                except OSError as exc:
+                    stale_cleanup_failure = exc
                     self._artifacts_by_identity.setdefault(
                         request.project_identity, set()
                     ).add(artifact)
-                    self._set_status_locked(
-                        "saved",
-                        "Autosave saved",
-                        artifact_path=artifact,
-                    )
+
+            if stale_cleanup_failure is not None:
+                self._set_status_locked(
+                    "failed",
+                    f"Autosave invalidated recovery cleanup failed: {stale_cleanup_failure}",
+                    artifact_path=artifact,
+                )
+            elif not stale:
+                if failure is None:
+                    assert artifact is not None
+                    self._last_saved_digest[request.project_identity] = request.digest
+                    self._artifacts_by_identity.setdefault(
+                        request.project_identity, set()
+                    ).add(artifact)
+                    try:
+                        # Retention is part of accepting this autosave generation.
+                        # Holding the lifecycle lock makes the epoch check and
+                        # history mutation atomic with respect to explicit save,
+                        # discard, and project-transition invalidation.
+                        self._rotate_history(request.project_identity)
+                    except OSError as exc:
+                        self._set_status_locked(
+                            "failed",
+                            f"Autosave recovery saved but history cleanup failed: {exc}",
+                            artifact_path=artifact,
+                        )
+                    else:
+                        self._set_status_locked(
+                            "saved",
+                            "Autosave saved",
+                            artifact_path=artifact,
+                        )
                 else:
                     self._set_status_locked(
                         "failed",
@@ -574,7 +806,10 @@ class AutosaveManager:
             sequence=self._sequence,
         )
 
-    def _clear_identity_locked(self, identity: str) -> None:
+    def _clear_identity_locked(
+        self,
+        identity: str,
+    ) -> tuple[tuple[Path, OSError], ...]:
         self._epochs[identity] = self._epochs.get(identity, 0) + 1
         self._last_saved_digest.pop(identity, None)
         if (
@@ -582,28 +817,67 @@ class AutosaveManager:
             and self._pending_request.project_identity == identity
         ):
             self._pending_request = None
-        artifacts = self._artifacts_by_identity.pop(identity, set())
-        for artifact in artifacts:
+
+        failures: list[tuple[Path, OSError]] = []
+        remaining: set[Path] = set()
+        for artifact in self._artifacts_by_identity.get(identity, set()):
             try:
                 artifact.unlink(missing_ok=True)
-            except OSError:
-                pass
+            except OSError as exc:
+                failures.append((artifact, exc))
+                remaining.add(artifact)
 
-    def discard_current_recoveries(self) -> None:
+        if remaining:
+            # Retain failed paths so a later save/discard can retry cleanup
+            # instead of silently orphaning a recovery artifact.
+            self._artifacts_by_identity[identity] = remaining
+        else:
+            self._artifacts_by_identity.pop(identity, None)
+        return tuple(failures)
+
+    def _set_cleanup_failure_locked(
+        self,
+        context: str,
+        failures: tuple[tuple[Path, OSError], ...] | list[tuple[Path, OSError]],
+    ) -> None:
+        artifact, exc = failures[0]
+        count = len(failures)
+        suffix = "" if count == 1 else f" ({count} artifacts could not be removed)"
+        self._set_status_locked(
+            "failed",
+            f"{context}{suffix}: {artifact}: {exc}",
+            artifact_path=artifact,
+        )
+
+    def discard_current_recoveries(self) -> AutosaveStatus:
         with self._lock:
-            self._clear_identity_locked(self._current_identity)
-            self._set_status_locked("idle", "Autosave recovery discarded")
+            failures = self._clear_identity_locked(self._current_identity)
+            if failures:
+                self._set_cleanup_failure_locked(
+                    "Autosave recovery discard incomplete",
+                    failures,
+                )
+            else:
+                self._set_status_locked("idle", "Autosave recovery discarded")
+            return self._status
 
-    def notify_explicit_save(self, source_path: str | Path) -> None:
+    def notify_explicit_save(self, source_path: str | Path) -> AutosaveStatus:
         with self._lock:
             previous = self._current_identity
             new_identity = project_identity(source_path, unsaved_id=self.session_id)
-            self._clear_identity_locked(previous)
+            failures = list(self._clear_identity_locked(previous))
             if new_identity != previous:
-                self._clear_identity_locked(new_identity)
+                failures.extend(self._clear_identity_locked(new_identity))
             self._current_identity = new_identity
             self._epochs.setdefault(new_identity, 0)
-            self._set_status_locked("idle", "Autosave clean after explicit save")
+            if failures:
+                self._set_cleanup_failure_locked(
+                    "Project saved, but autosave recovery cleanup is incomplete",
+                    failures,
+                )
+            else:
+                self._set_status_locked("idle", "Autosave clean after explicit save")
+            return self._status
 
     def wait_for_idle(self, timeout: float = 5.0) -> None:
         deadline = time.monotonic() + timeout

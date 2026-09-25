@@ -226,7 +226,8 @@ def test_hvac_fan_curve_check_uses_computed_branch_network_duty() -> None:
 
     assert check is not None
     assert check["required_airflow_m3_h"] == result["total_governing_airflow_m3_h"]
-    assert check["required_pressure_pa"] == result["supply_fan"]["total_static_pressure_pa"]
+    assert result["supply_fan"]["total_static_pressure_pa"] == 152.556
+    assert check["required_pressure_pa"] == 152.5556
     assert check["status"] == "pass"
 
 

@@ -1585,7 +1585,7 @@ def _prepare_analysis_input(
     else:
         spec = ANALYSIS_SPECS[kind]
         assert spec.parser is not None
-        parsed = _load_callable(spec.parser)(snapshot)
+        parsed = _load_callable(spec.parser)(copy.deepcopy(snapshot))
 
     _assert_input_snapshot_unchanged(
         kind,

@@ -1,47 +1,41 @@
-# CleanroomX v0.102.0 Spatial Closure Test Evidence
-
-## Verified functional baseline
+# CleanroomX v0.102.1 Spatial Closure Test Evidence
 
 Validation date: 2026-09-25
 
-The synchronized 2D/3D spatial implementation was merged to `main` by PR **#436 — Finish synchronized CleanroomX 2D/3D spatial design**.
+## Immutable base release
 
-- Merged main commit: `d4b8f6294dd7deed207935423a52cf5f19a035eb`
-- Post-merge GitHub Actions CI: **run #1493 / id 36167376732**
-- Conclusion: **success**
-- Python 3.11 complete suite: **973 passed**
-- Python 3.12 complete suite: **973 passed**
-- Python 3.13 complete suite: **973 passed**
-- Windows PowerShell launcher smoke: **success**
-- Windows CMD launcher smoke: **success**
-- Python 3.13 performance evidence: **success**
-- Clean wheel build/install and installed application checks: **success**
-- Python 3.13 Tk/Xvfb `cleanroomx-gui --demo --smoke`: **success**
-- Representative CLI smoke checks: **success**
+CleanroomX v0.102.0 is published at
+`37a83dcce3489397647f27faf41a7c79680aa576`. The patch release does not
+move or rewrite that tag.
 
-## Spatial behavior covered
+## v0.102.1 behavior under qualification
 
-The verified tree includes:
+The patch adds focused regression and installed-GUI coverage for:
 
-- one canonical `project.metadata.spatial_layout` model consumed by both views;
-- backward-compatible floor metadata and deterministic legacy defaults;
-- room elevation, classification, stable analysis-room linkage, dimensions, and pressure display;
-- door and transfer-opening geometry plus width, height, wall side, orientation, and swing metadata;
-- synchronized room/device drag, room resize, keyboard nudge, optional grid snapping, selection, zoom, pan, fit, and 3D camera controls;
-- independently switchable pressure, labels, devices, and relationship overlays;
-- pressure-cascade arrows derived only from explicit active-analysis `pressure_cascade` records;
-- deterministic layout area, volume, room-count, and device-count metrics;
-- explicit geometry-to-analysis synchronization with duplicate/missing-link rejection;
-- strict persistence-boundary spatial validation and interactive overlap/orphan/out-of-room/opening placement diagnostics;
-- representative Process / Preparation / Ante source and packaged demo geometry.
+- observed pressure-cascade delta derived only from supplied spatial room pressures;
+- explicit pass/fail/available/unavailable relationship state against configured active-analysis minimum delta;
+- synchronized relationship rendering in both 2D and 3D;
+- source and packaged demo defaulting to the verification analysis;
+- installed demo smoke proving representative three-room geometry renders in 2D and 3D and that pressure-cascade relationships render in both views.
 
-## Release identity
+The existing v0.102 spatial guarantees remain in scope: one canonical spatial model,
+floor/opening metadata, stable room identity, persisted synchronization provenance,
+all-or-nothing geometry-to-analysis mapping preflight, strict persistence validation,
+undo/redo integration, and legacy schema-v1 compatibility.
 
-The published `v0.101.0` tag remains unchanged at
-`1ca79b66c2e87c7ab45745ee98a5f60efa444cf5`.
+## Release qualification contract
 
-The `v0.102.0` release metadata changes only release/package/demo identity and documentation around the already-verified spatial tree. The normal CI workflow reruns the full Python 3.11/3.12/3.13 matrix, installed-wheel verification, launcher checks, performance evidence, GUI smoke, and CLI smoke before merge. The release publisher runs only after a successful current-main CI result and refuses to publish a stale main commit.
+Publication is intentionally tied to the normal GitHub Actions CI workflow. The publisher
+runs only after successful CI on `main`, then independently verifies that the successful
+CI commit is still the current `main` commit before tagging v0.102.1.
+
+The required CI includes the complete Python 3.11/3.12/3.13 suites, legacy solver/provenance
+compatibility gates, application and Release 2 gates, clean-wheel installation, Windows
+checkout launchers, representative CLI smoke, Python 3.13 performance evidence, and the
+installed Tk/Xvfb `cleanroomx-gui --demo --smoke` path.
 
 ## Engineering boundary
 
-No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion is intentionally changed by the v0.102.0 closure.
+No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty
+semantic, project schema version, unit convention, or engineering acceptance criterion is
+intentionally changed by v0.102.1.

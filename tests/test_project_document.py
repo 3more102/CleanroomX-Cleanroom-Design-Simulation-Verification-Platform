@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
+    ProjectFormatError, ProjectSaveConflictError, atomic_write_text,
+    load_project_document, project_file_fingerprint, project_from_dict,
     save_project_document,
 )
 
@@ -116,3 +118,64 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+
+def test_project_save_refuses_stale_external_overwrite(tmp_path):
+    path = save_project_document(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(name="Opened version"),
+    )
+    opened_fingerprint = project_file_fingerprint(path)
+
+    save_project_document(path, ProjectDocument(name="Externally changed"))
+
+    with pytest.raises(ProjectSaveConflictError, match="changed on disk"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local unsaved edits"),
+            expected_fingerprint=opened_fingerprint,
+        )
+
+    assert load_project_document(path).name == "Externally changed"
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_project_save_refuses_when_opened_file_was_removed(tmp_path):
+    path = save_project_document(
+        tmp_path / "removed.cleanroomx.json",
+        ProjectDocument(name="Opened version"),
+    )
+    opened_fingerprint = project_file_fingerprint(path)
+    path.unlink()
+
+    with pytest.raises(ProjectSaveConflictError, match="removed"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local unsaved edits"),
+            expected_fingerprint=opened_fingerprint,
+        )
+
+    assert not path.exists()
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_project_save_allows_timestamp_only_change_when_content_is_identical(tmp_path):
+    path = save_project_document(
+        tmp_path / "touched.cleanroomx.json",
+        ProjectDocument(name="Opened version"),
+    )
+    opened_fingerprint = project_file_fingerprint(path)
+    stat = path.stat()
+    os.utime(
+        path,
+        ns=(stat.st_atime_ns + 2_000_000_000, stat.st_mtime_ns + 2_000_000_000),
+    )
+
+    save_project_document(
+        path,
+        ProjectDocument(name="Saved after harmless touch"),
+        expected_fingerprint=opened_fingerprint,
+    )
+
+    assert load_project_document(path).name == "Saved after harmless touch"

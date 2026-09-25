@@ -238,6 +238,108 @@ def _snap_coordinate(value: float, grid_m: float, enabled: bool = True) -> float
     return round(_finite_number(value, 0.0) / grid) * grid
 
 
+def spatial_diagnostics(value: Any) -> list[dict[str, Any]]:
+    """Return non-destructive spatial QA findings for the editable layout."""
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    devices = layout["devices"]
+    issues: list[dict[str, Any]] = []
+    tolerance = 1e-6
+
+    for index, left in enumerate(rooms):
+        lx0, ly0 = left["x_m"], left["y_m"]
+        lx1 = lx0 + left["length_m"]
+        ly1 = ly0 + left["width_m"]
+        for right in rooms[index + 1 :]:
+            rx0, ry0 = right["x_m"], right["y_m"]
+            rx1 = rx0 + right["length_m"]
+            ry1 = ry0 + right["width_m"]
+            overlap_x = min(lx1, rx1) - max(lx0, rx0)
+            overlap_y = min(ly1, ry1) - max(ly0, ry0)
+            if overlap_x > tolerance and overlap_y > tolerance:
+                issues.append(
+                    {
+                        "code": "room_overlap",
+                        "severity": "warning",
+                        "item_ids": [left["id"], right["id"]],
+                        "message": (
+                            f"Rooms '{left['name']}' and '{right['name']}' overlap by "
+                            f"{overlap_x * overlap_y:.2f} m²."
+                        ),
+                    }
+                )
+
+    room_by_id = {room["id"]: room for room in rooms}
+
+    def contains(room: dict, x: float, y: float) -> bool:
+        return (
+            room["x_m"] - tolerance <= x <= room["x_m"] + room["length_m"] + tolerance
+            and room["y_m"] - tolerance <= y <= room["y_m"] + room["width_m"] + tolerance
+        )
+
+    for device in devices:
+        x, y, z = device["x_m"], device["y_m"], device["z_m"]
+        assigned_id = device.get("room_id")
+        assigned = room_by_id.get(assigned_id) if assigned_id else None
+        containing = [room for room in rooms if contains(room, x, y)]
+
+        if assigned_id and assigned is None:
+            issues.append(
+                {
+                    "code": "device_orphan_room",
+                    "severity": "warning",
+                    "item_ids": [device["id"]],
+                    "message": (
+                        f"Device '{device['name']}' references missing room '{assigned_id}'."
+                    ),
+                }
+            )
+        elif assigned is not None and not contains(assigned, x, y):
+            issues.append(
+                {
+                    "code": "device_outside_assigned_room",
+                    "severity": "warning",
+                    "item_ids": [device["id"], assigned["id"]],
+                    "message": (
+                        f"Device '{device['name']}' is outside assigned room "
+                        f"'{assigned['name']}'."
+                    ),
+                }
+            )
+        elif not assigned_id and rooms and not containing:
+            issues.append(
+                {
+                    "code": "device_outside_all_rooms",
+                    "severity": "warning",
+                    "item_ids": [device["id"]],
+                    "message": f"Device '{device['name']}' is outside every room.",
+                }
+            )
+
+        if z < -tolerance:
+            issues.append(
+                {
+                    "code": "device_below_floor",
+                    "severity": "warning",
+                    "item_ids": [device["id"]],
+                    "message": f"Device '{device['name']}' has Z={z:g} m below floor level.",
+                }
+            )
+        if assigned is not None and z > assigned["height_m"] + tolerance:
+            issues.append(
+                {
+                    "code": "device_above_ceiling",
+                    "severity": "warning",
+                    "item_ids": [device["id"], assigned["id"]],
+                    "message": (
+                        f"Device '{device['name']}' has Z={z:g} m above "
+                        f"'{assigned['name']}' ceiling ({assigned['height_m']:g} m)."
+                    ),
+                }
+            )
+    return issues
+
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -290,6 +392,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._workspace_var = tk.StringVar(value="0 rooms · 0 devices · 100%")
+        self._qa_var = tk.StringVar(value="QA: clean")
+        self._show_qa = tk.BooleanVar(value=True)
+        self._diagnostics: list[dict[str, Any]] = []
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -339,6 +444,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         grid_box.pack(side="left", padx=(0, 2))
         grid_box.bind("<<ComboboxSelected>>", lambda event: self._apply_grid_size())
         ttk.Label(toolbar, text="m").pack(side="left")
+        ttk.Checkbutton(
+            toolbar, text="QA", variable=self._show_qa, command=self.redraw
+        ).pack(side="left", padx=(8, 2))
+        ttk.Button(toolbar, text="Check Layout", command=self.check_layout).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -359,6 +468,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         footer2.pack(fill="x", padx=4, pady=2)
         ttk.Label(footer2, textvariable=self._coord_var, anchor="w").pack(side="left")
         ttk.Label(footer2, textvariable=self._workspace_var, anchor="e").pack(side="right")
+        ttk.Label(footer2, textvariable=self._qa_var, anchor="e").pack(side="right", padx=(0, 12))
 
         right = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=4)
@@ -392,6 +502,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("name", "Name"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
+            ("z_m", "Z (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
@@ -503,6 +614,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+        elif self.selected and self.selected.kind == "device":
+            z_text = self._property_vars.get("z_m")
+            if z_text is not None and z_text.get().strip():
+                item["z_m"] = _finite_number(z_text.get().strip(), item.get("z_m", 0.0))
         self._load_property_panel()
         self._persist("Spatial properties updated")
 
@@ -572,6 +687,17 @@ class SpatialDesignWorkspace(ttk.Frame):
     def clear_selection(self) -> None:
         self.selected = None
         self._load_property_panel()
+        self.redraw()
+
+    def check_layout(self) -> None:
+        self._diagnostics = spatial_diagnostics(self.layout)
+        if not self._diagnostics:
+            self._status_setter("Spatial QA passed: no overlap or placement warnings")
+        else:
+            first = self._diagnostics[0]["message"]
+            self._status_setter(
+                f"Spatial QA: {len(self._diagnostics)} warning(s). {first}"
+            )
         self.redraw()
 
     def nudge_selected(self, dx_steps: int, dy_steps: int) -> None:
@@ -647,6 +773,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
+        self._diagnostics = spatial_diagnostics(self.layout)
+        issue_count = len(self._diagnostics)
+        self._qa_var.set("QA: clean" if issue_count == 0 else f"QA: {issue_count} warning(s)")
         self._workspace_var.set(
             f"{len(self.layout['rooms'])} rooms · {len(self.layout['devices'])} devices · "
             f"{self.layout['view']['zoom_2d'] * 100:.0f}%"
@@ -696,18 +825,31 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+        warning_ids = {
+            item_id
+            for issue in self._diagnostics
+            for item_id in issue.get("item_ids", [])
+        } if self._show_qa.get() else set()
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#1d4ed8" if selected else "#34495e"
+            warned = room["id"] in warning_ids
+            outline = "#1d4ed8" if selected else ("#dc2626" if warned else "#34495e")
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                fill=fill, outline=outline, width=3 if selected or warned else 2,
+                dash=(6, 3) if warned and not selected else (),
                 tags=(f"room:{room['id']}", "room"),
             )
+            if warned:
+                canvas.create_text(
+                    x0 + 10, y0 + 10, text="!", fill="#dc2626",
+                    font=("TkDefaultFont", 10, "bold"),
+                    tags=(f"room:{room['id']}", "room"),
+                )
             pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
             canvas.create_text(
                 (x0 + x1) / 2,
@@ -729,11 +871,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         for device in self.layout["devices"]:
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
+            warned = device["id"] in warning_ids
             radius = 9 if selected else 7
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
-                width=3 if selected else 2,
+                fill="#ffffff",
+                outline="#c0392b" if selected else ("#dc2626" if warned else "#2c3e50"),
+                width=3 if selected or warned else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
             canvas.create_text(
@@ -788,6 +932,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+        warning_ids = {
+            item_id
+            for issue in self._diagnostics
+            for item_id in issue.get("item_ids", [])
+        } if self._show_qa.get() else set()
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -815,7 +964,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#7dd3fc" if selected else "#c8d5e3"
+            warned = room["id"] in warning_ids
+            outline = "#7dd3fc" if selected else ("#f87171" if warned else "#c8d5e3")
             tag = f"room:{room['id']}"
             canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
             canvas.create_polygon(
@@ -837,10 +987,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
+            warned = device["id"] in warning_ids
             radius = 5 if selected else 4
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
+                fill="#fbbf24",
+                outline="#ffffff" if selected else ("#f87171" if warned else "#d6a20f"),
                 width=2, tags=(tag, "device3d"),
             )
             canvas.create_text(

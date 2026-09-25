@@ -23,6 +23,10 @@ Both are converted in memory to the current project model with one analysis and 
 
 The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `Infinity`, unexpected schemas, non-integer schema versions, unsupported future/older schema versions after known migration, unsupported analysis kinds, non-object analysis inputs, duplicate analysis ids, and invalid active-analysis references.
 
+When `project.metadata.spatial_layout` is present, its existing spatial layout version 1 contract is also validated. Room and device ids must be non-empty and unique; device room references must resolve; supported device types are enforced; coordinates must be finite; room dimensions and grid spacing must be positive; and persisted view zoom/elevation values must remain in supported bounds. Invalid spatial metadata is rejected rather than silently normalized during project load or save.
+
+Project schema version remains **1**. This is validation hardening of an existing metadata contract, not a project-schema migration. Projects without spatial metadata remain valid, and verification-derived workspace geometry is not persisted merely by opening or refreshing a project.
+
 Unknown future project formats are rejected rather than silently reinterpreted.
 
 ## Save behavior after migration

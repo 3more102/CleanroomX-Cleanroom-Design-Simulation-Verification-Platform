@@ -1,56 +1,55 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.100.0
-Validation date: 2026-09-24
+Release: CleanroomX v0.101.0 (Release 2)
+Validation date: 2026-09-25
 
-MERGED RELEASE
+MERGED RELEASE TARGET
 main commit:
-fa02c71f990790089cb9c64eb2e009cd984eb5db
+0f487a7e11ad81c8bcd54eb91b6420a1d46523ea
 
 EXACT TESTED PR HEAD
-d8965090ee86713919079d9ee5e8a3b1d8f95e3b
-Pull request #242
+993a2803e1af6a37af05ac0036948cc9f7fb3fce
+Pull request #431
+
+EXACT TESTED TREE
+a6900bc9525721d964498b70c5da68950d7d6fba
+
+The merged release-target commit has the same tree SHA as the CI-tested PR head.
 
 GITHUB ACTIONS
-run #822
-run id 36047808002
+run #1463
+run id 36162913321
 conclusion SUCCESS
 
 FULL TEST MATRIX
-Python 3.11: 576 passed
-Python 3.12: 576 passed
-Python 3.13: 576 passed
+Python 3.11: 960 passed
+Python 3.12: 960 passed
+Python 3.13: 960 passed
 
 ADDITIONAL VERIFIED GATES
-PASS - v0.91 compatibility regressions
-PASS - v0.92 compatibility regressions
-PASS - v0.93 supplied-point replay regressions
-PASS - v0.94 canonical solver-provenance regressions
-PASS - v0.95 solver-result-integrity compatibility regressions
-PASS - focused v0.100 application/project/GUI release regressions
-PASS - clean wheel build/install on Python 3.11
-PASS - clean wheel build/install on Python 3.12
-PASS - clean wheel build/install on Python 3.13
+PASS - focused application/desktop/input-contract gate: 291 passed on each interpreter
+PASS - Release 2 consolidation gate: 128 passed on each interpreter
+PASS - v0.91-v0.95 compatibility gates on each interpreter
+PASS - clean wheel cleanroomx-0.101.0-py3-none-any.whl built and installed on Python 3.11
+PASS - clean wheel cleanroomx-0.101.0-py3-none-any.whl built and installed on Python 3.12
+PASS - clean wheel cleanroomx-0.101.0-py3-none-any.whl built and installed on Python 3.13
 PASS - installed cleanroomx-gui --check
-PASS - packaged demo resource validation
+PASS - packaged demo/resource validation
+PASS - installed cleanroomx-project-run smoke
+PASS - representative CLI smoke
+PASS - Python 3.13 Release 2 performance evidence
 PASS - Python 3.13 installed Tk/Xvfb cleanroomx-gui --demo --smoke
-PASS - representative CLI JSON/Markdown smoke checks
 
-V0.100 RELEASE INTEGRITY
-PASS - package/runtime/source-demo/packaged-demo version synchronization at 0.100.0
-PASS - application registry/catalog parity and pre-Tk fail-fast validation
-PASS - canonical application-input SHA-256 provenance
-PASS - before/after hash + byte-size evidence for external dependencies
-PASS - strict JSON run-bundle provenance export
-PASS - portable consistency/dossier references across import and Save Project As
-PASS - cache invalidation on base-directory context change
-PASS - abandoned-worker backend exclusivity
-PASS - same-directory flush/fsync atomic project/export writes
-PASS - backend-derived fan/system plot evidence with labeled series
-PASS - self-contained installed demonstration
+V0.101 RELEASE INTEGRITY
+PASS - package/runtime/source-demo/packaged-demo version synchronization at 0.101.0
+PASS - synchronized 2D/3D spatial workspace is integrated into the desktop application
+PASS - strict engineering JSON ingestion
+PASS - durable project persistence, guarded saves, recovery, revisions, and bounded undo/redo
+PASS - immutable run evidence, dependency freshness, portable bundles/reports, and project batch automation
+PASS - no open pull requests or issues at release-closure inspection
 
 ENGINEERING BOUNDARY
 No intentional changes to validated solver equations, numerical tolerances,
 no-extrapolation/root-selection behavior, uncertainty enumeration semantics,
-or engineering acceptance criteria.
+project schema version, unit conventions, or engineering acceptance criteria.

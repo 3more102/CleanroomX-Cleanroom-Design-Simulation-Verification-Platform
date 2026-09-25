@@ -9,6 +9,7 @@ import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
     ProjectDocument,
+    ProjectFileBusyError,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
@@ -208,3 +209,79 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+def test_guarded_save_refuses_concurrent_cleanroomx_lock_without_touching_project(tmp_path):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    expected = capture_project_file_revision(path)
+
+    with project_module._project_save_lock(path):
+        with pytest.raises(ProjectFileBusyError) as exc_info:
+            save_project_document_guarded(
+                path,
+                ProjectDocument(name="Window edit"),
+                expected_revision=expected,
+            )
+
+    assert exc_info.value.path == path.resolve(strict=False)
+    assert load_project_document(path).name == "Opened"
+
+
+def test_guarded_save_releases_lock_after_write_failure(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    expected = capture_project_file_revision(path)
+    original_atomic_write = project_module._atomic_write_text
+
+    def fail_write(*args, **kwargs):
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(project_module, "_atomic_write_text", fail_write)
+    with pytest.raises(OSError, match="simulated write failure"):
+        save_project_document_guarded(
+            path,
+            ProjectDocument(name="First attempt"),
+            expected_revision=expected,
+        )
+
+    assert load_project_document(path).name == "Opened"
+
+    monkeypatch.setattr(project_module, "_atomic_write_text", original_atomic_write)
+    saved_path, _revision = save_project_document_guarded(
+        path,
+        ProjectDocument(name="Retry"),
+        expected_revision=expected,
+    )
+
+    assert load_project_document(saved_path).name == "Retry"
+
+
+def test_gui_save_reports_busy_project_without_overwrite(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+    warnings = []
+    errors = []
+
+    def busy_save(*args, **kwargs):
+        raise ProjectFileBusyError(path, project_module._project_save_lock_path(path))
+
+    monkeypatch.setattr(gui_module, "save_project_document_guarded", busy_save)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "Opened"
+    assert warnings and warnings[0][0] == "Project save in progress"
+    assert "being saved by another CleanroomX process" in app.status_var.value
+    assert errors == []

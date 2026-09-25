@@ -86,7 +86,17 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
-Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
+Removing an analysis also clears any retained current result owned by that analysis, preventing stale current-result/report export after deletion. Historical session snapshots remain explicitly labeled as historical evidence until the project/session run state is reset.
+
+### Session run history
+
+Every accepted desktop analysis run is retained in the **Run History** tab in addition to the existing per-analysis current-result cache. The history is bounded to 100 accepted runs for the active project/path-context session and uses deterministic sequence numbers. Each retained run is deep-copied when it enters history, so a later rerun, input edit, result mutation, or analysis rename cannot rewrite the stored nested result/report/diagnostic/plot evidence.
+
+The history list uses lightweight immutable summaries containing the run sequence, analysis identity/name at execution, status, and submitted-input SHA-256. It labels whether a retained run still matches the analysis's **committed** input, represents historical input, or belongs to an analysis that has since been removed. Raw uncommitted editor text is deliberately not treated as committed analysis state; current-result availability is still invalidated immediately by editor modification.
+
+Historical evidence is never promoted back into the current-result cache automatically. Normal **Export Result JSON**, **Export Run Bundle JSON**, and **Export Report Markdown** continue to require a current run whose recorded input SHA-256 matches the current committed analysis input. **Export selected run bundle...** in the Run History tab (or the corresponding File menu action) exports the explicitly selected historical run using the existing run-bundle JSON shape and atomic export path.
+
+Session run history is not written into `cleanroomx.project` schema version 1 and is not part of crash-recovery persistence. It is cleared when a project/recovery is replaced and when **Save Project As** changes path context, preventing old run evidence from being associated with a different project identity or rebased external-file context. Export a historical run bundle when durable long-term retention is required.
 
 ## Supported workflows
 

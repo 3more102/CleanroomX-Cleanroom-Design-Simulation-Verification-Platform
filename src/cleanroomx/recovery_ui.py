@@ -11,7 +11,6 @@ from .autosave import (
     RecoveryScan,
     discard_recovery_artifact,
     load_recovery_artifact,
-    prepare_recovery_restore,
 )
 
 
@@ -300,15 +299,6 @@ class RecoveryDialog(tk.Toplevel):
     def _restore(self) -> None:
         candidate = self._selected_candidate()
         if candidate is None:
-            return
-        try:
-            prepare_recovery_restore(candidate.path)
-        except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
-            messagebox.showerror(
-                "Recovery snapshot is invalid",
-                str(exc),
-                parent=self,
-            )
             return
         self.result_path = candidate.path
         self.destroy()

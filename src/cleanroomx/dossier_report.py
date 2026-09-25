@@ -18,7 +18,7 @@ def markdown_dossier_report(result: dict) -> str:
         lines.extend(["## Dossier metadata", ""])
         for key, value in metadata.items():
             if value is not None:
-                lines.append(f"- {key.replace('_', ' ').title()}: {value}")
+                lines.append(f"- {key.replace('_', ' ').title()}: {markdown_text(value)}")
         lines.append("")
 
     lines.extend(
@@ -121,7 +121,7 @@ def markdown_dossier_report(result: dict) -> str:
                 item["status"] == "not_checked" for item in room["findings"]
             )
             lines.append(
-                f"- **{room['room']}** — ACH {room['ach']:.3f} 1/h; "
+                f"- **{markdown_text(room['room'])}** — ACH {room['ach']:.3f} 1/h; "
                 f"failures {fail_count}; unchecked {unchecked}."
             )
         if verification["pressure_cascade"]:
@@ -149,13 +149,13 @@ def markdown_dossier_report(result: dict) -> str:
         if hvac.get("duct_network") is not None:
             network = hvac["duct_network"]
             lines.append(
-                f"- Critical duct path: **{network['critical_path']}** at "
+                f"- Critical duct path: **{markdown_text(network['critical_path'])}** at "
                 f"**{network['critical_path_pressure_drop_pa']} Pa**"
             )
         if hvac.get("branch_flow_network") is not None:
             network = hvac["branch_flow_network"]
             lines.append(
-                f"- Critical branch-flow terminal: **{network['critical_terminal']}** at "
+                f"- Critical branch-flow terminal: **{markdown_text(network['critical_terminal'])}** at "
                 f"**{network['critical_path_pressure_drop_pa']} Pa**"
             )
         if hvac.get("supply_fan") is not None:
@@ -220,12 +220,12 @@ def markdown_dossier_report(result: dict) -> str:
         if consistency["verification_only_rooms"]:
             lines.append(
                 "- Verification-only rooms: "
-                + ", ".join(consistency["verification_only_rooms"])
+                + ", ".join(markdown_text(name) for name in consistency["verification_only_rooms"])
             )
         if consistency["hvac_only_rooms"]:
             lines.append(
                 "- HVAC-only rooms: "
-                + ", ".join(consistency["hvac_only_rooms"])
+                + ", ".join(markdown_text(name) for name in consistency["hvac_only_rooms"])
             )
         lines.extend(["", consistency["scope_note"]])
 

@@ -1,10 +1,10 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.101 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.102 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.102.0**, closing the synchronized 2D/3D spatial-design workspace on top of the verified Release 2 engineering baseline. It adds one canonical spatial model shared by the 2D editor and 3D viewer, floor/opening metadata, explicit pressure-cascade overlays, safe geometry-to-analysis synchronization, spatial integrity checks, and deterministic layout metrics while preserving the validated solver/provenance backend. Published `v0.100.0` and `v0.101.0` tags remain immutable at their original validated commits.
+The current release line is **CleanroomX v0.102.1**, closing the synchronized 2D/3D spatial-design workspace on top of the verified Release 2 engineering baseline. It adds one canonical spatial model shared by the 2D editor and 3D viewer, floor/opening metadata, explicit pressure-cascade overlays, safe geometry-to-analysis synchronization, spatial integrity checks, and deterministic layout metrics while preserving the validated solver/provenance backend. Published `v0.100.0` and `v0.101.0` tags remain immutable at their original validated commits.
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, strict engineering-ingestion and project-batch regressions, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
 

@@ -16,7 +16,11 @@ from .application import (
     _external_dependency_references,
     _resolve_relative,
 )
-from .persistence import atomic_write_generated, stable_file_sha256
+from .persistence import (
+    _fsync_directory,
+    atomic_write_generated,
+    stable_file_sha256,
+)
 from .project import (
     ProjectDocument,
     ProjectFormatError,
@@ -41,6 +45,19 @@ _COPY_CHUNK_SIZE = 1024 * 1024
 
 class ProjectBundleError(ValueError):
     """Raised when a portable project bundle is incomplete, unsafe, or corrupted."""
+
+
+class ProjectBundleDurabilityError(ProjectBundleError):
+    """Raised after extraction publish when directory durability is uncertain."""
+
+    def __init__(self, path: str | Path, cause: OSError) -> None:
+        self.path = Path(path)
+        self.cause = cause
+        self.committed = True
+        super().__init__(
+            "portable bundle extraction was published, but parent-directory "
+            f"durability could not be confirmed for {self.path}: {cause}"
+        )
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
@@ -586,6 +603,15 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
     }
 
 
+def _fsync_staged_directory_tree(root: Path) -> None:
+    """Persist staged directory entries before the tree is atomically published."""
+    directories = [item for item in root.rglob("*") if item.is_dir()]
+    directories.sort(key=lambda item: len(item.parts), reverse=True)
+    for directory in directories:
+        _fsync_directory(directory)
+    _fsync_directory(root)
+
+
 def extract_project_bundle(
     path: str | Path,
     destination: str | Path,
@@ -662,10 +688,21 @@ def extract_project_bundle(
         extracted_project = stage.joinpath(*PurePosixPath(report["project_path"]).parts)
         load_project_document_with_revision(extracted_project)
 
+        try:
+            _fsync_staged_directory_tree(stage)
+        except OSError as exc:
+            raise ProjectBundleError(
+                f"staged bundle extraction could not be made durable: {target}"
+            ) from exc
+
         if target.exists():
             target.rmdir()
         os.replace(stage, target)
         published = True
+        try:
+            _fsync_directory(target.parent)
+        except OSError as exc:
+            raise ProjectBundleDurabilityError(target, exc) from exc
     finally:
         if not published:
             shutil.rmtree(stage, ignore_errors=True)

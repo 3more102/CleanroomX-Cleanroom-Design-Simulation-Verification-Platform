@@ -12,6 +12,9 @@ from .application import (
     analysis_run_matches_input,
     validate_analysis_input,
 )
+from .air_system_design import air_system_design_from_dict
+from .design_consistency import analyze_design_air_system_consistency
+from .design_requirements import design_requirements_from_dict
 from .markdown import markdown_text
 from .project import ProjectDocument
 from .run_history import run_history_records
@@ -183,6 +186,212 @@ def _analysis_definition_issues(
                     details={"analysis_kind": analysis.kind},
                 )
             )
+    return issues
+
+
+def _design_traceability_issues(project: ProjectDocument) -> list[dict[str, Any]]:
+    requirement_analyses = [
+        item for item in project.analyses if item.kind == "design_requirements"
+    ]
+    air_system_analyses = [
+        item for item in project.analyses if item.kind == "air_system_design"
+    ]
+    if not requirement_analyses or not air_system_analyses:
+        return []
+
+    if len(requirement_analyses) != 1 or len(air_system_analyses) != 1:
+        return [
+            _issue(
+                rule="design_traceability.pairing_ambiguous",
+                category="design_traceability",
+                severity="info",
+                message=(
+                    "Requirement-to-air-system consistency was not evaluated because the "
+                    "project contains multiple candidate analyses and no persisted pairing "
+                    "contract identifies which analyses belong together."
+                ),
+                suggested_action=(
+                    "Review the intended analysis pairing explicitly. Automated comparison "
+                    "remains disabled until one unambiguous requirements/air-system pair exists."
+                ),
+                details={
+                    "design_requirement_analysis_ids": [
+                        item.id for item in requirement_analyses
+                    ],
+                    "air_system_analysis_ids": [
+                        item.id for item in air_system_analyses
+                    ],
+                },
+            )
+        ]
+
+    requirement_analysis = requirement_analyses[0]
+    air_system_analysis = air_system_analyses[0]
+    try:
+        requirements = design_requirements_from_dict(requirement_analysis.input)
+        air_system = air_system_design_from_dict(air_system_analysis.input)
+    except (ValueError, KeyError, TypeError):
+        # Ordinary input diagnostics already report parser/validation failures.
+        return []
+
+    comparison = analyze_design_air_system_consistency(requirements, air_system)
+    issues: list[dict[str, Any]] = []
+
+    for room_name in comparison["requirements_only_rooms"]:
+        issues.append(
+            _issue(
+                rule="design_traceability.requirements_room_missing_air_system",
+                category="design_traceability",
+                severity="warning",
+                element_type="room",
+                element_name=room_name,
+                message=(
+                    f"Room {room_name!r} has explicit design requirements but no exact-name "
+                    "room in the air-system design."
+                ),
+                suggested_action=(
+                    "Add or rename the corresponding air-system room, or confirm that the "
+                    "requirements room is intentionally outside this air-system design scope."
+                ),
+                details={
+                    "design_requirements_analysis_id": requirement_analysis.id,
+                    "air_system_analysis_id": air_system_analysis.id,
+                },
+            )
+        )
+
+    for room_name in comparison["air_system_only_rooms"]:
+        issues.append(
+            _issue(
+                rule="design_traceability.air_system_room_missing_requirements",
+                category="design_traceability",
+                severity="warning",
+                element_type="room",
+                element_name=room_name,
+                message=(
+                    f"Room {room_name!r} exists in the air-system design but has no exact-name "
+                    "design-requirements room."
+                ),
+                suggested_action=(
+                    "Add or rename the corresponding requirements room, or document why the "
+                    "air-system room is intentionally outside the requirements scope."
+                ),
+                details={
+                    "design_requirements_analysis_id": requirement_analysis.id,
+                    "air_system_analysis_id": air_system_analysis.id,
+                },
+            )
+        )
+
+    for room_check in comparison["room_checks"]:
+        room_name = room_check["room"]
+        geometry_mismatches = [
+            item for item in room_check["geometry"] if item["status"] == "mismatch"
+        ]
+        if geometry_mismatches:
+            issues.append(
+                _issue(
+                    rule="design_traceability.geometry_mismatch",
+                    category="design_traceability",
+                    severity="error",
+                    element_type="room",
+                    element_name=room_name,
+                    message=(
+                        f"Room {room_name!r} geometry differs between design requirements "
+                        "and the air-system design."
+                    ),
+                    suggested_action=(
+                        "Reconcile duplicated room dimensions before relying on airflow or "
+                        "load calculations that depend on room volume."
+                    ),
+                    details={
+                        "design_requirements_analysis_id": requirement_analysis.id,
+                        "air_system_analysis_id": air_system_analysis.id,
+                        "differences": geometry_mismatches,
+                        "numeric_comparison": comparison["numeric_comparison"],
+                    },
+                )
+            )
+
+        ach_check = room_check["minimum_ach"]
+        if ach_check["status"] in {"missing", "mismatch"}:
+            issues.append(
+                _issue(
+                    rule="design_traceability.minimum_ach_mismatch",
+                    category="design_traceability",
+                    severity="error",
+                    element_type="room",
+                    element_name=room_name,
+                    message=(
+                        f"Room {room_name!r} air-system minimum ACH does not carry the "
+                        "configured design requirement."
+                    ),
+                    suggested_action=(
+                        "Reconcile the air-system minimum ACH with the explicit requirement "
+                        "and its recorded project/reference provenance."
+                    ),
+                    details={
+                        "design_requirements_analysis_id": requirement_analysis.id,
+                        "air_system_analysis_id": air_system_analysis.id,
+                        "check": ach_check,
+                        "numeric_comparison": comparison["numeric_comparison"],
+                    },
+                )
+            )
+
+        temperature_check = room_check["room_temperature"]
+        if temperature_check["status"] in {"missing", "mismatch"}:
+            issues.append(
+                _issue(
+                    rule="design_traceability.room_temperature_mismatch",
+                    category="design_traceability",
+                    severity="error",
+                    element_type="room",
+                    element_name=room_name,
+                    message=(
+                        f"Room {room_name!r} air-system room temperature is missing or "
+                        "outside the configured design-requirement range."
+                    ),
+                    suggested_action=(
+                        "Set the air-system room design temperature inside the configured "
+                        "requirement range, or revise the requirement through its authoritative source."
+                    ),
+                    details={
+                        "design_requirements_analysis_id": requirement_analysis.id,
+                        "air_system_analysis_id": air_system_analysis.id,
+                        "check": temperature_check,
+                        "numeric_comparison": comparison["numeric_comparison"],
+                    },
+                )
+            )
+
+        sensible_check = room_check["sensible_load"]
+        if sensible_check["status"] == "mismatch":
+            issues.append(
+                _issue(
+                    rule="design_traceability.sensible_load_scope_mismatch",
+                    category="design_traceability",
+                    severity="warning",
+                    element_type="room",
+                    element_name=room_name,
+                    message=(
+                        f"Room {room_name!r} air-system sensible load differs from the "
+                        "explicit occupancy/equipment/process sensible-load components in "
+                        "design requirements."
+                    ),
+                    suggested_action=(
+                        "Review whether the air-system load intentionally includes additional "
+                        "load components; otherwise reconcile the duplicated sensible-load basis."
+                    ),
+                    details={
+                        "design_requirements_analysis_id": requirement_analysis.id,
+                        "air_system_analysis_id": air_system_analysis.id,
+                        "check": sensible_check,
+                        "numeric_comparison": comparison["numeric_comparison"],
+                    },
+                )
+            )
+
     return issues
 
 
@@ -467,6 +676,7 @@ def analyze_project_diagnostics(
     if layout is not None:
         issues.extend(_spatial_issues(project, layout))
     issues.extend(_analysis_definition_issues(project, base_dir=base))
+    issues.extend(_design_traceability_issues(project))
     if layout is not None:
         issues.extend(_sync_issues(project, layout))
     issues.extend(_run_history_issues(project, base_dir=base))

@@ -14,6 +14,8 @@ import threading
 import traceback
 from typing import Any
 
+from . import __version__
+
 
 LOGGER_NAME = "cleanroomx"
 LOG_SCHEMA = "cleanroomx.local-log"
@@ -110,6 +112,7 @@ class _JsonLineFormatter(logging.Formatter):
         payload: dict[str, Any] = {
             "schema": LOG_SCHEMA,
             "schema_version": LOG_SCHEMA_VERSION,
+            "application_version": __version__,
             "timestamp_utc": _utc_now_text(),
             "level": record.levelname,
             "logger": record.name,
@@ -225,10 +228,18 @@ def log_exception(
     )
 
 
-def _flush_local_handlers() -> None:
+def _local_handlers_for(path: Path) -> list[logging.Handler]:
+    normalized = path.expanduser().resolve(strict=False)
+    handlers: list[logging.Handler] = []
     for handler in logging.getLogger(LOGGER_NAME).handlers:
-        if getattr(handler, "_cleanroomx_local_handler", False):
-            handler.flush()
+        if not getattr(handler, "_cleanroomx_local_handler", False):
+            continue
+        base_filename = getattr(handler, "baseFilename", None)
+        if base_filename is None:
+            continue
+        if Path(base_filename).expanduser().resolve(strict=False) == normalized:
+            handlers.append(handler)
+    return handlers
 
 
 def read_log_tail(
@@ -251,12 +262,20 @@ def read_log_tail(
     if not path.exists():
         return ()
 
-    _flush_local_handlers()
-    size = path.stat().st_size
-    start = max(0, size - max_bytes)
-    with path.open("rb") as handle:
-        handle.seek(start)
-        raw = handle.read(max_bytes)
+    handlers = _local_handlers_for(path)
+    for handler in handlers:
+        handler.acquire()
+    try:
+        for handler in handlers:
+            handler.flush()
+        size = path.stat().st_size
+        start = max(0, size - max_bytes)
+        with path.open("rb") as handle:
+            handle.seek(start)
+            raw = handle.read(max_bytes)
+    finally:
+        for handler in reversed(handlers):
+            handler.release()
 
     text = raw.decode("utf-8", errors="replace")
     lines = text.splitlines()
@@ -292,8 +311,6 @@ def build_diagnostic_bundle(
     max_log_records: int = DEFAULT_BUNDLE_LOG_RECORDS,
 ) -> dict[str, Any]:
     """Build a strict-JSON, bounded, local diagnostic support bundle."""
-    from . import __version__
-
     path = Path(log_path)
     records = read_log_tail(
         path,

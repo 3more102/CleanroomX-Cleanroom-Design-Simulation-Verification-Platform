@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased durable verified persistence and recovery integrity — 2026-09-25
+
+- Hardens the shared project/export/recovery atomic writer with stable file-identity hashing, durable parent-directory rename synchronization on supported POSIX platforms, and byte-for-byte SHA-256 verification after replacement.
+- Surfaces directory-sync and post-replace verification failures instead of reporting an unverified save as successful; temporary files are still cleaned up on failure.
+- Advances the separate `cleanroomx.autosave` recovery-envelope schema to version 2 with a required canonical SHA-256 integrity record covering the full recovery payload except the integrity block itself.
+- Keeps recovery schema version 1 readable for backward compatibility; new v2 artifacts fail closed when well-formed JSON content is corrupted or modified without a matching digest.
+- Strengthens project/source fingerprinting against path-replacement and torn-read races by requiring device/inode/size/mtime identity to remain stable across the open file handle and path.
+- Adds failure-injection coverage for failed replace, failed parent-directory sync, post-replace corruption, simulated disk-full autosave failure, v1 recovery compatibility, v2 checksum corruption, recovery scanning, and source/artifact preservation.
+- Does not change project schema version 1, engineering equations, numerical tolerances, solver acceptance semantics, analysis APIs, or project migration behavior.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

@@ -46,7 +46,9 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. Newly written projects also carry a deterministic SHA-256 integrity block over canonical strict JSON; the top-level integrity block itself is the only excluded field. A present integrity block is verified on load, so valid-JSON content corruption is rejected in addition to unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Existing unsigned schema-v1 projects and supported legacy single-analysis shapes remain loadable; a subsequent save writes integrity evidence without changing the schema version.
+
+After an explicit project save, CleanroomX hashes the exact serialized bytes that were intended for commit, re-reads the destination, checks that byte digest, and parses/verifies the committed project before the save is reported successful. This complements atomic replace and external-change guarding; it does not turn the checksum into a source-authenticity signature.
 
 ### External-change write protection
 
@@ -62,7 +64,7 @@ The desktop application maintains crash-recovery autosaves separately from expli
 
 Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned `cleanroomx.autosave` recovery envelope in the per-user recovery directory using the same atomic-write primitive as project persistence. Writes run on a single background worker, identical snapshots are suppressed, newer pending edits are coalesced, and history is bounded per project identity.
 
-Each artifact contains the recoverable project snapshot, the active raw editor draft, application version, recovery timestamp, project identity, and a source-file fingerprint containing path, size, modification time, and SHA-256. A malformed JSON editor draft is preserved as raw text without being promoted into the authoritative project model. The recovery scanner reports malformed artifacts explicitly and classifies the source project as unchanged, changed, missing, or newer. This foundation never automatically overwrites a newer project file.
+Each artifact contains the recoverable project snapshot, the active raw editor draft, application version, recovery timestamp, project identity, and a source-file fingerprint containing path, size, modification time, and SHA-256. Newly written recovery envelopes also carry their own deterministic SHA-256 integrity block, covering the recoverable snapshot, raw draft, source fingerprint, timestamp, and other envelope fields. A present recovery integrity block is verified before the artifact is accepted. Older unsigned recovery artifacts remain readable for compatibility. A malformed JSON editor draft is preserved as raw text without being promoted into the authoritative project model. The recovery scanner reports malformed or integrity-failed artifacts explicitly and classifies the source project as unchanged, changed, missing, or newer. This foundation never automatically overwrites a newer project file.
 
 Current-session recovery artifacts are invalidated after an explicit save or an explicit discard. Recovery files from older sessions are not silently deleted by merely opening or saving the same project.
 
@@ -82,7 +84,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Project saves are atomic, externally guarded, integrity-stamped, and read back for exact-byte verification before success is reported; filesystem or verification failures are surfaced in the GUI.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 

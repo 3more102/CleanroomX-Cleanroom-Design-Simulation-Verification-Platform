@@ -10,6 +10,7 @@ import pytest
 import cleanroomx.persistence as persistence
 from cleanroomx.persistence import (
     AtomicWriteDurabilityError,
+    AtomicWriteVerificationError,
     atomic_write_bytes,
     atomic_write_text,
 )
@@ -132,3 +133,40 @@ def test_atomic_write_marks_post_replace_durability_failure_as_committed(
     assert isinstance(exc_info.value.__cause__, OSError)
     assert target.read_text(encoding="utf-8") == "new-result\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_rejects_corrupt_stage_before_replace(tmp_path, monkeypatch):
+    target = tmp_path / "verified.json"
+    target.write_bytes(b"previous")
+    original_verify = persistence._verify_file_payload
+
+    def corrupt_stage(path, payload, *, stage, committed):
+        if stage == "staged write":
+            path.write_bytes(b"corrupt")
+        return original_verify(path, payload, stage=stage, committed=committed)
+
+    monkeypatch.setattr(persistence, "_verify_file_payload", corrupt_stage)
+
+    with pytest.raises(AtomicWriteVerificationError, match="staged write") as exc_info:
+        atomic_write_bytes(target, b"replacement")
+
+    assert exc_info.value.committed is False
+    assert target.read_bytes() == b"previous"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_rejects_committed_content_corruption(tmp_path, monkeypatch):
+    target = tmp_path / "verified.json"
+    original_sync = persistence._fsync_directory
+
+    def corrupt_after_replace(directory):
+        original_sync(directory)
+        target.write_bytes(b"corrupted")
+
+    monkeypatch.setattr(persistence, "_fsync_directory", corrupt_after_replace)
+
+    with pytest.raises(AtomicWriteVerificationError, match="committed write") as exc_info:
+        atomic_write_bytes(target, b"expected")
+
+    assert exc_info.value.committed is True
+    assert target.read_bytes() == b"corrupted"

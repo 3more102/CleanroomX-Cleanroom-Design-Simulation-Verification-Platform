@@ -123,6 +123,48 @@ def normalize_layout(value: Any) -> dict:
     return result
 
 
+def spatial_layout_summary(value: Any) -> dict:
+    """Return operator-facing spatial metrics without changing the stored model."""
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    devices = layout["devices"]
+    room_ids = {room["id"] for room in rooms}
+    footprint_m2 = sum(room["length_m"] * room["width_m"] for room in rooms)
+    volume_m3 = sum(
+        room["length_m"] * room["width_m"] * room["height_m"] for room in rooms
+    )
+    pressures = [
+        room["pressure_pa"] for room in rooms if room.get("pressure_pa") is not None
+    ]
+    device_counts = {
+        device_type: sum(1 for device in devices if device["type"] == device_type)
+        for device_type in DEVICE_TYPES
+    }
+    unassigned_devices = sum(
+        1 for device in devices if device.get("room_id") not in room_ids
+    )
+    if rooms:
+        min_x = min(room["x_m"] for room in rooms)
+        min_y = min(room["y_m"] for room in rooms)
+        max_x = max(room["x_m"] + room["length_m"] for room in rooms)
+        max_y = max(room["y_m"] + room["width_m"] for room in rooms)
+        extents_m = {"width": max_x - min_x, "height": max_y - min_y}
+    else:
+        extents_m = {"width": 0.0, "height": 0.0}
+
+    return {
+        "room_count": len(rooms),
+        "device_count": len(devices),
+        "footprint_m2": footprint_m2,
+        "volume_m3": volume_m3,
+        "pressure_min_pa": min(pressures) if pressures else None,
+        "pressure_max_pa": max(pressures) if pressures else None,
+        "device_counts": device_counts,
+        "unassigned_device_count": unassigned_devices,
+        "extents_m": extents_m,
+    }
+
+
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
@@ -277,8 +319,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._summary_var = tk.StringVar(value="0 rooms • 0 devices")
+        self._view_2d_var = tk.StringVar(value="2D • 100%")
+        self._view_3d_var = tk.StringVar(value="3D • 35° / 28°")
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -307,7 +353,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+            side="left", padx=(6, 2)
+        )
+        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(
+            side="left", padx=2
         )
         ttk.Button(
             toolbar,
@@ -315,13 +364,31 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
 
+        scene_bar = ttk.Frame(self, padding=(8, 2, 8, 5))
+        scene_bar.pack(fill="x")
+        ttk.Label(
+            scene_bar,
+            textvariable=self._summary_var,
+            font=("TkDefaultFont", 9, "bold"),
+        ).pack(side="left")
+        ttk.Label(
+            scene_bar,
+            text="2D: drag to move • wheel to zoom • middle/right drag to pan    "
+                 "3D: click to select • wheel to zoom",
+        ).pack(side="right")
+
         body = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
 
         two_d = ttk.Frame(body)
         body.add(two_d, weight=4)
-        ttk.Label(two_d, text="2D Layout", font=("TkDefaultFont", 10, "bold")).pack(
-            anchor="w", padx=4, pady=(2, 4)
+        header2 = ttk.Frame(two_d)
+        header2.pack(fill="x")
+        ttk.Label(header2, text="2D PLAN", font=("TkDefaultFont", 10, "bold")).pack(
+            side="left", padx=4, pady=(2, 4)
+        )
+        ttk.Label(header2, textvariable=self._view_2d_var).pack(
+            side="right", padx=4, pady=(2, 4)
         )
         self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
         self.canvas_2d.pack(fill="both", expand=True)
@@ -334,8 +401,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         right.add(three_d, weight=3)
         header3 = ttk.Frame(three_d)
         header3.pack(fill="x")
-        ttk.Label(header3, text="3D View", font=("TkDefaultFont", 10, "bold")).pack(
+        ttk.Label(header3, text="3D PERSPECTIVE", font=("TkDefaultFont", 10, "bold")).pack(
             side="left", padx=4, pady=(2, 4)
+        )
+        ttk.Label(header3, textvariable=self._view_3d_var).pack(
+            side="left", padx=(8, 4), pady=(2, 4)
         )
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
@@ -393,6 +463,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<MouseWheel>", self._on_wheel)
         self.canvas_2d.bind("<Button-4>", lambda event: self._zoom_at(1.1, event.x, event.y))
         self.canvas_2d.bind("<Button-5>", lambda event: self._zoom_at(1 / 1.1, event.x, event.y))
+        self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
+        self.canvas_2d.bind("<Key-f>", lambda event: self.fit_views())
         self.canvas_3d.bind("<MouseWheel>", self._on_wheel_3d)
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
@@ -401,6 +473,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
+        self.canvas_3d.bind("<Delete>", lambda event: self.delete_selected())
+        self.canvas_3d.bind("<Key-f>", lambda event: self.fit_views())
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -565,7 +639,36 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["zoom_3d"] = 1.0
         self._persist("Fit spatial views")
 
+    def _update_scene_status(self) -> None:
+        summary = spatial_layout_summary(self.layout)
+        pressure_text = ""
+        if summary["pressure_min_pa"] is not None:
+            pressure_text = (
+                f" • pressure {summary['pressure_min_pa']:g}–"
+                f"{summary['pressure_max_pa']:g} Pa"
+            )
+        unassigned_text = (
+            f" • {summary['unassigned_device_count']} unassigned"
+            if summary["unassigned_device_count"]
+            else ""
+        )
+        self._summary_var.set(
+            f"{summary['room_count']} rooms • {summary['device_count']} devices"
+            f" • {summary['footprint_m2']:.1f} m² footprint"
+            f" • {summary['volume_m3']:.1f} m³ volume"
+            f"{pressure_text}{unassigned_text}"
+        )
+        self._view_2d_var.set(
+            f"2D • {self.layout['view']['zoom_2d'] * 100:.0f}%"
+        )
+        self._view_3d_var.set(
+            "3D • "
+            f"{self.layout['view']['azimuth_deg']:.0f}° az / "
+            f"{self.layout['view']['elevation_deg']:.0f}° el"
+        )
+
     def redraw(self) -> None:
+        self._update_scene_status()
         self._draw_2d()
         self._draw_3d()
 
@@ -598,6 +701,16 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+
+        if pmin is not None:
+            canvas.create_text(
+                12,
+                12,
+                anchor="nw",
+                text=f"Pressure map  {pmin:g} → {pmax:g} Pa",
+                fill="#40566d",
+                font=("TkDefaultFont", 9, "bold"),
+            )
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
@@ -683,6 +796,36 @@ class SpatialDesignWorkspace(ttk.Frame):
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
 
+        # Floor extent and axes keep the perspective view spatially readable.
+        floor = [
+            self._project_3d(min_x - cx, min_y - cy, 0),
+            self._project_3d(max_x - cx, min_y - cy, 0),
+            self._project_3d(max_x - cx, max_y - cy, 0),
+            self._project_3d(min_x - cx, max_y - cy, 0),
+        ]
+        canvas.create_polygon(
+            *sum(floor, ()),
+            fill="#17222d",
+            outline="#31465a",
+            width=1,
+        )
+        axis_origin = self._project_3d(min_x - cx, min_y - cy, 0)
+        axis_x = self._project_3d(min_x - cx + 1.5, min_y - cy, 0)
+        axis_y = self._project_3d(min_x - cx, min_y - cy + 1.5, 0)
+        canvas.create_line(*axis_origin, *axis_x, fill="#7dd3fc", width=2, arrow=tk.LAST)
+        canvas.create_line(*axis_origin, *axis_y, fill="#fbbf24", width=2, arrow=tk.LAST)
+        canvas.create_text(*axis_x, text=" X", fill="#7dd3fc", anchor="w")
+        canvas.create_text(*axis_y, text=" Y", fill="#fbbf24", anchor="w")
+        if pmin is not None:
+            canvas.create_text(
+                12,
+                12,
+                anchor="nw",
+                text=f"Pressure  {pmin:g} → {pmax:g} Pa",
+                fill="#d8e5f1",
+                font=("TkDefaultFont", 9, "bold"),
+            )
+
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
@@ -747,6 +890,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return None
 
     def _on_left_down(self, event: tk.Event) -> None:
+        self.canvas_2d.focus_set()
         current = self.canvas_2d.find_withtag("current")
         hit = None
         if current:
@@ -763,15 +907,43 @@ class SpatialDesignWorkspace(ttk.Frame):
         world = self._canvas_to_world(event.x, event.y)
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
-        grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self._snap_to_grid.get():
+            grid = self.layout["grid_m"]
+            item["x_m"] = round((item["x_m"] + dx) / grid) * grid
+            item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        else:
+            item["x_m"] += dx
+            item["y_m"] += dy
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
 
+    def _room_at(self, x: float, y: float) -> dict | None:
+        for room in reversed(self.layout["rooms"]):
+            if (
+                room["x_m"] <= x <= room["x_m"] + room["length_m"]
+                and room["y_m"] <= y <= room["y_m"] + room["width_m"]
+            ):
+                return room
+        return None
+
+    def _reassign_selected_device_room(self) -> None:
+        if self.selected is None or self.selected.kind != "device":
+            return
+        device = self._selected_object()
+        if device is None:
+            return
+        room = self._room_at(device["x_m"], device["y_m"])
+        device["room_id"] = None if room is None else room["id"]
+        if room is not None and device["type"] in {
+            "ffu", "supply", "return", "exhaust", "sensor"
+        }:
+            device["z_m"] = room["height_m"]
+
     def _on_left_up(self, event: tk.Event) -> None:
         if self._drag_anchor is not None and self.selected is not None:
+            self._reassign_selected_device_room()
+            self._load_property_panel()
             self._persist("Spatial item moved")
         self._drag_anchor = None
 
@@ -813,12 +985,14 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def rotate_3d(self, delta: float) -> None:
         self.layout["view"]["azimuth_deg"] = (self.layout["view"]["azimuth_deg"] + delta) % 360
+        self._update_scene_status()
         self._draw_3d()
 
     def tilt_3d(self, delta: float) -> None:
         self.layout["view"]["elevation_deg"] = max(
             5.0, min(75.0, self.layout["view"]["elevation_deg"] + delta)
         )
+        self._update_scene_status()
         self._draw_3d()
 
     def reset_3d(self) -> None:
@@ -827,6 +1001,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["zoom_3d"] = 1.0
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
+        self._update_scene_status()
         self._draw_3d()
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:
@@ -844,6 +1019,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_3d()
 
     def _on_3d_click(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
         current = self.canvas_3d.find_withtag("current")
         if not current:
             return

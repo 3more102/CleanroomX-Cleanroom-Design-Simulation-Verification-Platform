@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased external-modification save guard — 2026-09-25
+
+- Records a SHA-256 baseline for each project opened or explicitly saved by the desktop.
+- Blocks normal Save when the current project file was changed or deleted outside the active CleanroomX session, preserving the external version instead of silently overwriting it.
+- Offers Save Project As as the safe conflict path; selecting the conflicted original path through Save As requires an explicit overwrite confirmation.
+- Rejects an unstable open when the source changes between the pre-load and post-load fingerprints, so the GUI never claims a baseline for a mixed file version.
+- Refreshes the source fingerprint after successful Save/Save As and adds focused regression coverage for external-change preservation, redirect behavior, overwrite confirmation, and baseline refresh.
+- Does not change project schema version, solver equations, numerical tolerances, uncertainty semantics, or engineering acceptance criteria.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

@@ -97,6 +97,7 @@ jobs:
           tests/test_release2_spatial_integrity.py
           tests/test_release2_recovery_quarantine.py
           tests/test_persistence.py
+          tests/test_project_write_guard.py
           tests/test_project_history.py
           tests/test_project_revisions.py
           tests/test_gui_migration.py

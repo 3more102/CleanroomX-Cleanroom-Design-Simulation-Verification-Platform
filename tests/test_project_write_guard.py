@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 import multiprocessing
 
 import pytest
@@ -17,6 +18,7 @@ from cleanroomx.project import (
     capture_project_file_revision,
     load_project_document,
     load_project_document_with_revision,
+    load_project_document_with_revision_info,
     project_file_revision_matches,
     project_save_lock,
     project_save_lock_path,
@@ -63,6 +65,49 @@ def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch
 
     assert calls["count"] == 2
     assert project.name == "Second"
+    assert revision == capture_project_file_revision(path)
+
+
+def test_migration_aware_stable_load_retries_and_rebinds_provenance(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "legacy.cleanroomx.json"
+    path.write_text(
+        json.dumps({
+            "schema": "cleanroomx.project",
+            "schema_version": 0,
+            "name": "Legacy",
+            "analysis": {
+                "id": "a1",
+                "name": "Room",
+                "kind": "room_verification",
+                "input": {},
+            },
+        }),
+        encoding="utf-8",
+    )
+    original_load = project_module.load_project_document_with_migration_info
+    calls = {"count": 0}
+
+    def changing_load(source):
+        loaded = original_load(source)
+        if calls["count"] == 0:
+            save_project_document(path, ProjectDocument(name="Current"))
+        calls["count"] += 1
+        return loaded
+
+    monkeypatch.setattr(
+        project_module,
+        "load_project_document_with_migration_info",
+        changing_load,
+    )
+
+    project, revision, migration_info = load_project_document_with_revision_info(path)
+
+    assert calls["count"] == 2
+    assert project.name == "Current"
+    assert migration_info.migrated is False
+    assert migration_info.source_schema_version == 1
     assert revision == capture_project_file_revision(path)
 
 

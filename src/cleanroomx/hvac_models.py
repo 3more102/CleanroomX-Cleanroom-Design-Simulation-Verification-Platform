@@ -5,27 +5,24 @@ from dataclasses import dataclass, field
 from .branch_network import BranchFlowNetwork
 from .duct import DuctNetwork
 from .fan_curve import FanCurve
+from .numeric import (
+    efficiency_float,
+    finite_float,
+    nonnegative_float,
+    positive_float,
+)
 
 
 def _positive(value: float, field_name: str) -> float:
-    value = float(value)
-    if value <= 0:
-        raise ValueError(f"{field_name} must be > 0")
-    return value
+    return positive_float(value, field_name)
 
 
 def _nonnegative(value: float, field_name: str) -> float:
-    value = float(value)
-    if value < 0:
-        raise ValueError(f"{field_name} must be >= 0")
-    return value
+    return nonnegative_float(value, field_name)
 
 
 def _efficiency(value: float, field_name: str) -> float:
-    value = float(value)
-    if not 0.0 < value <= 1.0:
-        raise ValueError(f"{field_name} must be > 0 and <= 1")
-    return value
+    return efficiency_float(value, field_name)
 
 
 @dataclass(frozen=True)
@@ -35,8 +32,10 @@ class AirState:
     pressure_kpa: float = 101.325
 
     def __post_init__(self) -> None:
-        temperature = float(self.dry_bulb_c)
-        rh = float(self.relative_humidity_percent)
+        temperature = finite_float(self.dry_bulb_c, "dry_bulb_c")
+        rh = finite_float(
+            self.relative_humidity_percent, "relative_humidity_percent"
+        )
         pressure = _positive(self.pressure_kpa, "pressure_kpa")
         if not -45.0 <= temperature <= 60.0:
             raise ValueError(
@@ -124,7 +123,9 @@ class ThermalDesign:
         object.__setattr__(self, "capacity_margin_percent", margin)
         if self.supply_air_temp_c is not None:
             object.__setattr__(
-                self, "supply_air_temp_c", float(self.supply_air_temp_c)
+                self,
+                "supply_air_temp_c",
+                finite_float(self.supply_air_temp_c, "supply_air_temp_c"),
             )
 
 

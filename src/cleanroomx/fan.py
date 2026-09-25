@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .hvac_models import FanSystem
+from .numeric import nonnegative_float, positive_float
 
 
 def calculate_supply_fan(
@@ -11,20 +12,18 @@ def calculate_supply_fan(
     duct_pressure_drop_source: str | None = None,
 ) -> dict:
     """Return preliminary supply-fan duty and electrical input power."""
-    airflow_m3_h = float(airflow_m3_h)
-    filter_drop = float(terminal_filter_pressure_drop_pa)
-    if airflow_m3_h <= 0:
-        raise ValueError("airflow_m3_h must be > 0")
-    if filter_drop < 0:
-        raise ValueError("terminal_filter_pressure_drop_pa must be >= 0")
+    airflow_m3_h = positive_float(airflow_m3_h, "airflow_m3_h")
+    filter_drop = nonnegative_float(
+        terminal_filter_pressure_drop_pa, "terminal_filter_pressure_drop_pa"
+    )
 
     if duct_pressure_drop_override_pa is None:
         duct_drop = system.duct_pressure_drop_pa
         duct_drop_source = "fan_system_input"
     else:
-        duct_drop = float(duct_pressure_drop_override_pa)
-        if duct_drop < 0:
-            raise ValueError("duct_pressure_drop_override_pa must be >= 0")
+        duct_drop = nonnegative_float(
+            duct_pressure_drop_override_pa, "duct_pressure_drop_override_pa"
+        )
         duct_drop_source = duct_pressure_drop_source or "computed_duct_network"
 
     total_static_pa = (

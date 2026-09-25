@@ -5,6 +5,7 @@ import copy
 import json
 from pathlib import Path
 import queue
+import sys
 import threading
 import uuid
 
@@ -28,6 +29,12 @@ from .application import (
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
+)
+from .diagnostics import (
+    build_diagnostic_bundle,
+    configure_local_diagnostics,
+    log_event,
+    log_exception,
 )
 from .project import (
     AnalysisDocument,
@@ -175,6 +182,7 @@ class CleanroomXApp:
         *,
         autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
         autosave_manager: AutosaveManager | None = None,
+        diagnostic_log_path: str | Path | None = None,
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
@@ -202,6 +210,9 @@ class CleanroomXApp:
         self._autosave_manager.begin_project(None)
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
+        self._diagnostic_log_path = (
+            Path(diagnostic_log_path) if diagnostic_log_path is not None else None
+        )
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -232,6 +243,70 @@ class CleanroomXApp:
         if self._autosave_interval_ms:
             self.root.after(self._autosave_interval_ms, self._autosave_tick)
             self.root.after(500, self._poll_autosave_status)
+        self.root.report_callback_exception = self._handle_tk_exception
+
+    def _diagnostic_context(self) -> dict:
+        active_id = self.project.active_analysis_id
+        active_kind = None
+        if active_id is not None:
+            try:
+                active_kind = self.project.analysis_by_id(active_id).kind
+            except KeyError:
+                active_kind = None
+        autosave_state = None
+        manager = getattr(self, "_autosave_manager", None)
+        if manager is not None:
+            try:
+                autosave_state = manager.status().state
+            except Exception:
+                autosave_state = "unavailable"
+        return {
+            "project_path": (
+                str(self.project_path.resolve(strict=False))
+                if self.project_path is not None
+                else None
+            ),
+            "project_name": self.project.name,
+            "analysis_count": len(self.project.analyses),
+            "active_analysis_id": active_id,
+            "active_analysis_kind": active_kind,
+            "dirty": self._has_unsaved_changes(),
+            "analysis_running": bool(self._running),
+            "autosave_state": autosave_state,
+            "recovered_copy": self._restored_recovery_artifact is not None,
+        }
+
+    def _handle_tk_exception(self, exc_type, exc_value, exc_traceback) -> None:
+        log_exception(
+            "gui.callback_exception",
+            exc_type,
+            exc_value,
+            exc_traceback,
+            project_path=self.project_path,
+            active_analysis_id=self.project.active_analysis_id,
+        )
+        self.status_var.set("Unexpected application error — diagnostic evidence recorded")
+        log_hint = (
+            f"\n\nDiagnostic log: {self._diagnostic_log_path}"
+            if self._diagnostic_log_path is not None
+            else ""
+        )
+        try:
+            messagebox.showerror(
+                "Unexpected application error",
+                (
+                    f"{exc_type.__name__}: {exc_value}\n\n"
+                    "The failed operation was stopped. Save or recover your work before "
+                    "continuing if the application state is uncertain."
+                    f"{log_hint}"
+                ),
+                parent=self.root,
+            )
+        except tk.TclError:
+            print(
+                f"CleanroomX GUI callback failed: {exc_type.__name__}: {exc_value}",
+                file=sys.stderr,
+            )
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -248,6 +323,10 @@ class CleanroomXApp:
         file_menu.add_separator()
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
+        file_menu.add_command(
+            label="Export Diagnostic Bundle JSON...",
+            command=self.export_diagnostic_bundle_json,
+        )
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
@@ -712,6 +791,7 @@ class CleanroomXApp:
             elif status.state == "failed":
                 self.autosave_status_var.set("Autosave: failed")
                 self.status_var.set(status.message)
+                log_event("autosave.failed", detail=status.message)
             elif status.state == "idle":
                 self.autosave_status_var.set("Autosave: ready")
         self.root.after(500, self._poll_autosave_status)
@@ -939,12 +1019,19 @@ class CleanroomXApp:
             "Recovered unsaved work — use Save Project As to preserve it separately."
         )
         self.autosave_status_var.set("Autosave: recovered copy")
+        log_event(
+            "recovery.restored",
+            artifact_path=recovered.artifact_path,
+            source_path=recovered.source_path,
+            project_identity=recovered.project_identity,
+        )
         self._update_title()
 
     def show_recovery_center(self, *, announce_empty: bool = True) -> bool:
         try:
             scan = scan_recovery_artifacts(self._autosave_manager.recovery_dir)
         except OSError as exc:
+            log_exception("recovery.scan_failed", *sys.exc_info())
             messagebox.showerror(
                 "Recovery scan failed",
                 str(exc),
@@ -965,6 +1052,11 @@ class CleanroomXApp:
         try:
             self.restore_recovery_path(dialog.result)
         except (OSError, ValueError) as exc:
+            log_exception(
+                "recovery.restore_failed",
+                *sys.exc_info(),
+                artifact_path=dialog.result,
+            )
             messagebox.showerror(
                 "Recovery restore failed",
                 (
@@ -999,6 +1091,7 @@ class CleanroomXApp:
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set("New project")
+        log_event("project.new")
         self._update_title()
 
     def open_project(self) -> None:
@@ -1020,6 +1113,11 @@ class CleanroomXApp:
             try:
                 self.load_project_path(path)
             except Exception as exc:
+                log_exception(
+                    "project.open_failed",
+                    *sys.exc_info(),
+                    requested_path=path,
+                )
                 messagebox.showerror("Open failed", str(exc), parent=self.root)
 
     def load_project_path(self, path: str | Path) -> None:
@@ -1038,6 +1136,11 @@ class CleanroomXApp:
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set(f"Opened {project_path.name}")
+        log_event(
+            "project.opened",
+            project_path=project_path,
+            analysis_count=len(project.analyses),
+        )
         self._update_title()
 
     def _update_title(self) -> None:
@@ -1058,6 +1161,11 @@ class CleanroomXApp:
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
     def _report_external_save_conflict(self, path: Path) -> None:
+        log_event(
+            "project.save_conflict",
+            project_path=path,
+            active_analysis_id=self.project.active_analysis_id,
+        )
         self.status_var.set(
             f"Save blocked: {path.name} changed on disk. Use Save Project As or reopen."
         )
@@ -1099,6 +1207,11 @@ class CleanroomXApp:
             self._report_external_save_conflict(self.project_path)
             return
         except Exception as exc:
+            log_exception(
+                "project.save_failed",
+                *sys.exc_info(),
+                project_path=self.project_path,
+            )
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
@@ -1107,6 +1220,11 @@ class CleanroomXApp:
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
+        log_event(
+            "project.saved",
+            project_path=self.project_path,
+            analysis_count=len(self.project.analyses),
+        )
 
     def save_project_as(self) -> None:
         try:
@@ -1183,6 +1301,11 @@ class CleanroomXApp:
             self._report_external_save_conflict(destination)
             return
         except Exception as exc:
+            log_exception(
+                "project.save_as_failed",
+                *sys.exc_info(),
+                project_path=destination,
+            )
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
@@ -1201,6 +1324,11 @@ class CleanroomXApp:
         self._notify_explicit_save(self.project_path)
         self._discard_restored_recovery()
         self.status_var.set(f"Saved {self.project_path.name}")
+        log_event(
+            "project.saved_as",
+            project_path=self.project_path,
+            analysis_count=len(self.project.analyses),
+        )
         self._update_title()
 
     def add_analysis(self) -> None:
@@ -1558,6 +1686,49 @@ class CleanroomXApp:
                 label="Run bundle",
             )
 
+    def export_diagnostic_bundle_json(self) -> None:
+        if self._diagnostic_log_path is None:
+            messagebox.showinfo(
+                "Diagnostics unavailable",
+                "Local diagnostics were not configured for this session.",
+                parent=self.root,
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX diagnostic bundle",
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if not path:
+            return
+        try:
+            bundle = build_diagnostic_bundle(
+                self._diagnostic_log_path,
+                context=self._diagnostic_context(),
+            )
+            content = json.dumps(
+                bundle,
+                indent=2,
+                sort_keys=True,
+                ensure_ascii=False,
+                allow_nan=False,
+            ) + "\n"
+        except Exception as exc:
+            log_exception(
+                "diagnostics.bundle_build_failed",
+                *sys.exc_info(),
+                destination=path,
+            )
+            messagebox.showerror(
+                "Diagnostic export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        if self._write_export_file(path, content, label="Diagnostic bundle"):
+            log_event("diagnostics.bundle_exported", destination=path)
+
     def export_report_markdown(self) -> None:
         if self.last_run is None:
             messagebox.showinfo("No report", "Run an analysis first.")
@@ -1606,6 +1777,11 @@ class CleanroomXApp:
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)
+        log_event(
+            "gui.shutdown",
+            project_path=self.project_path,
+            dirty=False,
+        )
         self.root.destroy()
 
 
@@ -1661,12 +1837,36 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
-    validate_application_registry()
+    diagnostic_session = None
+    try:
+        diagnostic_session = configure_local_diagnostics()
+    except (OSError, ValueError) as exc:
+        print(f"CleanroomX diagnostics unavailable: {exc}", file=sys.stderr)
+
+    try:
+        validate_application_registry()
+    except Exception:
+        log_exception("gui.registry_validation_failed", *sys.exc_info())
+        raise
     project_path = bundled_demo_project_path() if args.demo else args.project
 
-    root = tk.Tk()
-    app = CleanroomXApp(
-        root,
+    try:
+        root = tk.Tk()
+        app = CleanroomXApp(
+            root,
+            autosave_interval_seconds=args.autosave_interval_seconds,
+            diagnostic_log_path=(
+                diagnostic_session.log_path if diagnostic_session is not None else None
+            ),
+        )
+    except Exception:
+        log_exception("gui.startup_failed", *sys.exc_info())
+        raise
+    log_event(
+        "gui.started",
+        demo=args.demo,
+        smoke=args.smoke,
+        project_argument=bool(args.project),
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
     recovered_at_startup = False
@@ -1677,6 +1877,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             app.load_project_path(project_path)
         except Exception as exc:
+            log_exception(
+                "gui.startup_project_open_failed",
+                *sys.exc_info(),
+                requested_path=project_path,
+            )
             if args.smoke:
                 root.destroy()
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
@@ -1689,11 +1894,18 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(run.to_dict(), allow_nan=False)
         root.update_idletasks()
         root.update()
+        log_event("gui.smoke_passed", project_path=project_path)
         root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0
 
-    root.mainloop()
+    try:
+        root.mainloop()
+    except Exception:
+        log_exception("gui.mainloop_failed", *sys.exc_info())
+        raise
+    finally:
+        log_event("gui.mainloop_exited")
     return 0
 
 

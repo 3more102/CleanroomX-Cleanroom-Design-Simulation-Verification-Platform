@@ -731,7 +731,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(restored)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        self._normalization_issues = []
         self.selected = _Hit(*state.selection) if state.selection is not None else None
         if self.selected and not self._selected_object():
             self.selected = None
@@ -786,7 +785,6 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        self._normalization_issues = []
         if history_before is not None:
             self._history.record(
                 before_layout=history_before,

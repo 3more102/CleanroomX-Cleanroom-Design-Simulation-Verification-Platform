@@ -12,7 +12,13 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__
-from .autosave import DEFAULT_AUTOSAVE_INTERVAL_SECONDS, AutosaveManager
+from .autosave import (
+    DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
+    AutosaveManager,
+    discard_recovery_artifact,
+    prepare_recovery_restore,
+    scan_recovery_artifacts,
+)
 from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
@@ -31,6 +37,7 @@ from .project import (
     new_project,
     save_project_document,
 )
+from .recovery_ui import RecoveryDialog
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -175,6 +182,10 @@ class CleanroomXApp:
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
+        self._recovery_requires_save_as = False
+        self._restored_recovery_path: Path | None = None
+        self._recovery_source_path: Path | None = None
+        self._recovery_source_relation: str | None = None
         self._autosave_interval_seconds = max(0.0, float(autosave_interval_seconds))
         self._autosave_interval_ms = (
             max(1000, int(self._autosave_interval_seconds * 1000))
@@ -533,6 +544,8 @@ class CleanroomXApp:
         )
 
     def _has_unsaved_changes(self) -> bool:
+        if getattr(self, "_recovery_requires_save_as", False):
+            return True
         baseline = getattr(self, "_baseline_state", None)
         if baseline is None:
             return False
@@ -599,6 +612,127 @@ class CleanroomXApp:
         if manager is not None:
             manager.discard_current_recoveries()
 
+    def _release_restored_recovery(self, *, delete_artifact: bool) -> str | None:
+        artifact = getattr(self, "_restored_recovery_path", None)
+        error: str | None = None
+        if delete_artifact and artifact is not None:
+            manager = getattr(self, "_autosave_manager", None)
+            recovery_dir = getattr(manager, "recovery_dir", None)
+            try:
+                discard_recovery_artifact(artifact, recovery_dir=recovery_dir)
+            except (OSError, ValueError) as exc:
+                error = str(exc)
+
+        self._recovery_requires_save_as = False
+        self._restored_recovery_path = None
+        self._recovery_source_path = None
+        self._recovery_source_relation = None
+        return error
+
+    def _discard_restored_recovery(self) -> None:
+        error = self._release_restored_recovery(delete_artifact=True)
+        if error:
+            messagebox.showwarning(
+                "Recovery cleanup incomplete",
+                (
+                    "The working copy was discarded, but its recovery artifact could "
+                    f"not be deleted. It may be offered again at startup.\n\n{error}"
+                ),
+                parent=self.root,
+            )
+
+    def restore_recovery_path(self, path: str | Path) -> None:
+        restored = prepare_recovery_restore(path)
+        self._discard_current_autosave()
+
+        self.project = restored.project
+        self.project_path = restored.source_path
+        self._baseline_state = None
+        self._recovery_requires_save_as = True
+        self._restored_recovery_path = restored.path
+        self._recovery_source_path = restored.source_path
+        self._recovery_source_relation = restored.source_relation
+        self._begin_autosave_project(self.project_path)
+
+        ui_state = restored.ui_state
+        name_text = ui_state.get("name_text", self.project.name)
+        description_text = ui_state.get("description_text", self.project.description)
+        self.name_var.set(name_text)
+        self.description_var.set(description_text)
+
+        editor_id = ui_state.get("editor_analysis_id")
+        if not isinstance(editor_id, str):
+            editor_id = self.project.active_analysis_id
+        try:
+            self.project.analysis_by_id(editor_id) if editor_id is not None else None
+        except KeyError:
+            editor_id = self.project.active_analysis_id
+        if editor_id is not None:
+            self.project.active_analysis_id = editor_id
+
+        self._clear_run_cache()
+        self._refresh_analysis_list(select_id=editor_id)
+
+        if (
+            editor_id is not None
+            and ui_state.get("editor_analysis_id") == editor_id
+            and "editor_text" in ui_state
+        ):
+            self.input_text.delete("1.0", "end")
+            self.input_text.insert("1.0", ui_state["editor_text"])
+            self.input_text.edit_modified(False)
+            self.refresh_structure(silent=True)
+
+        relation_text = restored.source_relation.replace("_", " ")
+        self.status_var.set(
+            f"Recovered {restored.saved_at_utc} ({relation_text}); "
+            "original preserved — Save uses Save As."
+        )
+        self.autosave_status_var.set("Autosave: recovered working copy")
+        self._update_title()
+
+    def offer_startup_recovery(self) -> None:
+        manager = getattr(self, "_autosave_manager", None)
+        recovery_dir = getattr(manager, "recovery_dir", None)
+        try:
+            scan = scan_recovery_artifacts(recovery_dir)
+        except (OSError, ValueError) as exc:
+            messagebox.showwarning(
+                "Recovery scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        if not scan.candidates:
+            if scan.issues:
+                messagebox.showwarning(
+                    "Recovery scan warning",
+                    (
+                        f"{len(scan.issues)} recovery artifact(s) could not be read. "
+                        "They were preserved for inspection."
+                    ),
+                    parent=self.root,
+                )
+            return
+
+        dialog = RecoveryDialog(
+            self.root,
+            scan,
+            recovery_dir=recovery_dir,
+        )
+        self.root.wait_window(dialog)
+        if dialog.result_path is None:
+            return
+        try:
+            self.restore_recovery_path(dialog.result_path)
+        except Exception as exc:
+            messagebox.showerror(
+                "Recovery failed",
+                str(exc),
+                parent=self.root,
+            )
+
     def _autosave_tick(self) -> None:
         if not self._autosave_interval_ms:
             return
@@ -648,6 +782,7 @@ class CleanroomXApp:
             self.save_project()
             return not self._has_unsaved_changes()
         self._discard_current_autosave()
+        self._discard_restored_recovery()
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
@@ -817,6 +952,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._release_restored_recovery(delete_artifact=False)
         self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
@@ -853,6 +989,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._release_restored_recovery(delete_artifact=False)
         self._begin_autosave_project(project_path)
         self.name_var.set(project.name)
         self.description_var.set(project.description)
@@ -867,10 +1004,14 @@ class CleanroomXApp:
         if not callable(title_method):
             return
         suffix = "" if self.project_path is None else f" — {self.project_path.name}"
+        recovered = " [Recovered]" if getattr(self, "_recovery_requires_save_as", False) else ""
         dirty = " *" if self._has_unsaved_changes() else ""
-        title_method(f"CleanroomX {__version__}{suffix}{dirty}")
+        title_method(f"CleanroomX {__version__}{suffix}{recovered}{dirty}")
 
     def save_project(self) -> None:
+        if getattr(self, "_recovery_requires_save_as", False):
+            self.save_project_as()
+            return
         try:
             if self._editor_analysis() is not None:
                 self._commit_editor()
@@ -910,6 +1051,24 @@ class CleanroomXApp:
             return
 
         destination = Path(path)
+        if getattr(self, "_recovery_requires_save_as", False):
+            recovery_source = getattr(self, "_recovery_source_path", None)
+            if (
+                recovery_source is not None
+                and destination.resolve(strict=False)
+                == recovery_source.resolve(strict=False)
+            ):
+                messagebox.showwarning(
+                    "Choose a new recovery file",
+                    (
+                        "A recovered working copy cannot be saved over its original "
+                        "project on the first save. Choose a different file name to "
+                        "preserve both versions."
+                    ),
+                    parent=self.root,
+                )
+                return
+
         previous_base = self._base_dir()
         editor_id = self._editor_analysis_id
         candidate = copy.deepcopy(self.project)
@@ -940,10 +1099,25 @@ class CleanroomXApp:
                 self._load_analysis_into_editor(self.project.analysis_by_id(editor_id))
             except KeyError:
                 self._refresh_analysis_list()
+        recovery_cleanup_error = None
+        if getattr(self, "_recovery_requires_save_as", False):
+            recovery_cleanup_error = self._release_restored_recovery(
+                delete_artifact=True
+            )
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
+        if recovery_cleanup_error:
+            messagebox.showwarning(
+                "Recovery cleanup incomplete",
+                (
+                    "The recovered project was saved successfully, but its old "
+                    "recovery artifact could not be deleted and may be offered again "
+                    f"at startup.\n\n{recovery_cleanup_error}"
+                ),
+                parent=self.root,
+            )
 
     def add_analysis(self) -> None:
         if self._running:
@@ -1420,6 +1594,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"CleanroomX GUI smoke: FAIL — {exc}")
                 return 2
             messagebox.showerror("Open failed", str(exc), parent=root)
+
+    if not args.smoke:
+        app.offer_startup_recovery()
 
     if args.smoke:
         if project_path and app.project.analyses:

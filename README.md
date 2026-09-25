@@ -1,10 +1,10 @@
 # CleanroomX
 
-CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.101 desktop application.
+CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.102 desktop application.
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.101.0 (Release 2)**, built from the consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding durable project lifecycle, recovery/history, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, precision hardening, deterministic project batch automation, and strict engineering JSON ingestion. The published `v0.100.0` tag remains immutable at its original validated commit.
+The current release line is **CleanroomX v0.102.0**, closing the synchronized 2D/3D spatial-design workspace on top of the verified Release 2 engineering baseline. It adds one canonical spatial model shared by the 2D editor and 3D viewer, deterministic spatial/engineering synchronization provenance and room-level state, safe all-or-nothing geometry synchronization, floor/opening metadata, pressure-cascade overlays, spatial integrity checks, and deterministic layout metrics while preserving the validated solver/provenance backend. Published `v0.100.0` and `v0.101.0` tags remain immutable at their original validated commits.
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, strict engineering-ingestion and project-batch regressions, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
 
@@ -28,8 +28,12 @@ CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused 
 | v0.99 | structural application-registry integrity gate with auditable headless readiness metadata |
 | v0.99.1 | abandoned-run concurrency hardening and installable self-contained desktop demo |
 | v0.100 | execution provenance, portable path context, atomic exports, fan/system plot evidence, and consolidated installed-desktop release |
-| v0.101 | Release 2 architecture consolidation, durable project lifecycle, deterministic batch automation, strict engineering JSON ingestion, portable bundles/reports, precision hardening, and final numerical-integrity gates |
+| v0.101 | Release 2 architecture consolidation, durable project lifecycle, deterministic batch automation, strict engineering JSON ingestion, portable bundles/reports, precision hardening, and final numerical-integrity gates |\n| v0.102 | synchronized 2D/3D spatial closure with proven engineering-sync provenance/state, guarded mapping, persistence validation, and focused spatial regression coverage |
 
+
+### v0.102 synchronized 2D/3D spatial closure
+
+v0.102 publishes the final synchronized spatial workspace without moving the already-published v0.101.0 tag. Room-level engineering synchronization state is deterministic: **synchronized**, **geometry newer**, **engineering newer**, **conflicting**, or **unmapped**. "Newer" is reported only when a persisted last-synchronized baseline proves which side changed; otherwise divergence fails closed as conflicting. Project-verification mappings are preflighted before mutation so a bad later mapping cannot leave a partial synchronization. The release retains the same validated solver equations, tolerances, project schema version, units, and engineering acceptance semantics.
 
 ### v0.101 Release 2
 

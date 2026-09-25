@@ -3,7 +3,7 @@
 ## Unreleased spatial production finish — 2026-09-25
 
 - Adds explicit engineering-to-layout pull alongside the existing layout-to-engineering push, with full mapping/value preflight and persisted synchronization provenance.
-- Makes room-pressure coloring and labels consume a fresh completed verification result when available, then preserve explicit spatial pressure and fall back to configured observed pressure without inventing evidence.
+- Makes room-pressure coloring and labels consume a fresh completed verification result when available, then preserve explicit spatial pressure and keep missing pressure unavailable without inventing evidence.
 - Uses the same fresh pressure evidence for 2D/3D pressure-cascade visualization.
 - Adds windows and generic wall openings as first-class persisted spatial object types.
 - Preserves spatial X/Y placement during engineering pulls, project schema version 1, solver equations, numerical tolerances, and engineering acceptance criteria.

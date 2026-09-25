@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased cancellable analysis process isolation — 2026-09-25
+
+- Replaces the desktop's non-cancellable daemon analysis thread with one spawn-based child process per GUI run while leaving the synchronous backend/CLI `run_analysis()` contract unchanged.
+- Changes **Abandon** to real **Cancel**: termination is requested immediately, the workspace stays exclusive until process exit is observed, cancelled tasks cannot publish stale results, and a terminate grace window escalates to kill if needed.
+- Returns successful/error outcomes through a private strict-JSON temporary artifact, avoiding a large-result pipe read on the Tk thread and making unreadable/missing outcomes explicit worker failures.
+- Detects abrupt worker exit with exit-code evidence instead of leaving the desktop permanently locked in a running state.
+- Cancels and reaps an active analysis worker during confirmed application shutdown and cleans private task state on success, failure, cancellation, and startup failure.
+- Adds focused worker serialization, cancellation, abnormal-exit, reconstruction, real spawned-demo, and GUI cancellation regressions without changing solver equations, tolerances, engineering acceptance logic, project schema, or CLI behavior.
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

@@ -13,6 +13,7 @@ from cleanroomx.spatial import (
     SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
+    engineering_sync_status,
     layout_metrics,
     normalize_layout,
     sync_layout_to_analysis,
@@ -734,3 +735,190 @@ def test_validate_layout_reports_opening_height_and_wall_association_problems():
 
     assert "opening_above_room" in codes
     assert "opening_off_wall" in codes
+
+def test_engineering_sync_status_tracks_provenance_without_guessing_newness():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                }
+            ]
+        },
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process display",
+                    "analysis_room_name": "Process",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                }
+            ]
+        }
+    )
+
+    status = engineering_sync_status(layout, analysis)
+    assert status["overall"] == "synchronized"
+    assert status["rooms"][0]["state"] == "synchronized"
+
+    # Explicit sync establishes the common baseline even when no engineering
+    # value changes, without invalidating the existing engineering input.
+    assert sync_layout_to_analysis(layout, analysis) is False
+    assert layout["engineering_sync"]["analysis_id"] == "verification"
+
+    layout["rooms"][0]["length_m"] = 7.0
+    status = engineering_sync_status(layout, analysis)
+    assert status["overall"] == "geometry_newer"
+    assert status["rooms"][0]["differences"] == ["length_m"]
+
+    layout["rooms"][0]["length_m"] = 6.0
+    analysis.input["rooms"][0]["width_m"] = 5.5
+    status = engineering_sync_status(layout, analysis)
+    assert status["overall"] == "engineering_newer"
+    assert status["rooms"][0]["differences"] == ["width_m"]
+
+    layout["rooms"][0]["length_m"] = 7.0
+    status = engineering_sync_status(layout, analysis)
+    assert status["overall"] == "conflicting"
+    assert status["rooms"][0]["state"] == "conflicting"
+
+    no_baseline = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "analysis_room_name": "Process",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 8.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                }
+            ]
+        }
+    )
+    analysis.input["rooms"][0]["width_m"] = 5.0
+    status = engineering_sync_status(no_baseline, analysis)
+    assert status["overall"] == "conflicting"
+    assert "engineering_sync" not in no_baseline
+
+
+def test_engineering_sync_status_reports_unmapped_and_normalization_preserves_baseline():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                }
+            ]
+        },
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "analysis_room_name": "Process",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                },
+                {
+                    "id": "support",
+                    "name": "Support",
+                    "analysis_room_name": "Support",
+                    "x_m": 7.0,
+                    "y_m": 0.0,
+                    "length_m": 4.0,
+                    "width_m": 3.0,
+                    "height_m": 3.0,
+                },
+            ],
+            "engineering_sync": {
+                "analysis_id": "verification",
+                "rooms": [
+                    {
+                        "room_id": "process",
+                        "analysis_room_name": "Process",
+                        "length_m": 6.0,
+                        "width_m": 5.0,
+                        "height_m": 3.0,
+                    }
+                ],
+            },
+        }
+    )
+
+    assert layout["engineering_sync"]["rooms"][0]["room_id"] == "process"
+    status = engineering_sync_status(layout, analysis)
+    by_id = {record["room_id"]: record["state"] for record in status["rooms"]}
+    assert by_id == {"process": "synchronized", "support": "unmapped"}
+    assert status["overall"] == "unmapped"
+
+
+def test_project_sync_validates_all_links_before_mutating_any_engineering_room():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6.0, "width_m": 5.0, "height_m": 3.0},
+                {"name": "Ante", "length_m": 4.0, "width_m": 3.0, "height_m": 3.0},
+            ]
+        },
+    )
+    original = copy.deepcopy(analysis.input)
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "analysis_room_name": "Process",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 7.0,
+                "width_m": 5.0,
+                "height_m": 3.0,
+            },
+            {
+                "id": "missing",
+                "name": "Missing",
+                "analysis_room_name": "Missing",
+                "x_m": 8.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 3.0,
+                "height_m": 3.0,
+            },
+        ]
+    }
+
+    with pytest.raises(SpatialSyncError, match="does not exist"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == original
+    assert "engineering_sync" not in layout
+

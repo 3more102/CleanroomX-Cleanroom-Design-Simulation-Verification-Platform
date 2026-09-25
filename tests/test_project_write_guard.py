@@ -10,6 +10,7 @@ import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
     ProjectDocument,
+    ProjectFileRevision,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
@@ -261,3 +262,53 @@ def test_loaded_revision_is_derived_from_the_parsed_bytes(tmp_path, monkeypatch)
     assert len(observed) == 1
     assert revision.sha256 == project_module.sha256(observed[0]).hexdigest()
     assert revision.size == len(observed[0])
+
+
+
+def test_gui_reports_post_write_verification_failure_distinctly(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+    expected = capture_project_file_revision(path)
+    current = ProjectFileRevision(
+        path=expected.path,
+        exists=True,
+        size=(expected.size or 0) + 1,
+        mtime_ns=expected.mtime_ns,
+        sha256="0" * 64,
+    )
+    warnings = []
+
+    def fail_post_write(*args, **kwargs):
+        raise ProjectWriteConflictError(
+            path,
+            expected,
+            current,
+            phase="post_write",
+        )
+
+    monkeypatch.setattr(
+        gui_module,
+        "save_project_document_guarded",
+        fail_post_write,
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("verification conflict must not be reported as a generic error")
+        ),
+    )
+
+    app.save_project()
+
+    assert warnings
+    assert warnings[0][0] == "Save verification failed"
+    assert "exact bytes" in warnings[0][1]
+    assert "not marked clean" in warnings[0][1]
+    assert "Save not verified" in app.status_var.value

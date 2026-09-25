@@ -36,6 +36,7 @@ from .project import (
     atomic_write_text,
     load_project_document_with_fingerprint,
     new_project,
+    project_file_fingerprint,
     save_project_document_with_fingerprint,
 )
 from .recovery_ui import RecoveryCenter
@@ -1154,7 +1155,6 @@ class CleanroomXApp:
                     target_base=destination.parent,
                 )
 
-        expected_fingerprint = None
         if (
             self.project_path is not None
             and destination.resolve(strict=False)
@@ -1163,6 +1163,16 @@ class CleanroomXApp:
             expected_fingerprint = getattr(
                 self, "_project_source_fingerprint", None
             )
+        else:
+            try:
+                # Capture the destination immediately after the file chooser has
+                # completed its overwrite confirmation. This also protects a
+                # previously missing destination from being created by another
+                # process between selection and atomic replacement.
+                expected_fingerprint = project_file_fingerprint(destination)
+            except OSError as exc:
+                messagebox.showerror("Save failed", str(exc), parent=self.root)
+                return
 
         try:
             (

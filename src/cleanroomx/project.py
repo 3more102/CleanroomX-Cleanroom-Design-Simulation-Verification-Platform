@@ -223,8 +223,11 @@ def atomic_write_text(
     text: str,
     *,
     expected_sha256: str | None = None,
+    expected_missing: bool = False,
 ) -> Path:
     """Atomically replace UTF-8 text, optionally guarding against external edits."""
+    if expected_sha256 is not None and expected_missing:
+        raise ValueError("expected_sha256 and expected_missing are mutually exclusive")
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -239,7 +242,12 @@ def atomic_write_text(
             handle.flush()
             os.fsync(handle.fileno())
 
-        if expected_sha256 is not None:
+        if expected_missing:
+            if destination.exists():
+                raise ProjectWriteConflictError(
+                    f"{destination.name} reappeared on disk before the guarded write completed"
+                )
+        elif expected_sha256 is not None:
             try:
                 current_sha256 = project_file_sha256(destination)
             except FileNotFoundError as exc:
@@ -264,6 +272,7 @@ def save_project_document(
     project: ProjectDocument,
     *,
     expected_sha256: str | None = None,
+    expected_missing: bool = False,
 ) -> Path:
     destination = Path(path)
     data = project.to_dict()
@@ -271,4 +280,9 @@ def save_project_document(
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text, expected_sha256=expected_sha256)
+    return atomic_write_text(
+        destination,
+        text,
+        expected_sha256=expected_sha256,
+        expected_missing=expected_missing,
+    )

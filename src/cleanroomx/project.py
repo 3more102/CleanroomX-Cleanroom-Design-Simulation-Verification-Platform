@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import errno
 from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 from typing import Any, Callable
 
@@ -33,6 +35,27 @@ class ProjectWriteConflictError(RuntimeError):
         self.current = current
         super().__init__(
             f"project file changed on disk since it was opened or last saved: {self.path}"
+        )
+
+
+class AtomicWriteVerificationError(OSError):
+    """Raised when committed bytes do not match the requested atomic-write payload."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        expected_sha256: str,
+        actual: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.actual = actual
+        super().__init__(
+            "atomic write verification failed after replacement; "
+            f"on-disk bytes do not match the requested payload: {self.path}"
         )
 
 
@@ -310,6 +333,72 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _existing_regular_file_mode(path: Path) -> int | None:
+    """Return the permission bits that should survive replacement, when applicable."""
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(mode):
+        return None
+    return stat.S_IMODE(mode)
+
+
+def _directory_fsync_is_unsupported(exc: OSError) -> bool:
+    unsupported = {
+        errno.EACCES,
+        errno.EBADF,
+        errno.EINVAL,
+        errno.EPERM,
+    }
+    for name in ("ENOTSUP", "EOPNOTSUPP"):
+        value = getattr(errno, name, None)
+        if value is not None:
+            unsupported.add(value)
+    return exc.errno in unsupported
+
+
+def _fsync_parent_directory(destination: Path) -> None:
+    """Persist a completed rename on POSIX filesystems that support directory fsync."""
+    if os.name != "posix":
+        return
+
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        directory_fd = os.open(destination.parent, flags)
+    except OSError as exc:
+        if _directory_fsync_is_unsupported(exc):
+            return
+        raise
+
+    try:
+        try:
+            os.fsync(directory_fd)
+        except OSError as exc:
+            if not _directory_fsync_is_unsupported(exc):
+                raise
+    finally:
+        os.close(directory_fd)
+
+
+def _verify_atomic_write(destination: Path, payload: bytes) -> ProjectFileRevision:
+    """Read back the committed file and prove it matches the requested bytes."""
+    expected_sha256 = sha256(payload).hexdigest()
+    actual = capture_project_file_revision(destination)
+    if (
+        not actual.exists
+        or actual.size != len(payload)
+        or actual.sha256 != expected_sha256
+    ):
+        raise AtomicWriteVerificationError(
+            destination,
+            expected_size=len(payload),
+            expected_sha256=expected_sha256,
+            actual=actual,
+        )
+    return actual
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -319,20 +408,33 @@ def _atomic_write_text(
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    # Write exact UTF-8 bytes rather than platform-translated text newlines so the
+    # persisted representation and verification digest are deterministic.
+    payload = text.encode("utf-8")
+    preserved_mode = _existing_regular_file_mode(destination)
+
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
+            mode="wb", prefix=f".{destination.name}.",
             suffix=".tmp", dir=destination.parent, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
+            if preserved_mode is not None and hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), preserved_mode)
             handle.flush()
             os.fsync(handle.fileno())
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        temp_path = None
+
+        # The file contents are fsynced before rename. Sync the parent directory
+        # where the platform/filesystem supports it so the rename itself is durable.
+        _fsync_parent_directory(destination)
+        _verify_atomic_write(destination, payload)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

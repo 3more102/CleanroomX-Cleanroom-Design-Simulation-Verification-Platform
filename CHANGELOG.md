@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased external project save protection — 2026-09-25
+
+- Records a content fingerprint for an explicitly opened or saved project and checks the live file before every in-place Save.
+- Blocks lost-update overwrites when another process changes, replaces, deletes, or moves the project file, preserving the external version and routing the operator to Save Project As.
+- Refuses Save As back onto the conflicted active path, so the protection cannot be bypassed accidentally through the file picker.
+- Compares SHA-256 plus byte size rather than modification time alone, avoiding false conflicts from metadata-only timestamp changes.
+- Detects files that change while they are being opened by comparing stable fingerprints around project parsing.
+- Adds focused regressions for external modification, same-path Save As protection, metadata-only rewrites, and revision-baseline refresh after successful saves.
+
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

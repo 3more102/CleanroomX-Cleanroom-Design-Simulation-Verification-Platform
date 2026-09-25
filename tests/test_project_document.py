@@ -57,6 +57,23 @@ def test_atomic_write_text_syncs_parent_directory_after_replace(tmp_path, monkey
     assert target.read_text(encoding="utf-8") == "payload\n"
 
 
+def test_atomic_write_text_reports_directory_sync_failure_after_commit(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+
+    def fail_sync(_directory):
+        raise OSError("directory sync failed")
+
+    monkeypatch.setattr(project_module, "_sync_directory", fail_sync)
+
+    with pytest.raises(OSError, match="directory sync failed"):
+        atomic_write_text(target, "payload\n")
+
+    assert target.read_bytes() == b"payload\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
 def test_atomic_write_text_reports_committed_content_verification_failure(
     tmp_path, monkeypatch
 ):

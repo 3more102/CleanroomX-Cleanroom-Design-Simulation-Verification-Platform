@@ -7,7 +7,7 @@ from typing import Any
 
 
 class NonFiniteJSONError(ValueError):
-    """Raised when JSON input uses NaN or Infinity constants."""
+    """Raised when JSON input would introduce a non-finite numeric value."""
 
 
 def _reject_nonfinite_constant(value: str):
@@ -35,5 +35,5 @@ def strict_json_loads(text: str) -> Any:
 
 
 def load_strict_json(path: str | Path) -> Any:
-    """Read UTF-8 JSON and reject non-standard NaN/Infinity constants."""
+    """Read UTF-8 JSON and reject any value that would decode as non-finite."""
     return strict_json_loads(Path(path).read_text(encoding="utf-8"))

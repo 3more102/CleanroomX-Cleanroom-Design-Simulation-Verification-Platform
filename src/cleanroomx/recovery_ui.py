@@ -69,13 +69,13 @@ class RecoveryInspection:
     saved_at_utc: str
     source_path: str
     source_status: str
-    integrity_status: str
     application_version: str
     analysis_count: int
     analysis_names: tuple[str, ...]
     editor_analysis_id: str | None
     editor_json_valid: bool | None
     editor_text: str
+    integrity_status: str = "Legacy / unverified"
 
 
 def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:

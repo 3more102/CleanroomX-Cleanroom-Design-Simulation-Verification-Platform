@@ -37,27 +37,41 @@ class ProjectWriteConflictError(RuntimeError):
         )
 
 
+class AtomicWriteDurabilityError(OSError):
+    """Raised after replacement when directory durability cannot be confirmed."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        super().__init__(
+            "atomic replacement completed but directory durability sync failed for "
+            f"{self.path}; the file may contain the new data, but crash durability "
+            "was not confirmed"
+        )
+
+
 class AtomicWriteVerificationError(OSError):
-    """Raised when a replaced file does not match the bytes submitted for commit."""
+    """Raised when an atomic text write cannot be verified byte-for-byte."""
 
     def __init__(
         self,
         path: str | Path,
         *,
+        stage: str,
         expected_size: int,
         expected_sha256: str,
-        actual_size: int,
-        actual_sha256: str,
-    ):
+        actual_size: int | None,
+        actual_sha256: str | None,
+    ) -> None:
         self.path = Path(path)
+        self.stage = stage
         self.expected_size = expected_size
         self.expected_sha256 = expected_sha256
         self.actual_size = actual_size
         self.actual_sha256 = actual_sha256
         super().__init__(
-            "atomic write verification failed for "
-            f"{self.path}: expected {expected_size} bytes/{expected_sha256}, "
-            f"found {actual_size} bytes/{actual_sha256}"
+            f"{stage} verification failed for {self.path}: "
+            f"expected {expected_size} bytes / sha256 {expected_sha256}, "
+            f"got {actual_size!r} bytes / sha256 {actual_sha256!r}"
         )
 
 
@@ -297,8 +311,8 @@ def _stable_file_sha256(
     raise last_error
 
 
-def _fsync_directory(directory: Path) -> bool:
-    """Durably commit directory-entry changes where the platform/filesystem supports it."""
+def _fsync_parent_directory(directory: Path) -> bool:
+    """Durably commit a rename where directory fsync is supported."""
     if os.name == "nt":
         return False
 
@@ -327,19 +341,28 @@ def _fsync_directory(directory: Path) -> bool:
     return True
 
 
-def _verify_atomic_write(
-    destination: Path,
-    *,
-    expected_size: int,
-    expected_sha256: str,
-) -> None:
-    stat, actual_sha256 = _stable_file_sha256(
-        destination,
-        change_label="written file",
-    )
+def _verify_file_payload(path: Path, payload: bytes, *, stage: str) -> None:
+    """Re-read one stable path revision and require the exact requested bytes."""
+    expected_size = len(payload)
+    expected_sha256 = sha256(payload).hexdigest()
+    try:
+        stat, actual_sha256 = _stable_file_sha256(
+            path,
+            change_label=f"{stage} file",
+        )
+    except OSError as exc:
+        raise AtomicWriteVerificationError(
+            path,
+            stage=stage,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_size=None,
+            actual_sha256=None,
+        ) from exc
     if stat.st_size != expected_size or actual_sha256 != expected_sha256:
         raise AtomicWriteVerificationError(
-            destination,
+            path,
+            stage=stage,
             expected_size=expected_size,
             expected_sha256=expected_sha256,
             actual_size=stat.st_size,
@@ -418,8 +441,7 @@ def _atomic_write_text(
 ) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    encoded = text.encode("utf-8")
-    expected_sha256 = sha256(encoded).hexdigest()
+    payload = text.encode("utf-8")
 
     temp_path: Path | None = None
     try:
@@ -428,21 +450,27 @@ def _atomic_write_text(
             suffix=".tmp", dir=destination.parent, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(encoded)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+
+        # Do not replace an authoritative file until the exact staged bytes have
+        # been re-read from a stable path revision and verified.
+        _verify_file_payload(temp_path, payload, stage="staged write")
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
         temp_path = None
 
-        _fsync_directory(destination.parent)
-        _verify_atomic_write(
-            destination,
-            expected_size=len(encoded),
-            expected_sha256=expected_sha256,
-        )
+        try:
+            _fsync_parent_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(destination) from exc
+
+        # A successful replacement is not reported until the destination itself
+        # matches the exact requested UTF-8 payload.
+        _verify_file_payload(destination, payload, stage="committed write")
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -451,7 +479,7 @@ def _atomic_write_text(
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically commit UTF-8 text with fsync and post-replace content verification."""
+    """Commit exact UTF-8 bytes through a staged, durable, verified replacement."""
     return _atomic_write_text(path, text)
 
 

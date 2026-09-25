@@ -1326,7 +1326,7 @@ def test_pressure_relationship_state_reports_pass_warning_and_unavailable_withou
     analysis.input["rooms"][1]["observed_pressure_pa"] = 20.0
     relationship = pressure_relationship_state(layout, analysis)[0]
     assert relationship["delta_pa"] == 10.0
-    assert relationship["status"] == "warning"
+    assert relationship["status"] == "fail"
 
     analysis.input["rooms"][1].pop("observed_pressure_pa")
     relationship = pressure_relationship_state(layout, analysis)[0]

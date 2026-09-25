@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectConflictError,
+    ProjectDocument,
+    ProjectFileFingerprint,
+    load_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -727,3 +733,92 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+
+
+def test_save_project_blocks_external_change_without_overwriting(monkeypatch, tmp_path):
+    class Value:
+        def __init__(self, value=""):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="Local")
+    app.project_path = tmp_path / "project.cleanroomx.json"
+    app._project_source_fingerprint = ProjectFileFingerprint(
+        sha256="a" * 64, size_bytes=10, mtime_ns=1
+    )
+    app.status_var = Value()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._capture_saved_state = lambda: pytest.fail("blocked save captured baseline")
+    app._notify_explicit_save = lambda path: pytest.fail("blocked save notified autosave")
+
+    def reject_save(path, project, *, expected_fingerprint=None):
+        assert path == app.project_path
+        assert project is app.project
+        assert expected_fingerprint is app._project_source_fingerprint
+        raise ProjectConflictError("project file changed outside CleanroomX")
+
+    monkeypatch.setattr(gui_module, "save_project_document", reject_save)
+    captured = {}
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.save_project()
+
+    assert app.status_var.value == "Save blocked: project changed on disk"
+    assert captured["title"] == "Save blocked — external project change"
+    assert "Nothing was overwritten" in captured["message"]
+    assert "Save Project As" in captured["message"]
+    assert captured["parent"] is app.root
+
+
+def test_save_project_as_same_open_path_cannot_bypass_external_change_guard(
+    monkeypatch, tmp_path
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    current = tmp_path / "project.cleanroomx.json"
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="Demo")
+    app.project_path = current
+    app._editor_analysis_id = None
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+
+    calls = []
+    app.save_project = lambda: calls.append("guarded-save")
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(current),
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "save_project_document",
+        lambda *args, **kwargs: pytest.fail("Save As bypassed guarded save"),
+    )
+
+    app.save_project_as()
+
+    assert calls == ["guarded-save"]

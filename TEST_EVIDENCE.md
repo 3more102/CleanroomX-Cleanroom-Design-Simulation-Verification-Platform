@@ -34,10 +34,16 @@ The final v0.102.1 tree is composed from CI-green spatial closures plus a CI-gre
   - complete suite: **1003 passed** on Python 3.11, 3.12, and 3.13
   - Windows PowerShell/CMD launcher smoke: **success**
   - Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+- PR **#479 — Fix v0.102.1 autosave completion race on current main**
+  - exact tested head: `4a802f43be7bc891e2c4de90b631ddea7c1fa9e4`
+  - PR CI **#1565** / id `36184210616`: **success**
+  - merged main commit: `54fc239853cf4a2ab92b7686169e07acab34b8dd`
+  - closes the `Future.done()`-before-completion-callback coordination race
+  - adds deterministic regression coverage for queued autosave handoff and idle detection
 
 Those successful CI jobs exercise the repository CI workflow, including the complete Python 3.11/3.12/3.13 suite, clean-wheel installation, representative CLI checks, Windows checkout launchers, and the Python 3.13 performance plus installed Tk/Xvfb GUI smoke. The immutable v0.102.1 publisher additionally refuses to tag any successful CI SHA that is no longer the current `main` commit.
 
-The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D **Fit** derive zoom and both pan axes from real room floor/ceiling geometry; adds an explicit geometry-preserving 2D viewport reset and Shift+left-drag 3D orbit with bounded elevation; and strengthens the packaged-demo smoke. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
+The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D **Fit** derive zoom and both pan axes from real room floor/ceiling geometry; adds an explicit geometry-preserving 2D viewport reset and Shift+left-drag 3D orbit with bounded elevation; hardens autosave completion ownership and idle detection against callback races; and strengthens the packaged-demo smoke. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
 
 
 ## v0.102.0 final synchronized spatial baseline

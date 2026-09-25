@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased durable persistence integrity — 2026-09-25
+
+- Hardens the existing guarded/shared atomic-write primitive so a committed rename is followed by parent-directory metadata synchronization on POSIX filesystems and a read-back verification of the committed UTF-8 contents before the write is reported as successful.
+- Preserves the external-revision guard: project saves still verify the expected on-disk revision immediately before replacement, then apply the stronger durability/verification boundary after replacement.
+- Adds deterministic SHA-256 integrity evidence to newly written schema-v1 recovery envelopes, covering the complete canonical recovery payload except the integrity field itself.
+- Rejects structurally valid but checksum-corrupted recovery artifacts during load/scan, while continuing to read legacy schema-v1 recovery artifacts that predate the optional integrity block.
+- Adds failure-injection and backward-compatibility regressions without changing project schema, analysis APIs, solver equations, tolerances, or engineering acceptance semantics.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

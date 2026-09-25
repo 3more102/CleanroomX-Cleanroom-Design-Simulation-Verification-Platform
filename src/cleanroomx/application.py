@@ -86,6 +86,31 @@ def verify_analysis_run_bundle(document: dict) -> dict:
             f"unsupported run bundle schema version: {document.get('schema_version')!r}"
         )
 
+    expected_keys = {
+        "schema",
+        "schema_version",
+        "cleanroomx_version",
+        "kind",
+        "title",
+        "status",
+        "input_snapshot",
+        "result",
+        "markdown",
+        "diagnostics",
+        "plot",
+        "integrity",
+    }
+    missing_keys = expected_keys - set(document)
+    unknown_keys = set(document) - expected_keys
+    if missing_keys:
+        raise ValueError(
+            "run bundle is missing required field(s): " + ", ".join(sorted(missing_keys))
+        )
+    if unknown_keys:
+        raise ValueError(
+            "run bundle contains unsupported field(s): " + ", ".join(sorted(unknown_keys))
+        )
+
     bundle_version = document.get("cleanroomx_version")
     if not isinstance(bundle_version, str) or not bundle_version:
         raise ValueError("run bundle cleanroomx_version must be a non-empty string")
@@ -110,6 +135,16 @@ def verify_analysis_run_bundle(document: dict) -> dict:
     kind = document.get("kind")
     if kind not in ANALYSIS_SPECS:
         raise ValueError(f"run bundle contains unsupported analysis kind: {kind!r}")
+    if not isinstance(document.get("title"), str) or not document["title"]:
+        raise ValueError("run bundle title must be a non-empty string")
+    if not isinstance(document.get("status"), str) or not document["status"]:
+        raise ValueError("run bundle status must be a non-empty string")
+    if not isinstance(document.get("result"), dict):
+        raise ValueError("run bundle result must be a JSON object")
+    if not isinstance(document.get("markdown"), str):
+        raise ValueError("run bundle markdown must be a string")
+    if document.get("plot") is not None and not isinstance(document["plot"], dict):
+        raise ValueError("run bundle plot must be a JSON object or null")
     input_snapshot = document.get("input_snapshot")
     if not isinstance(input_snapshot, dict):
         raise ValueError("run bundle input_snapshot must be a JSON object")

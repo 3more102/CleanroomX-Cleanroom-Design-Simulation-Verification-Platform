@@ -2,7 +2,7 @@
 
 ## Unreleased validated project edit history — 2026-09-25
 
-- Adds bounded validated **Undo Project Edit / Redo Project Edit** for committed analysis input, project metadata, analysis add/rename/remove, imported input, and spatial-to-analysis synchronization.
+- Adds bounded validated **Undo Project Edit / Redo Project Edit** for committed analysis input, project metadata, analysis add/rename/remove, imported input, and spatial-to-analysis synchronization, with both a 100-edit cap and a 64 MiB serialized history budget.
 - Reconstructs restored states through the ordinary project validator, detects out-of-history document divergence, invalidates redo after a new edit, and blocks replay rather than overwriting untracked state.
 - Preserves the independently-owned spatial layout during project-history replay and keeps the existing fine-grained spatial undo stack authoritative for geometry edits.
 - Clears cached analysis results whenever project history restores older inputs, preventing stale engineering results from being displayed or exported against restored state.

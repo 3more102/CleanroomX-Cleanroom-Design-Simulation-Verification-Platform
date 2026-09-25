@@ -1461,35 +1461,35 @@ class SpatialDesignWorkspace(ttk.Frame):
         max_y = max(room["y_m"] + room["width_m"] for room in rooms)
         return min_x, min_y, max_x, max_y
 
+    def _transform_2d(self) -> ViewTransform2D:
+        return ViewTransform2D(
+            width_px=max(1, self.canvas_2d.winfo_width()),
+            height_px=max(1, self.canvas_2d.winfo_height()),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
+        )
+
     def _scale_2d(self) -> float:
-        return 55.0 * self.layout["view"]["zoom_2d"]
+        return self._transform_2d().scale_px_per_m
 
     def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            self.canvas_2d.winfo_width() / 2 + self.layout["view"]["pan_x"] + x * scale,
-            self.canvas_2d.winfo_height() / 2 + self.layout["view"]["pan_y"] + y * scale,
-        )
+        return self._transform_2d().model_to_screen(x, y)
 
     def _canvas_to_world(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            (x - self.canvas_2d.winfo_width() / 2 - self.layout["view"]["pan_x"]) / scale,
-            (y - self.canvas_2d.winfo_height() / 2 - self.layout["view"]["pan_y"]) / scale,
-        )
+        return self._transform_2d().screen_to_model(x, y)
 
     def fit_views(self) -> None:
-        min_x, min_y, max_x, max_y = self._bounds()
-        width_m = max(1.0, max_x - min_x)
-        height_m = max(1.0, max_y - min_y)
-        cw = max(200, self.canvas_2d.winfo_width())
-        ch = max(200, self.canvas_2d.winfo_height())
-        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (55 * width_m), ch / (55 * height_m))))
-        scale = self._scale_2d()
-        cx = (min_x + max_x) / 2
-        cy = (min_y + max_y) / 2
-        self.layout["view"]["pan_x"] = -cx * scale
-        self.layout["view"]["pan_y"] = -cy * scale
+        fitted = ViewTransform2D.fit_bounds(
+            self._bounds(),
+            width_px=max(200, self.canvas_2d.winfo_width()),
+            height_px=max(200, self.canvas_2d.winfo_height()),
+            padding_fraction=0.11,
+            max_zoom=5.0,
+        )
+        self.layout["view"]["zoom_2d"] = fitted.zoom
+        self.layout["view"]["pan_x"] = fitted.pan_x_px
+        self.layout["view"]["pan_y"] = fitted.pan_y_px
         self.layout["view"]["zoom_3d"] = 1.0
         self._persist("Fit spatial views")
 
@@ -2027,11 +2027,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
-        before = self._canvas_to_world(x, y)
-        self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
-        after = self._world_to_canvas(*before)
-        self.layout["view"]["pan_x"] += x - after[0]
-        self.layout["view"]["pan_y"] += y - after[1]
+        zoomed = self._transform_2d().zoom_about(factor, x, y)
+        self.layout["view"]["zoom_2d"] = zoomed.zoom
+        self.layout["view"]["pan_x"] = zoomed.pan_x_px
+        self.layout["view"]["pan_y"] = zoomed.pan_y_px
         self.redraw()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:

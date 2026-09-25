@@ -224,6 +224,20 @@ def test_run_bundle_captures_immutable_input_and_verifies():
     assert verification["bundle_sha256"] == bundle["integrity"]["sha256"]
 
 
+def test_run_bundle_verification_is_independent_of_current_registry(monkeypatch):
+    import cleanroomx.application as application_module
+
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    reduced = dict(application_module.ANALYSIS_SPECS)
+    reduced.pop("room_verification")
+    monkeypatch.setattr(application_module, "ANALYSIS_SPECS", reduced)
+
+    verification = verify_analysis_run_bundle(bundle)
+
+    assert verification["status"] == "ok"
+    assert verification["analysis_kind"] == "room_verification"
+
+
 def test_run_bundle_verification_detects_document_tampering():
     bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
     bundle["status"] = "tampered"

@@ -46,7 +46,17 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. Before CleanroomX overwrites an existing valid project, it archives the exact previous UTF-8 bytes as a checksummed saved version. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+
+## Saved project versions
+
+Explicit project overwrites retain a bounded history of the previous valid project in a separate per-user saved-version directory. The default history limit is 10 versions per project path. Set `CLEANROOMX_SAVED_REVISIONS_DIR` only when an installation needs a controlled alternate state location.
+
+Each saved-version artifact records the exact prior UTF-8 project text, normalized original path, UTC archive time, CleanroomX version, byte size, and SHA-256. Before an artifact is listed or restored, CleanroomX verifies its schema, timestamp, byte size, checksum, strict JSON representation, and embedded project validity. Corrupt or unreadable artifacts are reported and preserved; normal history rotation deletes only validated old versions.
+
+If an existing Save or Save As destination cannot be validated and archived, CleanroomX aborts the overwrite and reports the failure. A new destination requires no pre-image archive. **File > Saved Versions...** lists versions for the current saved project. **Restore as Unsaved Copy** never overwrites the current file: it opens the selected historical version with the original project path retained only as relative-reference context, and the first save must use a different destination. The saved-version artifact itself remains available after restore.
+
+Saved-version history complements crash recovery: autosave protects dirty work that was not explicitly saved, while saved versions protect the last valid on-disk state from later explicit overwrites.
 
 ## Recovery autosave
 

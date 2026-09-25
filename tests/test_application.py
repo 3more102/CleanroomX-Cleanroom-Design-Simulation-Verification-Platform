@@ -243,6 +243,76 @@ def test_run_analysis_rejects_backend_mutation_of_prepared_input_alias(
     assert submitted == {"value": 1}
 
 
+def test_run_analysis_rejects_custom_adapter_input_mutation(
+    monkeypatch,
+):
+    submitted = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+
+    def mutating_adapter(run_payload, base_dir):
+        run_payload["require_same_room_set"] = True
+        return {"status": "pass"}
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        mutating_adapter,
+    )
+
+    with pytest.raises(
+        AnalysisInputMutationError,
+        match="backend execution",
+    ):
+        run_analysis("consistency", submitted, base_dir=ROOT / "examples")
+
+    assert submitted == {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+
+
+def test_run_analysis_rejects_plot_builder_input_mutation(
+    monkeypatch,
+):
+    spec = ANALYSIS_SPECS["room_verification"]
+    original_loader = application_module._load_callable
+    submitted = {"value": 1}
+
+    def parser(run_payload):
+        return {"parsed": run_payload["value"]}
+
+    def runner(parsed):
+        return {"status": "pass", "parsed": parsed["parsed"]}
+
+    def load_callable(target):
+        if target == spec.parser:
+            return parser
+        if target == spec.runner:
+            return runner
+        return original_loader(target)
+
+    def mutating_plot_builder(run_payload, result):
+        run_payload["value"] = 2
+        return None
+
+    monkeypatch.setattr(application_module, "_load_callable", load_callable)
+    monkeypatch.setattr(
+        application_module,
+        "build_plot_model",
+        mutating_plot_builder,
+    )
+
+    with pytest.raises(
+        AnalysisInputMutationError,
+        match="result presentation",
+    ):
+        run_analysis("room_verification", submitted)
+
+    assert submitted == {"value": 1}
+
+
 def test_unknown_analysis_kind_is_rejected():
     with pytest.raises(ValueError, match="unsupported analysis kind"):
         run_analysis("does-not-exist", {})

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased autosave and crash-recovery foundation — 2026-09-25
+
+- Adds a dedicated recovery-autosave service that writes only separate recovery artifacts; it never overwrites the user's explicitly saved `.cleanroomx.json` file.
+- Runs recovery writes on a bounded single-worker background executor, coalesces pending snapshots, skips identical snapshots, and rotates a per-project recovery history.
+- Fingerprints the source project with SHA-256, size, and modification time so later recovery logic can distinguish unchanged, changed, missing, and newer source files without making an automatic overwrite decision.
+- Captures unsaved project metadata and raw JSON-editor draft text, including malformed drafts that cannot yet be committed to the authoritative project model.
+- Adds a dedicated desktop autosave status indicator and `--autosave-interval-seconds` configuration; `0` disables autosave.
+- Preserves prior-session recovery artifacts during current-session save/discard cleanup and invalidates in-flight current-session writes when a project is explicitly saved, discarded, replaced, or closed.
+- Adds focused autosave, recovery-scan, source-comparison, history-rotation, malformed-artifact, GUI draft-capture, and scheduler regressions without changing engineering solver equations or acceptance logic.
+
 ## Unreleased spatial transactional edit history — 2026-09-25
 
 - Adds bounded model-level **Undo/Redo** for spatial room/device property edits, creation, deletion, and drag movement; a complete drag gesture is coalesced into one history entry.

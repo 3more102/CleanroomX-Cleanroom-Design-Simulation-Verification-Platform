@@ -779,9 +779,10 @@ def _rollback_if_unchanged(
         return False
 
     if previous_bytes is None:
-        destination.unlink(missing_ok=True)
-        _fsync_directory(destination.parent)
-        return True
+        # There is no prior user file to restore. Deleting here would introduce a
+        # check-then-unlink race that could remove an external replacement written
+        # after verification failed, so leave the destination in place for diagnosis.
+        return False
 
     def assert_still_failed_write() -> None:
         latest = capture_project_file_revision(destination)
@@ -835,7 +836,13 @@ def save_project_document_guarded(
     expected_bytes = text.encode("utf-8")
 
     if previous_bytes == expected_bytes:
-        return destination, capture_project_file_revision(destination)
+        assert_unchanged()
+        verified_revision = _verify_saved_project(
+            destination,
+            project,
+            expected_bytes,
+        )
+        return destination, verified_revision
 
     revision_path: Path | None = None
     if (
@@ -892,8 +899,8 @@ def save_project_document_guarded(
                 "project save verification failed; the prior project file was restored"
             ) from verification_error
         raise OSError(
-            "project save verification failed after the destination changed again; "
-            f"no rollback was attempted; preserved revision: {revision_path!s}"
+            "project save verification failed and no safe rollback was attempted; "
+            f"preserved revision: {revision_path!s}"
         ) from verification_error
 
     if revision_path is not None:
@@ -1006,9 +1013,8 @@ def restore_project_revision(
                 "destination was restored"
             ) from verification_error
         raise OSError(
-            "project revision restore verification failed after the destination "
-            f"changed again; no rollback was attempted; preserved revision: "
-            f"{target_revision!s}"
+            "project revision restore verification failed and no safe rollback "
+            f"was attempted; preserved revision: {target_revision!s}"
         ) from verification_error
 
     if target_revision is not None:

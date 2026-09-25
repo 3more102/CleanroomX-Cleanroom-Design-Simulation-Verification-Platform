@@ -1479,6 +1479,7 @@ class CleanroomXApp:
         def mutate() -> None:
             self.project.analyses.append(analysis)
             self.project.active_analysis_id = analysis_id
+            self._editor_analysis_id = analysis_id
 
         try:
             self._perform_project_edit(f"Add analysis {analysis.name}", mutate)
@@ -1531,6 +1532,7 @@ class CleanroomXApp:
             self.project.active_analysis_id = (
                 self.project.analyses[0].id if self.project.analyses else None
             )
+            self._editor_analysis_id = self.project.active_analysis_id
 
         try:
             self._perform_project_edit(f"Remove analysis {analysis.name}", mutate)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .loop_network import solve_looped_network
 from .loop_network_io import load_looped_flow_network
 from .loop_network_report import markdown_looped_network_report

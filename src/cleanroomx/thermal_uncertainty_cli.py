@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .thermal_uncertainty import analyze_thermal_uncertainty
 from .thermal_uncertainty_io import load_thermal_uncertainty
 from .thermal_uncertainty_report import markdown_thermal_uncertainty_report

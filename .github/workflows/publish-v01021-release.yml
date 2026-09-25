@@ -62,7 +62,9 @@ jobs:
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1552'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1554'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1561'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1565'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F '3D Fit derives zoom and both pan axes from real room floor/ceiling geometry'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'autosave coordinator retains Future ownership until completion callbacks finalize shared state'
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence'
 
       - name: Publish tag and GitHub Release
@@ -112,8 +114,11 @@ jobs:
           - PR #476 viewport-controls head: df1ef16207fcca8abfbaf08a48fe13fadd77c221
           - PR #476 CI #1561 / 36183831885: success; 1003 passed on Python 3.11/3.12/3.13
           - final functional spatial merge commit: e528c694debbf6a3263693669f5acb6026f1951f
+          - PR #479 autosave-race head: 4a802f43be7bc891e2c4de90b631ddea7c1fa9e4
+          - PR #479 CI #1565 / 36184210616: success
+          - merged autosave-race closure commit: 54fc239853cf4a2ab92b7686169e07acab34b8dd
 
-          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D Fit derive zoom and pan from real room floor/ceiling geometry; adds explicit 2D viewport reset and Shift+left-drag 3D orbit; and strengthens the installed demo smoke.
+          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D Fit derive zoom and pan from real room floor/ceiling geometry; adds explicit 2D viewport reset and Shift+left-drag 3D orbit; hardens autosave completion ownership and idle detection against callback races; and strengthens the installed demo smoke.
 
           The successful current-main CI that triggers this publisher is the release gate for the exact tagged commit. Published v0.100.0, v0.101.0, and v0.102.0 remain unchanged.
 

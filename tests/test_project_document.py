@@ -4,9 +4,11 @@ import json
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
+    AnalysisDocument, AtomicWriteDurabilityError, AtomicWriteVerificationError,
+    PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError,
+    atomic_write_text, load_project_document, project_from_dict,
     save_project_document,
 )
 
@@ -51,6 +53,90 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
         atomic_write_text(target, "payload\n")
 
     assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_writes_exact_utf8_bytes(tmp_path):
+    target = tmp_path / "export.txt"
+
+    atomic_write_text(target, "line 1\nline 2\n")
+
+    assert target.read_bytes() == b"line 1\nline 2\n"
+
+
+def test_atomic_write_text_verifies_stage_before_replacing_existing_file(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_bytes(b"previous")
+    original_verify = project_module._verify_file_payload
+
+    def corrupt_staged_payload(path, payload, *, stage):
+        if stage == "staged write":
+            path.write_bytes(b"corrupt")
+        return original_verify(path, payload, stage=stage)
+
+    monkeypatch.setattr(
+        project_module, "_verify_file_payload", corrupt_staged_payload
+    )
+
+    with pytest.raises(AtomicWriteVerificationError, match="staged write"):
+        atomic_write_text(target, "replacement\n")
+
+    assert target.read_bytes() == b"previous"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_verifies_committed_destination(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    original_sync = project_module._fsync_parent_directory
+
+    def corrupt_after_replace(directory):
+        original_sync(directory)
+        target.write_bytes(b"corrupt-after-replace")
+
+    monkeypatch.setattr(
+        project_module, "_fsync_parent_directory", corrupt_after_replace
+    )
+
+    with pytest.raises(AtomicWriteVerificationError, match="committed write"):
+        atomic_write_text(target, "replacement\n")
+
+    assert target.read_bytes() == b"corrupt-after-replace"
+
+
+def test_atomic_write_text_syncs_parent_directory_after_replace(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    calls = []
+
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_parent_directory",
+        lambda directory: calls.append(directory),
+    )
+
+    atomic_write_text(target, "payload\n")
+
+    assert calls == [target.parent]
+
+
+def test_atomic_write_text_reports_directory_sync_failure_after_replace(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_bytes(b"previous")
+
+    def fail_sync(directory):
+        raise OSError("directory sync failed")
+
+    monkeypatch.setattr(project_module, "_fsync_parent_directory", fail_sync)
+
+    with pytest.raises(AtomicWriteDurabilityError, match="durability sync failed"):
+        atomic_write_text(target, "replacement\n")
+
+    # The atomic replacement already happened; callers receive an explicit
+    # indeterminate-durability error and must not treat the save as successful.
+    assert target.read_bytes() == b"replacement\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

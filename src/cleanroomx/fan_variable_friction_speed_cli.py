@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .fan_variable_friction_speed import (
     analyze_fan_variable_friction_speed_study,
 )
@@ -40,7 +40,7 @@ def main() -> int:
         load_fan_variable_friction_speed_study(args.study)
     )
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_fan_variable_friction_speed_report(result)
     )

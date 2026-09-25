@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased strict JSON engineering boundary — 2026-09-25
+
+- Centralizes standalone engineering JSON parsing and CLI JSON serialization in `src/cleanroomx/jsonio.py`.
+- Rejects non-finite input constants (`NaN`, `Infinity`, and `-Infinity`) across standalone engineering-study/model loaders and dossier manifests, matching the existing strict project/recovery/desktop behavior.
+- Makes command-line JSON output fail explicitly on non-finite results instead of emitting non-standard JSON tokens.
+- Adds cross-loader regressions for every standalone file-ingestion path plus strict parser/serializer round-trip, malformed-input, and non-finite-output cases without changing project schema, solver equations, numerical tolerances, or acceptance semantics.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

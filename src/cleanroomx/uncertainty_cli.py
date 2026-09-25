@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .uncertainty import analyze_room_uncertainty
 from .uncertainty_io import load_uncertain_room
 from .uncertainty_report import markdown_uncertainty_report
@@ -24,7 +24,7 @@ def main() -> int:
     args = build_parser().parse_args()
     result = analyze_room_uncertainty(load_uncertain_room(args.room))
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_uncertainty_report(result)
     )

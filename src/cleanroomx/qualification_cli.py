@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .qualification import analyze_qualification_uncertainty
 from .qualification_io import load_qualification_uncertainty
 from .qualification_report import markdown_qualification_report
@@ -24,7 +24,7 @@ def main() -> int:
     args = build_parser().parse_args()
     result = analyze_qualification_uncertainty(load_qualification_uncertainty(args.file))
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_qualification_report(result)
     )

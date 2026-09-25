@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Iterable
+
+from .jsonio import load_strict_json
 
 
 def _count_statuses(statuses: Iterable[str]) -> dict[str, int]:
@@ -750,7 +751,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .uncertainty_io import load_uncertain_room
 
     manifest_path = Path(manifest_path)
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    data = load_strict_json(manifest_path)
     name = str(data.get("name", "")).strip()
     if not name:
         raise ValueError("dossier name cannot be empty")

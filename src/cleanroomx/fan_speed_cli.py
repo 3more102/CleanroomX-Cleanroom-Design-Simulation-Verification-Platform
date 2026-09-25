@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .fan_speed import analyze_fan_speed_study
 from .fan_speed_io import load_fan_speed_study
 from .fan_speed_report import markdown_fan_speed_report
@@ -28,7 +28,7 @@ def main() -> int:
     args = build_parser().parse_args()
     result = analyze_fan_speed_study(load_fan_speed_study(args.study))
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_fan_speed_report(result)
     )

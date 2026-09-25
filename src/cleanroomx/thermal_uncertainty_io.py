@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .jsonio import load_strict_json
 
 from .hvac_models import AirState
 from .psychrometric_uncertainty_models import UncertainAirState
@@ -93,5 +94,5 @@ def thermal_uncertainty_from_dict(data: dict) -> UncertainThermalDesign:
 
 
 def load_thermal_uncertainty(path: str | Path) -> UncertainThermalDesign:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_strict_json(path)
     return thermal_uncertainty_from_dict(data)

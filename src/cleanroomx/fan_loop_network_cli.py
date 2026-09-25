@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .fan_loop_network import solve_fan_loop_network
 from .fan_loop_network_io import load_fan_loop_network_study
 from .fan_loop_network_report import markdown_fan_loop_network_report
@@ -24,7 +24,7 @@ def main() -> int:
     args = build_parser().parse_args()
     result = solve_fan_loop_network(load_fan_loop_network_study(args.study))
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_fan_loop_network_report(result)
     )

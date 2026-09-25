@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .fan_variable_friction_loop import solve_fan_variable_friction_loop
 from .fan_variable_friction_loop_io import (
     load_fan_variable_friction_loop_study,
@@ -37,7 +37,7 @@ def main() -> int:
         load_fan_variable_friction_loop_study(args.study)
     )
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_fan_variable_friction_loop_report(result)
     )

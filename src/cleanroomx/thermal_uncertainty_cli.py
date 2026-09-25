@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .thermal_uncertainty import analyze_thermal_uncertainty
 from .thermal_uncertainty_io import load_thermal_uncertainty
 from .thermal_uncertainty_report import markdown_thermal_uncertainty_report
@@ -24,7 +24,7 @@ def main() -> int:
     args = build_parser().parse_args()
     result = analyze_thermal_uncertainty(load_thermal_uncertainty(args.file))
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_thermal_uncertainty_report(result)
     )

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
+from .jsonio import strict_json_dumps
 from .fan_uncertainty import analyze_fan_system_uncertainty
 from .fan_uncertainty_io import load_fan_system_uncertainty
 from .fan_uncertainty_report import markdown_fan_system_uncertainty_report
@@ -28,7 +28,7 @@ def main() -> int:
         load_fan_system_uncertainty(args.study)
     )
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_fan_system_uncertainty_report(result)
     )

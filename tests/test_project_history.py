@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 
 import pytest
 
@@ -270,6 +271,99 @@ def test_project_history_restore_invalidates_cached_engineering_results():
     assert app._runs_by_analysis == {}
     assert app.last_run is None
     assert app.last_run_analysis_id is None
+
+
+class _Text:
+    def __init__(self, value: str):
+        self.value = value
+
+    def get(self, *args):
+        return self.value
+
+    def delete(self, *args):
+        self.value = ""
+
+    def insert(self, index, value):
+        self.value = value
+
+    def edit_modified(self, *args):
+        return False
+
+
+def test_desktop_undo_redo_commits_pending_editor_change_and_replays_it():
+    analysis = AnalysisDocument(
+        id="analysis-a",
+        name="A",
+        kind="room_verification",
+        input={"value": 1},
+    )
+    app = _history_restore_app(
+        ProjectDocument(
+            name="History",
+            analyses=[analysis],
+            active_analysis_id=analysis.id,
+        )
+    )
+    app.root = object()
+    app._running = False
+    app.input_text = _Text(json.dumps({"value": 1}))
+
+    def refresh(select_id=None):
+        target = select_id or app.project.active_analysis_id
+        app._editor_analysis_id = target
+        if target is not None:
+            app.input_text.value = json.dumps(app.project.analysis_by_id(target).input)
+
+    app._refresh_analysis_list = refresh
+
+    app.input_text.value = json.dumps({"value": 2})
+    assert app.undo_project_edit() is True
+    assert app.project.analysis_by_id("analysis-a").input == {"value": 1}
+    assert json.loads(app.input_text.value) == {"value": 1}
+    assert app._project_history.can_redo is True
+    assert app.status_var.value == "Undo: Edit A input"
+
+    assert app.redo_project_edit() is True
+    assert app.project.analysis_by_id("analysis-a").input == {"value": 2}
+    assert json.loads(app.input_text.value) == {"value": 2}
+    assert app.status_var.value == "Redo: Edit A input"
+
+
+def test_desktop_undo_refuses_to_discard_malformed_pending_editor_text(monkeypatch):
+    analysis = AnalysisDocument(
+        id="analysis-a",
+        name="A",
+        kind="room_verification",
+        input={"value": 1},
+    )
+    app = _history_restore_app(
+        ProjectDocument(
+            name="History",
+            analyses=[analysis],
+            active_analysis_id=analysis.id,
+        )
+    )
+    app.root = object()
+    app._running = False
+    app.input_text = _Text(json.dumps({"value": 1}))
+    app._perform_project_edit(
+        "Edit input",
+        lambda: setattr(analysis, "input", {"value": 2}),
+    )
+    assert app._project_history.can_undo is True
+
+    app.input_text.value = "{broken"
+    errors = []
+    monkeypatch.setattr(
+        "cleanroomx.gui.messagebox.showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    assert app.undo_project_edit() is False
+    assert app.project.analysis_by_id("analysis-a").input == {"value": 2}
+    assert app._project_history.can_undo is True
+    assert errors
+    assert errors[0][0] == "Cannot undo"
 
 
 def test_project_history_rejects_invalid_configuration():

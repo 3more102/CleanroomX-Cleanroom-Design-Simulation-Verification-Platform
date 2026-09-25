@@ -733,6 +733,68 @@ def spatial_layout_schedule_csv(value: Any) -> str:
     return stream.getvalue()
 
 
+def spatial_overlap_report_csv(value: Any) -> str:
+    """Export deterministic room-overlap QA evidence as UTF-8 CSV."""
+
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    rooms_by_id = {room["id"]: room for room in rooms}
+    fieldnames = [
+        "conflict_index",
+        "room_a_id",
+        "room_a_name",
+        "room_b_id",
+        "room_b_name",
+        "overlap_x_m",
+        "overlap_y_m",
+        "overlap_length_m",
+        "overlap_width_m",
+        "overlap_area_m2",
+        "room_a_area_m2",
+        "room_b_area_m2",
+        "room_a_overlap_pct",
+        "room_b_overlap_pct",
+    ]
+
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        stream,
+        fieldnames=fieldnames,
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    writer.writeheader()
+
+    for index, conflict in enumerate(room_overlap_conflicts(rooms), start=1):
+        room_a = rooms_by_id.get(conflict["room_a_id"])
+        room_b = rooms_by_id.get(conflict["room_b_id"])
+        if room_a is None or room_b is None:
+            continue
+        room_a_area = room_a["length_m"] * room_a["width_m"]
+        room_b_area = room_b["length_m"] * room_b["width_m"]
+        overlap_area = conflict["area_m2"]
+        writer.writerow(
+            {
+                "conflict_index": index,
+                "room_a_id": room_a["id"],
+                "room_a_name": room_a["name"],
+                "room_b_id": room_b["id"],
+                "room_b_name": room_b["name"],
+                "overlap_x_m": f'{conflict["x_m"]:g}',
+                "overlap_y_m": f'{conflict["y_m"]:g}',
+                "overlap_length_m": f'{conflict["length_m"]:g}',
+                "overlap_width_m": f'{conflict["width_m"]:g}',
+                "overlap_area_m2": f"{overlap_area:g}",
+                "room_a_area_m2": f"{room_a_area:g}",
+                "room_b_area_m2": f"{room_b_area:g}",
+                "room_a_overlap_pct": f"{100.0 * overlap_area / room_a_area:.6g}",
+                "room_b_overlap_pct": f"{100.0 * overlap_area / room_b_area:.6g}",
+            }
+        )
+
+    return stream.getvalue()
+
+
 def resize_room(
     room: dict,
     handle: str,
@@ -1074,6 +1136,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export SVG", command=self.export_svg).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export CSV", command=self.export_schedule_csv).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Export conflicts",
+            command=self.export_overlap_report_csv,
+        ).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=(6, 2)
         )
@@ -1338,6 +1405,31 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             return
         self._status_setter(f"Exported spatial schedule CSV: {path}")
+
+    def export_overlap_report_csv(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export room-overlap QA report as CSV",
+            defaultextension=".csv",
+            initialfile="cleanroomx-overlap-conflicts.csv",
+            filetypes=(("CSV QA report", "*.csv"), ("All files", "*.*")),
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(spatial_overlap_report_csv(self.layout))
+        except OSError as exc:
+            messagebox.showerror(
+                "Export overlap report",
+                f"Could not export the room-overlap QA report:\n{exc}",
+                parent=self,
+            )
+            return
+        conflict_count = len(room_overlap_conflicts(self.layout["rooms"]))
+        self._status_setter(
+            f"Exported {conflict_count} room-overlap conflict(s) to CSV: {path}"
+        )
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:

@@ -1466,7 +1466,7 @@ class CleanroomXApp:
         analysis: AnalysisDocument,
         run: AnalysisRun,
     ) -> bool:
-        project_path = self.project_path
+        project_path = getattr(self, "project_path", None)
         manager = getattr(self, "_run_history_manager", None)
         if project_path is None or manager is None:
             return False

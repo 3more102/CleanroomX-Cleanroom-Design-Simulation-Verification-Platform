@@ -12,9 +12,17 @@ import uuid
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
+
+
+def _project_json_snapshot(value: Any) -> Any:
+    try:
+        return clone_strict_json(value)
+    except StrictJSONError as exc:
+        raise ProjectFormatError(str(exc)) from exc
 
 _PROJECT_TOP_LEVEL_FIELDS = frozenset({
     "schema",
@@ -32,9 +40,10 @@ def _copy_extra_fields(extra_fields: Any) -> dict[str, Any]:
     """Validate and detach an opaque additive-field mapping."""
     if not isinstance(extra_fields, dict):
         raise ProjectFormatError("additive project fields must be an object")
-    if any(not isinstance(key, str) for key in extra_fields):
-        raise ProjectFormatError("additive project field names must be strings")
-    return copy.deepcopy(extra_fields)
+    snapshot = _project_json_snapshot(extra_fields)
+    if not isinstance(snapshot, dict):
+        raise ProjectFormatError("additive project fields must be an object")
+    return snapshot
 
 
 def _extra_fields(data: dict, known_fields: frozenset[str]) -> dict[str, Any]:
@@ -94,7 +103,7 @@ class AnalysisDocument:
     def __post_init__(self) -> None:
         # The model is mutable, but it owns its nested JSON state. Caller-owned
         # parser/build dictionaries must never remain aliases into project state.
-        self.input = copy.deepcopy(self.input)
+        self.input = _project_json_snapshot(self.input)
         self.extra_fields = _copy_extra_fields(self.extra_fields)
 
     def to_dict(self) -> dict:
@@ -104,7 +113,7 @@ class AnalysisDocument:
                 "id": self.id,
                 "name": self.name,
                 "kind": self.kind,
-                "input": copy.deepcopy(self.input),
+                "input": _project_json_snapshot(self.input),
             },
         )
 
@@ -123,7 +132,7 @@ class ProjectDocument:
         # Preserve AnalysisDocument object identity for in-model editing while
         # detaching every caller-owned container at the model boundary.
         self.analyses = list(self.analyses)
-        self.metadata = copy.deepcopy(self.metadata)
+        self.metadata = _project_json_snapshot(self.metadata)
         self.project_extra_fields = _copy_extra_fields(self.project_extra_fields)
         self.top_level_extra_fields = _copy_extra_fields(self.top_level_extra_fields)
 
@@ -133,7 +142,7 @@ class ProjectDocument:
             {
                 "name": self.name,
                 "description": self.description,
-                "metadata": copy.deepcopy(self.metadata),
+                "metadata": _project_json_snapshot(self.metadata),
             },
         )
         return _merge_extra_fields(
@@ -382,10 +391,7 @@ def _migrate_legacy(data: dict) -> dict:
 def project_from_dict(data: dict) -> ProjectDocument:
     if not isinstance(data, dict):
         raise ProjectFormatError("project file must contain a JSON object")
-    try:
-        json.dumps(data, allow_nan=False)
-    except (TypeError, ValueError) as exc:
-        raise ProjectFormatError("project must contain only strict JSON values") from exc
+    data = _project_json_snapshot(data)
     data = _migrate_legacy(data)
 
     if data.get("schema") != PROJECT_SCHEMA:
@@ -447,14 +453,13 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
 def load_project_document(path: str | Path) -> ProjectDocument:
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        data = strict_json_loads(source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except StrictJSONError as exc:
+        raise ProjectFormatError(str(exc)) from exc
     return project_from_dict(data)
 
 

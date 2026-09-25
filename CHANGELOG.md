@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased unified crash-safe output persistence — 2026-09-25
+
+- Centralizes user-file text replacement in a dependency-light persistence module shared by project saves, recovery autosaves, GUI exports, and CLI report/result exports.
+- Retains the guarded project's final external-revision check immediately before replacement, preserving the save-conflict protection introduced on current main.
+- Flushes and fsyncs temporary payloads before atomic replacement, preserves existing file permission bits, fsyncs the parent directory where supported, and removes temporary files on ordinary failures and keyboard interrupts before replacement.
+- Migrates every production CLI output path away from direct `Path.write_text()`, eliminating partial/truncated report files from interrupted in-place writes.
+- Preserves the existing `cleanroomx.project.atomic_write_text()` API and does not change project schema, solver equations, tolerances, analysis semantics, or output content.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

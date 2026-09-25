@@ -5,11 +5,11 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
-import tempfile
 from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .persistence import atomic_write_text as _shared_atomic_write_text
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -316,28 +316,11 @@ def _atomic_write_text(
     *,
     before_replace: Callable[[], None] | None = None,
 ) -> Path:
-    destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
-        ) as handle:
-            temp_path = Path(handle.name)
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-        if before_replace is not None:
-            before_replace()
-        temp_path.replace(destination)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-    return destination
+    return _shared_atomic_write_text(
+        path,
+        text,
+        before_replace=before_replace,
+    )
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:

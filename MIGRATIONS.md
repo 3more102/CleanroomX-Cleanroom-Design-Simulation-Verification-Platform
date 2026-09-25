@@ -35,3 +35,8 @@ For controlled archival workflows, retain a copy of the original legacy file bef
 ## v0.100 path-context behavior
 
 Project schema version remains **1**. v0.100 does not introduce a schema migration. When a project is saved into a different directory, relative consistency/dossier file references are rebased so they continue to identify the same external files. Imported consistency/dossier JSON is rebased from the source JSON directory into the current project context; when no project base exists, relative references are converted to absolute paths. Cached analysis results are cleared when **Save Project As** changes the project base directory.
+
+
+## Durable-persistence compatibility
+
+The durable-persistence hardening does not change the project schema or migration rules. Schema version remains **1**. Only the physical write/commit path changes: staged bytes are verified before atomic replacement and directory metadata is synchronized where supported. Existing project JSON remains parse-compatible with the same loader and public project APIs.

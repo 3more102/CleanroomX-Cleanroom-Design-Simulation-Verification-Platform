@@ -350,7 +350,20 @@ def load_project_document_with_revision(
         before = capture_project_file_revision(source)
         payload = source.read_bytes()
         payload_sha256 = sha256(payload).hexdigest()
-        project = _project_document_from_bytes(payload)
+        try:
+            project = _project_document_from_bytes(payload)
+        except ProjectFormatError:
+            after = capture_project_file_revision(source)
+            stable_invalid_revision = (
+                project_file_revision_matches(before, after)
+                and after.exists
+                and after.size == len(payload)
+                and after.sha256 == payload_sha256
+            )
+            if stable_invalid_revision:
+                raise
+            continue
+
         after = capture_project_file_revision(source)
         if (
             project_file_revision_matches(before, after)

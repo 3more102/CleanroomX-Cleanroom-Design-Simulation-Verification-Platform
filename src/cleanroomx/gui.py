@@ -29,6 +29,7 @@ from .application import (
     validate_analysis_input,
     validate_application_registry,
 )
+from .json_integrity import strict_json_loads
 from .project import (
     AnalysisDocument,
     ProjectDocument,
@@ -66,12 +67,8 @@ _UNIT_SUFFIXES = (
 )
 
 
-def _reject_json_constant(value: str):
-    raise ValueError(f"non-finite JSON constant is not allowed: {value}")
-
-
 def _strict_json_loads(text: str):
-    return json.loads(text, parse_constant=_reject_json_constant)
+    return strict_json_loads(text)
 
 
 def unit_hint(path: str) -> str:

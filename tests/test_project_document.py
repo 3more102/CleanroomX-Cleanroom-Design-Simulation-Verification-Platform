@@ -4,10 +4,11 @@ import json
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    ProjectFormatError, ProjectIntegrityError, ProjectSaveVerificationError,
+    atomic_write_text, load_project_document, project_from_dict, save_project_document,
 )
 
 
@@ -28,6 +29,8 @@ def test_project_document_round_trip(tmp_path):
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["schema"] == PROJECT_SCHEMA
     assert raw["schema_version"] == PROJECT_SCHEMA_VERSION
+    assert raw["integrity"]["algorithm"] == "sha256"
+    assert len(raw["integrity"]["payload_sha256"]) == 64
 
 
 def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):
@@ -116,3 +119,73 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+def test_project_loader_rejects_valid_json_content_corruption(tmp_path):
+    project = ProjectDocument(
+        name="Integrity Demo",
+        analyses=[
+            AnalysisDocument(
+                id="room-1",
+                name="Room",
+                kind="room_verification",
+                input={"length_m": 5.0},
+            )
+        ],
+        active_analysis_id="room-1",
+    )
+    path = save_project_document(tmp_path / "integrity.cleanroomx.json", project)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["analyses"][0]["input"]["length_m"] = 7.0
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectIntegrityError, match="integrity check failed"):
+        load_project_document(path)
+
+
+def test_project_integrity_is_independent_of_json_formatting(tmp_path):
+    project = ProjectDocument(name="Formatting Demo")
+    path = save_project_document(tmp_path / "format.cleanroomx.json", project)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(", ", ": ")) + "\n\n",
+        encoding="utf-8",
+    )
+
+    assert load_project_document(path) == project
+
+
+def test_unsigned_schema_v1_project_remains_backward_compatible():
+    project = ProjectDocument(name="Unsigned v1")
+    payload = project.to_dict()
+
+    assert "integrity" not in payload
+    assert project_from_dict(payload) == project
+
+
+def test_project_save_verifies_exact_committed_bytes(tmp_path, monkeypatch):
+    original_atomic_write = project_module._atomic_write_text
+
+    def write_then_mutate(path, text, *, before_replace=None):
+        saved = original_atomic_write(
+            path,
+            text,
+            before_replace=before_replace,
+        )
+        saved.write_text(
+            saved.read_text(encoding="utf-8") + " ",
+            encoding="utf-8",
+        )
+        return saved
+
+    monkeypatch.setattr(project_module, "_atomic_write_text", write_then_mutate)
+
+    with pytest.raises(ProjectSaveVerificationError, match="save verification failed"):
+        save_project_document(
+            tmp_path / "verify.cleanroomx.json",
+            ProjectDocument(name="Verify"),
+        )

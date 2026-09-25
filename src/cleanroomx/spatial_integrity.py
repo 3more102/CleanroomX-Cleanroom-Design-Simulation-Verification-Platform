@@ -116,8 +116,41 @@ def validate_spatial_layout_document(value: Any) -> None:
         _require_positive_number(room.get("length_m"), f"{prefix}.length_m")
         _require_positive_number(room.get("width_m"), f"{prefix}.width_m")
         _require_positive_number(room.get("height_m"), f"{prefix}.height_m")
+        if room.get("elevation_m") is not None:
+            _require_finite_number(room.get("elevation_m"), f"{prefix}.elevation_m")
         if room.get("pressure_pa") is not None:
             _require_finite_number(room.get("pressure_pa"), f"{prefix}.pressure_pa")
+        if room.get("temperature_target_c") is not None:
+            _require_finite_number(
+                room.get("temperature_target_c"),
+                f"{prefix}.temperature_target_c",
+            )
+        if room.get("humidity_target_percent") is not None:
+            humidity = _require_finite_number(
+                room.get("humidity_target_percent"),
+                f"{prefix}.humidity_target_percent",
+            )
+            if humidity < 0 or humidity > 100:
+                raise SpatialLayoutFormatError(
+                    f"{prefix}.humidity_target_percent must be between 0 and 100"
+                )
+        for field in ("classification", "notes"):
+            if field in room and not isinstance(room[field], str):
+                raise SpatialLayoutFormatError(f"{prefix}.{field} must be a string")
+        if room.get("engineering_ref") is not None:
+            reference = room.get("engineering_ref")
+            if not isinstance(reference, dict):
+                raise SpatialLayoutFormatError(
+                    f"{prefix}.engineering_ref must be an object"
+                )
+            _require_non_empty_string(
+                reference.get("analysis_id"),
+                f"{prefix}.engineering_ref.analysis_id",
+            )
+            _require_non_empty_string(
+                reference.get("room_name"),
+                f"{prefix}.engineering_ref.room_name",
+            )
 
     devices = value.get("devices", [])
     if not isinstance(devices, list):

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .strict_json import load_strict_json
 
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_duct_network import FanDuctNetworkStudy
@@ -31,5 +32,5 @@ def load_fan_duct_network_study(
     path: str | Path,
 ) -> FanDuctNetworkStudy:
     return fan_duct_network_study_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_strict_json(path)
     )

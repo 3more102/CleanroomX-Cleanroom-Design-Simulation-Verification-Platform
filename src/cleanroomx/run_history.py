@@ -6,7 +6,6 @@ from hashlib import sha256
 import json
 from typing import Any
 
-from . import __version__
 
 RUN_HISTORY_METADATA_KEY = "cleanroomx.analysis_run_history"
 RUN_HISTORY_SCHEMA = "cleanroomx.analysis-run-history"
@@ -288,6 +287,8 @@ def run_history_records(
 def build_run_history_evidence(
     input_payload: dict[str, Any],
     run: Any,
+    *,
+    completed_at_utc: str | None = None,
 ) -> dict[str, Any]:
     """Build immutable run evidence without mutating project state.
 
@@ -337,7 +338,10 @@ def build_run_history_evidence(
             "completed analysis plot must be an object or null"
         )
 
+    completed = completed_at_utc or _utc_now_text()
+    _validate_utc_timestamp(completed)
     evidence = {
+        "completed_at_utc": completed,
         "analysis_kind": analysis_kind,
         "run_title": _require_non_empty_string(
             getattr(run, "title", None), "run.title"
@@ -427,7 +431,11 @@ def append_run_history_evidence(
     )
     sequence = records[-1]["sequence"] + 1 if records else 1
 
-    completed = completed_at_utc or _utc_now_text()
+    completed = (
+        completed_at_utc
+        or evidence.get("completed_at_utc")
+        or _utc_now_text()
+    )
     _validate_utc_timestamp(completed)
     record = {
         "sequence": sequence,
@@ -479,7 +487,11 @@ def append_run_history_record(
     limit: int = DEFAULT_RUN_HISTORY_LIMIT,
 ) -> dict[str, Any]:
     """Prepare and append one completed run in a single non-GUI convenience call."""
-    evidence = build_run_history_evidence(input_payload, run)
+    evidence = build_run_history_evidence(
+        input_payload,
+        run,
+        completed_at_utc=completed_at_utc,
+    )
     return append_run_history_evidence(
         metadata,
         analysis_id=analysis_id,

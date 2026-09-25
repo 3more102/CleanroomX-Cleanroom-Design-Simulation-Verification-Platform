@@ -6,7 +6,203 @@
     "name": "CleanroomX GUI Demonstration",
     "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
     "metadata": {
-      "purpose": "GUI and application-service demonstration"
+      "purpose": "GUI and application-service demonstration",
+      "spatial_layout": {
+        "version": 1,
+        "floor": {
+          "id": "floor-1",
+          "name": "Main Cleanroom Floor",
+          "elevation_m": 0,
+          "default_ceiling_height_m": 3,
+          "units": "m"
+        },
+        "grid_m": 0.5,
+        "rooms": [
+          {
+            "id": "process",
+            "name": "Process",
+            "analysis_room_name": "Process",
+            "x_m": 0,
+            "y_m": 0,
+            "length_m": 6,
+            "width_m": 5,
+            "height_m": 3,
+            "floor_elevation_m": 0,
+            "pressure_pa": 30,
+            "classification": "Demo process suite"
+          },
+          {
+            "id": "preparation",
+            "name": "Preparation",
+            "analysis_room_name": "Preparation",
+            "x_m": 7,
+            "y_m": 0,
+            "length_m": 5,
+            "width_m": 4,
+            "height_m": 3,
+            "floor_elevation_m": 0,
+            "pressure_pa": 16,
+            "classification": "Demo preparation suite"
+          },
+          {
+            "id": "ante",
+            "name": "Ante / Airlock",
+            "analysis_room_name": "Ante",
+            "x_m": 13,
+            "y_m": 0,
+            "length_m": 4,
+            "width_m": 3,
+            "height_m": 3,
+            "floor_elevation_m": 0,
+            "pressure_pa": 8,
+            "classification": "Demo transition suite"
+          }
+        ],
+        "devices": [
+          {
+            "id": "door-process",
+            "type": "door",
+            "name": "Process Door",
+            "room_id": "process",
+            "x_m": 3,
+            "y_m": 0,
+            "z_m": 0,
+            "width_m": 1,
+            "height_m": 2.1,
+            "orientation_deg": 0,
+            "wall_side": "south",
+            "swing": "left"
+          },
+          {
+            "id": "supply-process",
+            "type": "supply",
+            "name": "Process Supply",
+            "room_id": "process",
+            "x_m": 1.5,
+            "y_m": 2,
+            "z_m": 3,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "ffu-process",
+            "type": "ffu",
+            "name": "Process FFU",
+            "room_id": "process",
+            "x_m": 4.5,
+            "y_m": 3,
+            "z_m": 3,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "return-process",
+            "type": "return",
+            "name": "Process Return",
+            "room_id": "process",
+            "x_m": 5.5,
+            "y_m": 2,
+            "z_m": 3,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "equipment-process",
+            "type": "equipment",
+            "name": "Process Tool",
+            "room_id": "process",
+            "x_m": 3,
+            "y_m": 3.5,
+            "z_m": 0,
+            "width_m": 1,
+            "height_m": 1.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "door-preparation",
+            "type": "door",
+            "name": "Preparation Door",
+            "room_id": "preparation",
+            "x_m": 9.5,
+            "y_m": 0,
+            "z_m": 0,
+            "width_m": 0.9,
+            "height_m": 2.1,
+            "orientation_deg": 0,
+            "wall_side": "south",
+            "swing": "right"
+          },
+          {
+            "id": "supply-preparation",
+            "type": "supply",
+            "name": "Preparation Supply",
+            "room_id": "preparation",
+            "x_m": 9,
+            "y_m": 2,
+            "z_m": 3,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "return-preparation",
+            "type": "return",
+            "name": "Preparation Return",
+            "room_id": "preparation",
+            "x_m": 11,
+            "y_m": 2,
+            "z_m": 3,
+            "width_m": 0.4,
+            "height_m": 0.2,
+            "orientation_deg": 0
+          },
+          {
+            "id": "door-ante",
+            "type": "door",
+            "name": "Ante Door",
+            "room_id": "ante",
+            "x_m": 15,
+            "y_m": 0,
+            "z_m": 0,
+            "width_m": 0.9,
+            "height_m": 2.1,
+            "orientation_deg": 0,
+            "wall_side": "south",
+            "swing": "left"
+          },
+          {
+            "id": "transfer-ante",
+            "type": "transfer",
+            "name": "Ante Transfer",
+            "room_id": "ante",
+            "x_m": 16,
+            "y_m": 3,
+            "z_m": 1,
+            "width_m": 0.6,
+            "height_m": 0.4,
+            "orientation_deg": 0,
+            "wall_side": "north"
+          }
+        ],
+        "view": {
+          "zoom_2d": 1,
+          "pan_x": 0,
+          "pan_y": 0,
+          "azimuth_deg": 35,
+          "elevation_deg": 28,
+          "zoom_3d": 1,
+          "pan_3d_x": 0,
+          "pan_3d_y": 0,
+          "snap_to_grid": true,
+          "show_pressure": true,
+          "show_labels": true,
+          "show_devices": true,
+          "show_relationships": true
+        }
+      }
     }
   },
   "analyses": [

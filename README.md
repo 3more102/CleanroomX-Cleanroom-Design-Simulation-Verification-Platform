@@ -2,6 +2,10 @@
 
 CleanroomX is an open engineering platform for **cleanroom design screening, simulation, verification, recovery qualification, uncertainty/provenance tracking, and preliminary HVAC analysis**. The same auditable, requirement-driven backend workflows are available through command-line tools and the v0.100 desktop application.
 
+## Portable project handoff
+
+CleanroomX can export a desktop project as a deterministic `.cleanroomx.zip` bundle containing the schema-v1 project and its registered external consistency/dossier inputs. The bundle records SHA-256 and byte-size integrity for every packaged file, rejects changing inputs during export, and can be verified or transactionally extracted through **File → Export/Open Portable Project Bundle...** or `cleanroomx-project-bundle`. See [Portable Project Bundles](docs/PROJECT_BUNDLES.md).
+
 ## Verified development status
 
 The current release line is **CleanroomX v0.100.0**, built directly on the verified v0.99.1 `main` lineage. It preserves the validated solver/provenance backend and adds desktop execution-integrity evidence, portable external-file references, atomic project/export writes, backend-derived fan/system plotting, and the self-contained installed demonstration.

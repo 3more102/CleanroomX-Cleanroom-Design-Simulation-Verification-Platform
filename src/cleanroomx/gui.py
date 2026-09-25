@@ -1489,7 +1489,7 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
-        if self._editor_analysis_id == analysis.id:
+        if getattr(self, "_editor_analysis_id", None) == analysis.id:
             try:
                 self._commit_editor(analysis)
             except Exception as exc:
@@ -1538,7 +1538,7 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
-        if self._editor_analysis_id == analysis.id:
+        if getattr(self, "_editor_analysis_id", None) == analysis.id:
             try:
                 self._commit_editor(analysis)
             except Exception as exc:

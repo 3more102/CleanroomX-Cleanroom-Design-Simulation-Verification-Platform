@@ -378,11 +378,19 @@ def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
     )
 
 
+def _geometry_number(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return math.nan
+    return number if math.isfinite(number) else math.nan
+
+
 def _geometry_matches(left: dict, right: dict) -> bool:
     return all(
         math.isclose(
-            float(left.get(field, math.nan)),
-            float(right.get(field, math.nan)),
+            _geometry_number(left.get(field)),
+            _geometry_number(right.get(field)),
             rel_tol=0.0,
             abs_tol=SPATIAL_GEOMETRY_EPSILON_M,
         )
@@ -395,8 +403,8 @@ def _geometry_differences(left: dict, right: dict) -> list[str]:
         field
         for field in ("length_m", "width_m", "height_m")
         if not math.isclose(
-            float(left.get(field, math.nan)),
-            float(right.get(field, math.nan)),
+            _geometry_number(left.get(field)),
+            _geometry_number(right.get(field)),
             rel_tol=0.0,
             abs_tol=SPATIAL_GEOMETRY_EPSILON_M,
         )

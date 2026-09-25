@@ -332,8 +332,8 @@ def _fingerprint_matches_expected(
     )
     if not same_content:
         raise ProjectFileConflictError(
-            "project file changed, was replaced, or was deleted on disk since "
-            f"it was opened or last saved: {normalized_destination}"
+            "project file content or existence changed on disk since the save "
+            f"baseline was captured: {normalized_destination}"
         )
 
 

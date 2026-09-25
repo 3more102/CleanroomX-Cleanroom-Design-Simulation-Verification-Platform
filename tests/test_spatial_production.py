@@ -4,6 +4,7 @@ import copy
 
 from cleanroomx.project import AnalysisDocument, project_from_dict
 from cleanroomx.spatial import (
+    ensure_project_layout,
     normalize_layout,
     spatial_engineering_status,
     spatial_pressure_overlay,
@@ -208,3 +209,48 @@ def test_pressure_projection_does_not_use_stale_or_invented_solver_values():
     assert resolved["rooms"][0]["pressure_target_pa"] == 20.0
     assert resolved["rooms"][0]["source"] == "result"
     assert resolved["rooms"][0]["status"] == "fail"
+
+
+def test_opening_existing_layout_does_not_invent_sync_provenance():
+    analysis = _analysis()
+    layout = _layout()
+    assert "engineering_ref" not in layout["rooms"][0]
+
+    class Project:
+        metadata = {"spatial_layout": layout}
+        analyses = [analysis]
+
+    opened = ensure_project_layout(Project(), analysis)
+
+    assert "engineering_ref" not in opened["rooms"][0]
+    assert spatial_engineering_status(opened, analysis)["rooms"][0]["status"] == "synchronized"
+
+    analysis.input["rooms"][0]["length_m"] = 6.25
+    assert spatial_engineering_status(opened, analysis)["rooms"][0]["status"] == "conflicting"
+
+
+def test_spatial_push_preflights_all_links_before_mutating_engineering_input():
+    analysis = _analysis()
+    original_length = analysis.input["rooms"][0]["length_m"]
+    layout = _layout()
+    layout["rooms"][0]["length_m"] = 7.0
+    layout["rooms"].append(
+        {
+            "id": "missing",
+            "name": "Missing",
+            "analysis_room_name": "No such engineering room",
+            "x_m": 20.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+            "height_m": 3.0,
+        }
+    )
+
+    import pytest
+    from cleanroomx.spatial import SpatialSyncError
+
+    with pytest.raises(SpatialSyncError, match="does not exist"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input["rooms"][0]["length_m"] == original_length

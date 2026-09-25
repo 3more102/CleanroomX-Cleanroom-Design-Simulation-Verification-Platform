@@ -14,6 +14,7 @@ from cleanroomx.spatial import (
     spatial_layout_schedule_csv,
     spatial_layout_summary,
     spatial_layout_svg,
+    spatial_measurement,
     sync_layout_to_analysis,
 )
 
@@ -491,3 +492,23 @@ def test_room_translation_keeps_assigned_devices_attached():
     assert (room["x_m"], room["y_m"]) == (2.5, 1.5)
     assert (attached["x_m"], attached["y_m"]) == (3.5, 2.5)
     assert (free["x_m"], free["y_m"]) == (20, 20)
+
+
+def test_spatial_measurement_reports_signed_deltas_distance_and_angle():
+    result = spatial_measurement((1.0, 2.0), (4.0, 6.0))
+
+    assert result["dx_m"] == 3.0
+    assert result["dy_m"] == 4.0
+    assert result["distance_m"] == 5.0
+    assert math.isclose(result["angle_deg"], 53.13010235415598)
+
+
+def test_spatial_measurement_zero_length_is_stable():
+    result = spatial_measurement((2.5, -1.0), (2.5, -1.0))
+
+    assert result == {
+        "dx_m": 0.0,
+        "dy_m": 0.0,
+        "distance_m": 0.0,
+        "angle_deg": 0.0,
+    }

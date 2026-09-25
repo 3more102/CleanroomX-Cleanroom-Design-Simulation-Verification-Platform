@@ -128,8 +128,8 @@ def _project_differences(
                     walk(before[key], after[key], child, depth + 1)
             return
         if isinstance(before, list) and isinstance(after, list):
-            before_by_id = _identified_list(before)
-            after_by_id = _identified_list(after)
+            before_by_id = _identified_list(before) if path == "analyses" else None
+            after_by_id = _identified_list(after) if path == "analyses" else None
             if before_by_id is not None and after_by_id is not None:
                 for item_id in sorted(set(before_by_id) | set(after_by_id)):
                     child = f"{path}[{item_id}]"

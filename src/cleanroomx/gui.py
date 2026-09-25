@@ -43,6 +43,13 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .run_history import (
+    RUN_HISTORY_METADATA_KEY,
+    RunHistoryError,
+    append_run_history,
+    restore_matching_run_cache,
+    validated_run_history_document,
+)
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -190,6 +197,7 @@ class CleanroomXApp:
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
+        self._run_history_generation = 0
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
@@ -249,6 +257,7 @@ class CleanroomXApp:
         file_menu.add_separator()
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
+        file_menu.add_command(label="Export Run History JSON...", command=self.export_run_history_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
@@ -458,6 +467,23 @@ class CleanroomXApp:
         self._runs_by_analysis.clear()
         self._clear_rendered_run()
 
+    def _hydrate_persisted_run_history(self) -> tuple:
+        restored, issues = restore_matching_run_cache(self.project)
+        if not issues:
+            self._runs_by_analysis.update(restored)
+        return issues
+
+    def _record_run_history(
+        self, analysis: AnalysisDocument, run: AnalysisRun
+    ) -> str | None:
+        try:
+            append_run_history(self.project, analysis, run)
+        except Exception as exc:
+            return str(exc)
+        self._run_history_generation = getattr(self, "_run_history_generation", 0) + 1
+        self._update_title()
+        return None
+
     def _invalidate_last_run_for(self, analysis_id: str | None) -> None:
         if analysis_id is None:
             return
@@ -565,7 +591,21 @@ class CleanroomXApp:
         return None
 
     def _project_state_signature(self) -> str:
-        data = copy.deepcopy(self.project.to_dict())
+        project_data = self.project.to_dict()
+        metadata = project_data["project"]["metadata"]
+        data = {
+            **project_data,
+            "project": {
+                **project_data["project"],
+                "metadata": {
+                    key: copy.deepcopy(value)
+                    for key, value in metadata.items()
+                    if key != RUN_HISTORY_METADATA_KEY
+                },
+            },
+            "analyses": copy.deepcopy(project_data["analyses"]),
+            "_run_history_generation": getattr(self, "_run_history_generation", 0),
+        }
         name = self.name_var.get().strip()
         if not name:
             raise ValueError("project name cannot be empty")
@@ -930,6 +970,7 @@ class CleanroomXApp:
         recovered = restore_recovery_artifact(path)
         self._discard_current_autosave()
         self.project = recovered.project
+        self._run_history_generation = 0
         self.project_path = None
         self._project_file_revision = None
         self._recovery_source_path = recovered.source_path
@@ -948,6 +989,7 @@ class CleanroomXApp:
             else self.project.description
         )
         self._clear_run_cache()
+        history_issues = self._hydrate_persisted_run_history()
         self._refresh_analysis_list()
 
         editor_id = ui_state.get("editor_analysis_id")
@@ -970,9 +1012,16 @@ class CleanroomXApp:
         # A recovered copy must require an explicit Save As even when its recovered
         # model happens to equal the source project byte-for-byte.
         self._baseline_state = "__cleanroomx_recovered_copy_requires_save_as__"
-        self.status_var.set(
-            "Recovered unsaved work — use Save Project As to preserve it separately."
-        )
+        if history_issues:
+            self.status_var.set(
+                "Recovered unsaved work — persisted run history has "
+                f"{len(history_issues)} integrity issue(s) and was not restored; "
+                "use Save Project As to preserve the recovered copy separately."
+            )
+        else:
+            self.status_var.set(
+                "Recovered unsaved work — use Save Project As to preserve it separately."
+            )
         self.autosave_status_var.set("Autosave: recovered copy")
         self._update_title()
 
@@ -1023,6 +1072,7 @@ class CleanroomXApp:
             return
         self._discard_current_autosave()
         self.project = new_project()
+        self._run_history_generation = 0
         self.project_path = None
         self._project_file_revision = None
         self._recovery_source_path = None
@@ -1062,6 +1112,7 @@ class CleanroomXApp:
         project, project_revision = load_project_document_with_revision(project_path)
         self._discard_current_autosave()
         self.project = project
+        self._run_history_generation = 0
         self.project_path = project_path
         self._project_file_revision = project_revision
         self._recovery_source_path = None
@@ -1070,9 +1121,22 @@ class CleanroomXApp:
         self.name_var.set(project.name)
         self.description_var.set(project.description)
         self._clear_run_cache()
+        history_issues = self._hydrate_persisted_run_history()
+        restored_run_count = len(self._runs_by_analysis)
         self._refresh_analysis_list()
         self._capture_saved_state()
-        self.status_var.set(f"Opened {project_path.name}")
+        if history_issues:
+            self.status_var.set(
+                f"Opened {project_path.name} — persisted run history has "
+                f"{len(history_issues)} integrity issue(s); historical results were not restored."
+            )
+        elif restored_run_count:
+            self.status_var.set(
+                f"Opened {project_path.name} — restored {restored_run_count} "
+                "current result(s) from run history."
+            )
+        else:
+            self.status_var.set(f"Opened {project_path.name}")
         self._update_title()
 
     def _update_title(self) -> None:
@@ -1467,13 +1531,31 @@ class CleanroomXApp:
                             "run the analysis again."
                         )
                         continue
+                    history_error = self._record_run_history(analysis, payload)
                     self._runs_by_analysis[analysis_id] = payload
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
-                    self.status_var.set(
-                        f"Completed — {payload.title} — status: {payload.status}"
-                    )
+                    if history_error is None:
+                        self.status_var.set(
+                            f"Completed — {payload.title} — status: {payload.status} "
+                            "— recorded in project run history"
+                        )
+                    else:
+                        self.status_var.set(
+                            f"Completed — {payload.title} — status: {payload.status} "
+                            "— run history was not recorded"
+                        )
+                        messagebox.showwarning(
+                            "Run history not recorded",
+                            (
+                                "The analysis result is available in this session, but "
+                                "CleanroomX did not modify the persisted run history. "
+                                "Existing history evidence was preserved.\n\n"
+                                f"{history_error}"
+                            ),
+                            parent=self.root,
+                        )
         except queue.Empty:
             pass
         self.root.after(100, self._poll_worker)
@@ -1618,6 +1700,41 @@ class CleanroomXApp:
                     allow_nan=False,
                 ) + "\n",
                 label="Run bundle",
+            )
+
+    def export_run_history_json(self) -> None:
+        try:
+            history = validated_run_history_document(self.project)
+        except RunHistoryError as exc:
+            self.status_var.set("Run history export blocked")
+            messagebox.showerror(
+                "Run history export blocked",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        if history is None or not history.get("entries"):
+            messagebox.showinfo(
+                "No run history",
+                "This project does not contain any persisted analysis runs yet.",
+                parent=self.root,
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if path:
+            self._write_export_file(
+                path,
+                json.dumps(
+                    history,
+                    indent=2,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ) + "\n",
+                label="Run history",
             )
 
     def export_report_markdown(self) -> None:

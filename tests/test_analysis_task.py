@@ -134,6 +134,34 @@ def test_task_cancel_terminates_worker_and_cleans_temporary_state(tmp_path):
     assert task.cancel() is False
 
 
+def test_task_shutdown_escalates_to_kill_and_cleans_state():
+    class StubbornProcess(_FakeProcess):
+        def terminate(self):
+            self.terminated = True
+            # Simulate a backend/native call that does not exit on terminate.
+            self.alive = True
+
+    class StubbornContext:
+        def __init__(self):
+            self.process = None
+
+        def Process(self, *, target, args, name):
+            self.process = StubbornProcess(target=target, args=args, name=name)
+            return self.process
+
+    context = StubbornContext()
+    task = AnalysisTask.start("demo", {"value": 1}, _context=context)
+    work_dir = task._work_dir
+
+    task.shutdown()
+
+    assert context.process is not None
+    assert context.process.terminated is True
+    assert context.process.killed is True
+    assert context.process.is_alive() is False
+    assert not work_dir.exists()
+
+
 def test_task_reports_worker_exit_without_outcome_as_failure():
     context = _FakeContext(exit_code=23)
     task = AnalysisTask.start("demo", {"value": 1}, _context=context)

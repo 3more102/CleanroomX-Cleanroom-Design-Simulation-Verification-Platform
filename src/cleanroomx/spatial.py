@@ -80,9 +80,7 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
     raw = metadata.get(SPATIAL_METADATA_KEY)
     if raw is not None:
         validate_persisted_spatial_layout(raw)
-        normalized = normalize_layout(raw)
-        metadata[SPATIAL_METADATA_KEY] = normalized
-        return normalized
+        return raw
 
     normalized = normalize_layout(derive_layout_from_analysis(analysis))
     if not normalized["rooms"]:

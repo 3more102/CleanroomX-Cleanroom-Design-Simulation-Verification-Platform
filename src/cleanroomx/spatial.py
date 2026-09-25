@@ -1676,7 +1676,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(
+        self,
+    ) -> list[tuple[dict, dict, float | None, float | None, str]]:
         if not self._show_relationships.get():
             return []
         analysis = self._analysis_getter()
@@ -1692,7 +1694,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                 key = str(name or "").strip().casefold()
                 if key and key not in rooms_by_name:
                     rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
+        relationships: list[
+            tuple[dict, dict, float | None, float | None, str]
+        ] = []
         for item in raw:
             if not isinstance(item, dict):
                 continue
@@ -1710,28 +1714,59 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if delta is not None
                 else None
             )
-            relationships.append((high, low, delta_value))
+            observed_delta = None
+            if high.get("pressure_pa") is not None and low.get("pressure_pa") is not None:
+                observed_delta = (
+                    _finite_number(high.get("pressure_pa"), 0.0)
+                    - _finite_number(low.get("pressure_pa"), 0.0)
+                )
+            if observed_delta is None:
+                state = "unavailable"
+            elif delta_value is None:
+                state = "available"
+            elif observed_delta + SPATIAL_GEOMETRY_EPSILON_M >= delta_value:
+                state = "pass"
+            else:
+                state = "fail"
+            relationships.append(
+                (high, low, delta_value, observed_delta, state)
+            )
         return relationships
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        colors = {
+            "pass": "#15803d",
+            "fail": "#b91c1c",
+            "available": "#7c3aed",
+            "unavailable": "#64748b",
+        }
+        for high, low, min_delta, observed_delta, state in self._pressure_relationships():
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            color = colors[state]
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                arrow="last", width=2, dash=(6, 3), fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                if observed_delta is None and min_delta is not None:
+                    label = f"Δ unavailable / target ≥ {min_delta:g} Pa"
+                elif observed_delta is not None and min_delta is not None:
+                    label = f"Δ {observed_delta:g} Pa / target ≥ {min_delta:g} Pa"
+                elif observed_delta is not None:
+                    label = f"Δ {observed_delta:g} Pa"
+                else:
+                    label = "Pressure unavailable"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
 

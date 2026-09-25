@@ -35,8 +35,10 @@ association, opening dimensions/orientation/wall side/swing, room floor elevatio
 classification text, and analysis-room linkage.
 
 Pressure color is shown only when a room has a supplied pressure value. Relationship arrows are
-drawn only from the active analysis's explicit `pressure_cascade` records. CleanroomX does not
-invent missing pressure or airflow values.
+drawn only from the active analysis's explicit `pressure_cascade` records. When both linked rooms
+have supplied pressures, CleanroomX shows the observed delta and marks the configured minimum
+relationship as pass or fail; missing pressure remains explicitly unavailable. The same relation
+state is rendered in both 2D and 3D. CleanroomX does not invent missing pressure or airflow values.
 
 ## 3D viewer
 
@@ -52,9 +54,9 @@ record used in 2D.
 ## Engineering synchronization
 
 Spatial editing does not silently alter engineering inputs. Use **Sync dimensions to active
-analysis** explicitly. For room-verification and project-verification workflows, CleanroomX can
-copy the spatial room length, width, height, and an already-supported observed pressure field.
-Other engineering inputs are preserved.
+analysis** explicitly. For room-verification and project-verification workflows, CleanroomX copies
+only spatial room length, width, and height. Observed pressure and all other engineering evidence
+remain owned by the engineering analysis and are never overwritten by dimension synchronization.
 
 A room can keep a stable `analysis_room_name` even when its display name changes. Duplicate
 links and links to a missing analysis room are rejected instead of being applied ambiguously.

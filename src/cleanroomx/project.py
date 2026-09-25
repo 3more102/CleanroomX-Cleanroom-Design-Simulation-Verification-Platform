@@ -291,18 +291,28 @@ def _stable_file_sha256(
             before = source.stat()
             digest = sha256()
             with source.open("rb") as handle:
+                opened_before = os.fstat(handle.fileno())
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
+                opened_after = os.fstat(handle.fileno())
             after = source.stat()
         except OSError as exc:
             last_error = exc
             continue
 
+        identities = {
+            (before.st_dev, before.st_ino),
+            (opened_before.st_dev, opened_before.st_ino),
+            (opened_after.st_dev, opened_after.st_ino),
+            (after.st_dev, after.st_ino),
+        }
         if (
-            before.st_dev == after.st_dev
-            and before.st_ino == after.st_ino
-            and before.st_size == after.st_size
-            and before.st_mtime_ns == after.st_mtime_ns
+            len(identities) == 1
+            and before.st_size == opened_before.st_size == opened_after.st_size == after.st_size
+            and before.st_mtime_ns
+            == opened_before.st_mtime_ns
+            == opened_after.st_mtime_ns
+            == after.st_mtime_ns
         ):
             return after, digest.hexdigest()
         last_error = OSError(f"{change_label} changed while fingerprinting: {source}")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import copy
 import math
+import uuid
 from typing import Any, Callable
 
 import tkinter as tk
@@ -13,9 +14,7 @@ from .spatial_schema import (
     DEVICE_TYPES,
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
-    allocate_unique_identifier,
     migrate_spatial_layout,
-    preferred_device_id,
     preferred_room_id,
 )
 
@@ -150,6 +149,7 @@ def normalize_layout(value: Any) -> dict:
     )
     result["view"] = view
     return result
+
 
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
@@ -743,12 +743,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         index = len(self.layout["rooms"]) + 1
         room_name = f"Room {index}"
-        room_id = allocate_unique_identifier(
-            preferred_room_id(room_name),
-            {str(item["id"]) for item in self.layout["rooms"]},
-        )
         room = {
-            "id": room_id,
+            "id": f"room-{uuid.uuid4().hex}",
             "name": room_name,
             "x_m": x + (1.0 if self.layout["rooms"] else 0.0),
             "y_m": 0.0,
@@ -780,12 +776,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         else:
             x = y = z = 0.0
             room_id = None
-        device_id = allocate_unique_identifier(
-            preferred_device_id(device_type, device_type.upper()),
-            {str(item["id"]) for item in self.layout["devices"]},
-        )
         device = {
-            "id": device_id,
+            "id": f"device-{uuid.uuid4().hex}",
             "type": device_type,
             "name": device_type.upper(),
             "room_id": room_id,

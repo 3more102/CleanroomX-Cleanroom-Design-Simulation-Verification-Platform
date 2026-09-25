@@ -125,6 +125,60 @@ def test_run_current_starts_isolated_task_and_locks_editor(monkeypatch):
     assert "running" in app.status_var.value.lower()
 
 
+def test_run_current_start_failure_reenables_editor(monkeypatch):
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="analysis-a",
+        name="A",
+        kind="room_verification",
+        input={"value": 3},
+    )
+    errors = []
+    monkeypatch.setattr(gui_module, "validate_analysis_input", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        gui_module.AnalysisTask,
+        "start",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("spawn failed")),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._analysis_task = None
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: Path("/project")
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = object()
+
+    app.run_current()
+
+    assert app._analysis_task is None
+    assert app._running is False
+    assert app.run_button.state == "normal"
+    assert app.cancel_button.state == "disabled"
+    assert app.input_text.state == "normal"
+    assert app.status_var.value == "Analysis could not start"
+    assert errors == [("Cannot start analysis", "spawn failed")]
+
+
 def test_cancel_terminates_worker_and_reenables_ui_after_cancelled_outcome():
     class Widget:
         def __init__(self):

@@ -8,6 +8,10 @@ The current release line is **CleanroomX v0.100.0**, built directly on the verif
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
 
+### Unreleased background worker context isolation — 2026-09-25
+
+Background analysis completion is now bound not only to input provenance but also to the exact originating project object, analysis object/active selection, and project base directory. A worker completion from a replaced or rebased project context is discarded before an error or result is published. **Save Project As** and Recovery Center restoration are blocked while a backend worker is active. Project schema, solver behavior, result formats, and recovery formats are unchanged. See [docs/ANALYSIS_RUN_STATE_ISOLATION.md](docs/ANALYSIS_RUN_STATE_ISOLATION.md).
+
 ### Network-state replay provenance ladder
 
 | Version | Audited state |

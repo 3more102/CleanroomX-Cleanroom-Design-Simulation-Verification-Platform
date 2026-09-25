@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased background worker context isolation — 2026-09-25
+
+- Binds every background worker completion to the originating in-memory project object, analysis object/active selection, and normalized base directory.
+- Discards stale success **and error** completions before they can be rendered, cached, or presented against a replacement/rebased project context.
+- Blocks Save Project As and Recovery Center restoration while a backend worker remains active; direct project-load/recovery-restore APIs enforce the same invariant.
+- Complements the existing canonical input-provenance freshness guard rather than reimplementing it.
+- Preserves project schema version 1, solver equations/tolerances, result/report formats, and recovery artifact formats.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

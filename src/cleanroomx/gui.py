@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import queue
@@ -47,6 +48,15 @@ from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
+
+
+@dataclass(frozen=True)
+class _AnalysisRunContext:
+    """Project state that a background worker completion is allowed to update."""
+
+    project: ProjectDocument
+    analysis: AnalysisDocument
+    base_dir: Path | None
 
 
 _UNIT_SUFFIXES = (
@@ -208,6 +218,7 @@ class CleanroomXApp:
         self._run_generation = 0
         self._running = False
         self._abandon_requested = False
+        self._active_run_context: _AnalysisRunContext | None = None
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -563,6 +574,41 @@ class CleanroomXApp:
         if recovery_source is not None:
             return recovery_source.parent
         return None
+
+    @staticmethod
+    def _normalized_base_dir(path: Path | None) -> Path | None:
+        if path is None:
+            return None
+        return path.expanduser().resolve(strict=False)
+
+    def _capture_run_context(
+        self,
+        analysis: AnalysisDocument,
+        *,
+        base_dir: Path | None,
+    ) -> _AnalysisRunContext:
+        return _AnalysisRunContext(
+            project=self.project,
+            analysis=analysis,
+            base_dir=self._normalized_base_dir(base_dir),
+        )
+
+    def _run_context_matches_current(self, context: _AnalysisRunContext) -> bool:
+        if self.project is not context.project:
+            return False
+        if self.project.active_analysis_id != context.analysis.id:
+            return False
+        try:
+            current_analysis = self.project.analysis_by_id(context.analysis.id)
+        except KeyError:
+            return False
+        if current_analysis is not context.analysis:
+            return False
+        try:
+            current_base_dir = self._normalized_base_dir(self._base_dir())
+        except (OSError, RuntimeError):
+            return False
+        return current_base_dir == context.base_dir
 
     def _project_state_signature(self) -> str:
         data = copy.deepcopy(self.project.to_dict())
@@ -927,6 +973,10 @@ class CleanroomXApp:
             )
 
     def restore_recovery_path(self, path: str | Path) -> None:
+        if getattr(self, "_running", False):
+            raise RuntimeError(
+                "cannot restore recovery while an analysis is running; abandon the run first"
+            )
         recovered = restore_recovery_artifact(path)
         self._discard_current_autosave()
         self.project = recovered.project
@@ -977,6 +1027,13 @@ class CleanroomXApp:
         self._update_title()
 
     def show_recovery_center(self, *, announce_empty: bool = True) -> bool:
+        if getattr(self, "_running", False):
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before opening Recovery Center.",
+                parent=self.root,
+            )
+            return False
         try:
             scan = scan_recovery_artifacts(self._autosave_manager.recovery_dir)
         except OSError as exc:
@@ -1058,6 +1115,10 @@ class CleanroomXApp:
                 messagebox.showerror("Open failed", str(exc), parent=self.root)
 
     def load_project_path(self, path: str | Path) -> None:
+        if getattr(self, "_running", False):
+            raise RuntimeError(
+                "cannot replace the project while an analysis is running; abandon the run first"
+            )
         project_path = Path(path)
         project, project_revision = load_project_document_with_revision(project_path)
         self._discard_current_autosave()
@@ -1144,6 +1205,13 @@ class CleanroomXApp:
         self.status_var.set(f"Saved {self.project_path.name}")
 
     def save_project_as(self) -> None:
+        if getattr(self, "_running", False):
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before changing the project location.",
+                parent=self.root,
+            )
+            return
         try:
             if self._editor_analysis() is not None:
                 self._commit_editor()
@@ -1406,6 +1474,13 @@ class CleanroomXApp:
         kind = analysis.kind
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
+        try:
+            run_context = self._capture_run_context(analysis, base_dir=base_dir)
+        except (OSError, RuntimeError) as exc:
+            self.status_var.set("Cannot run — execution context unavailable")
+            messagebox.showerror("Cannot run analysis", str(exc), parent=self.root)
+            return
+        self._active_run_context = run_context
         self._abandon_requested = False
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
@@ -1442,9 +1517,20 @@ class CleanroomXApp:
                     continue
                 if self._abandon_requested:
                     self._abandon_requested = False
+                    self._active_run_context = None
                     self._set_running(False)
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
+                context = getattr(self, "_active_run_context", None)
+                if context is None or not self._run_context_matches_current(context):
+                    self._active_run_context = None
+                    self._set_running(False)
+                    self.status_var.set(
+                        "Worker completion discarded — the project execution context "
+                        "changed while the backend was running. Validate and run again."
+                    )
+                    continue
+                self._active_run_context = None
                 self._set_running(False)
                 if kind == "error":
                     self.status_var.set("Analysis failed")

@@ -44,6 +44,15 @@ def _room_ref(room: dict) -> str:
     return str(room.get("engineering_ref") or room.get("name") or "").strip()
 
 
+def _effective_room_ref(room: dict, analysis: Any, targets: dict[str, list[dict]]) -> str:
+    explicit = str(room.get("engineering_ref") or "").strip()
+    if explicit:
+        return explicit
+    if getattr(analysis, "kind", "") == "room_verification" and len(targets) == 1:
+        return next(iter(targets))
+    return str(room.get("name") or "").strip()
+
+
 def _target_index(analysis: Any) -> dict[str, list[dict]]:
     index: dict[str, list[dict]] = {}
     for target in _analysis_rooms(analysis):
@@ -121,7 +130,7 @@ def engineering_sync_status(layout: dict, analysis: Any) -> dict[str, dict]:
         if not isinstance(room, dict):
             continue
         room_id = str(room.get("id") or "")
-        room_ref = _room_ref(room)
+        room_ref = _effective_room_ref(room, analysis, targets)
         expected_analysis_id = str(room.get("engineering_analysis_id") or "").strip()
         base = {
             "room_id": room_id,
@@ -229,7 +238,7 @@ def push_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     for room in layout.get("rooms", []):
         if not isinstance(room, dict):
             continue
-        ref = _room_ref(room)
+        ref = _effective_room_ref(room, analysis, targets)
         if not ref:
             continue
         expected_analysis_id = str(room.get("engineering_analysis_id") or "").strip()
@@ -249,10 +258,21 @@ def push_layout_to_analysis(layout: dict, analysis: Any) -> bool:
             if target.get("observed_pressure_pa") != pressure:
                 target["observed_pressure_pa"] = pressure
                 changed = True
+        previous_mapping = (
+            room.get("engineering_ref"),
+            room.get("engineering_analysis_id"),
+            room.get("engineering_snapshot"),
+        )
         room["engineering_ref"] = ref
         if analysis_id:
             room["engineering_analysis_id"] = analysis_id
         _stamp_snapshot(room, analysis, target, ref)
+        if previous_mapping != (
+            room.get("engineering_ref"),
+            room.get("engineering_analysis_id"),
+            room.get("engineering_snapshot"),
+        ):
+            changed = True
     return changed
 
 
@@ -275,7 +295,7 @@ def pull_analysis_to_layout(layout: dict, analysis: Any) -> bool:
     for room in layout.get("rooms", []):
         if not isinstance(room, dict):
             continue
-        ref = _room_ref(room)
+        ref = _effective_room_ref(room, analysis, targets)
         matches = targets.get(ref, []) if ref else []
         if len(matches) != 1:
             continue
@@ -290,10 +310,21 @@ def pull_analysis_to_layout(layout: dict, analysis: Any) -> bool:
             if room.get("pressure_pa") != pressure:
                 room["pressure_pa"] = pressure
                 changed = True
+        previous_mapping = (
+            room.get("engineering_ref"),
+            room.get("engineering_analysis_id"),
+            room.get("engineering_snapshot"),
+        )
         room["engineering_ref"] = ref
         if analysis_id:
             room["engineering_analysis_id"] = analysis_id
         _stamp_snapshot(room, analysis, target, ref)
+        if previous_mapping != (
+            room.get("engineering_ref"),
+            room.get("engineering_analysis_id"),
+            room.get("engineering_snapshot"),
+        ):
+            changed = True
     return changed
 
 

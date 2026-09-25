@@ -10,6 +10,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    remap_room_devices,
     resize_room,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
@@ -611,3 +612,46 @@ def test_resize_room_noop_does_not_move_devices():
     assert resize_room(room, "e", 6.0, 3.0, devices=devices) is False
     assert devices[0]["x_m"] == 2.0
     assert devices[0]["y_m"] == 3.0
+
+def test_remap_room_devices_updates_ceiling_height_only_for_assigned_ceiling_devices():
+    before = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+        "height_m": 3.0,
+    }
+    after = dict(before, height_m=4.2)
+    devices = [
+        {
+            "id": "ffu-1",
+            "type": "ffu",
+            "room_id": "process",
+            "x_m": 2.5,
+            "y_m": 2.0,
+            "z_m": 3.0,
+        },
+        {
+            "id": "equipment-1",
+            "type": "equipment",
+            "room_id": "process",
+            "x_m": 2.0,
+            "y_m": 1.0,
+            "z_m": 0.0,
+        },
+        {
+            "id": "ffu-other",
+            "type": "ffu",
+            "room_id": "other-room",
+            "x_m": 1.0,
+            "y_m": 1.0,
+            "z_m": 3.0,
+        },
+    ]
+
+    assert remap_room_devices(devices, before, after) == 1
+    assert devices[0]["z_m"] == 4.2
+    assert devices[1]["z_m"] == 0.0
+    assert devices[2]["z_m"] == 3.0
+

@@ -55,6 +55,7 @@ def _stable_identifier(
     index: int,
     reserved: set[str],
     used: set[str],
+    generated_base: str | None = None,
 ) -> tuple[str, str | None]:
     """Preserve valid persisted ids and deterministically repair missing/colliding ids."""
     text = _identifier_text(preferred)
@@ -71,7 +72,7 @@ def _stable_identifier(
             candidate = f"{base}-{suffix}"
         reason = "duplicate"
     else:
-        base = f"{prefix}-{index + 1}"
+        base = generated_base or f"{prefix}-{index + 1}"
         candidate = base
         suffix = 2
         while candidate in used or candidate in reserved:
@@ -132,6 +133,7 @@ def normalize_layout(value: Any, *, issues: list[dict] | None = None) -> dict:
             index=index,
             reserved=reserved_room_ids,
             used=used_room_ids,
+            generated_base=_room_id(name),
         )
         if raw_id:
             room_reference_targets.setdefault(raw_id, []).append(room_id)

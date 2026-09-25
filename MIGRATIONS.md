@@ -25,6 +25,8 @@ The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `
 
 Unknown future project formats are rejected rather than silently reinterpreted.
 
+When project metadata contains `spatial_layout`, that sub-document is validated independently at spatial layout version 1. The loader/saver rejects unsupported spatial versions, duplicate room/device IDs, non-finite or non-positive required geometry, unsupported device types, and device references to missing room IDs. Projects that do not contain `spatial_layout` are unchanged. Spatial layout validation does not promote design advisories such as room overlap into file-format errors.
+
 ## Save behavior after migration
 
 Loading a supported legacy file does not overwrite it automatically. If the migrated project is saved, CleanroomX writes schema version 1 using the current document model. Saving is validated first and uses an atomic temporary-file replacement.

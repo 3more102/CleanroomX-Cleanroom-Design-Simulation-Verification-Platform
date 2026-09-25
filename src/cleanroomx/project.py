@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -16,6 +17,10 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectFileConflictError(RuntimeError):
+    """Raised when an explicit save would overwrite externally changed content."""
 
 
 @dataclass
@@ -190,22 +195,128 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _normalized_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def _stable_read_bytes(path: Path) -> tuple[bytes, os.stat_result]:
+    """Read one stable file generation or fail instead of fingerprinting mixed content."""
+    last_error: OSError | None = None
+    for _attempt in range(2):
+        try:
+            before = path.stat()
+            payload = path.read_bytes()
+            after = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+            return payload, after
+        last_error = OSError(f"project file changed while reading: {path}")
+    assert last_error is not None
+    raise last_error
+
+
+def _fingerprint_from_bytes(
+    path: Path,
+    payload: bytes,
+    *,
+    mtime_ns: int | None,
+) -> dict[str, Any]:
+    return {
+        "path": str(_normalized_path(path)),
+        "exists": True,
+        "size": len(payload),
+        "mtime_ns": mtime_ns,
+        "sha256": sha256(payload).hexdigest(),
+    }
+
+
+def project_file_fingerprint(path: str | Path) -> dict[str, Any]:
+    """Return a stable content fingerprint for optimistic project-save checks."""
+    source = _normalized_path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        payload, stat = _stable_read_bytes(source)
+    except FileNotFoundError:
+        return {
+            "path": str(source),
+            "exists": False,
+            "size": None,
+            "mtime_ns": None,
+            "sha256": None,
+        }
+    return _fingerprint_from_bytes(source, payload, mtime_ns=stat.st_mtime_ns)
+
+
+def load_project_document_with_fingerprint(
+    path: str | Path,
+) -> tuple[ProjectDocument, dict[str, Any]]:
+    """Load a project and fingerprint the exact bytes that were parsed."""
+    source = _normalized_path(path)
+    payload, stat = _stable_read_bytes(source)
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    project = project_from_dict(data)
+    return project, _fingerprint_from_bytes(
+        source,
+        payload,
+        mtime_ns=stat.st_mtime_ns,
+    )
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _fingerprint = load_project_document_with_fingerprint(path)
+    return project
+
+
+def _fingerprint_matches_expected(
+    destination: Path,
+    expected: dict[str, Any],
+) -> None:
+    expected_path = expected.get("path")
+    expected_exists = expected.get("exists")
+    expected_sha = expected.get("sha256")
+    if not isinstance(expected_path, str) or not isinstance(expected_exists, bool):
+        raise ValueError("expected project fingerprint is malformed")
+
+    normalized_destination = _normalized_path(destination)
+    if _normalized_path(expected_path) != normalized_destination:
+        raise ValueError("expected project fingerprint belongs to a different path")
+
+    current = project_file_fingerprint(normalized_destination)
+    same_content = (
+        expected_exists == current["exists"]
+        and (
+            not expected_exists
+            or (
+                isinstance(expected_sha, str)
+                and expected_sha
+                and expected_sha == current["sha256"]
+            )
+        )
+    )
+    if not same_content:
+        raise ProjectFileConflictError(
+            "project file changed, was replaced, or was deleted on disk since "
+            f"it was opened or last saved: {normalized_destination}"
+        )
+
+
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    pre_replace_check: Callable[[], None] | None = None,
+) -> Path:
+    """Atomically replace UTF-8 text after an optional last-moment safety check."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +331,8 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if pre_replace_check is not None:
+            pre_replace_check()
         temp_path.replace(destination)
     except Exception:
         if temp_path is not None:
@@ -228,11 +341,53 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    destination = Path(path)
+def _serialized_project_text(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)
-    text = json.dumps(
+    return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+
+
+def save_project_document_with_fingerprint(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: dict[str, Any] | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    """Save atomically and return the fingerprint of the bytes CleanroomX wrote."""
+    destination = _normalized_path(path)
+    text = _serialized_project_text(project)
+    payload = text.encode("utf-8")
+
+    check = None
+    if expected_fingerprint is not None:
+        check = lambda: _fingerprint_matches_expected(
+            destination,
+            expected_fingerprint,
+        )
+
+    atomic_write_text(destination, text, pre_replace_check=check)
+    try:
+        mtime_ns = destination.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = None
+    return destination, _fingerprint_from_bytes(
+        destination,
+        payload,
+        mtime_ns=mtime_ns,
+    )
+
+
+def save_project_document(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: dict[str, Any] | None = None,
+) -> Path:
+    destination, _fingerprint = save_project_document_with_fingerprint(
+        path,
+        project,
+        expected_fingerprint=expected_fingerprint,
+    )
+    return destination

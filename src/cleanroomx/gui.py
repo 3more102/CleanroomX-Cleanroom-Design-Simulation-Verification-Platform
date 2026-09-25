@@ -1052,15 +1052,17 @@ class CleanroomXApp:
                 self.save_project_as()
                 return
             try:
+                overwrite_exists = self.project_path.exists()
                 overwrite_expected = (
                     project_file_sha256(self.project_path)
-                    if self.project_path.exists()
+                    if overwrite_exists
                     else None
                 )
                 save_project_document(
                     self.project_path,
                     self.project,
                     expected_sha256=overwrite_expected,
+                    expected_missing=not overwrite_exists,
                 )
             except ProjectWriteConflictError as retry_exc:
                 messagebox.showerror(

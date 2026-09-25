@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased bounded desktop analysis run history — 2026-09-25
+
+- Retains accepted desktop analysis runs in a separate bounded in-session history without weakening current-result freshness checks.
+- Stores immutable canonical strict-JSON run bundles with execution-provenance input SHA-256, bundle SHA-256, byte size, sequence, and UTC capture metadata; history loads revalidate bundle integrity before reconstructing evidence.
+- Bounds retention to eight runs per analysis and 16 MiB across the session, evicts oldest evidence first, and leaves an oversized run available as the current result without retaining an unbounded duplicate.
+- Adds **Analysis → Run History...** with explicit CURRENT/HISTORICAL labeling from the live editor input hash, read-only result/report/diagnostics inspection, and explicit historical run-bundle export.
+- Clears session history at project/path-context replacement boundaries and clears only the affected history when an analysis is deleted; historical runs never become the current cached result.
+- Preserves project schema version 1, solver equations, numerical tolerances, acceptance semantics, existing run-bundle shape, and backend APIs.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

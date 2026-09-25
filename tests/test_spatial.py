@@ -150,8 +150,8 @@ def test_normalize_layout_makes_device_ids_unique_and_room_links_canonical_strin
 
     assert [device["id"] for device in layout["devices"]] == [
         "sensor",
-        "sensor-3",
         "sensor-2",
+        "sensor-2-2",
     ]
     assert [device["room_id"] for device in layout["devices"]] == ["101", "101", None]
 

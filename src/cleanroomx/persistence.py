@@ -271,3 +271,99 @@ def atomic_write_text(
         text.encode("utf-8"),
         before_replace=before_replace,
     )
+
+
+def atomic_write_generated(
+    path: str | Path,
+    generator: Callable[[Path], None],
+    *,
+    before_replace: BeforeReplace | None = None,
+) -> Path:
+    """Atomically publish a file produced incrementally at a same-directory temp path.
+
+    This is the shared primitive for potentially large generated engineering outputs
+    such as portable ZIP bundles. The generator never writes the destination. After
+    it returns, CleanroomX flushes the staged file, records its stable size/SHA-256,
+    performs the guarded atomic replacement, fsyncs the directory where supported,
+    then verifies that the committed bytes exactly match the staged bytes.
+    """
+    if not callable(generator):
+        raise TypeError("generator must be callable")
+
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    existing_mode: int | None = None
+    try:
+        existing_mode = stat.S_IMODE(destination.stat().st_mode)
+    except FileNotFoundError:
+        pass
+
+    temp_path: Path | None = None
+    expected_size: int | None = None
+    expected_sha256: str | None = None
+    try:
+        descriptor, temp_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+        )
+        os.close(descriptor)
+        temp_path = Path(temp_name)
+
+        generator(temp_path)
+        if not temp_path.is_file():
+            raise OSError(
+                f"generated output did not leave a regular staged file: {temp_path}"
+            )
+        if existing_mode is not None:
+            try:
+                temp_path.chmod(existing_mode)
+            except OSError:
+                pass
+        with temp_path.open("rb") as handle:
+            os.fsync(handle.fileno())
+
+        staged_stat, expected_sha256 = stable_file_sha256(temp_path)
+        expected_size = staged_stat.st_size
+        if before_replace is not None:
+            before_replace()
+        temp_path.replace(destination)
+        temp_path = None
+
+        try:
+            _fsync_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(destination, exc) from exc
+
+        try:
+            committed_stat, committed_sha256 = stable_file_sha256(destination)
+        except OSError as exc:
+            raise AtomicWriteVerificationError(
+                destination,
+                stage="committed generated write",
+                expected_size=expected_size,
+                expected_sha256=expected_sha256,
+                actual_size=None,
+                actual_sha256=None,
+                committed=True,
+            ) from exc
+        if (
+            committed_stat.st_size != expected_size
+            or committed_sha256 != expected_sha256
+        ):
+            raise AtomicWriteVerificationError(
+                destination,
+                stage="committed generated write",
+                expected_size=expected_size,
+                expected_sha256=expected_sha256,
+                actual_size=committed_stat.st_size,
+                actual_sha256=committed_sha256,
+                committed=True,
+            )
+    except BaseException:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        raise
+
+    return destination

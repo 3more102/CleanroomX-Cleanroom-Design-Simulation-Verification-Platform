@@ -162,3 +162,13 @@ def test_release2_spatial_engineering_sync_baseline_is_strictly_validated():
     with pytest.raises(Exception, match="engineering_sync.*length_m"):
         validate_spatial_layout_document(invalid_geometry)
 
+
+
+def test_release2_spatial_accepts_window_and_generic_opening_types():
+    for device_type in ("window", "opening"):
+        layout = _layout()
+        layout["devices"][0]["type"] = device_type
+        layout["devices"][0]["width_m"] = 1.0
+        layout["devices"][0]["height_m"] = 1.0
+        layout["devices"][0]["wall_side"] = "south"
+        validate_spatial_layout_document(layout)

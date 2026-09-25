@@ -7,8 +7,19 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
 
+from .spatial_domain import (
+    SpatialTransform2D,
+    engineering_fields_for_room,
+    engineering_mapping_issues,
+    engineering_sync_states,
+    mapped_pressure_values,
+    mark_layout_synchronized,
+    pressure_relationships,
+    room_plan_bounds,
+    room_prism_vertices,
+)
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_GEOMETRY_EPSILON_M,
@@ -129,11 +140,30 @@ def normalize_layout(value: Any) -> dict:
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            for field in ("classification", "analysis_room_name"):
+            for field in ("classification", "analysis_room_name", "notes"):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
                     if text:
                         room[field] = text
+            if isinstance(raw.get("metadata"), dict):
+                room["metadata"] = copy.deepcopy(raw["metadata"])
+            ref = raw.get("engineering_ref")
+            if isinstance(ref, dict):
+                analysis_id = str(ref.get("analysis_id") or "").strip()
+                room_name = str(ref.get("room_name") or "").strip()
+                if analysis_id and room_name:
+                    normalized_ref = {
+                        "analysis_id": analysis_id,
+                        "room_name": room_name,
+                    }
+                    synced = ref.get("synced_geometry")
+                    if isinstance(synced, dict):
+                        normalized_ref["synced_geometry"] = {
+                            "length_m": _positive(synced.get("length_m"), room["length_m"]),
+                            "width_m": _positive(synced.get("width_m"), room["width_m"]),
+                            "height_m": _positive(synced.get("height_m"), room["height_m"]),
+                        }
+                    room["engineering_ref"] = normalized_ref
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -325,8 +355,19 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
         return False
 
     changed = False
+    analysis_id = str(getattr(analysis, "id", "") or "")
     if getattr(analysis, "kind", "") == "room_verification":
         source = rooms[0]
+        ref = source.get("engineering_ref")
+        if (
+            isinstance(ref, dict)
+            and str(ref.get("analysis_id") or "")
+            and str(ref.get("analysis_id") or "") != analysis_id
+        ):
+            raise SpatialSyncError(
+                "Cannot synchronize this room because it is explicitly mapped to "
+                f"analysis {ref.get('analysis_id')!r}, not {analysis_id!r}."
+            )
         for key in ("name", "length_m", "width_m", "height_m"):
             value = source[key]
             if analysis.input.get(key) != value:
@@ -353,7 +394,16 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     }
     used_source_links: set[str] = set()
     for source in rooms:
-        source_name = str(source.get("analysis_room_name") or source["name"]).strip()
+        ref = source.get("engineering_ref")
+        if isinstance(ref, dict) and str(ref.get("analysis_id") or ""):
+            if str(ref.get("analysis_id")) != analysis_id:
+                raise SpatialSyncError(
+                    f"Spatial room {source['name']!r} is mapped to a different "
+                    f"analysis ({ref.get('analysis_id')!r})."
+                )
+            source_name = str(ref.get("room_name") or "").strip()
+        else:
+            source_name = str(source.get("analysis_room_name") or source["name"]).strip()
         source_key = source_name.casefold()
         if source_key in used_source_links:
             raise SpatialSyncError(

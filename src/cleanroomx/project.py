@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from hashlib import sha256
 import errno
 import json
 import os
-from pathlib import Path
 import tempfile
+from dataclasses import dataclass, field
+from hashlib import sha256
+from pathlib import Path
 from typing import Any, Callable
 
 from . import __version__
@@ -55,7 +55,7 @@ class AtomicWriteDurabilityError(OSError):
         self.current_revision = current_revision
         super().__init__(
             "atomic replacement bytes were verified, but the directory durability "
-            f"flush failed for {self.path}; retry the save before relying on "
+            f"flush failed for {self.path}; retry the write before relying on "
             "crash/power-loss durability"
         )
 

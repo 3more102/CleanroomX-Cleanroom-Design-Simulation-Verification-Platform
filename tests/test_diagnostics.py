@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 
@@ -108,3 +109,18 @@ def test_default_diagnostics_dir_honors_environment_override(tmp_path, monkeypat
     monkeypatch.setenv("CLEANROOMX_DIAGNOSTICS_DIR", str(override))
 
     assert default_diagnostics_dir() == override
+
+
+def test_rotated_active_log_keeps_owner_only_permissions_on_posix(tmp_path):
+    if os.name == "nt":
+        return
+    session = configure_local_diagnostics(tmp_path, max_bytes=1024, backup_count=2)
+    for marker in range(80):
+        log_event("rotation.marker", marker=marker, payload="x" * 80)
+    _flush()
+
+    assert session.log_path.exists()
+    assert session.log_path.stat().st_mode & 0o777 == 0o600
+    rotated = session.log_path.with_name(session.log_path.name + ".1")
+    assert rotated.exists()
+    assert rotated.stat().st_mode & 0o777 == 0o600

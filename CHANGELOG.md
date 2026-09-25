@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased atomic CLI output persistence — 2026-09-25
+
+- Routes all 23 file-producing engineering CLI entry points through the existing same-directory atomic text writer instead of direct `Path.write_text()` replacement.
+- Preserves an existing output file if temporary-file replacement fails, cleans the abandoned temporary file, and propagates the write error instead of reporting a successful export.
+- Keeps stdout behavior, report contents, exit-status semantics, solver equations, numerical tolerances, project schema, and engineering acceptance logic unchanged.
+- Adds an architecture regression that rejects direct `.write_text()` calls in `*_cli.py` modules plus a real CLI failure-injection test that proves the previous result survives a failed atomic replacement.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

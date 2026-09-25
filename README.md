@@ -8,6 +8,8 @@ The current release line is **CleanroomX v0.100.0**, built directly on the verif
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
 
+All command-line workflows that accept `--output` now use the same same-directory atomic replacement path as project/desktop text persistence. A failed replacement leaves the previously committed output intact and surfaces the write failure; stdout-only execution is unchanged.
+
 ### Network-state replay provenance ladder
 
 | Version | Audited state |

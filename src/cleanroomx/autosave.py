@@ -148,7 +148,7 @@ def project_identity(path: str | Path | None, *, unsaved_id: str) -> str:
 
 def _file_sha256(path: Path) -> tuple[os.stat_result, str]:
     last_error: OSError | None = None
-    for _attempt in range(2):
+    for _attempt in range(3):
         before = path.stat()
         digest = sha256()
         try:
@@ -159,7 +159,12 @@ def _file_sha256(path: Path) -> tuple[os.stat_result, str]:
             last_error = exc
             continue
         after = path.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+        if (
+            before.st_dev == after.st_dev
+            and before.st_ino == after.st_ino
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+        ):
             return after, digest.hexdigest()
         last_error = OSError(f"source changed while fingerprinting: {path}")
     assert last_error is not None

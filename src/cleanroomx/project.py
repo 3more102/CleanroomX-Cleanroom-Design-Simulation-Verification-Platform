@@ -356,7 +356,7 @@ def save_project_document_with_fingerprint(
     expected_fingerprint: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     """Save atomically and return the fingerprint of the bytes CleanroomX wrote."""
-    destination = _normalized_path(path)
+    destination = Path(path)
     text = _serialized_project_text(project)
     payload = text.encode("utf-8")
 

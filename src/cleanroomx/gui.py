@@ -41,6 +41,9 @@ from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
+RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
+
+
 _UNIT_SUFFIXES = (
     ("_m3_h", "m³/h"),
     ("_m3_s", "m³/s"),
@@ -193,6 +196,7 @@ class CleanroomXApp:
         self._autosave_manager = autosave_manager or AutosaveManager()
         self._autosave_manager.begin_project(None)
         self._autosave_status_sequence = -1
+        self._recovery_checkpoint_after_id = None
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -597,11 +601,13 @@ class CleanroomXApp:
         }
 
     def _begin_autosave_project(self, path: str | Path | None) -> None:
+        self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.begin_project(path)
 
     def _notify_explicit_save(self, path: str | Path) -> None:
+        self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.notify_explicit_save(path)
@@ -610,6 +616,7 @@ class CleanroomXApp:
             autosave_var.set("Autosave: clean")
 
     def _discard_current_autosave(self) -> None:
+        self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.discard_current_recoveries()
@@ -635,9 +642,31 @@ class CleanroomXApp:
             return self.project_path
         return getattr(self, "_recovery_source_path", None)
 
-    def _autosave_tick(self) -> None:
-        if not self._autosave_interval_ms:
+    def _cancel_recovery_checkpoint(self) -> None:
+        token = getattr(self, "_recovery_checkpoint_after_id", None)
+        if token is None:
             return
+        cancel = getattr(self.root, "after_cancel", None)
+        if callable(cancel):
+            try:
+                cancel(token)
+            except tk.TclError:
+                pass
+        self._recovery_checkpoint_after_id = None
+
+    def _schedule_recovery_checkpoint(self) -> None:
+        if not getattr(self, "_autosave_interval_ms", 0):
+            return
+        schedule = getattr(self.root, "after", None)
+        if not callable(schedule):
+            return
+        self._cancel_recovery_checkpoint()
+        self._recovery_checkpoint_after_id = schedule(
+            RECOVERY_CHECKPOINT_DEBOUNCE_MS,
+            self._run_debounced_recovery_checkpoint,
+        )
+
+    def _checkpoint_recovery(self) -> None:
         try:
             if self._has_unsaved_changes():
                 snapshot = self._build_recovery_snapshot()
@@ -652,6 +681,18 @@ class CleanroomXApp:
         except (OSError, TypeError, ValueError) as exc:
             self.autosave_status_var.set("Autosave: failed")
             self.status_var.set(f"Autosave failed: {exc}")
+
+    def _run_debounced_recovery_checkpoint(self) -> None:
+        self._recovery_checkpoint_after_id = None
+        if not getattr(self, "_autosave_interval_ms", 0):
+            return
+        self._checkpoint_recovery()
+
+    def _autosave_tick(self) -> None:
+        if not self._autosave_interval_ms:
+            return
+        try:
+            self._checkpoint_recovery()
         finally:
             self.root.after(self._autosave_interval_ms, self._autosave_tick)
 
@@ -992,6 +1033,10 @@ class CleanroomXApp:
         self._update_title()
 
     def _update_title(self) -> None:
+        has_unsaved_changes = self._has_unsaved_changes()
+        if has_unsaved_changes:
+            self._schedule_recovery_checkpoint()
+
         title_method = getattr(self.root, "title", None)
         if not callable(title_method):
             return
@@ -1001,7 +1046,7 @@ class CleanroomXApp:
             suffix = " — Recovered copy"
         else:
             suffix = ""
-        dirty = " *" if self._has_unsaved_changes() else ""
+        dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
     def save_project(self) -> None:

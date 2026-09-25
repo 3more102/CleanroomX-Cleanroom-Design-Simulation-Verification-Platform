@@ -9,6 +9,8 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import ttk
 
+from .spatial_history import SpatialEditHistory, SpatialHistoryState
+
 
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
@@ -393,6 +395,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
         self._property_vars: dict[str, tk.StringVar] = {}
+        self._history = SpatialEditHistory(limit=100)
+        self._history_project_token: int | None = None
+        self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
 
         self._build()
         self.refresh()
@@ -417,6 +422,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        self._undo_button = ttk.Button(toolbar, text="Undo", command=self.undo_edit, state="disabled")
+        self._undo_button.pack(side="left", padx=2)
+        self._redo_button = ttk.Button(toolbar, text="Redo", command=self.redo_edit, state="disabled")
+        self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
@@ -516,22 +525,109 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
+        for canvas in (self.canvas_2d, self.canvas_3d):
+            canvas.bind("<Control-z>", self._on_undo_shortcut)
+            canvas.bind("<Control-y>", self._on_redo_shortcut)
+            canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
+            canvas.bind("<Delete>", lambda event: self.delete_selected())
 
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
+        project_token = id(project)
+        if project_token != self._history_project_token:
+            self._history.clear()
+            self._history_project_token = project_token
+            self._drag_history_before = None
         self.layout = ensure_project_layout(project, analysis)
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
+        self._update_history_controls()
         self.redraw()
 
-    def _persist(self, message: str) -> None:
+    def _selection_state(self) -> tuple[str, str] | None:
+        if self.selected is None:
+            return None
+        return (self.selected.kind, self.selected.item_id)
+
+    def _history_layout(self) -> dict:
+        snapshot = copy.deepcopy(normalize_layout(self.layout))
+        snapshot.pop("view", None)
+        return snapshot
+
+    def _restore_history_state(self, state: SpatialHistoryState) -> None:
+        view = copy.deepcopy(self.layout.get("view", {}))
+        restored = copy.deepcopy(state.layout)
+        restored["view"] = view
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(restored)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self.selected = _Hit(*state.selection) if state.selection is not None else None
+        if self.selected and not self._selected_object():
+            self.selected = None
+        self._load_property_panel()
+        self._on_change()
+        self._update_history_controls()
+        self.redraw()
+
+    def _update_history_controls(self) -> None:
+        if hasattr(self, "_undo_button"):
+            self._undo_button.configure(state="normal" if self._history.can_undo else "disabled")
+        if hasattr(self, "_redo_button"):
+            self._redo_button.configure(state="normal" if self._history.can_redo else "disabled")
+
+    def undo_edit(self) -> bool:
+        restored = self._history.undo()
+        if restored is None:
+            self._status_setter("Nothing to undo in the spatial workspace")
+            self._update_history_controls()
+            return False
+        state, description = restored
+        self._restore_history_state(state)
+        self._status_setter(f"Undo: {description}")
+        return True
+
+    def redo_edit(self) -> bool:
+        restored = self._history.redo()
+        if restored is None:
+            self._status_setter("Nothing to redo in the spatial workspace")
+            self._update_history_controls()
+            return False
+        state, description = restored
+        self._restore_history_state(state)
+        self._status_setter(f"Redo: {description}")
+        return True
+
+    def _on_undo_shortcut(self, event=None):
+        self.undo_edit()
+        return "break"
+
+    def _on_redo_shortcut(self, event=None):
+        self.redo_edit()
+        return "break"
+
+    def _persist(
+        self,
+        message: str,
+        *,
+        history_before: dict | None = None,
+        selection_before: tuple[str, str] | None = None,
+    ) -> None:
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        if history_before is not None:
+            self._history.record(
+                before_layout=history_before,
+                before_selection=selection_before,
+                after_layout=self._history_layout(),
+                after_selection=self._selection_state(),
+                description=message,
+            )
         self._on_change()
         self._status_setter(message)
+        self._update_history_controls()
         self.redraw()
 
     def _selected_object(self) -> dict | None:
@@ -586,6 +682,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             return
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
         name = self._property_vars["name"].get().strip()
         if name:
             item["name"] = name
@@ -604,9 +702,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
         self._load_property_panel()
-        self._persist("Spatial properties updated")
+        self._persist(
+            "Spatial properties updated",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def add_room(self) -> None:
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
         x = max(
             (room["x_m"] + room["length_m"] for room in self.layout["rooms"]),
             default=0.0,
@@ -624,9 +728,15 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["rooms"].append(room)
         self.selected = _Hit("room", room["id"])
         self._load_property_panel()
-        self._persist(f"Added {room['name']}")
+        self._persist(
+            f"Added {room['name']}",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def add_device(self, device_type: str) -> None:
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
         device_type = device_type if device_type in DEVICE_TYPES else "equipment"
         room = self._selected_object() if self.selected and self.selected.kind == "room" else None
         if room is None and self.layout["rooms"]:
@@ -651,11 +761,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["devices"].append(device)
         self.selected = _Hit("device", device["id"])
         self._load_property_panel()
-        self._persist(f"Added {device_type}")
+        self._persist(
+            f"Added {device_type}",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def delete_selected(self) -> None:
         if self.selected is None:
             return
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
         collection_name = "rooms" if self.selected.kind == "room" else "devices"
         item_id = self.selected.item_id
         self.layout[collection_name] = [item for item in self.layout[collection_name] if item["id"] != item_id]
@@ -665,7 +781,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
         self.selected = None
         self._load_property_panel()
-        self._persist("Deleted spatial item")
+        self._persist(
+            "Deleted spatial item",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def _bounds(self) -> tuple[float, float, float, float]:
         rooms = self.layout["rooms"]
@@ -936,6 +1056,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
         self.selected = hit
         self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
+        self._drag_history_before = (
+            (self._history_layout(), self._selection_state()) if hit is not None else None
+        )
         self._load_property_panel()
         self.redraw()
 
@@ -954,9 +1077,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redraw()
 
     def _on_left_up(self, event: tk.Event) -> None:
-        if self._drag_anchor is not None and self.selected is not None:
-            self._persist("Spatial item moved")
+        if (
+            self._drag_anchor is not None
+            and self.selected is not None
+            and self._drag_history_before is not None
+        ):
+            history_before, selection_before = self._drag_history_before
+            self._persist(
+                "Spatial item moved",
+                history_before=history_before,
+                selection_before=selection_before,
+            )
         self._drag_anchor = None
+        self._drag_history_before = None
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)

@@ -259,7 +259,7 @@ def _normalized_project_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
-def _stable_file_digest(
+def stable_file_digest(
     path: Path,
     *,
     attempts: int = 3,
@@ -332,7 +332,7 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     if not source.is_file():
         raise OSError(f"project path is not a regular file: {source}")
 
-    stat, digest = _stable_file_digest(source)
+    stat, digest = stable_file_digest(source)
     return ProjectFileRevision(
         path=normalized,
         exists=True,
@@ -414,14 +414,14 @@ def _atomic_write_text(
             handle.flush()
             os.fsync(handle.fileno())
 
-        expected_stat, expected_sha256 = _stable_file_digest(temp_path, attempts=1)
+        expected_stat, expected_sha256 = stable_file_digest(temp_path, attempts=1)
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
         _fsync_parent_directory(destination.parent)
 
-        actual_stat, actual_sha256 = _stable_file_digest(destination)
+        actual_stat, actual_sha256 = stable_file_digest(destination)
         if (
             actual_stat.st_size != expected_stat.st_size
             or actual_sha256 != expected_sha256

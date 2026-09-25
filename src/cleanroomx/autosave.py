@@ -194,9 +194,22 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
     }
 
 
-def _artifact_filename(project_identity_value: str, recovery_id: str) -> str:
+def _session_filename_token(session_id: str) -> str:
+    """Return a filesystem-safe stable token for one autosave session."""
+    return sha256(session_id.encode("utf-8")).hexdigest()
+
+
+def _artifact_filename(
+    project_identity_value: str,
+    session_id: str,
+    recovery_id: str,
+) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    return f"{project_identity_value}-{stamp}-{recovery_id[:8]}.recovery.json"
+    session_token = _session_filename_token(session_id)
+    return (
+        f"{project_identity_value}-session-{session_token}-"
+        f"{stamp}-{recovery_id[:8]}.recovery.json"
+    )
 
 
 def _validate_recovery_payload(data: Any) -> dict[str, Any]:
@@ -361,7 +374,8 @@ class AutosaveManager:
     """Serialize recovery snapshots away from the Tk/UI thread.
 
     Explicit project files are never written by this class. Recovery artifacts are
-    separate JSON envelopes with bounded per-project history.
+    separate JSON envelopes with bounded per-project, per-session history so one
+    application session cannot prune another session's unsaved recovery evidence.
     """
 
     def __init__(
@@ -488,7 +502,9 @@ class AutosaveManager:
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(
-            request.project_identity, recovery_id
+            request.project_identity,
+            self.session_id,
+            recovery_id,
         )
         text = json.dumps(
             payload,
@@ -502,12 +518,30 @@ class AutosaveManager:
         return destination
 
     def _rotate_history(self, identity: str) -> None:
-        artifacts = sorted(
-            self.recovery_dir.glob(f"{identity}-*.recovery.json"),
-            key=lambda path: path.name,
-            reverse=True,
-        )
-        for stale in artifacts[self.history_limit :]:
+        """Prune only recovery generations owned by this manager's session.
+
+        Project identity alone is not a safe ownership boundary because multiple
+        CleanroomX processes can edit the same project concurrently. The filename
+        token narrows discovery to this session, then the recovery envelope is
+        validated before deletion so malformed or foreign evidence is preserved.
+        """
+        session_token = _session_filename_token(self.session_id)
+        owned: list[tuple[str, Path]] = []
+        pattern = f"{identity}-session-{session_token}-*.recovery.json"
+        for path in self.recovery_dir.glob(pattern):
+            try:
+                recovery = load_recovery_artifact(path)
+            except (OSError, RecoveryFormatError, TypeError, ValueError):
+                continue
+            if (
+                recovery.get("project_identity") != identity
+                or recovery.get("session_id") != self.session_id
+            ):
+                continue
+            owned.append((recovery["saved_at_utc"], path))
+
+        owned.sort(key=lambda item: (item[0], item[1].name), reverse=True)
+        for _saved_at, stale in owned[self.history_limit :]:
             stale.unlink(missing_ok=True)
 
     def _on_write_done(

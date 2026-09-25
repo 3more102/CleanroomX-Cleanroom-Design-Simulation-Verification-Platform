@@ -30,6 +30,10 @@ CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused
 | v0.100 | execution provenance, portable path context, atomic exports, fan/system plot evidence, and consolidated installed-desktop release |
 
 
+### Unreleased: self-verifying analysis run bundles
+
+Exported `cleanroomx.analysis-run` JSON now preserves an isolated submitted-input snapshot alongside result, report, diagnostics, plot data, and the CleanroomX version. A canonical whole-document SHA-256 record makes accidental or post-export modification detectable, and **Verify Run Bundle JSON...** cross-checks that document integrity plus the submitted-input hash recorded by execution provenance without re-running the solver. The integrity hash is tamper evidence, not authentication or a digital signature; referenced consistency/dossier source files remain external and are represented by their existing hash/size provenance.
+
 ### v0.100 consolidated desktop release
 
 v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves and GUI exports use same-directory atomic replacement; export failures are surfaced in the desktop UI.

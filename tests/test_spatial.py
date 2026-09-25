@@ -10,6 +10,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    resize_room,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
@@ -491,3 +492,48 @@ def test_room_translation_keeps_assigned_devices_attached():
     assert (room["x_m"], room["y_m"]) == (2.5, 1.5)
     assert (attached["x_m"], attached["y_m"]) == (3.5, 2.5)
     assert (free["x_m"], free["y_m"]) == (20, 20)
+
+
+def test_resize_room_corner_snaps_to_grid_and_preserves_origin():
+    room = {
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+    }
+
+    assert resize_room(room, "se", 7.3, 7.1, grid_m=0.5) is True
+    assert room["x_m"] == 1.0
+    assert room["y_m"] == 2.0
+    assert room["length_m"] == 6.5
+    assert room["width_m"] == 5.0
+
+
+def test_resize_room_northwest_preserves_opposite_edges_and_minimum_size():
+    room = {
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+    }
+
+    assert resize_room(room, "nw", 5.9, 5.9, min_size_m=0.5) is True
+    assert room["x_m"] == 5.5
+    assert room["y_m"] == 5.5
+    assert room["x_m"] + room["length_m"] == 6.0
+    assert room["y_m"] + room["width_m"] == 6.0
+    assert room["length_m"] == 0.5
+    assert room["width_m"] == 0.5
+
+
+def test_resize_room_rejects_unknown_handle_without_mutation():
+    room = {
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+    }
+    before = dict(room)
+
+    assert resize_room(room, "center", 8.0, 8.0) is False
+    assert room == before

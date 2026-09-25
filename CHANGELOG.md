@@ -1180,6 +1180,7 @@
 
 ## Unreleased — Release 2 architecture consolidation
 
+- Adds a deterministic read-only project batch runner that executes selected saved-project analyses in persisted order, preserves per-run provenance, and stops scheduling if the source project changes during execution.
 - Consolidates durable verified atomic persistence behind one shared persistence layer, including durable creation of previously missing nested parent directories.
 - Adds versioned crash-recovery integrity evidence while preserving legacy v1 recovery readability as unverified evidence.
 - Adds guarded saved-project revision history with migration-aware stable source revision tracking.

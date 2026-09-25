@@ -41,7 +41,7 @@ PASS - windows-latest PowerShell checkout launcher smoke
 PASS - windows-latest CMD checkout launcher smoke
 PASS - Python 3.13 installed Tk/Xvfb CleanroomX GUI smoke
 
-FULL TEST MATRIX
+RELEASE 2 CONSOLIDATION BASELINE MATRIX
 Python 3.11: 960 passed
 Python 3.12: 960 passed
 Python 3.13: 960 passed

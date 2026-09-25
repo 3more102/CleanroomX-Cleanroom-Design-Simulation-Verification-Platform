@@ -76,7 +76,9 @@ than silently substituting a different workflow.
 
 Registered plugin analyses use the normal CleanroomX application execution path:
 
-1. the parser validates an isolated deep copy of the submitted JSON input;
+1. the parser validates an isolated deep copy of the submitted JSON input; if
+   the parser mutates that submitted snapshot, CleanroomX rejects the run before
+   backend execution;
 2. the runner receives the parser result;
 3. the result must normalize to strict JSON through the existing application
    result boundary;

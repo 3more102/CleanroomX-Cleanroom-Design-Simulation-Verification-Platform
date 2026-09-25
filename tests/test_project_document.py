@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    ProjectFormatError, ProjectSaveConflictError, atomic_write_text,
+    load_project_document, load_project_document_with_fingerprint,
+    project_file_fingerprint, project_from_dict, save_project_document,
+    save_project_document_with_fingerprint,
 )
 
 
@@ -52,6 +56,84 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
 
     assert not target.exists()
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_load_project_fingerprint_matches_exact_parsed_bytes(tmp_path):
+    project = ProjectDocument(name="Fingerprint")
+    path = save_project_document(tmp_path / "fingerprint.cleanroomx.json", project)
+
+    loaded, fingerprint = load_project_document_with_fingerprint(path)
+
+    assert loaded == project
+    assert fingerprint == project_file_fingerprint(path)
+    assert fingerprint is not None
+    assert fingerprint.size_bytes == len(path.read_bytes())
+
+
+def test_checked_project_save_refuses_external_content_change(tmp_path):
+    path = save_project_document(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    _, fingerprint = load_project_document_with_fingerprint(path)
+    external_bytes = b'{"external":"newer"}\n'
+    path.write_bytes(external_bytes)
+
+    with pytest.raises(ProjectSaveConflictError, match="contents changed"):
+        save_project_document_with_fingerprint(
+            path,
+            ProjectDocument(name="Local edit"),
+            expected_fingerprint=fingerprint,
+        )
+
+    assert path.read_bytes() == external_bytes
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_checked_project_save_refuses_recreating_deleted_loaded_file(tmp_path):
+    path = save_project_document(
+        tmp_path / "deleted.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    fingerprint = project_file_fingerprint(path)
+    assert fingerprint is not None
+    path.unlink()
+
+    with pytest.raises(ProjectSaveConflictError, match="deleted"):
+        save_project_document_with_fingerprint(
+            path,
+            ProjectDocument(name="Local edit"),
+            expected_fingerprint=fingerprint,
+        )
+
+    assert not path.exists()
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_atomic_write_can_require_destination_to_remain_absent(tmp_path):
+    path = tmp_path / "new.json"
+    path.write_text("external\n", encoding="utf-8")
+
+    with pytest.raises(ProjectSaveConflictError, match="now exists"):
+        atomic_write_text(path, "local\n", expected_fingerprint=None)
+
+    assert path.read_text(encoding="utf-8") == "external\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="directory fsync durability is POSIX-specific")
+def test_atomic_write_fsyncs_file_and_parent_directory(tmp_path, monkeypatch):
+    calls = []
+    real_fsync = project_module.os.fsync
+
+    def recording_fsync(fd):
+        calls.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(project_module.os, "fsync", recording_fsync)
+
+    atomic_write_text(tmp_path / "durable.json", "payload\n")
+
+    assert len(calls) >= 2
 
 
 def test_project_loader_migrates_legacy_single_analysis_shape():

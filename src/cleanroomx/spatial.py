@@ -30,6 +30,11 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
+def is_spatial_item_locked(value: Any) -> bool:
+    """Return whether a persisted spatial item is explicitly edit-locked."""
+    return isinstance(value, dict) and value.get("locked") is True
+
+
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
     return slug or f"room-{uuid.uuid4().hex[:8]}"
@@ -79,6 +84,7 @@ def normalize_layout(value: Any) -> dict:
                 "length_m": _positive(raw.get("length_m"), 4.0),
                 "width_m": _positive(raw.get("width_m"), 4.0),
                 "height_m": _positive(raw.get("height_m"), 3.0),
+                "locked": raw.get("locked") is True,
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
@@ -104,6 +110,7 @@ def normalize_layout(value: Any) -> dict:
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
+                    "locked": raw.get("locked") is True,
                 }
             )
     result["devices"] = devices
@@ -426,6 +433,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._undo_button.pack(side="left", padx=2)
         self._redo_button = ttk.Button(toolbar, text="Redo", command=self.redo_edit, state="disabled")
         self._redo_button.pack(side="left", padx=2)
+        self._lock_button = ttk.Button(
+            toolbar, text="Lock", command=self.toggle_selected_lock, state="disabled"
+        )
+        self._lock_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
@@ -529,6 +540,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-z>", self._on_undo_shortcut)
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
+            canvas.bind("<Control-l>", self._on_lock_shortcut)
+            canvas.bind("<Control-L>", self._on_lock_shortcut)
             canvas.bind("<Delete>", lambda event: self.delete_selected())
 
     def refresh(self) -> None:
@@ -576,6 +589,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._undo_button.configure(state="normal" if self._history.can_undo else "disabled")
         if hasattr(self, "_redo_button"):
             self._redo_button.configure(state="normal" if self._history.can_redo else "disabled")
+        if hasattr(self, "_lock_button"):
+            item = self._selected_object()
+            self._lock_button.configure(
+                state="normal" if item is not None else "disabled",
+                text="Unlock" if is_spatial_item_locked(item) else "Lock",
+            )
 
     def undo_edit(self) -> bool:
         restored = self._history.undo()
@@ -606,6 +625,28 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_redo_shortcut(self, event=None):
         self.redo_edit()
         return "break"
+
+    def _on_lock_shortcut(self, event=None):
+        self.toggle_selected_lock()
+        return "break"
+
+    def toggle_selected_lock(self) -> bool:
+        item = self._selected_object()
+        if item is None:
+            self._status_setter("Select a room or device to lock")
+            self._update_history_controls()
+            return False
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        locked = not is_spatial_item_locked(item)
+        item["locked"] = locked
+        self._persist(
+            f"{'Locked' if locked else 'Unlocked'} spatial item",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
+        self._load_property_panel()
+        return True
 
     def _persist(
         self,
@@ -673,7 +714,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 var.set("")
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
-        self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+        lock_suffix = " [Locked]" if is_spatial_item_locked(item) else ""
+        self._selection_var.set(f"{prefix}: {item.get('name', '')}{lock_suffix}")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -681,6 +723,9 @@ class SpatialDesignWorkspace(ttk.Frame):
     def apply_properties(self) -> None:
         item = self._selected_object()
         if item is None:
+            return
+        if is_spatial_item_locked(item):
+            self._status_setter("Locked spatial item; unlock it before editing properties")
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
@@ -769,6 +814,10 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def delete_selected(self) -> None:
         if self.selected is None:
+            return
+        item = self._selected_object()
+        if is_spatial_item_locked(item):
+            self._status_setter("Locked spatial item; unlock it before deleting")
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
@@ -885,7 +934,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.create_text(
                 (x0 + x1) / 2,
                 (y0 + y1) / 2,
-                text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
+                text=(
+                    f"{room['name']}{' [LOCK]' if is_spatial_item_locked(room) else ''}"
+                    f"\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}"
+                ),
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
             )
@@ -935,6 +987,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                 x, y, text=symbols.get(device["type"], "?"),
                 tags=(f"device:{device['id']}", "device"),
             )
+            if is_spatial_item_locked(device):
+                canvas.create_text(
+                    x + 14,
+                    y - 12,
+                    text="L",
+                    fill="#475569",
+                    tags=(f"device:{device['id']}", "device"),
+                )
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -1020,7 +1080,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_text(
                 *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=room["name"],
+                text=f"{room['name']}{' [LOCK]' if is_spatial_item_locked(room) else ''}",
                 fill="#f0f6fc",
                 tags=(tag, "room3d"),
             )
@@ -1040,6 +1100,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#fbbf24", outline=device_outline,
                 width=2, tags=(tag, "device3d"),
             )
+            if is_spatial_item_locked(device):
+                canvas.create_text(
+                    x + 10, y - 9, text="L", fill="#f0f6fc", tags=(tag, "device3d")
+                )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:
@@ -1055,16 +1119,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         if current:
             hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
         self.selected = hit
-        self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
+        item = self._selected_object()
+        editable_hit = hit is not None and not is_spatial_item_locked(item)
+        self._drag_anchor = self._canvas_to_world(event.x, event.y) if editable_hit else None
         self._drag_history_before = (
-            (self._history_layout(), self._selection_state()) if hit is not None else None
+            (self._history_layout(), self._selection_state()) if editable_hit else None
         )
         self._load_property_panel()
         self.redraw()
 
     def _on_left_drag(self, event: tk.Event) -> None:
         item = self._selected_object()
-        if item is None or self._drag_anchor is None:
+        if item is None or self._drag_anchor is None or is_spatial_item_locked(item):
             return
         world = self._canvas_to_world(event.x, event.y)
         dx = world[0] - self._drag_anchor[0]

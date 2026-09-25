@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .json_integrity import load_json_file
 
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_uncertainty_models import FanSystemUncertaintyStudy
@@ -51,5 +52,5 @@ def load_fan_system_uncertainty(
     path: str | Path,
 ) -> FanSystemUncertaintyStudy:
     return fan_system_uncertainty_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_json_file(path)
     )

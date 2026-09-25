@@ -163,6 +163,7 @@ def test_migrated_save_as_preserves_original_and_writes_current_schema(
     assert app._migration_source_path is None
     assert app._has_unsaved_changes() is False
 
+
 def test_current_schema_project_open_remains_clean(tmp_path):
     source = tmp_path / "current.cleanroomx.json"
     source.write_text(

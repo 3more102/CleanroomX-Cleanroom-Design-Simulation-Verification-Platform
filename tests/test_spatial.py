@@ -23,6 +23,7 @@ from cleanroomx.spatial import (
     layout_metrics,
     normalize_layout,
     pressure_overlay_state,
+    pressure_relationship_state,
     sync_layout_to_analysis,
     validate_layout,
 )
@@ -1160,4 +1161,229 @@ def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
     assert status["overall"] == "conflicting"
     assert status["rooms"][0]["state"] == "conflicting"
     assert "mapping changed" in status["rooms"][0]["message"]
+
+
+def test_room_verification_mapping_does_not_depend_on_spatial_room_order():
+    analysis = AnalysisDocument(
+        id="room-check",
+        name="Room verification",
+        kind="room_verification",
+        input={
+            "name": "Engineering Room A",
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+            "observed_pressure_pa": 15.0,
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "unrelated",
+                "name": "Unrelated",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 9.0,
+                "width_m": 9.0,
+                "height_m": 9.0,
+                "pressure_pa": 99.0,
+            },
+            {
+                "id": "mapped",
+                "name": "Renamed display",
+                "analysis_room_name": "Engineering Room A",
+                "x_m": 10.0,
+                "y_m": 0.0,
+                "length_m": 5.0,
+                "width_m": 4.5,
+                "height_m": 3.2,
+                "pressure_pa": 18.0,
+            },
+        ]
+    }
+
+    status = engineering_sync_status(layout, analysis)
+    by_id = {item["room_id"]: item["state"] for item in status["rooms"]}
+    assert by_id == {"unrelated": "unmapped", "mapped": "conflicting"}
+
+    assert sync_layout_to_analysis(layout, analysis) is True
+    assert analysis.input["name"] == "Engineering Room A"
+    assert analysis.input["length_m"] == 5.0
+    assert analysis.input["width_m"] == 4.5
+    assert analysis.input["height_m"] == 3.2
+    assert analysis.input["observed_pressure_pa"] == 18.0
+    assert layout["engineering_sync"]["rooms"][0]["room_id"] == "mapped"
+
+
+def test_room_verification_sync_rejects_missing_or_ambiguous_mapping_before_mutation():
+    analysis = AnalysisDocument(
+        id="room-check",
+        name="Room verification",
+        kind="room_verification",
+        input={
+            "name": "Engineering Room A",
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+        },
+    )
+    missing = {
+        "rooms": [
+            {
+                "id": "other",
+                "name": "Other",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 5.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            }
+        ]
+    }
+    before = copy.deepcopy(analysis.input)
+    with pytest.raises(SpatialSyncError, match="no spatial room maps"):
+        sync_layout_to_analysis(missing, analysis)
+    assert analysis.input == before
+    assert "engineering_sync" not in missing
+
+    ambiguous = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "A",
+                "analysis_room_name": "Engineering Room A",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 5.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+            {
+                "id": "b",
+                "name": "B",
+                "analysis_room_name": "Engineering Room A",
+                "x_m": 6.0,
+                "y_m": 0.0,
+                "length_m": 5.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+        ]
+    }
+    with pytest.raises(SpatialSyncError, match="multiple spatial rooms"):
+        sync_layout_to_analysis(ambiguous, analysis)
+    assert analysis.input == before
+    assert "engineering_sync" not in ambiguous
+
+
+def test_pressure_overlay_prefers_mapped_engineering_observed_pressure_over_stale_spatial_value():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 32.0,
+                }
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process display",
+                "analysis_room_name": "Process",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 6.0,
+                "width_m": 5.0,
+                "height_m": 3.0,
+                "pressure_pa": 10.0,
+            }
+        ]
+    }
+
+    room = pressure_overlay_state(layout, analysis)["rooms"][0]
+
+    assert room["pressure_pa"] == 32.0
+    assert room["source"] == "engineering_observed"
+    assert room["engineering_state"] == "synchronized"
+
+
+def test_pressure_relationship_state_reports_real_pass_fail_and_unavailable_values():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "High",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                },
+                {
+                    "name": "Low",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 15.0,
+                },
+            ],
+            "pressure_cascade": [
+                {
+                    "higher_pressure_room": "High",
+                    "lower_pressure_room": "Low",
+                    "min_delta_pa": 10.0,
+                }
+            ],
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "high",
+                "name": "High display",
+                "analysis_room_name": "High",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+            {
+                "id": "low",
+                "name": "Low display",
+                "analysis_room_name": "Low",
+                "x_m": 5.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+        ]
+    }
+
+    relationship = pressure_relationship_state(layout, analysis)[0]
+    assert relationship["status"] == "pass"
+    assert relationship["actual_delta_pa"] == 15.0
+    assert relationship["higher_pressure_source"] == "engineering_observed"
+
+    analysis.input["rooms"][1]["observed_pressure_pa"] = 25.0
+    relationship = pressure_relationship_state(layout, analysis)[0]
+    assert relationship["status"] == "fail"
+    assert relationship["actual_delta_pa"] == 5.0
+
+    analysis.input["rooms"][1].pop("observed_pressure_pa")
+    relationship = pressure_relationship_state(layout, analysis)[0]
+    assert relationship["status"] == "unavailable"
+    assert relationship["actual_delta_pa"] is None
 

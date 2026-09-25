@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib
+from pathlib import Path
 import sys
+import tomllib
 
 import pytest
 
@@ -55,3 +58,13 @@ def test_cli_output_replace_failure_preserves_previous_complete_file(
 
     assert target.read_text(encoding="utf-8") == "previous complete report\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_all_packaged_console_entrypoints_import_and_resolve():
+    metadata = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    for script_name, target in metadata["project"]["scripts"].items():
+        module_name, function_name = target.split(":", 1)
+        module = importlib.import_module(module_name)
+        entrypoint = getattr(module, function_name)
+        assert callable(entrypoint), script_name

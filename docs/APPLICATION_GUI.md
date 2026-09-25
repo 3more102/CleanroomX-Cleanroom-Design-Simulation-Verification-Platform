@@ -82,6 +82,9 @@ Existing projects remain schema-version-1 compatible because the spatial documen
 
 Spatial editing also runs non-blocking design guardrails. Overlapping room footprints and devices that are unassigned, outside their assigned room, or associated with a different room are reported in the workspace and highlighted in the 2D plan. Moving an assigned room carries its placed devices with it. Moving a device or editing its coordinates automatically updates its room association from the plan position. These checks are geometry-consistency warnings only; they do not alter engineering acceptance or solver results. The **Next Issue** action cycles through detected problems and centers the implicated room or device in the 2D editor; issue highlighting is mirrored in the 3D view. **Fix Devices** performs an explicit, deterministic repair of device-to-room links from the current plan position only; it never moves geometry or changes solver inputs.
 
+
+Spatial-to-analysis synchronization performs an explicit mapping preflight. Duplicate room names are rejected because project-verification synchronization is name-based. For a single-room verification analysis in a multi-room layout, exactly one spatial room must match the analysis room name; otherwise synchronization is blocked instead of taking an arbitrary first room. Device guardrails also check vertical placement and report devices below the floor or above their assigned room ceiling. These are geometry-consistency and mapping checks only; they do not alter engineering acceptance or solver results.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.

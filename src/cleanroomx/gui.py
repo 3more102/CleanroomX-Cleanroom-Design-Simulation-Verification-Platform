@@ -1489,6 +1489,16 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
+        if self._editor_analysis_id == analysis.id:
+            try:
+                self._commit_editor(analysis)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot remove analysis",
+                    f"Fix the current analysis input before removing it.\n\n{exc}",
+                    parent=self.root,
+                )
+                return
         before = self._project_history_snapshot()
         self._invalidate_last_run_for(analysis.id)
         self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
@@ -1528,6 +1538,16 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
+        if self._editor_analysis_id == analysis.id:
+            try:
+                self._commit_editor(analysis)
+            except Exception as exc:
+                messagebox.showerror(
+                    "Cannot import",
+                    f"Fix the current analysis input before replacing it.\n\n{exc}",
+                    parent=self.root,
+                )
+                return
         before = self._project_history_snapshot()
         analysis.input = payload
         self._invalidate_last_run_for(analysis.id)

@@ -9,6 +9,7 @@ import pytest
 import cleanroomx.application as application_module
 from cleanroomx.application import (
     ANALYSIS_SPECS,
+    AnalysisInputMutationError,
     ExternalDependencyChangedError,
     analysis_catalog,
     analysis_run_matches_input,
@@ -133,6 +134,113 @@ def test_fan_operating_point_application_service_produces_real_plot_model():
 def test_application_validation_uses_existing_domain_parser():
     with pytest.raises((KeyError, TypeError, ValueError)):
         validate_analysis_input("hvac", {})
+
+
+def test_run_analysis_parses_standard_workflow_once_and_executes_same_model(
+    monkeypatch,
+):
+    spec = ANALYSIS_SPECS["room_verification"]
+    original_loader = application_module._load_callable
+    submitted = {"value": 1}
+    marker = object()
+    calls: list[str] = []
+
+    def parser(run_payload):
+        assert run_payload is not submitted
+        assert run_payload == submitted
+        calls.append("parser")
+        return marker
+
+    def runner(parsed):
+        assert parsed is marker
+        calls.append("runner")
+        return {"status": "pass"}
+
+    def load_callable(target):
+        if target == spec.parser:
+            return parser
+        if target == spec.runner:
+            return runner
+        return original_loader(target)
+
+    monkeypatch.setattr(application_module, "_load_callable", load_callable)
+
+    run = run_analysis("room_verification", submitted)
+
+    assert calls == ["parser", "runner"]
+    assert submitted == {"value": 1}
+    provenance = run.diagnostics["application_execution_provenance"]
+    assert provenance["input_execution_policy"] == (
+        "isolated-copy-single-parse-sha256-guard-v1"
+    )
+
+
+def test_run_analysis_rejects_parser_input_mutation_without_touching_caller(
+    monkeypatch,
+):
+    spec = ANALYSIS_SPECS["room_verification"]
+    original_loader = application_module._load_callable
+    submitted = {"value": 1}
+    runner_called = False
+
+    def parser(run_payload):
+        run_payload["value"] = 2
+        return run_payload
+
+    def runner(parsed):
+        nonlocal runner_called
+        runner_called = True
+        return {"status": "pass"}
+
+    def load_callable(target):
+        if target == spec.parser:
+            return parser
+        if target == spec.runner:
+            return runner
+        return original_loader(target)
+
+    monkeypatch.setattr(application_module, "_load_callable", load_callable)
+
+    with pytest.raises(
+        AnalysisInputMutationError,
+        match="input validation/parsing",
+    ):
+        run_analysis("room_verification", submitted)
+
+    assert submitted == {"value": 1}
+    assert runner_called is False
+
+
+def test_run_analysis_rejects_backend_mutation_of_prepared_input_alias(
+    monkeypatch,
+):
+    spec = ANALYSIS_SPECS["room_verification"]
+    original_loader = application_module._load_callable
+    submitted = {"value": 1}
+
+    def parser(run_payload):
+        return run_payload
+
+    def runner(parsed):
+        parsed["value"] = 2
+        return {"status": "pass"}
+
+    def load_callable(target):
+        if target == spec.parser:
+            return parser
+        if target == spec.runner:
+            return runner
+        return original_loader(target)
+
+    monkeypatch.setattr(application_module, "_load_callable", load_callable)
+
+    with pytest.raises(
+        AnalysisInputMutationError,
+        match="backend execution",
+    ):
+        run_analysis("room_verification", submitted)
+
+    assert submitted == {"value": 1}
 
 
 def test_unknown_analysis_kind_is_rejected():

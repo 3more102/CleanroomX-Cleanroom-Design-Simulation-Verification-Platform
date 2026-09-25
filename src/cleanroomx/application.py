@@ -55,6 +55,23 @@ class ExternalDependencyChangedError(RuntimeError):
         )
 
 
+class ExternalDependencyStaleError(RuntimeError):
+    """Raised when a completed run no longer matches its external input revisions."""
+
+    def __init__(self, changes: list[dict]) -> None:
+        self.changes = tuple(copy.deepcopy(changes))
+        labels = [
+            f"{item['field']} ({item['declared_path']})"
+            for item in self.changes
+        ]
+        detail = ", ".join(labels) if labels else "unknown dependency"
+        super().__init__(
+            "Cached analysis evidence is out of date because referenced engineering "
+            "input no longer matches the content used for the completed run. "
+            f"Run the analysis again before using or exporting its result: {detail}"
+        )
+
+
 def _spec(key, title, category, parser, runner, reporter, description):
     return AnalysisSpec(key, title, category, parser, runner, reporter, description)
 
@@ -668,6 +685,113 @@ def _application_execution_provenance(
         ),
         "external_dependencies": dependencies,
     }
+
+
+def analysis_run_freshness(run: AnalysisRun, *, base_dir=None) -> dict:
+    """Compare a completed run's external input evidence with current file contents."""
+    if not isinstance(run, AnalysisRun):
+        raise TypeError("run must be an AnalysisRun")
+
+    provenance = run.diagnostics.get("application_execution_provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("analysis run is missing application execution provenance")
+    if provenance.get("schema") != "cleanroomx.application-execution-provenance":
+        raise ValueError("analysis run has unsupported application execution provenance")
+    if provenance.get("analysis_kind") != run.kind:
+        raise ValueError("analysis run provenance kind does not match the run")
+
+    dependencies = provenance.get("external_dependencies")
+    if not isinstance(dependencies, list):
+        raise ValueError("analysis run provenance external_dependencies must be an array")
+    if provenance.get("external_dependency_count") != len(dependencies):
+        raise ValueError("analysis run provenance external dependency count is inconsistent")
+
+    base = Path(base_dir) if base_dir is not None else None
+    checks: list[dict] = []
+    for dependency in dependencies:
+        if not isinstance(dependency, dict):
+            raise ValueError("analysis run external dependency evidence must be an object")
+        field = dependency.get("field")
+        declared_path = dependency.get("declared_path")
+        expected_sha256 = dependency.get("sha256_after")
+        expected_size = dependency.get("size_bytes_after")
+        expected_mtime_ns = dependency.get("mtime_ns_after")
+        if not isinstance(field, str) or not field:
+            raise ValueError("analysis run external dependency field is invalid")
+        if not isinstance(declared_path, str) or not declared_path:
+            raise ValueError("analysis run external dependency path is invalid")
+        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+            raise ValueError("analysis run external dependency SHA-256 evidence is invalid")
+        if not isinstance(expected_size, int) or expected_size < 0:
+            raise ValueError("analysis run external dependency size evidence is invalid")
+        if not isinstance(expected_mtime_ns, int):
+            raise ValueError("analysis run external dependency timestamp evidence is invalid")
+        if dependency.get("stable_during_run") is not True:
+            raise ValueError("analysis run contains external dependency evidence that was not stable")
+
+        check = {
+            "field": field,
+            "declared_path": declared_path,
+            "expected_sha256": expected_sha256,
+            "expected_size_bytes": expected_size,
+            "expected_mtime_ns": expected_mtime_ns,
+        }
+        try:
+            path = _resolve_relative(base, declared_path)
+            current = _stable_file_fingerprint(path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            check.update({
+                "status": "unavailable_or_unstable",
+                "current_content_matches_run": False,
+                "current_error": str(exc),
+            })
+            checks.append(check)
+            continue
+
+        content_matches = (
+            current["sha256"] == expected_sha256
+            and current["size_bytes"] == expected_size
+        )
+        metadata_matches = current["mtime_ns"] == expected_mtime_ns
+        if content_matches and metadata_matches:
+            status = "current"
+        elif content_matches:
+            status = "current_content_metadata_changed"
+        else:
+            status = "content_changed"
+        check.update({
+            "status": status,
+            "current_content_matches_run": content_matches,
+            "current_sha256": current["sha256"],
+            "current_size_bytes": current["size_bytes"],
+            "current_mtime_ns": current["mtime_ns"],
+        })
+        checks.append(check)
+
+    fresh = all(item["current_content_matches_run"] for item in checks)
+    return {
+        "schema": "cleanroomx.analysis-run-freshness",
+        "schema_version": 1,
+        "analysis_kind": run.kind,
+        "fresh": fresh,
+        "status": "current" if fresh else "stale",
+        "external_dependency_count": len(checks),
+        "external_dependencies": checks,
+    }
+
+
+def require_analysis_run_fresh(run: AnalysisRun, *, base_dir=None) -> dict:
+    """Fail closed when completed file-backed evidence no longer matches its inputs."""
+    assessment = analysis_run_freshness(run, base_dir=base_dir)
+    if not assessment["fresh"]:
+        raise ExternalDependencyStaleError(
+            [
+                item
+                for item in assessment["external_dependencies"]
+                if not item["current_content_matches_run"]
+            ]
+        )
+    return assessment
 
 
 def _validate_dossier(payload: dict, base_dir: Path | None) -> None:

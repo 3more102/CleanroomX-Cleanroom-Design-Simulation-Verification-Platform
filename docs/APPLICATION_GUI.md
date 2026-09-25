@@ -112,6 +112,8 @@ All backend outputs are normalized to strict JSON with non-finite values rejecte
 
 For `consistency` and `dossier`, those external dependencies are guarded as engineering run inputs rather than treated as advisory provenance only. CleanroomX fingerprints each referenced file from a stable read before execution and again after result/report generation. If a referenced file changes, disappears, or remains unstable while being fingerprinted, the run fails with an actionable error and the result is discarded. Stabilize the source files and run again. This prevents the desktop from presenting a result assembled while its external engineering inputs were changing; it does not lock files against other programs.
 
+The guard continues after execution while a file-backed result remains cached. Before CleanroomX restores that cached result after analysis switching, or exports its result JSON, run bundle, or Markdown report, it verifies the current content of every referenced file against the revision used by the completed run. Changed, missing, or unstable inputs invalidate the cached evidence and require a rerun. A timestamp-only metadata change does not invalidate a result when SHA-256 and byte size are unchanged.
+
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
 ## Validation and automated smoke

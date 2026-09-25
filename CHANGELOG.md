@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased cached external-result freshness — 2026-09-25
+
+- Revalidates completed `consistency` and `dossier` external dependencies before cached-result restoration and result/report/run-bundle export.
+- Reuses the stable SHA-256 fingerprint path and compares current content with the post-run revision, closing the gap where a source file could change after a successful run while stale evidence remained exportable.
+- Invalidates cached evidence and requires a rerun when a dependency changes, disappears, or cannot be fingerprinted stably; metadata-only timestamp changes with identical content remain valid.
+- Adds deterministic freshness evidence plus GUI regressions for restore/export invalidation without changing project schema, solver equations, numerical tolerances, acceptance semantics, or ordinary inline analyses.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

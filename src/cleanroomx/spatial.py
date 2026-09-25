@@ -726,6 +726,69 @@ def room_clearance_dimensions(room: dict, rooms: list[dict]) -> list[dict]:
     ]
 
 
+def room_overlap_regions(room: dict, rooms: list[dict]) -> list[dict]:
+    """Return positive-area intersections between one room and its neighbors.
+
+    Edge/corner contact is not an overlap. Returned regions are deterministic
+    and contain only derived geometry, so rendering them never mutates the
+    canonical spatial model.
+    """
+
+    x0 = _finite_number(room.get("x_m"), 0.0)
+    y0 = _finite_number(room.get("y_m"), 0.0)
+    x1 = x0 + _positive(room.get("length_m"), 0.0)
+    y1 = y0 + _positive(room.get("width_m"), 0.0)
+    room_id = room.get("id")
+    epsilon = 1e-9
+    regions: list[dict] = []
+
+    for other in rooms:
+        if not isinstance(other, dict):
+            continue
+        if other is room or (
+            room_id is not None and other.get("id") == room_id
+        ):
+            continue
+
+        ox0 = _finite_number(other.get("x_m"), 0.0)
+        oy0 = _finite_number(other.get("y_m"), 0.0)
+        ox1 = ox0 + _positive(other.get("length_m"), 0.0)
+        oy1 = oy0 + _positive(other.get("width_m"), 0.0)
+
+        overlap_x0 = max(x0, ox0)
+        overlap_y0 = max(y0, oy0)
+        overlap_x1 = min(x1, ox1)
+        overlap_y1 = min(y1, oy1)
+        overlap_length = overlap_x1 - overlap_x0
+        overlap_width = overlap_y1 - overlap_y0
+        if overlap_length <= epsilon or overlap_width <= epsilon:
+            continue
+
+        reference_id = str(other.get("id") or "")
+        reference_name = str(other.get("name") or reference_id or "Room")
+        regions.append(
+            {
+                "reference_room_id": reference_id,
+                "reference_room_name": reference_name,
+                "x_m": overlap_x0,
+                "y_m": overlap_y0,
+                "length_m": overlap_length,
+                "width_m": overlap_width,
+                "area_m2": overlap_length * overlap_width,
+            }
+        )
+
+    return sorted(
+        regions,
+        key=lambda region: (
+            region["reference_room_id"],
+            region["reference_room_name"],
+            region["x_m"],
+            region["y_m"],
+        ),
+    )
+
+
 class SpatialEditHistory:
     """Bounded undo/redo history for normalized spatial-layout snapshots."""
 
@@ -822,6 +885,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._smart_align = tk.BooleanVar(value=True)
         self._alignment_guides: list[dict] = []
         self._show_clearances = tk.BooleanVar(value=True)
+        self._show_overlaps = tk.BooleanVar(value=True)
 
         self._build()
         self.refresh()
@@ -876,6 +940,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             variable=self._show_clearances,
             command=self.redraw,
         ).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            toolbar,
+            text="Overlaps",
+            variable=self._show_overlaps,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -891,7 +961,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left")
         ttk.Label(
             scene_bar,
-            text="2D: drag to move • smart align • live room gaps • wheel to zoom • middle/right drag to pan    "
+            text="2D: drag to move • smart align • live gaps/overlaps • wheel to zoom • middle/right drag to pan    "
                  "3D: click to select • wheel to zoom",
         ).pack(side="right")
 
@@ -1436,6 +1506,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                     )
 
         if (
+            self._show_overlaps.get()
+            and self.selected is not None
+            and self.selected.kind == "room"
+        ):
+            selected_room = self._selected_object()
+            if selected_room is not None:
+                self._draw_room_overlaps(selected_room)
+
+        if (
             self._show_clearances.get()
             and self.selected is not None
             and self.selected.kind == "room"
@@ -1475,6 +1554,38 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
                 justify="center",
                 fill="#667788",
+            )
+
+    def _draw_room_overlaps(self, room: dict) -> None:
+        canvas = self.canvas_2d
+        for region in room_overlap_regions(room, self.layout["rooms"]):
+            x0, y0 = self._world_to_canvas(region["x_m"], region["y_m"])
+            x1, y1 = self._world_to_canvas(
+                region["x_m"] + region["length_m"],
+                region["y_m"] + region["width_m"],
+            )
+            canvas.create_rectangle(
+                x0,
+                y0,
+                x1,
+                y1,
+                fill="#fee2e2",
+                stipple="gray25",
+                outline="#b91c1c",
+                width=2,
+                tags=("room-overlap",),
+            )
+            canvas.create_text(
+                (x0 + x1) / 2.0,
+                (y0 + y1) / 2.0,
+                text=(
+                    f"OVERLAP {region['area_m2']:.3g} m²\n"
+                    f"{region['reference_room_name']}"
+                ),
+                fill="#991b1b",
+                font=("TkDefaultFont", 8, "bold"),
+                justify="center",
+                tags=("room-overlap",),
             )
 
     def _draw_room_clearances(self, room: dict) -> None:

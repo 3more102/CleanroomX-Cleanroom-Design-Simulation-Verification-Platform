@@ -45,7 +45,8 @@ from .project import (
 from .recovery_ui import RecoveryCenter
 from .run_history import (
     RunHistoryIntegrityError,
-    append_run_history_record,
+    append_run_history_evidence,
+    build_run_history_evidence,
     run_history_records,
     validate_run_history,
 )
@@ -615,15 +616,22 @@ class CleanroomXApp:
         return run
 
     def _record_completed_run(
-        self, analysis: AnalysisDocument, run: AnalysisRun
+        self,
+        analysis: AnalysisDocument,
+        run: AnalysisRun,
+        evidence: dict | None = None,
     ) -> dict:
-        record = append_run_history_record(
+        prepared = (
+            evidence
+            if evidence is not None
+            else build_run_history_evidence(analysis.input, run)
+        )
+        record = append_run_history_evidence(
             self.project.metadata,
             analysis_id=analysis.id,
             analysis_name=analysis.name,
             analysis_kind=analysis.kind,
-            input_payload=analysis.input,
-            run=run,
+            evidence=prepared,
         )
         self._update_title()
         return record
@@ -1562,9 +1570,24 @@ class CleanroomXApp:
         def worker() -> None:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
-                self._queue.put(("success", generation, analysis_id, result))
             except Exception as exc:
                 self._queue.put(("error", generation, analysis_id, str(exc)))
+                return
+
+            history_evidence = None
+            history_error = None
+            try:
+                history_evidence = build_run_history_evidence(payload, result)
+            except Exception as exc:  # audit preparation must not hide a valid result
+                history_error = str(exc)
+            self._queue.put(
+                (
+                    "success",
+                    generation,
+                    analysis_id,
+                    (result, history_evidence, history_error),
+                )
+            )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1599,6 +1622,16 @@ class CleanroomXApp:
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
+                    history_evidence = None
+                    history_error = None
+                    run = payload
+                    if (
+                        isinstance(payload, tuple)
+                        and len(payload) == 3
+                        and isinstance(payload[0], AnalysisRun)
+                    ):
+                        run, history_evidence, history_error = payload
+
                     try:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
@@ -1608,7 +1641,7 @@ class CleanroomXApp:
                         )
                         continue
                     if not analysis_run_matches_input(
-                        payload, analysis.kind, analysis.input
+                        run, analysis.kind, analysis.input
                     ):
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(
@@ -1616,32 +1649,35 @@ class CleanroomXApp:
                             "run the analysis again."
                         )
                         continue
-                    history_error = None
-                    try:
-                        self._record_completed_run(analysis, payload)
-                    except RunHistoryIntegrityError as exc:
-                        history_error = str(exc)
 
-                    self._runs_by_analysis[analysis_id] = payload
-                    self.last_run = payload
+                    if history_error is None:
+                        try:
+                            self._record_completed_run(
+                                analysis, run, history_evidence
+                            )
+                        except RunHistoryIntegrityError as exc:
+                            history_error = str(exc)
+
+                    self._runs_by_analysis[analysis_id] = run
+                    self.last_run = run
                     self.last_run_analysis_id = analysis_id
-                    self._render_run(payload)
+                    self._render_run(run)
                     if history_error is None:
                         self.status_var.set(
-                            f"Completed — {payload.title} — status: {payload.status}"
+                            f"Completed — {run.title} — status: {run.status}"
                         )
                     else:
                         self.status_var.set(
-                            f"Completed — {payload.title}; run history was not updated."
+                            f"Completed — {run.title}; run history was not updated."
                         )
                         messagebox.showwarning(
                             "Run history not updated",
                             (
                                 "The analysis completed and its result is available, but "
-                                "CleanroomX did not append an audit record because the "
-                                "existing run history failed integrity validation. Existing "
-                                "history was left unchanged. Export the run bundle if this "
-                                "result must be retained.\n\n"
+                                "CleanroomX did not append an audit record because run-history "
+                                "evidence could not be prepared or the existing history failed "
+                                "integrity validation. Existing history was left unchanged. "
+                                "Export the run bundle if this result must be retained.\n\n"
                                 f"{history_error}"
                             ),
                             parent=self.root,

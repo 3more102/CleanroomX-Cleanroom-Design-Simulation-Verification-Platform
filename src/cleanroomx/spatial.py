@@ -35,16 +35,36 @@ def _room_id(name: str) -> str:
     return slug or "room"
 
 
-def _unique_identifier(value: Any, fallback: str, used_ids: set[str]) -> str:
-    """Return a deterministic identifier without rewriting an already-unique id."""
+def _declared_identifiers(items: list[Any]) -> set[str]:
+    return {
+        str(item.get("id")).strip()
+        for item in items
+        if isinstance(item, dict)
+        and item.get("id") is not None
+        and str(item.get("id")).strip()
+    }
+
+
+def _unique_identifier(
+    value: Any,
+    fallback: str,
+    used_ids: set[str],
+    reserved_ids: set[str] | None = None,
+) -> str:
+    """Return a deterministic id while preserving other declared stable ids."""
 
     base = str(value).strip() if value is not None else ""
     base = base or fallback
-    candidate = base
+    if base not in used_ids:
+        used_ids.add(base)
+        return base
+
+    reserved = reserved_ids or set()
     suffix = 2
-    while candidate in used_ids:
-        candidate = f"{base}-{suffix}"
+    candidate = f"{base}-{suffix}"
+    while candidate in used_ids or candidate in reserved:
         suffix += 1
+        candidate = f"{base}-{suffix}"
     used_ids.add(candidate)
     return candidate
 
@@ -77,11 +97,17 @@ def normalize_layout(value: Any) -> dict:
     used_ids: set[str] = set()
     raw_rooms = source.get("rooms", [])
     if isinstance(raw_rooms, list):
+        reserved_room_ids = _declared_identifiers(raw_rooms)
         for index, raw in enumerate(raw_rooms):
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = _unique_identifier(raw.get("id"), _room_id(name), used_ids)
+            room_id = _unique_identifier(
+                raw.get("id"),
+                _room_id(name),
+                used_ids,
+                reserved_room_ids,
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -100,6 +126,7 @@ def normalize_layout(value: Any) -> dict:
     used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
+        reserved_device_ids = _declared_identifiers(raw_devices)
         for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
@@ -110,6 +137,7 @@ def normalize_layout(value: Any) -> dict:
                 raw.get("id"),
                 f"device-{index + 1}",
                 used_device_ids,
+                reserved_device_ids,
             )
             devices.append(
                 {

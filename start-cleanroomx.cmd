@@ -4,22 +4,24 @@ cd /d "%~dp0"
 
 set "PYTHONPATH=%CD%\src;%PYTHONPATH%"
 
-if "%~1"=="" (
-    set "CLEANROOMX_ARGS=--demo"
-) else (
-    set "CLEANROOMX_ARGS=%*"
-)
-
 if exist ".venv\Scripts\python.exe" (
-    ".venv\Scripts\python.exe" -m cleanroomx.gui %CLEANROOMX_ARGS%
-    exit /b %ERRORLEVEL%
+    set "CLEANROOMX_PY=.venv\Scripts\python.exe"
+    set "CLEANROOMX_PY_ARGS="
+) else (
+    where py >nul 2>nul
+    if not errorlevel 1 (
+        set "CLEANROOMX_PY=py"
+        set "CLEANROOMX_PY_ARGS=-3"
+    ) else (
+        set "CLEANROOMX_PY=python"
+        set "CLEANROOMX_PY_ARGS="
+    )
 )
 
-where py >nul 2>nul
-if %ERRORLEVEL%==0 (
-    py -3 -m cleanroomx.gui %CLEANROOMX_ARGS%
-    exit /b %ERRORLEVEL%
+if "%~1"=="" (
+    "%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -m cleanroomx.gui --demo
+) else (
+    "%CLEANROOMX_PY%" %CLEANROOMX_PY_ARGS% -m cleanroomx.gui %*
 )
 
-python -m cleanroomx.gui %CLEANROOMX_ARGS%
 exit /b %ERRORLEVEL%

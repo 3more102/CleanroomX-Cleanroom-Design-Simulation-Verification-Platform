@@ -41,6 +41,7 @@ cleanroomx-damper-study = "cleanroomx.damper_study_cli:main"
 
 cleanroomx-dossier = "cleanroomx.dossier_cli:main"
 cleanroomx-consistency = "cleanroomx.consistency_cli:main"
+cleanroomx-project-validate = "cleanroomx.project_validation_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -4,7 +4,7 @@
 
 - Adds deterministic SHA-256 integrity blocks to newly saved `cleanroomx.project` files and `cleanroomx.autosave` recovery envelopes using canonical strict JSON that excludes only the top-level integrity block itself.
 - Verifies a present integrity block during project/recovery load, so valid-JSON content changes that still satisfy structural schema checks are rejected instead of silently becoming authoritative state.
-- Verifies the exact serialized project bytes immediately after each explicit atomic save before reporting success, detecting unexpected post-replace byte changes or unreadable committed state.
+- Verifies the exact serialized project bytes immediately after each explicit atomic save, and verifies exact recovery-artifact bytes plus envelope readability before an autosave checkpoint reports success.
 - Keeps existing unsigned schema-v1 projects, legacy project shapes, and unsigned recovery artifacts loadable; they gain integrity evidence the next time CleanroomX writes them.
 - Preserves project schema version 1, external-change write protection, crash-recovery behavior, solver equations, numerical tolerances, and engineering acceptance semantics.
 - Treats SHA-256 as corruption/change detection only; the integrity block is not a digital signature and does not establish source authenticity.

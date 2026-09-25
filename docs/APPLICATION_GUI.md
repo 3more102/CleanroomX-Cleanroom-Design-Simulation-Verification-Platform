@@ -64,7 +64,7 @@ History is scoped to the current document. **New Project**, opening another proj
 
 Project-history restoration clears cached analysis results because those results may no longer correspond to restored inputs. The active project path and its external-write revision guard are deliberately not rewound by Undo/Redo.
 
-Ctrl+Z/Ctrl+Y are context-sensitive. While the JSON editor has focus, its native text undo/redo remains local to the draft. While a spatial canvas has focus, the spatial transactional history handles geometry edits. Outside those local editors, Ctrl+Z/Ctrl+Y operate on project-level history; Ctrl+Shift+Z is also available for project/spatial redo.
+Ctrl+Z/Ctrl+Y are context-sensitive. While the JSON editor has focus, its native text undo/redo remains local to the draft. While a spatial canvas has focus, the spatial transactional history handles geometry edits. Outside those local editors, Ctrl+Z/Ctrl+Y operate on project-level history; Ctrl+Shift+Z is also available for project/spatial redo. A new JSON-draft or spatial edit starts a local-history branch and clears older project-level history so a stale document snapshot can never rewind newer local editor or geometry work.
 
 ## Recovery autosave
 

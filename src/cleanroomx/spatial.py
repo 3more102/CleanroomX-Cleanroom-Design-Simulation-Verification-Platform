@@ -306,6 +306,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._room_label_to_id: dict[str, str | None] = {}
         self._model_tree: ttk.Treeview | None = None
         self._tree_selection_guard = False
+        self._undo_stack: list[dict] = []
+        self._redo_stack: list[dict] = []
+        self._history_limit = 50
+        self._persisted_layout_snapshot: dict | None = None
+        self._undo_button: ttk.Button | None = None
+        self._redo_button: ttk.Button | None = None
         self._orbit_anchor: tuple[int, int] | None = None
         self._orbit_origin: tuple[float, float] | None = None
 
@@ -335,6 +341,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(objectbar, text="Center Selected", command=self.center_selected).pack(side="left", padx=2)
         ttk.Button(objectbar, text="Duplicate", command=self.duplicate_selected).pack(side="left", padx=2)
         ttk.Button(objectbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
+        ttk.Separator(objectbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        self._undo_button = ttk.Button(objectbar, text="Undo", command=self.undo)
+        self._undo_button.pack(side="left", padx=2)
+        self._redo_button = ttk.Button(objectbar, text="Redo", command=self.redo)
+        self._redo_button.pack(side="left", padx=2)
 
         displaybar = ttk.Frame(self, padding=(6, 0, 6, 3))
         displaybar.pack(fill="x")
@@ -404,7 +415,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(viewbar, text="m").pack(side="left", padx=(3, 8))
         ttk.Label(
             viewbar,
-            text="Arrows nudge · Shift+arrows ×5 · Ctrl+D duplicate · Del remove · Esc clear",
+            text="Ctrl+Z/Y undo/redo · arrows nudge · Shift+arrows ×5 · Ctrl+D duplicate",
         ).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="horizontal")
@@ -573,6 +584,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Home>", lambda event: self.fit_views())
             canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
             canvas.bind("<Control-D>", lambda event: self.duplicate_selected())
+            canvas.bind("<Control-z>", lambda event: self.undo())
+            canvas.bind("<Control-Z>", lambda event: self.undo())
+            canvas.bind("<Control-y>", lambda event: self.redo())
+            canvas.bind("<Control-Y>", lambda event: self.redo())
             canvas.bind("<Left>", lambda event: self.nudge_selected(-1, 0))
             canvas.bind("<Right>", lambda event: self.nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self.nudge_selected(0, -1))
@@ -625,18 +640,80 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._grid_var.set(f"{self.layout['grid_m']:g}")
         if self.selected and not self._selected_object():
             self.selected = None
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._persisted_layout_snapshot = copy.deepcopy(normalize_layout(self.layout))
         self._update_summary()
         self._load_property_panel()
+        self._update_history_controls()
         self.redraw()
 
     def _persist(self, message: str) -> None:
         project = self._project_getter()
-        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        normalized = normalize_layout(self.layout)
+        previous = self._persisted_layout_snapshot
+        if previous is not None and normalized != previous:
+            self._undo_stack.append(copy.deepcopy(previous))
+            if len(self._undo_stack) > self._history_limit:
+                del self._undo_stack[0 : len(self._undo_stack) - self._history_limit]
+            self._redo_stack.clear()
+        project.metadata[SPATIAL_METADATA_KEY] = normalized
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._persisted_layout_snapshot = copy.deepcopy(self.layout)
         self._on_change()
         self._update_summary()
+        self._update_history_controls()
         self._status_setter(message)
         self.redraw()
+
+    def _update_history_controls(self) -> None:
+        if self._undo_button is not None:
+            self._undo_button.configure(state="normal" if self._undo_stack else "disabled")
+        if self._redo_button is not None:
+            self._redo_button.configure(state="normal" if self._redo_stack else "disabled")
+
+    def _restore_history_layout(self, layout: dict, message: str) -> None:
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(layout)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._persisted_layout_snapshot = copy.deepcopy(self.layout)
+        self._grid_var.set(f"{self.layout['grid_m']:g}")
+        if self.selected and not self._selected_object():
+            self.selected = None
+        self._on_change()
+        self._update_summary()
+        self._load_property_panel()
+        self._update_history_controls()
+        self._status_setter(message)
+        self.redraw()
+
+    def undo(self) -> None:
+        if not self._undo_stack:
+            self._status_setter("Nothing to undo")
+            return
+        current = copy.deepcopy(
+            self._persisted_layout_snapshot
+            if self._persisted_layout_snapshot is not None
+            else normalize_layout(self.layout)
+        )
+        target = self._undo_stack.pop()
+        self._redo_stack.append(current)
+        self._restore_history_layout(target, "Undid spatial edit")
+
+    def redo(self) -> None:
+        if not self._redo_stack:
+            self._status_setter("Nothing to redo")
+            return
+        current = copy.deepcopy(
+            self._persisted_layout_snapshot
+            if self._persisted_layout_snapshot is not None
+            else normalize_layout(self.layout)
+        )
+        target = self._redo_stack.pop()
+        self._undo_stack.append(current)
+        if len(self._undo_stack) > self._history_limit:
+            del self._undo_stack[0 : len(self._undo_stack) - self._history_limit]
+        self._restore_history_layout(target, "Redid spatial edit")
 
     def _update_summary(self) -> None:
         rooms = self.layout["rooms"]

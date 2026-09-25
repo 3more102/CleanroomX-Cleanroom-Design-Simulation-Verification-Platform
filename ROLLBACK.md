@@ -58,3 +58,14 @@ PR CI run #1503 / `36168565655` passed 985 tests on Python 3.11, 3.12, and
 Preserve published v0.100.0, v0.101.0, and v0.102.0 tags; rollback through normal
 revert and CI rather than moving release history.
 
+
+## v0.102.1 final spatial production closure anchor
+
+The final production closure before the v0.102.1 identity bump is merged on `main` at
+`9a9caedb46b80d376c21f36e3b10f46b05e00764`. PR #467 exact head
+`4be4fb840480df7a5f1e0313a73830313150d9dd` passed CI run #1540 /
+`36170548238`, and post-merge `main` CI run #1550 / `36171324227` also passed
+the Python 3.11/3.12/3.13 matrix and Windows launcher smoke. Preserve all earlier
+published tags and publish v0.102.1 as a new immutable tag only from a successful
+current-main CI commit.
+

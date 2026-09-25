@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from .loop_resistance import (
     LoopedDuctResistanceInput,
@@ -62,6 +63,13 @@ def _edge_from_dict(data: dict) -> QuadraticFlowEdge:
     )
 
 
+@strict_input_fields(
+    "name",
+    "node_injections_m3_h",
+    "edges",
+    "reference_node",
+    context="loop-network input",
+)
 def looped_flow_network_from_dict(data: dict) -> LoopedFlowNetwork:
     return LoopedFlowNetwork(
         name=data["name"],

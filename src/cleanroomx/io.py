@@ -3,9 +3,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .models import ParticleRequirement, PressureCascadeRequirement, ProjectSpec, RoomSpec
 
 
+@strict_input_fields(
+    "name",
+    "length_m",
+    "width_m",
+    "height_m",
+    "supply_airflow_m3_h",
+    "min_ach",
+    "min_pressure_pa",
+    "observed_pressure_pa",
+    "particle_requirements",
+    context="room verification input",
+)
 def room_from_dict(data: dict) -> RoomSpec:
     particle_requirements = tuple(
         ParticleRequirement(
@@ -28,6 +41,12 @@ def room_from_dict(data: dict) -> RoomSpec:
     )
 
 
+@strict_input_fields(
+    "name",
+    "rooms",
+    "pressure_cascade",
+    context="project verification input",
+)
 def project_from_dict(data: dict) -> ProjectSpec:
     rooms = tuple(room_from_dict(item) for item in data["rooms"])
     pressure_cascade = tuple(

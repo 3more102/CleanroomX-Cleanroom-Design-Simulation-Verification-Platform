@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .branch_network import BranchDuct, BranchFlowNetwork, TerminalDemand
 from .duct import DuctNetwork, DuctPath, DuctSection
 from .fan_curve import FanCurve, FanCurvePoint
@@ -18,6 +19,15 @@ from .hvac_models import (
 )
 
 
+@strict_input_fields(
+    "room_air",
+    "outdoor_air",
+    "makeup_air_m3_h",
+    "supply_air_temp_c",
+    "capacity_margin_percent",
+    "loads",
+    context="thermal design input",
+)
 def thermal_design_from_dict(data: dict) -> ThermalDesign:
     outdoor = data.get("outdoor_air")
     return ThermalDesign(
@@ -43,6 +53,10 @@ def _with_optional_friction_factor(data: dict) -> dict:
     return values
 
 
+@strict_input_fields(
+    "paths",
+    context="duct network input",
+)
 def duct_network_from_dict(data: dict) -> DuctNetwork:
     return DuctNetwork(
         paths=tuple(
@@ -58,6 +72,12 @@ def duct_network_from_dict(data: dict) -> DuctNetwork:
     )
 
 
+@strict_input_fields(
+    "source_node",
+    "branches",
+    "terminal_demands",
+    context="branch-flow network input",
+)
 def branch_flow_network_from_dict(data: dict) -> BranchFlowNetwork:
     return BranchFlowNetwork(
         source_node=data["source_node"],
@@ -71,6 +91,16 @@ def branch_flow_network_from_dict(data: dict) -> BranchFlowNetwork:
     )
 
 
+@strict_input_fields(
+    "name",
+    "rooms",
+    "filter_unit",
+    "fan_system",
+    "fan_curve",
+    "duct_network",
+    "branch_flow_network",
+    context="HVAC project input",
+)
 def hvac_project_from_dict(data: dict) -> HVACProject:
     rooms = tuple(
         HVACRoom(

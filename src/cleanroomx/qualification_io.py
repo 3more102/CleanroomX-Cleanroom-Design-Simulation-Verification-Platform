@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .qualification_models import (
     MeasurementCheck,
     PressureCascadeCheck,
@@ -25,6 +26,12 @@ def _uncertain_value_from_dict(data: dict) -> UncertainValue:
     )
 
 
+@strict_input_fields(
+    "name",
+    "measurements",
+    "pressure_cascades",
+    context="qualification-uncertainty input",
+)
 def qualification_uncertainty_from_dict(data: dict) -> QualificationUncertaintySpec:
     measurements = tuple(
         MeasurementCheck(

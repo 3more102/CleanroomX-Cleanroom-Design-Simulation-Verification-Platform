@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .uncertainty_models import Provenance, UncertainRoom, UncertainValue
 
 
@@ -19,6 +20,15 @@ def _value_from_dict(data: dict, unit: str) -> UncertainValue:
     )
 
 
+@strict_input_fields(
+    "name",
+    "length_m",
+    "width_m",
+    "height_m",
+    "supply_airflow_m3_h",
+    "min_ach",
+    context="room-uncertainty input",
+)
 def uncertain_room_from_dict(data: dict) -> UncertainRoom:
     return UncertainRoom(
         name=data["name"],

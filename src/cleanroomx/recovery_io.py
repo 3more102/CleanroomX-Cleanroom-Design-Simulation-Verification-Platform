@@ -3,9 +3,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .recovery_models import RecoverySample, RecoveryTestSpec
 
 
+@strict_input_fields(
+    "name",
+    "particle_size_um",
+    "target_concentration_per_m3",
+    "max_recovery_time_minutes",
+    "instrument_id",
+    "sample_location",
+    "occupancy_state",
+    "method_reference",
+    "samples",
+    context="recovery-test input",
+)
 def recovery_test_from_dict(data: dict) -> RecoveryTestSpec:
     samples = tuple(RecoverySample(**item) for item in data["samples"])
     return RecoveryTestSpec(

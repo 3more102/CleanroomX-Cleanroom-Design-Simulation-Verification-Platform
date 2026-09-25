@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased persistence integrity hardening — 2026-09-25
+
+- Adds canonical SHA-256 self-integrity records to newly saved `cleanroomx.project` documents while keeping pre-integrity schema-version-1 files readable.
+- Rejects malformed integrity metadata and project-content digest mismatches with explicit corruption/external-modification diagnostics.
+- Adds canonical SHA-256 integrity to new recovery envelopes so corruption of either the recoverable project snapshot or raw editor/UI draft state is detected before restore.
+- Preserves pre-integrity recovery schema-version-1 artifacts for backward compatibility.
+- Strengthens the atomic writer with parent-directory fsync on supported POSIX systems while retaining file flush/fsync and the external-revision guard before replacement.
+- Verifies every explicit project save through a stable strict-loader read-back before the application accepts the new revision.
+- Adds corruption, canonicalization, backward-compatibility, directory-sync, recovery-integrity, and read-back-verification regressions without changing project schema version, solver equations, numerical tolerances, or engineering acceptance semantics.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

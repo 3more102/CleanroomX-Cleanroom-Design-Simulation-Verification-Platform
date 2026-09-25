@@ -88,6 +88,9 @@ jobs:
           tests/test_gui.py
           tests/test_gui_autosave.py
           tests/test_gui_recovery.py
+          tests/test_spatial.py
+          tests/test_spatial_history.py
+          tests/test_spatial_model_integrity.py
       - name: Run complete test suite
         run: python -m pytest -q
       - name: Build wheel and verify installed application

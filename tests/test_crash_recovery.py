@@ -15,13 +15,14 @@ from cleanroomx.autosave import (
 )
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.recovery_ui import (
+    compare_recovery_to_source,
     inspect_recovery,
     recovery_relation_label,
     recovery_safety_message,
 )
 
 
-def _project(name: str = "Recovery Demo") -> ProjectDocument:
+def _project(name: str = "Recovery Demo", *, value: int = 1) -> ProjectDocument:
     return ProjectDocument(
         name=name,
         analyses=[
@@ -29,7 +30,7 @@ def _project(name: str = "Recovery Demo") -> ProjectDocument:
                 id="room-1",
                 name="Room",
                 kind="room_verification",
-                input={"value": 1},
+                input={"value": value},
             )
         ],
         active_analysis_id="room-1",
@@ -49,13 +50,18 @@ def _snapshot(project: ProjectDocument, *, editor_text: str = '{"value": 2}') ->
     }
 
 
-def _write_recovery(tmp_path, *, editor_text='{"value": 2}'):
+def _write_recovery(
+    tmp_path,
+    *,
+    editor_text='{"value": 2}',
+    recovered_value: int = 1,
+):
     source = save_project_document(tmp_path / "source.cleanroomx.json", _project())
     manager = AutosaveManager(tmp_path / "recovery", session_id="crashed-session")
     try:
         manager.begin_project(source)
         assert manager.request_autosave(
-            _snapshot(_project(), editor_text=editor_text),
+            _snapshot(_project(value=recovered_value), editor_text=editor_text),
             source_path=source,
         )
         manager.wait_for_idle()
@@ -177,3 +183,55 @@ def test_newer_source_warning_explicitly_promises_no_overwrite(tmp_path):
     message = recovery_safety_message(candidate).lower()
     assert "newer" in message
     assert "never overwrites" in message
+
+
+
+def test_recovery_comparison_reports_exact_semantic_project_paths(tmp_path):
+    source, artifact = _write_recovery(tmp_path, recovered_value=2)
+    scan = scan_recovery_artifacts(tmp_path / "recovery")
+    candidate = next(item for item in scan.candidates if item.path == artifact)
+
+    comparison = compare_recovery_to_source(candidate)
+
+    assert source.exists()
+    assert comparison.state == "different"
+    assert comparison.truncated is False
+    assert any(
+        item.path == "analyses[room-1].input.value"
+        and item.change == "changed"
+        and item.original == 1
+        and item.recovered == 2
+        for item in comparison.differences
+    )
+
+
+def test_recovery_comparison_ignores_file_only_serialization_changes(tmp_path):
+    source, artifact = _write_recovery(tmp_path)
+    parsed = json.loads(source.read_text(encoding="utf-8"))
+    source.write_text(
+        json.dumps(parsed, sort_keys=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    scan = scan_recovery_artifacts(tmp_path / "recovery")
+    candidate = next(item for item in scan.candidates if item.path == artifact)
+
+    comparison = compare_recovery_to_source(candidate)
+
+    assert candidate.source_relation in {"source_changed", "source_newer"}
+    assert comparison.state == "identical"
+    assert comparison.differences == ()
+    assert "file-level only" in comparison.summary
+
+
+def test_recovery_comparison_handles_missing_original_without_guessing(tmp_path):
+    source, artifact = _write_recovery(tmp_path, recovered_value=2)
+    source.unlink()
+    scan = scan_recovery_artifacts(tmp_path / "recovery")
+    candidate = next(item for item in scan.candidates if item.path == artifact)
+
+    comparison = compare_recovery_to_source(candidate)
+
+    assert candidate.source_relation == "source_missing"
+    assert comparison.state == "source_missing"
+    assert comparison.differences == ()
+    assert "missing" in comparison.summary.lower()

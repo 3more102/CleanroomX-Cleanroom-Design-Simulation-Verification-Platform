@@ -85,6 +85,8 @@ def test_restore_failure_preserves_artifact_and_source(tmp_path):
     source, artifact = _write_recovery(tmp_path)
     source_before = source.read_bytes()
     payload = load_recovery_artifact(artifact)
+    payload["schema_version"] = 1
+    payload.pop("integrity")
     payload["snapshot"]["project"]["schema_version"] = 999
     artifact.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -95,6 +97,24 @@ def test_restore_failure_preserves_artifact_and_source(tmp_path):
         restore_recovery_artifact(artifact)
 
     assert artifact.exists()
+    assert source.read_bytes() == source_before
+
+
+def test_integrity_failure_preserves_recovery_artifact_and_source(tmp_path):
+    source, artifact = _write_recovery(tmp_path)
+    source_before = source.read_bytes()
+    payload = load_recovery_artifact(artifact)
+    payload["snapshot"]["ui_state"]["editor_text"] = '{"value": 999}'
+    artifact.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    tampered_before = artifact.read_bytes()
+
+    with pytest.raises(RecoveryFormatError, match="integrity check failed"):
+        restore_recovery_artifact(artifact)
+
+    assert artifact.read_bytes() == tampered_before
     assert source.read_bytes() == source_before
 
 

@@ -81,8 +81,8 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
-6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots. Use **Analysis → Run History...** to inspect previous accepted runs for the selected analysis without replacing the current result.
+7. Export input/result JSON, complete current or historical run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
@@ -114,11 +114,19 @@ For `consistency` and `dossier`, those external dependencies are guarded as engi
 
 Cached desktop results are also bound to the canonical SHA-256 of the exact submitted analysis input. Before a cached result is restored, before a completed background run is accepted, and before result/run-bundle/report export, CleanroomX compares that recorded identity with the current analysis kind and input. A mismatch clears the cached result and requires a rerun. The existing immediate invalidation hooks remain in place, but the provenance check is the final fail-closed boundary if a mutation path misses an invalidation notification.
 
+### In-session run history
+
+Every accepted desktop run is copied into a separate in-session history after the same input-freshness check used for the current result. History storage uses canonical strict JSON with a SHA-256 digest and retains the application execution-provenance input SHA-256. Loading a history entry rechecks the stored bundle digest and provenance metadata before reconstructing the run.
+
+History is bounded to eight entries per analysis and 16 MiB across the session. Oldest entries are evicted first; a single run larger than the total budget remains available as the current result but is not retained in history, and the status line reports that condition. History is intentionally not part of project schema version 1 and is cleared when the project/recovery identity or relative-path context is replaced. Removing one analysis clears only that analysis's retained history.
+
+**Analysis → Run History...** labels each retained run as **CURRENT** only when its recorded input hash matches the live editor draft; otherwise it is explicitly **HISTORICAL**. Historical results are displayed in a separate window and never become the current cached result. An operator can export a selected historical run bundle explicitly; the existing current-result export path continues to reject stale results.
+
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, bounded run-history snapshot/integrity/eviction behavior, accepted-run history integration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

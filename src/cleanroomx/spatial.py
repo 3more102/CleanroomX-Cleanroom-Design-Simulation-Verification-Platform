@@ -30,9 +30,62 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
+def _identifier_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _reserved_identifiers(raw_items: Any) -> set[str]:
+    if not isinstance(raw_items, list):
+        return set()
+    return {
+        text
+        for raw in raw_items
+        if isinstance(raw, dict)
+        for text in [_identifier_text(raw.get("id"))]
+        if text
+    }
+
+
+def _stable_identifier(
+    preferred: Any,
+    *,
+    prefix: str,
+    index: int,
+    reserved: set[str],
+    used: set[str],
+) -> tuple[str, str | None]:
+    """Preserve valid persisted ids and deterministically repair missing/colliding ids."""
+    text = _identifier_text(preferred)
+    if text and text not in used:
+        used.add(text)
+        return text, None
+
+    if text:
+        base = text
+        suffix = 2
+        candidate = f"{base}-{suffix}"
+        while candidate in used or candidate in reserved:
+            suffix += 1
+            candidate = f"{base}-{suffix}"
+        reason = "duplicate"
+    else:
+        base = f"{prefix}-{index + 1}"
+        candidate = base
+        suffix = 2
+        while candidate in used or candidate in reserved:
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        reason = "missing"
+
+    used.add(candidate)
+    return candidate, reason
+
+
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return slug or "room"
 
 
 def empty_layout() -> dict:
@@ -54,58 +107,146 @@ def empty_layout() -> dict:
     }
 
 
-def normalize_layout(value: Any) -> dict:
+def normalize_layout(value: Any, *, issues: list[dict] | None = None) -> dict:
+    """Canonicalize spatial data while preserving valid ids and repairing identity deterministically."""
     source = value if isinstance(value, dict) else {}
     result = empty_layout()
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
 
-    rooms: list[dict] = []
-    used_ids: set[str] = set()
     raw_rooms = source.get("rooms", [])
-    if isinstance(raw_rooms, list):
-        for index, raw in enumerate(raw_rooms):
-            if not isinstance(raw, dict):
-                continue
-            name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
-            room = {
-                "id": room_id,
-                "name": name,
-                "x_m": _finite_number(raw.get("x_m"), 0.0),
-                "y_m": _finite_number(raw.get("y_m"), 0.0),
-                "length_m": _positive(raw.get("length_m"), 4.0),
-                "width_m": _positive(raw.get("width_m"), 4.0),
-                "height_m": _positive(raw.get("height_m"), 3.0),
-            }
-            if raw.get("pressure_pa") is not None:
-                room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            rooms.append(room)
+    room_entries = (
+        [raw for raw in raw_rooms if isinstance(raw, dict)]
+        if isinstance(raw_rooms, list)
+        else []
+    )
+    reserved_room_ids = _reserved_identifiers(raw_rooms)
+    used_room_ids: set[str] = set()
+    room_reference_targets: dict[str, list[str]] = {}
+    rooms: list[dict] = []
+    for index, raw in enumerate(room_entries):
+        name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
+        raw_id = _identifier_text(raw.get("id"))
+        room_id, repair = _stable_identifier(
+            raw_id,
+            prefix="room",
+            index=index,
+            reserved=reserved_room_ids,
+            used=used_room_ids,
+        )
+        if raw_id:
+            room_reference_targets.setdefault(raw_id, []).append(room_id)
+        if issues is not None and repair is not None:
+            if repair == "duplicate":
+                issues.append(
+                    {
+                        "code": "duplicate_room_id_repaired",
+                        "severity": "warning",
+                        "item_ids": [room_id],
+                        "message": (
+                            f"Duplicate room id '{raw_id}' was repaired deterministically "
+                            f"as '{room_id}'. References to the duplicated id remain bound "
+                            "to its first occurrence and should be reviewed."
+                        ),
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "code": "missing_room_id_repaired",
+                        "severity": "warning",
+                        "item_ids": [room_id],
+                        "message": f"Missing room id was repaired deterministically as '{room_id}'.",
+                    }
+                )
+
+        room = {
+            "id": room_id,
+            "name": name,
+            "x_m": _finite_number(raw.get("x_m"), 0.0),
+            "y_m": _finite_number(raw.get("y_m"), 0.0),
+            "length_m": _positive(raw.get("length_m"), 4.0),
+            "width_m": _positive(raw.get("width_m"), 4.0),
+            "height_m": _positive(raw.get("height_m"), 3.0),
+        }
+        if raw.get("pressure_pa") is not None:
+            room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+        rooms.append(room)
     result["rooms"] = rooms
 
-    devices: list[dict] = []
     raw_devices = source.get("devices", [])
-    if isinstance(raw_devices, list):
-        for raw in raw_devices:
-            if not isinstance(raw, dict):
-                continue
-            device_type = str(raw.get("type") or "equipment").lower()
-            if device_type not in DEVICE_TYPES:
-                device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
-            devices.append(
+    device_entries = (
+        [raw for raw in raw_devices if isinstance(raw, dict)]
+        if isinstance(raw_devices, list)
+        else []
+    )
+    reserved_device_ids = _reserved_identifiers(raw_devices)
+    used_device_ids: set[str] = set()
+    devices: list[dict] = []
+    for index, raw in enumerate(device_entries):
+        device_type = str(raw.get("type") or "equipment").lower()
+        if device_type not in DEVICE_TYPES:
+            device_type = "equipment"
+        raw_id = _identifier_text(raw.get("id"))
+        device_id, repair = _stable_identifier(
+            raw_id,
+            prefix="device",
+            index=index,
+            reserved=reserved_device_ids,
+            used=used_device_ids,
+        )
+        if issues is not None and repair is not None:
+            if repair == "duplicate":
+                issues.append(
+                    {
+                        "code": "duplicate_device_id_repaired",
+                        "severity": "warning",
+                        "item_ids": [device_id],
+                        "message": (
+                            f"Duplicate device id '{raw_id}' was repaired deterministically "
+                            f"as '{device_id}'."
+                        ),
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "code": "missing_device_id_repaired",
+                        "severity": "warning",
+                        "item_ids": [device_id],
+                        "message": (
+                            f"Missing device id was repaired deterministically as '{device_id}'."
+                        ),
+                    }
+                )
+
+        raw_room_id = _identifier_text(raw.get("room_id"))
+        room_id = raw_room_id or None
+        referenced_rooms = room_reference_targets.get(raw_room_id, []) if raw_room_id else []
+        if issues is not None and len(referenced_rooms) > 1:
+            issues.append(
                 {
-                    "id": device_id,
-                    "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
-                    "x_m": _finite_number(raw.get("x_m"), 0.0),
-                    "y_m": _finite_number(raw.get("y_m"), 0.0),
-                    "z_m": _finite_number(raw.get("z_m"), 0.0),
+                    "code": "ambiguous_device_room_reference",
+                    "severity": "warning",
+                    "item_ids": [device_id, *referenced_rooms],
+                    "message": (
+                        f"Device '{str(raw.get('name') or device_type.upper())}' references "
+                        f"duplicated room id '{raw_room_id}'. It remains assigned to the first "
+                        "room with that original id; review the assignment."
+                    ),
                 }
             )
+
+        devices.append(
+            {
+                "id": device_id,
+                "type": device_type,
+                "name": str(raw.get("name") or device_type.upper()),
+                "room_id": room_id,
+                "x_m": _finite_number(raw.get("x_m"), 0.0),
+                "y_m": _finite_number(raw.get("y_m"), 0.0),
+                "z_m": _finite_number(raw.get("z_m"), 0.0),
+            }
+        )
     result["devices"] = devices
 
     view = source.get("view", {})
@@ -116,7 +257,9 @@ def normalize_layout(value: Any) -> dict:
                 "pan_x": _finite_number(view.get("pan_x"), 0.0),
                 "pan_y": _finite_number(view.get("pan_y"), 0.0),
                 "azimuth_deg": _finite_number(view.get("azimuth_deg"), 35.0),
-                "elevation_deg": max(5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))),
+                "elevation_deg": max(
+                    5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))
+                ),
                 "zoom_3d": max(0.2, min(8.0, _positive(view.get("zoom_3d"), 1.0))),
                 "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
                 "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),
@@ -160,10 +303,15 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
-    return layout
+    return normalize_layout(layout)
 
 
-def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
+def ensure_project_layout(
+    project: Any,
+    analysis: Any = None,
+    *,
+    issues: list[dict] | None = None,
+) -> dict:
     metadata = getattr(project, "metadata", None)
     if not isinstance(metadata, dict):
         project.metadata = {}
@@ -171,7 +319,7 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
 
     raw = metadata.get(SPATIAL_METADATA_KEY)
     if isinstance(raw, dict):
-        normalized = normalize_layout(raw)
+        normalized = normalize_layout(raw, issues=issues)
         metadata[SPATIAL_METADATA_KEY] = normalized
         return normalized
 
@@ -234,10 +382,11 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
 def validate_layout(value: Any) -> list[dict]:
     """Return advisory spatial-edit warnings without mutating persisted layout data."""
-    layout = normalize_layout(value)
+    normalization_issues: list[dict] = []
+    layout = normalize_layout(value, issues=normalization_issues)
     rooms = layout["rooms"]
     devices = layout["devices"]
-    issues: list[dict] = []
+    issues: list[dict] = list(normalization_issues)
 
     first_room_by_name: dict[str, dict] = {}
     for room in rooms:
@@ -394,6 +543,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
+        self._normalization_issues: list[dict] = []
         self._property_vars: dict[str, tk.StringVar] = {}
         self._history = SpatialEditHistory(limit=100)
         self._history_project_token: int | None = None
@@ -539,7 +689,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._history.clear()
             self._history_project_token = project_token
             self._drag_history_before = None
-        self.layout = ensure_project_layout(project, analysis)
+            self._normalization_issues = []
+        normalization_issues: list[dict] = []
+        self.layout = ensure_project_layout(project, analysis, issues=normalization_issues)
+        if normalization_issues:
+            self._normalization_issues = normalization_issues
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
@@ -563,6 +717,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(restored)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._normalization_issues = []
         self.selected = _Hit(*state.selection) if state.selection is not None else None
         if self.selected and not self._selected_object():
             self.selected = None
@@ -617,6 +772,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self._normalization_issues = []
         if history_before is not None:
             self._history.record(
                 before_layout=history_before,
@@ -830,7 +986,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
-        self._validation_issues = validate_layout(self.layout)
+        self._validation_issues = [
+            *self._normalization_issues,
+            *validate_layout(self.layout),
+        ]
         self._update_validation_summary()
         self._draw_2d()
         self._draw_3d()

@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 from typing import Any, Callable
 
@@ -47,6 +48,20 @@ class AnalysisRun:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+class ExternalDependencySnapshotError(RuntimeError):
+    """Raised when a verified private execution snapshot cannot be materialized."""
+
+    def __init__(self, field: str, declared_path: str, detail: str) -> None:
+        self.field = field
+        self.declared_path = declared_path
+        self.detail = detail
+        super().__init__(
+            "Could not create a verified private execution snapshot for external "
+            f"engineering input {field} ({declared_path}); analysis was not started. "
+            f"{detail}"
+        )
 
 
 class ExternalDependencyChangedError(RuntimeError):
@@ -751,6 +766,183 @@ def _capture_external_dependencies(
     return records
 
 
+def _set_external_dependency_reference(
+    payload: dict,
+    field: str,
+    replacement: Path,
+) -> None:
+    """Rewrite one known file-reference field in an execution-only payload copy."""
+    if field.endswith("]") and "[" in field:
+        key, index_text = field[:-1].rsplit("[", 1)
+        values = payload.get(key)
+        try:
+            index = int(index_text)
+        except ValueError as exc:
+            raise RuntimeError(f"invalid external dependency field: {field}") from exc
+        if not isinstance(values, list) or not 0 <= index < len(values):
+            raise RuntimeError(f"external dependency field is no longer present: {field}")
+        values[index] = str(replacement)
+        return
+    if field not in payload:
+        raise RuntimeError(f"external dependency field is no longer present: {field}")
+    payload[field] = str(replacement)
+
+
+def _prepare_external_dependency_snapshot(
+    kind: str,
+    payload: dict,
+    base_dir: Path | None,
+    snapshot_dir: Path,
+) -> tuple[dict, list[dict], dict[str, str]]:
+    """Capture file-backed engineering inputs once into verified private bytes."""
+    references = _external_dependency_references(kind, payload)
+    if not references:
+        return copy.deepcopy(payload), [], {}
+
+    last_changes: list[dict] = []
+    for _attempt in range(_DEPENDENCY_FINGERPRINT_ATTEMPTS):
+        dependencies_before = _capture_external_dependencies(kind, payload, base_dir)
+        if len(dependencies_before) != len(references):
+            raise RuntimeError("external dependency reference set changed while snapshotting")
+
+        execution_payload = copy.deepcopy(payload)
+        execution_path_aliases: dict[str, str] = {}
+        changes: list[dict] = []
+        for index, ((field, declared_path), expected) in enumerate(
+            zip(references, dependencies_before)
+        ):
+            if expected["field"] != field or expected["declared_path"] != declared_path:
+                raise RuntimeError(
+                    "external dependency identity changed while preparing execution snapshot"
+                )
+
+            source = _resolve_relative(base_dir, declared_path)
+            destination = snapshot_dir / f"dependency-{index:04d}.json"
+            try:
+                shutil.copyfile(source, destination)
+            except OSError as exc:
+                try:
+                    current = _stable_file_fingerprint(source)
+                except (OSError, RuntimeError):
+                    changes.append({
+                        "field": field,
+                        "declared_path": declared_path,
+                        "status": "unavailable_or_unstable",
+                    })
+                    continue
+                if (
+                    current["sha256"] != expected["sha256"]
+                    or current["size_bytes"] != expected["size_bytes"]
+                    or current["mtime_ns"] != expected["mtime_ns"]
+                ):
+                    changes.append({
+                        "field": field,
+                        "declared_path": declared_path,
+                        "status": "changed_while_snapshotting",
+                        "sha256_before": expected["sha256"],
+                        "snapshot_sha256": current["sha256"],
+                        "size_bytes_before": expected["size_bytes"],
+                        "snapshot_size_bytes": current["size_bytes"],
+                    })
+                    continue
+                detail = exc.strerror or exc.__class__.__name__
+                raise ExternalDependencySnapshotError(
+                    field, declared_path, detail
+                ) from exc
+
+            try:
+                copied = _stable_file_fingerprint(destination)
+            except (OSError, RuntimeError) as exc:
+                raise ExternalDependencySnapshotError(
+                    field,
+                    declared_path,
+                    "private snapshot verification failed",
+                ) from exc
+            if (
+                copied["sha256"] != expected["sha256"]
+                or copied["size_bytes"] != expected["size_bytes"]
+            ):
+                changes.append({
+                    "field": field,
+                    "declared_path": declared_path,
+                    "status": "changed_while_snapshotting",
+                    "sha256_before": expected["sha256"],
+                    "snapshot_sha256": copied["sha256"],
+                    "size_bytes_before": expected["size_bytes"],
+                    "snapshot_size_bytes": copied["size_bytes"],
+                })
+                continue
+
+            snapshot_path = destination.resolve()
+            _set_external_dependency_reference(execution_payload, field, snapshot_path)
+            execution_path_aliases[str(snapshot_path)] = declared_path
+
+        if not changes:
+            return execution_payload, dependencies_before, execution_path_aliases
+        last_changes = changes
+
+    raise ExternalDependencyChangedError(last_changes)
+
+
+def _verify_external_dependency_snapshot(
+    kind: str,
+    execution_payload: dict,
+    dependencies_before: list[dict],
+) -> None:
+    """Reject a run if a private execution snapshot changed during execution."""
+    references = _external_dependency_references(kind, execution_payload)
+    if len(references) != len(dependencies_before):
+        raise RuntimeError("execution snapshot dependency set changed during analysis")
+    for (field, snapshot_path), expected in zip(references, dependencies_before):
+        if field != expected["field"]:
+            raise RuntimeError("execution snapshot dependency identity changed during analysis")
+        try:
+            current = _stable_file_fingerprint(Path(snapshot_path))
+        except (OSError, RuntimeError) as exc:
+            raise ExternalDependencySnapshotError(
+                field,
+                expected["declared_path"],
+                "private snapshot became unavailable or unstable during backend execution",
+            ) from exc
+        if (
+            current["sha256"] != expected["sha256"]
+            or current["size_bytes"] != expected["size_bytes"]
+        ):
+            raise ExternalDependencySnapshotError(
+                field,
+                expected["declared_path"],
+                "private snapshot changed during backend execution",
+            )
+
+
+def _restore_external_dependency_result_paths(
+    kind: str,
+    result: Any,
+    execution_path_aliases: dict[str, str],
+) -> Any:
+    """Remove execution-only paths from durable dossier evidence."""
+    if kind != "dossier" or not execution_path_aliases:
+        return result
+    if not isinstance(result, dict):
+        raise RuntimeError("dossier backend returned a non-object result")
+    source_files = result.get("source_files")
+    if not isinstance(source_files, list):
+        raise RuntimeError("dossier result is missing source_files")
+    restored = 0
+    for source in source_files:
+        if not isinstance(source, dict):
+            continue
+        source_path = source.get("path")
+        if isinstance(source_path, str) and source_path in execution_path_aliases:
+            source["path"] = execution_path_aliases[source_path]
+            restored += 1
+    if restored != len(execution_path_aliases):
+        raise RuntimeError(
+            "dossier result did not preserve every execution snapshot source reference"
+        )
+    return result
+
+
 def _application_execution_provenance(
     kind: str,
     input_sha256: str,
@@ -782,6 +974,8 @@ def _application_execution_provenance(
                 "size_bytes_after": after["size_bytes"],
                 "mtime_ns_before": before["mtime_ns"],
                 "mtime_ns_after": after["mtime_ns"],
+                "execution_snapshot_sha256": before["sha256"],
+                "execution_snapshot_size_bytes": before["size_bytes"],
                 "stable_during_run": stable,
             }
         )
@@ -808,6 +1002,9 @@ def _application_execution_provenance(
         "input_execution_policy": _APPLICATION_INPUT_EXECUTION_POLICY,
         "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
+        "external_dependency_execution_mode": (
+            "immutable_content_snapshot_v1" if dependencies else "not_applicable"
+        ),
         "external_dependencies_stable": all(
             item["stable_during_run"] for item in dependencies
         ),
@@ -976,19 +1173,44 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     prepared = _prepare_analysis_input(kind, payload, base_dir=base_dir)
     spec = ANALYSIS_SPECS[kind]
-    dependencies_before = _capture_external_dependencies(
-        kind,
-        prepared.payload,
-        prepared.base_dir,
-    )
+    references = _external_dependency_references(kind, prepared.payload)
 
-    if kind == "consistency":
-        result = _run_consistency(prepared.payload, prepared.base_dir)
-    elif kind == "dossier":
-        result = _run_dossier(prepared.payload, prepared.base_dir)
+    if references:
+        with tempfile.TemporaryDirectory(
+            prefix="cleanroomx-analysis-inputs-"
+        ) as snapshot_dir_text:
+            execution_payload, dependencies_before, execution_path_aliases = (
+                _prepare_external_dependency_snapshot(
+                    kind,
+                    prepared.payload,
+                    prepared.base_dir,
+                    Path(snapshot_dir_text),
+                )
+            )
+            if kind == "consistency":
+                result = _run_consistency(execution_payload, prepared.base_dir)
+            elif kind == "dossier":
+                result = _run_dossier(execution_payload, prepared.base_dir)
+            else:
+                raise RuntimeError(
+                    "host-managed external dependency snapshots are only defined "
+                    "for built-in file-backed analyses"
+                )
+            _verify_external_dependency_snapshot(
+                kind, execution_payload, dependencies_before
+            )
+            result = _restore_external_dependency_result_paths(
+                kind, result, execution_path_aliases
+            )
     else:
-        assert spec.runner is not None
-        result = _load_callable(spec.runner)(prepared.parsed)
+        dependencies_before = []
+        if kind == "consistency":
+            result = _run_consistency(prepared.payload, prepared.base_dir)
+        elif kind == "dossier":
+            result = _run_dossier(prepared.payload, prepared.base_dir)
+        else:
+            assert spec.runner is not None
+            result = _load_callable(spec.runner)(prepared.parsed)
 
     _assert_input_snapshot_unchanged(
         kind,
@@ -1051,7 +1273,6 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         diagnostics=diagnostics,
         plot=plot,
     )
-
 
 def application_info() -> dict:
     registry_validation = validate_application_registry()

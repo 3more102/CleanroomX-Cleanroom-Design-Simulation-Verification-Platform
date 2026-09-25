@@ -25,8 +25,10 @@ def test_consistency_rejects_misspelled_required_room_set_option() -> None:
         "require_same_room_sets": True,
     }
 
-    with pytest.raises(ValueError, match="require_same_room_sets"):
+    with pytest.raises(ValueError, match="require_same_room_sets") as raised:
         validate_analysis_input("consistency", payload, base_dir=EXAMPLES)
+
+    assert "did you mean 'require_same_room_set'?" in str(raised.value)
 
 
 def test_dossier_rejects_misspelled_source_list_in_application_path() -> None:

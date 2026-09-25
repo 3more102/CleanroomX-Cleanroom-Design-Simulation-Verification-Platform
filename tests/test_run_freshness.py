@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -106,12 +107,9 @@ def test_analysis_run_freshness_accepts_metadata_only_timestamp_change(tmp_path)
 
 
 def test_analysis_run_freshness_is_current_for_inline_analysis_without_files():
-    payload = {
-        "name": "Inline room",
-        "dimensions": {"length_m": 5.0, "width_m": 4.0, "height_m": 3.0},
-        "supply_airflow_m3_h": 1800.0,
-        "required_ach": 10.0,
-    }
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
     run = run_analysis("room_verification", payload)
 
     assessment = analysis_run_freshness(run)

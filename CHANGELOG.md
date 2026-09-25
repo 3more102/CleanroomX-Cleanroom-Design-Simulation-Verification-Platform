@@ -3,7 +3,7 @@
 ## v0.102.1 final spatial UX closure — 2026-09-25
 
 - Makes spatial pressure overlays consume the active mapped engineering room's current `observed_pressure_pa` when available, with the persisted spatial pressure retained only as an explicit fallback.
-- Evaluates configured pressure-cascade relationships as pass, warning, or unavailable from actual mapped pressure evidence; unavailable data is displayed without inference.
+- Evaluates configured pressure-cascade relationships as pass, fail, or unavailable from actual mapped pressure evidence; unavailable data is displayed without inference.
 - Completes navigation with true 3D fit-to-model, explicit 2D reset, and Shift-drag 3D orbit while retaining rotate/tilt buttons, pan, zoom, selection, and camera reset.
 - Adds focused regressions for pressure-source precedence, pressure-cascade status, 3D fit, 2D reset, and orbit behavior; solver equations, engineering acceptance criteria, and project schema remain unchanged.
 

@@ -864,7 +864,7 @@ def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
         return
     spec = ANALYSIS_SPECS[kind]
     assert spec.parser is not None
-    _load_callable(spec.parser)(payload)
+    _load_callable(spec.parser)(copy.deepcopy(payload))
 
 
 def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
@@ -917,14 +917,17 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         result = _run_dossier(payload, base)
     else:
         assert spec.parser is not None and spec.runner is not None
-        result = _load_callable(spec.runner)(_load_callable(spec.parser)(payload))
+        parsed = _load_callable(spec.parser)(copy.deepcopy(payload))
+        result = _load_callable(spec.runner)(parsed)
 
     normalized = _normalize_result(result)
     markdown = (
         _fallback_markdown(spec.title, normalized)
         if spec.reporter is None
-        else _load_callable(spec.reporter)(normalized)
+        else _load_callable(spec.reporter)(copy.deepcopy(normalized))
     )
+    if not isinstance(markdown, str):
+        raise TypeError("analysis reporter must return Markdown text as a string")
     dependencies_after = _capture_external_dependencies(kind, payload, base)
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(

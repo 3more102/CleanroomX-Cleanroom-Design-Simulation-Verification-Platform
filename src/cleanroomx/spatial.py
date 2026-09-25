@@ -232,7 +232,7 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
 
 def validate_layout(value: Any) -> list[dict]:
-    """Return deterministic spatial-edit warnings without mutating persisted layout data."""
+    """Return advisory spatial-edit warnings without mutating persisted layout data."""
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
@@ -893,9 +893,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
+            device_outline = "#ffffff" if selected else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
+                fill="#fbbf24", outline=device_outline,
                 width=2, tags=(tag, "device3d"),
             )
 

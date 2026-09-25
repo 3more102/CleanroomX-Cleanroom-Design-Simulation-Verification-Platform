@@ -288,7 +288,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_labels = tk.BooleanVar(value=True)
+        self._show_dimensions = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
@@ -358,6 +360,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Checkbutton(displaybar, text="Labels", variable=self._show_labels, command=self.redraw).pack(
             side="left", padx=2
         )
+        ttk.Checkbutton(
+            displaybar,
+            text="Dimensions",
+            variable=self._show_dimensions,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
         ttk.Checkbutton(displaybar, text="Pressure", variable=self._show_pressure, command=self.redraw).pack(
             side="left", padx=2
         )
@@ -412,7 +420,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         grid_box.pack(side="left")
         grid_box.bind("<<ComboboxSelected>>", lambda event: self.set_grid_spacing())
-        ttk.Label(viewbar, text="m").pack(side="left", padx=(3, 8))
+        ttk.Label(viewbar, text="m").pack(side="left", padx=(3, 4))
+        ttk.Checkbutton(viewbar, text="Snap", variable=self._snap_to_grid).pack(
+            side="left", padx=(0, 8)
+        )
         ttk.Label(
             viewbar,
             text="Ctrl+Z/Y undo/redo · arrows nudge · Shift+arrows ×5 · Ctrl+D duplicate",
@@ -1182,6 +1193,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                     fill="#0f172a",
                     tags=(f"room:{room['id']}", "room"),
                 )
+            if self._show_dimensions.get():
+                self._draw_room_dimensions(canvas, room, x0, y0, x1, y1, selected=selected)
             if selected:
                 handle_size = 5
                 for handle, hx, hy in (
@@ -1255,16 +1268,73 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#667788",
             )
 
+    def _draw_room_dimensions(
+        self,
+        canvas: tk.Canvas,
+        room: dict,
+        x0: float,
+        y0: float,
+        x1: float,
+        y1: float,
+        *,
+        selected: bool,
+    ) -> None:
+        """Draw compact CAD-style length/width annotations for a room."""
+        line_fill = "#1d4ed8" if selected else "#64748b"
+        text_fill = "#0f172a"
+        inset = 12.0
+        if abs(x1 - x0) >= 58:
+            y = y0 + inset
+            canvas.create_line(
+                x0 + inset,
+                y,
+                x1 - inset,
+                y,
+                fill=line_fill,
+                width=1,
+                arrow="both",
+                tags=(f"room:{room['id']}", "dimension"),
+            )
+            canvas.create_text(
+                (x0 + x1) / 2,
+                y + 9,
+                text=f"{room['length_m']:g} m",
+                fill=text_fill,
+                font=("TkDefaultFont", 7, "bold" if selected else "normal"),
+                tags=(f"room:{room['id']}", "dimension"),
+            )
+        if abs(y1 - y0) >= 58:
+            x = x1 - inset
+            canvas.create_line(
+                x,
+                y0 + inset,
+                x,
+                y1 - inset,
+                fill=line_fill,
+                width=1,
+                arrow="both",
+                tags=(f"room:{room['id']}", "dimension"),
+            )
+            canvas.create_text(
+                x - 20,
+                (y0 + y1) / 2,
+                text=f"{room['width_m']:g} m",
+                fill=text_fill,
+                font=("TkDefaultFont", 7, "bold" if selected else "normal"),
+                tags=(f"room:{room['id']}", "dimension"),
+            )
+
     def _draw_2d_hud(self, canvas: tk.Canvas) -> None:
         """Draw compact CAD-style view state and a scale bar."""
         zoom = self.layout["view"]["zoom_2d"]
         grid = self.layout["grid_m"]
-        canvas.create_rectangle(10, 10, 178, 36, fill="#ffffff", outline="#cbd5e1", tags=("hud",))
+        snap = "SNAP" if self._snap_to_grid.get() else "FREE"
+        canvas.create_rectangle(10, 10, 230, 36, fill="#ffffff", outline="#cbd5e1", tags=("hud",))
         canvas.create_text(
             18,
             23,
             anchor="w",
-            text=f"2D  ·  {zoom * 100:.0f}%  ·  grid {grid:g} m",
+            text=f"2D  ·  {zoom * 100:.0f}%  ·  grid {grid:g} m  ·  {snap}",
             fill="#334155",
             font=("TkDefaultFont", 8, "bold"),
             tags=("hud",),
@@ -1551,9 +1621,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             y0 = start["y_m"]
             x1 = x0 + start["length_m"]
             y1 = y0 + start["width_m"]
-            px = round(world[0] / grid) * grid
-            py = round(world[1] / grid) * grid
-            min_size = grid
+            if self._snap_to_grid.get():
+                px = round(world[0] / grid) * grid
+                py = round(world[1] / grid) * grid
+                min_size = grid
+            else:
+                px, py = world
+                min_size = 0.05
             if "w" in self._resize_handle:
                 nx0 = min(px, x1 - min_size)
                 item["x_m"] = nx0
@@ -1580,8 +1654,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         dy = world[1] - self._drag_anchor[1]
         old_x = item["x_m"]
         old_y = item["y_m"]
-        item["x_m"] = round((old_x + dx) / grid) * grid
-        item["y_m"] = round((old_y + dy) / grid) * grid
+        next_x = old_x + dx
+        next_y = old_y + dy
+        if self._snap_to_grid.get():
+            next_x = round(next_x / grid) * grid
+            next_y = round(next_y / grid) * grid
+        item["x_m"] = next_x
+        item["y_m"] = next_y
         if self.selected and self.selected.kind == "room":
             self._translate_room_devices(
                 self.selected.item_id,

@@ -4,7 +4,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current release-candidate line is **CleanroomX v0.101.0 (Release 2)**, built from the consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding durable project lifecycle, recovery/history, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, precision hardening, deterministic project batch automation, and strict engineering JSON ingestion. The published `v0.100.0` tag remains immutable at its original validated commit.
+The current release line is **CleanroomX v0.101.0 (Release 2)**, built from the consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding durable project lifecycle, recovery/history, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, precision hardening, deterministic project batch automation, and strict engineering JSON ingestion. The published `v0.100.0` tag remains immutable at its original validated commit.
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, strict engineering-ingestion and project-batch regressions, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
 
@@ -735,7 +735,7 @@ Always use the applicable purchased standard, local regulations, client URS/spec
 
 v0.37 adds deterministic bounded corner uncertainty around the nonlinear fan/variable-friction loop solver for explicit fixed-pressure and selected automatic-friction local-loss bounds. Every corner rebuilds the affected geometry evidence and re-runs the full Darcy-friction fan/network solve. Complete operating-point and internal edge-flow envelopes are reported only when the nominal case and every evaluated corner solve inside the supplied fan-curve range; no-intersection or numerical non-convergence remains indeterminate. The analysis is deterministic corner evidence, not statistical uncertainty propagation, and does not infer K-factor uncertainty, covariance, geometry manufacturing tolerances, fan-curve uncertainty, controls, leakage, commissioning acceptance, or certification.
 
-## Release 2 integration (unreleased)
+## Release 2 integration (v0.101.0)
 
 The Release 2 integration branch consolidates the previously overlapping persistence, recovery, project-history, run-evidence, reporting, plugin, and portable-bundle work into one architecture. The current integration includes:
 
@@ -746,4 +746,4 @@ The Release 2 integration branch consolidates the previously overlapping persist
 - versioned analysis plugin API v1;
 - integrity-checked portable project bundles and self-contained portable engineering HTML reports.
 
-See [Plugin API](docs/PLUGINS.md), [Project Bundles](docs/PROJECT_BUNDLES.md), and [Portable Engineering HTML Reports](docs/PORTABLE_ENGINEERING_REPORT.md). Release 2 remains unreleased until the integration PR completes its full Python 3.11/3.12/3.13 and installed-application release gates.
+See [Plugin API](docs/PLUGINS.md), [Project Bundles](docs/PROJECT_BUNDLES.md), and [Portable Engineering HTML Reports](docs/PORTABLE_ENGINEERING_REPORT.md). Release 2 is released as v0.101.0 after the full Python 3.11/3.12/3.13 and installed-application gates passed; the Windows checkout launcher was additionally validated on Windows in PR #434.

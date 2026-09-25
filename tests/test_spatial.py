@@ -50,7 +50,7 @@ def test_derive_layout_from_project_verification_preserves_real_room_geometry_an
     assert layout["rooms"][1]["x_m"] == 7
 
 
-def test_ensure_project_layout_persists_schema_compatible_metadata():
+def test_ensure_project_layout_seeds_from_analysis_without_implicit_persistence():
     analysis = AnalysisDocument(
         id="room",
         name="Room",
@@ -61,7 +61,7 @@ def test_ensure_project_layout_persists_schema_compatible_metadata():
 
     layout = ensure_project_layout(project, analysis)
 
-    assert project.metadata[SPATIAL_METADATA_KEY] == layout
+    assert SPATIAL_METADATA_KEY not in project.metadata
     assert layout["version"] == 1
     assert layout["rooms"][0]["name"] == "Suite"
 

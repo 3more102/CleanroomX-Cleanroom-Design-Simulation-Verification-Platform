@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .jsonio import load_strict_json
 
 from .models import ParticleRequirement, PressureCascadeRequirement, ProjectSpec, RoomSpec
 
@@ -42,10 +43,10 @@ def project_from_dict(data: dict) -> ProjectSpec:
 
 
 def load_room(path: str | Path) -> RoomSpec:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_strict_json(path)
     return room_from_dict(data)
 
 
 def load_project(path: str | Path) -> ProjectSpec:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_strict_json(path)
     return project_from_dict(data)

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased protected legacy project migration — 2026-09-25
+
+- Adds immutable migration provenance for supported legacy project shapes without changing the historical project-loader return contracts.
+- Opens migrated legacy projects as visibly unsaved converted copies instead of treating the in-memory schema upgrade as a clean current-schema file.
+- Routes ordinary Save to Save As while migration protection is active and rejects the original legacy source as the first Save-As destination.
+- Preserves the legacy source bytes and relative-reference base context until a validated schema-v1 file is successfully written elsewhere.
+- Adds focused migration-provenance and desktop source-preservation regressions and includes them in the application/desktop CI gate.
+- Preserves project schema version 1, current-project save behavior, solver equations, tolerances, engineering acceptance semantics, and supported legacy migration content.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

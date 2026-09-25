@@ -29,6 +29,7 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 30,
+            "pressure_source": "engineering_input",
             "classification": "Demo process suite"
           },
           {
@@ -42,6 +43,7 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 16,
+            "pressure_source": "engineering_input",
             "classification": "Demo preparation suite"
           },
           {
@@ -55,6 +57,7 @@
             "height_m": 3,
             "floor_elevation_m": 0,
             "pressure_pa": 8,
+            "pressure_source": "engineering_input",
             "classification": "Demo transition suite"
           }
         ],
@@ -646,5 +649,5 @@
       }
     }
   ],
-  "active_analysis_id": "hvac"
+  "active_analysis_id": "verification"
 }

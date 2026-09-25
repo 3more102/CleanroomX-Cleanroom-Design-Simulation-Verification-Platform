@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased crash-consistent persistence hardening — 2026-09-25
+
+- Centralizes project, recovery, and desktop-export writes on a single persistence primitive instead of keeping atomic file replacement buried in the project-document module.
+- Writes exact UTF-8 bytes to a same-directory temporary file, flushes and fsyncs staged content, preserves an existing regular file's permission mode, atomically replaces the destination, and fsyncs the parent directory on platforms with a portable directory-fsync contract.
+- Preserves the existing optimistic project revision guard by running its final conflict check after staging and immediately before replacement.
+- Makes recovery artifact discard/rotation use durable unlink semantics and surfaces current-session recovery-cleanup failures instead of silently reporting autosave as clean.
+- Distinguishes the rare post-replacement directory-sync failure from a pre-write failure in the desktop UI; recovery artifacts are retained and the operator is told that power-loss durability was not confirmed.
+- Adds failure-injection coverage for pre-replace rollback, parent-directory sync, permission preservation, completed-but-unconfirmed durability failures, durable unlink, and recovery-cleanup diagnostics without changing project schema or engineering solver behavior.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

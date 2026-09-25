@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.autosave as autosave_module
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
@@ -203,5 +204,44 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
                 source_path=None,
             )
         assert not (tmp_path / "recovery").exists()
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_explicit_save_surfaces_recovery_cleanup_failure(tmp_path, monkeypatch):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None and artifact.exists()
+
+        real_durable_unlink = autosave_module.durable_unlink
+        failures_remaining = 1
+
+        def fail_cleanup_once(path, *, missing_ok=False):
+            nonlocal failures_remaining
+            if failures_remaining:
+                failures_remaining -= 1
+                raise OSError("simulated recovery cleanup failure")
+            return real_durable_unlink(path, missing_ok=missing_ok)
+
+        monkeypatch.setattr(autosave_module, "durable_unlink", fail_cleanup_once)
+
+        manager.notify_explicit_save(source)
+
+        status = manager.status()
+        assert status.state == "failed"
+        assert "cleanup failed" in status.message
+        assert "simulated recovery cleanup failure" in status.message
+        assert artifact.exists()
+        assert source.exists()
+
+        manager.notify_explicit_save(source)
+
+        assert manager.status().state == "idle"
+        assert not artifact.exists()
     finally:
         manager.shutdown(wait=True)

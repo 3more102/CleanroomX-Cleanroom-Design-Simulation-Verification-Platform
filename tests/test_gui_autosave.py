@@ -7,6 +7,7 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.autosave import AutosaveStatus
 from cleanroomx.gui import CleanroomXApp
+from cleanroomx.persistence import PersistenceDurabilityError
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 
 
@@ -166,3 +167,82 @@ def test_gui_rejects_negative_autosave_interval_before_tk_startup():
     with pytest.raises(SystemExit) as exc:
         gui_module.main(["--autosave-interval-seconds", "-1", "--check"])
     assert exc.value.code == 2
+
+
+def test_explicit_save_surfaces_recovery_cleanup_failure_in_status():
+    class Manager:
+        def notify_explicit_save(self, path):
+            self.path = path
+
+        def status(self):
+            return AutosaveStatus(
+                state="failed",
+                message="Project saved; recovery cleanup failed",
+            )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._recovery_checkpoint_after_id = None
+    app._autosave_manager = Manager()
+    app.autosave_status_var = Value("")
+
+    target = Path("/tmp/demo.cleanroomx.json")
+    app._notify_explicit_save(target)
+
+    assert app._autosave_manager.path == target
+    assert app.autosave_status_var.value == "Autosave: recovery cleanup failed"
+
+
+def test_clean_checkpoint_keeps_cleanup_failure_visible():
+    class Manager:
+        def __init__(self):
+            self.failed = False
+
+        def status(self):
+            return AutosaveStatus(
+                state="failed" if self.failed else "saved",
+                message=(
+                    "Autosave recovery cleanup failed: simulated"
+                    if self.failed
+                    else "saved"
+                ),
+            )
+
+        def discard_current_recoveries(self):
+            self.failed = True
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._autosave_manager = Manager()
+    app._has_unsaved_changes = lambda: False
+    app.autosave_status_var = Value("")
+    app.status_var = Value("")
+
+    app._checkpoint_recovery()
+
+    assert app.autosave_status_var.value == "Autosave: recovery cleanup failed"
+    assert "cleanup failed" in app.status_var.value
+
+
+def test_persistence_durability_warning_is_actionable(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.status_var = Value("")
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, **kwargs: warnings.append((title, message)),
+    )
+    target = tmp_path / "project.cleanroomx.json"
+    exc = PersistenceDurabilityError(
+        target,
+        "atomic replacement",
+        OSError("simulated directory fsync failure"),
+    )
+
+    app._report_persistence_durability_failure(target, exc)
+
+    assert "durability was not confirmed" in app.status_var.value
+    assert warnings
+    assert "Save Project As" in warnings[0][1]
+    assert "power loss" in warnings[0][1]

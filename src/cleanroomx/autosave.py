@@ -14,7 +14,8 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .project import ProjectDocument, atomic_write_text, project_from_dict
+from .persistence import atomic_write_text, durable_unlink
+from .project import ProjectDocument, project_from_dict
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
@@ -288,7 +289,7 @@ def discard_recovery_artifact(
     if not resolved_artifact.name.endswith(".recovery.json"):
         raise RecoveryFormatError("refusing to discard a non-recovery file")
     load_recovery_artifact(resolved_artifact)
-    resolved_artifact.unlink()
+    durable_unlink(resolved_artifact)
 
 
 def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:
@@ -508,7 +509,7 @@ class AutosaveManager:
             reverse=True,
         )
         for stale in artifacts[self.history_limit :]:
-            stale.unlink(missing_ok=True)
+            durable_unlink(stale, missing_ok=True)
 
     def _on_write_done(
         self,
@@ -525,13 +526,23 @@ class AutosaveManager:
         with self._lock:
             current_epoch = self._epochs.get(request.project_identity, 0)
             stale = request.epoch != current_epoch
+            stale_cleanup_failure: OSError | None = None
             if stale and artifact is not None:
                 try:
-                    artifact.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                    durable_unlink(artifact, missing_ok=True)
+                except OSError as exc:
+                    stale_cleanup_failure = exc
 
-            if not stale:
+            if stale_cleanup_failure is not None:
+                assert artifact is not None
+                self._artifacts_by_identity.setdefault(
+                    request.project_identity, set()
+                ).add(artifact)
+                self._set_status_locked(
+                    "failed",
+                    f"Stale recovery cleanup failed: {stale_cleanup_failure}",
+                )
+            elif not stale:
                 if failure is None:
                     self._last_saved_digest[request.project_identity] = request.digest
                     assert artifact is not None
@@ -574,7 +585,7 @@ class AutosaveManager:
             sequence=self._sequence,
         )
 
-    def _clear_identity_locked(self, identity: str) -> None:
+    def _clear_identity_locked(self, identity: str) -> tuple[str, ...]:
         self._epochs[identity] = self._epochs.get(identity, 0) + 1
         self._last_saved_digest.pop(identity, None)
         if (
@@ -583,27 +594,45 @@ class AutosaveManager:
         ):
             self._pending_request = None
         artifacts = self._artifacts_by_identity.pop(identity, set())
+        failed_artifacts: set[Path] = set()
+        issues: list[str] = []
         for artifact in artifacts:
             try:
-                artifact.unlink(missing_ok=True)
-            except OSError:
-                pass
+                durable_unlink(artifact, missing_ok=True)
+            except OSError as exc:
+                failed_artifacts.add(artifact)
+                issues.append(f"{artifact.name}: {exc}")
+        if failed_artifacts:
+            self._artifacts_by_identity[identity] = failed_artifacts
+        return tuple(issues)
 
     def discard_current_recoveries(self) -> None:
         with self._lock:
-            self._clear_identity_locked(self._current_identity)
-            self._set_status_locked("idle", "Autosave recovery discarded")
+            issues = self._clear_identity_locked(self._current_identity)
+            if issues:
+                self._set_status_locked(
+                    "failed",
+                    f"Autosave recovery cleanup failed: {issues[0]}",
+                )
+            else:
+                self._set_status_locked("idle", "Autosave recovery discarded")
 
     def notify_explicit_save(self, source_path: str | Path) -> None:
         with self._lock:
             previous = self._current_identity
             new_identity = project_identity(source_path, unsaved_id=self.session_id)
-            self._clear_identity_locked(previous)
+            issues = list(self._clear_identity_locked(previous))
             if new_identity != previous:
-                self._clear_identity_locked(new_identity)
+                issues.extend(self._clear_identity_locked(new_identity))
             self._current_identity = new_identity
             self._epochs.setdefault(new_identity, 0)
-            self._set_status_locked("idle", "Autosave clean after explicit save")
+            if issues:
+                self._set_status_locked(
+                    "failed",
+                    f"Project saved; recovery cleanup failed: {issues[0]}",
+                )
+            else:
+                self._set_status_locked("idle", "Autosave clean after explicit save")
 
     def wait_for_idle(self, timeout: float = 5.0) -> None:
         deadline = time.monotonic() + timeout

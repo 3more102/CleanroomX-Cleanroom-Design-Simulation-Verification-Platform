@@ -33,7 +33,6 @@ from .project import (
     AnalysisDocument,
     ProjectDocument,
     ProjectWriteConflictError,
-    atomic_write_text,
     capture_project_file_revision,
     load_project_document,
     load_project_document_with_revision,
@@ -41,6 +40,7 @@ from .project import (
     save_project_document,
     save_project_document_guarded,
 )
+from .persistence import PersistenceDurabilityError, atomic_write_text
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
@@ -614,11 +614,17 @@ class CleanroomXApp:
     def _notify_explicit_save(self, path: str | Path) -> None:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
+        cleanup_failed = False
         if manager is not None:
             manager.notify_explicit_save(path)
+            cleanup_failed = manager.status().state == "failed"
         autosave_var = getattr(self, "autosave_status_var", None)
         if autosave_var is not None:
-            autosave_var.set("Autosave: clean")
+            autosave_var.set(
+                "Autosave: recovery cleanup failed"
+                if cleanup_failed
+                else "Autosave: clean"
+            )
 
     def _discard_current_autosave(self) -> None:
         self._cancel_recovery_checkpoint()
@@ -682,7 +688,12 @@ class CleanroomXApp:
                     self.autosave_status_var.set("Autosave: saving…")
             elif self._autosave_manager.status().state == "saved":
                 self._discard_current_autosave()
-                self.autosave_status_var.set("Autosave: clean")
+                cleanup_status = self._autosave_manager.status()
+                if cleanup_status.state == "failed":
+                    self.autosave_status_var.set("Autosave: recovery cleanup failed")
+                    self.status_var.set(cleanup_status.message)
+                else:
+                    self.autosave_status_var.set("Autosave: clean")
         except (OSError, TypeError, ValueError) as exc:
             self.autosave_status_var.set("Autosave: failed")
             self.status_var.set(f"Autosave failed: {exc}")
@@ -1057,6 +1068,26 @@ class CleanroomXApp:
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
+    def _report_persistence_durability_failure(
+        self,
+        path: Path,
+        exc: PersistenceDurabilityError,
+    ) -> None:
+        self.status_var.set(
+            f"Write completed for {path.name}, but storage durability was not confirmed."
+        )
+        messagebox.showwarning(
+            "Storage durability not confirmed",
+            (
+                f"CleanroomX replaced {path.name}, but the operating system reported "
+                "a failure while making the directory update durable. Recovery "
+                "artifacts were retained. Do not assume the write will survive a "
+                "power loss; use Save Project As to another location or reopen and "
+                f"verify the file.\n\n{exc}"
+            ),
+            parent=self.root,
+        )
+
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(
             f"Save blocked: {path.name} changed on disk. Use Save Project As or reopen."
@@ -1095,6 +1126,9 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
+        except PersistenceDurabilityError as exc:
+            self._report_persistence_durability_failure(self.project_path, exc)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(self.project_path)
             return
@@ -1179,6 +1213,9 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
+        except PersistenceDurabilityError as exc:
+            self._report_persistence_durability_failure(destination, exc)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(destination)
             return
@@ -1312,6 +1349,14 @@ class CleanroomXApp:
         target = Path(path)
         try:
             atomic_write_text(target, content)
+        except PersistenceDurabilityError as exc:
+            self.status_var.set(f"{label} written; durability not confirmed")
+            messagebox.showwarning(
+                f"{label} durability not confirmed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
             messagebox.showerror(

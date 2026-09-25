@@ -46,7 +46,7 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use a crash-hardened same-directory replacement. CleanroomX writes exact UTF-8 bytes to a temporary file, flushes and fsyncs that file, preserves the existing regular file's permission mode, performs the guarded replacement, and fsyncs the containing directory where the operating system exposes a portable directory-fsync contract. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ### External-change write protection
 
@@ -64,7 +64,7 @@ Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned
 
 Each artifact contains the recoverable project snapshot, the active raw editor draft, application version, recovery timestamp, project identity, and a source-file fingerprint containing path, size, modification time, and SHA-256. A malformed JSON editor draft is preserved as raw text without being promoted into the authoritative project model. The recovery scanner reports malformed artifacts explicitly and classifies the source project as unchanged, changed, missing, or newer. This foundation never automatically overwrites a newer project file.
 
-Current-session recovery artifacts are invalidated after an explicit save or an explicit discard. Recovery files from older sessions are not silently deleted by merely opening or saving the same project.
+Current-session recovery artifacts are invalidated after an explicit save or an explicit discard using the same durable directory-mutation primitive. Recovery files from older sessions are not silently deleted by merely opening or saving the same project. If cleanup of a current-session artifact fails, autosave status reports the cleanup failure rather than claiming a clean recovery state.
 
 ### Startup recovery
 
@@ -82,7 +82,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes use the shared crash-hardened persistence primitive and filesystem errors are surfaced in the GUI. If replacement completed but directory durability sync fails, the UI says that the bytes were written but power-loss durability was not confirmed and retains recovery evidence.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 

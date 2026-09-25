@@ -40,7 +40,7 @@ Project schema version remains **1**. v0.100 does not introduce a schema migrati
 
 Recovery autosaves use a separate `cleanroomx.autosave` envelope and do not change the `.cleanroomx.json` project schema.
 
-New recovery writes use recovery schema version **2**. Version 2 adds a canonical SHA-256 integrity block covering the complete recovery payload except the integrity block itself. CleanroomX verifies that digest whenever the artifact is loaded and reopens a just-written artifact before rotating older recovery generations. A structurally valid version-2 file whose content no longer matches its digest is rejected and preserved as a recovery scan issue.
+New recovery writes use recovery schema version **2**. Version 2 adds a canonical SHA-256 integrity block covering the complete recovery payload except the integrity block itself. CleanroomX verifies that digest whenever the artifact is loaded and reopens a just-written artifact before rotating older recovery generations. If immediate read-back verification fails, the bad new artifact is removed best-effort and older history is retained. A structurally valid version-2 file later discovered with content that no longer matches its digest is rejected and preserved as a recovery scan issue.
 
 Recovery schema version **1** remains readable for backward compatibility. Because version 1 had no embedded self-integrity digest, the Recovery Center labels it **legacy/unverified** rather than claiming checksum verification. Restoring either supported recovery version still passes the embedded project snapshot through the ordinary project-schema validator.
 

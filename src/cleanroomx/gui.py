@@ -32,6 +32,7 @@ from .application import (
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectFileBusyError,
     ProjectWriteConflictError,
     atomic_write_text,
     capture_project_file_revision,
@@ -1057,6 +1058,21 @@ class CleanroomXApp:
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
+    def _report_project_save_busy(self, path: Path) -> None:
+        self.status_var.set(
+            f"Save blocked: {path.name} is being saved by another CleanroomX process."
+        )
+        messagebox.showwarning(
+            "Project save in progress",
+            (
+                f"Another CleanroomX process is currently saving {path.name}.\n\n"
+                "CleanroomX did not write this project. Retry Save after the other "
+                "save finishes, or use Save Project As to preserve this window's "
+                "work under another name."
+            ),
+            parent=self.root,
+        )
+
     def _report_external_save_conflict(self, path: Path) -> None:
         self.status_var.set(
             f"Save blocked: {path.name} changed on disk. Use Save Project As or reopen."
@@ -1095,6 +1111,9 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
+        except ProjectFileBusyError:
+            self._report_project_save_busy(self.project_path)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(self.project_path)
             return
@@ -1179,6 +1198,9 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
+        except ProjectFileBusyError:
+            self._report_project_save_busy(destination)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(destination)
             return

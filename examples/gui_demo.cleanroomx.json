@@ -6,7 +6,7 @@
     "name": "CleanroomX GUI Demonstration",
     "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
     "metadata": {
-      "purpose": "GUI and application-service demonstration",
+      "purpose": "GUI, spatial-design, pressure-cascade, and application-service demonstration",
       "spatial_layout": {
         "version": 1,
         "floor": {
@@ -620,5 +620,5 @@
       }
     }
   ],
-  "active_analysis_id": "hvac"
+  "active_analysis_id": "verification"
 }

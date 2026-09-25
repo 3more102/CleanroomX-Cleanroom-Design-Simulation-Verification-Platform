@@ -537,3 +537,77 @@ def test_resize_room_rejects_unknown_handle_without_mutation():
 
     assert resize_room(room, "center", 8.0, 8.0) is False
     assert room == before
+
+
+def test_resize_room_preserves_relative_positions_for_assigned_devices():
+    room = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 10.0,
+        "width_m": 8.0,
+    }
+    devices = [
+        {
+            "id": "ffu-1",
+            "room_id": "process",
+            "x_m": 5.0,
+            "y_m": 4.0,
+        },
+        {
+            "id": "other-1",
+            "room_id": "other-room",
+            "x_m": 7.0,
+            "y_m": 3.0,
+        },
+    ]
+
+    assert resize_room(room, "se", 20.0, 16.0, devices=devices) is True
+    assert (devices[0]["x_m"], devices[0]["y_m"]) == (10.0, 8.0)
+    assert (devices[1]["x_m"], devices[1]["y_m"]) == (7.0, 3.0)
+
+
+def test_resize_room_keeps_boundary_device_on_preserved_edge():
+    room = {
+        "id": "process",
+        "x_m": 2.0,
+        "y_m": 3.0,
+        "length_m": 4.0,
+        "width_m": 6.0,
+    }
+    devices = [
+        {
+            "id": "door-1",
+            "room_id": "process",
+            "x_m": 6.0,
+            "y_m": 6.0,
+        },
+    ]
+
+    assert resize_room(room, "w", 0.0, 6.0, devices=devices) is True
+    assert room["x_m"] == 0.0
+    assert room["x_m"] + room["length_m"] == 6.0
+    assert devices[0]["x_m"] == 6.0
+    assert devices[0]["y_m"] == 6.0
+
+
+def test_resize_room_noop_does_not_move_devices():
+    room = {
+        "id": "process",
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+    }
+    devices = [
+        {
+            "id": "sensor-1",
+            "room_id": "process",
+            "x_m": 2.0,
+            "y_m": 3.0,
+        },
+    ]
+
+    assert resize_room(room, "e", 6.0, 3.0, devices=devices) is False
+    assert devices[0]["x_m"] == 2.0
+    assert devices[0]["y_m"] == 3.0

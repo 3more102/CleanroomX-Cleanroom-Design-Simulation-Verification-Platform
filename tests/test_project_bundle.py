@@ -503,21 +503,20 @@ def test_bundle_verification_rejects_archive_revision_change(tmp_path, monkeypat
     bundle = tmp_path / "stable.cleanroomx.zip"
     export_project_bundle(bundle, _consistency_project(), source_base=source)
 
-    original_fingerprint = bundle_module._stable_file_fingerprint
+    original_fingerprint = bundle_module.stable_file_sha256
     calls = 0
 
     def changed_second_fingerprint(path):
         nonlocal calls
         calls += 1
-        result = original_fingerprint(path)
+        stat_result, digest = original_fingerprint(path)
         if calls == 2:
-            result = dict(result)
-            result["sha256"] = "0" * 64
-        return result
+            digest = "0" * 64
+        return stat_result, digest
 
     monkeypatch.setattr(
         bundle_module,
-        "_stable_file_fingerprint",
+        "stable_file_sha256",
         changed_second_fingerprint,
     )
 
@@ -535,21 +534,20 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
     bundle = tmp_path / "stable.cleanroomx.zip"
     export_project_bundle(bundle, _consistency_project(), source_base=source)
 
-    original_fingerprint = bundle_module._stable_file_fingerprint
+    original_fingerprint = bundle_module.stable_file_sha256
     calls = 0
 
     def changed_after_inspection(path):
         nonlocal calls
         calls += 1
-        result = original_fingerprint(path)
+        stat_result, digest = original_fingerprint(path)
         if calls == 3:
-            result = dict(result)
-            result["sha256"] = "f" * 64
-        return result
+            digest = "f" * 64
+        return stat_result, digest
 
     monkeypatch.setattr(
         bundle_module,
-        "_stable_file_fingerprint",
+        "stable_file_sha256",
         changed_after_inspection,
     )
     destination = tmp_path / "extracted"

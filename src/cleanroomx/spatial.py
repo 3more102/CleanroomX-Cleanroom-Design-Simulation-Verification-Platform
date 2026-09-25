@@ -1508,29 +1508,47 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        pressures = [
-            room.get("pressure_pa")
-            for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
-        ]
+        pressure_by_id = mapped_pressure_values(self.layout, self._analysis_getter())
+        pressures = [value for value in pressure_by_id.values() if value is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        sync_by_id = {
+            record["room_id"]: record["state"]
+            for record in engineering_sync_states(self.layout, self._analysis_getter())
+        }
 
         for room in self.layout["rooms"]:
-            x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
-            x1, y1 = self._world_to_canvas(
-                room["x_m"] + room["length_m"],
-                room["y_m"] + room["width_m"],
-            )
+            x0_m, y0_m, x1_m, y1_m = room_plan_bounds(room)
+            x0, y0 = self._world_to_canvas(x0_m, y0_m)
+            x1, y1 = self._world_to_canvas(x1_m, y1_m)
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hovered == _Hit("room", room["id"])
+            sync_state = sync_by_id.get(room["id"], "unmapped")
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else (
+                    "#0284c7"
+                    if hovered
+                    else (
+                        "#b45309"
+                        if room["id"] in warning_ids
+                        else (
+                            "#b91c1c"
+                            if sync_state == "conflicting"
+                            else (
+                                "#7c3aed"
+                                if sync_state == "engineering_newer"
+                                else ("#0f766e" if sync_state == "geometry_newer" else "#34495e")
+                            )
+                        )
+                    )
+                )
             )
+            display_pressure = pressure_by_id.get(room["id"])
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                _pressure_fill(display_pressure, pmin, pmax)
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
@@ -1541,8 +1559,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             if self._show_labels.get():
                 pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
+                    f"\n{display_pressure:g} Pa"
+                    if self._show_pressure.get() and display_pressure is not None
                     else ""
                 )
                 canvas.create_text(
@@ -1689,14 +1707,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        pressures = [
-            room.get("pressure_pa")
-            for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
-        ]
+        pressure_by_id = mapped_pressure_values(self.layout, self._analysis_getter())
+        pressures = [value for value in pressure_by_id.values() if value is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        sync_by_id = {
+            record["room_id"]: record["state"]
+            for record in engineering_sync_states(self.layout, self._analysis_getter())
+        }
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
@@ -1707,34 +1726,42 @@ class SpatialDesignWorkspace(ttk.Frame):
             ),
         )
         for room in ordered:
-            x0 = room["x_m"] - cx
-            y0 = room["y_m"] - cy
-            x1 = x0 + room["length_m"]
-            y1 = y0 + room["width_m"]
-            z0 = room.get("floor_elevation_m", floor_z)
-            z1 = z0 + room["height_m"]
+            prism = room_prism_vertices(room, default_floor_elevation_m=floor_z)
+            z0 = prism["base"][0][2]
+            z1 = prism["top"][0][2]
             base = [
-                self._project_3d(x0, y0, z0),
-                self._project_3d(x1, y0, z0),
-                self._project_3d(x1, y1, z0),
-                self._project_3d(x0, y1, z0),
+                self._project_3d(x - cx, y - cy, z)
+                for x, y, z in prism["base"]
             ]
             top = [
-                self._project_3d(x0, y0, z1),
-                self._project_3d(x1, y0, z1),
-                self._project_3d(x1, y1, z1),
-                self._project_3d(x0, y1, z1),
+                self._project_3d(x - cx, y - cy, z)
+                for x, y, z in prism["top"]
             ]
+            x0_m, y0_m, x1_m, y1_m = room_plan_bounds(room)
+            x0 = x0_m - cx
+            y0 = y0_m - cy
+            x1 = x1_m - cx
+            y1 = y1_m - cy
+            display_pressure = pressure_by_id.get(room["id"])
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                _pressure_fill(display_pressure, pmin, pmax)
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
             selected = self.selected == _Hit("room", room["id"])
+            sync_state = sync_by_id.get(room["id"], "unmapped")
             outline = (
                 "#7dd3fc"
                 if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                else (
+                    "#fb7185"
+                    if room["id"] in warning_ids
+                    else (
+                        "#f87171"
+                        if sync_state == "conflicting"
+                        else ("#c4b5fd" if sync_state == "engineering_newer" else ("#5eead4" if sync_state == "geometry_newer" else "#c8d5e3"))
+                    )
+                )
             )
             tag = f"room:{room['id']}"
             canvas.create_polygon(
@@ -1754,9 +1781,13 @@ class SpatialDesignWorkspace(ttk.Frame):
                     *start, *end, fill=outline, width=1, tags=(tag, "room3d")
                 )
             if self._show_labels.get():
+                pressure_text = (
+                    "" if not self._show_pressure.get() or display_pressure is None
+                    else f"\n{display_pressure:g} Pa"
+                )
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=f"{room['name']}{pressure_text}",
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )

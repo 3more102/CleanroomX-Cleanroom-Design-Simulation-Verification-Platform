@@ -9,6 +9,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    spatial_diagnostics,
     sync_layout_to_analysis,
 )
 
@@ -187,3 +188,96 @@ def test_snap_coordinate_respects_grid_and_free_move_mode():
     assert _snap_coordinate(-0.26, 0.5, True) == -0.5
     assert _snap_coordinate(1.26, 0.5, False) == 1.26
     assert _snap_coordinate(float("nan"), 0.5, False) == 0.0
+
+
+
+def test_spatial_diagnostics_flags_overlap_and_device_placement_problems():
+    layout = {
+        "rooms": [
+            {
+                "id": "r1",
+                "name": "ISO 7",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+            {
+                "id": "r2",
+                "name": "Airlock",
+                "x_m": 3.0,
+                "y_m": 1.0,
+                "length_m": 2.0,
+                "width_m": 2.0,
+                "height_m": 2.5,
+            },
+        ],
+        "devices": [
+            {
+                "id": "d1",
+                "type": "sensor",
+                "name": "High sensor",
+                "room_id": "r1",
+                "x_m": 1.0,
+                "y_m": 1.0,
+                "z_m": 3.5,
+            },
+            {
+                "id": "d2",
+                "type": "equipment",
+                "name": "Outside tool",
+                "room_id": "r1",
+                "x_m": 8.0,
+                "y_m": 8.0,
+                "z_m": -0.1,
+            },
+            {
+                "id": "d3",
+                "type": "door",
+                "name": "Orphan door",
+                "room_id": "missing-room",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "z_m": 0.0,
+            },
+        ],
+    }
+
+    findings = spatial_diagnostics(layout)
+    codes = {finding["code"] for finding in findings}
+
+    assert "room_overlap" in codes
+    assert "device_above_ceiling" in codes
+    assert "device_outside_assigned_room" in codes
+    assert "device_below_floor" in codes
+    assert "device_orphan_room" in codes
+
+
+def test_spatial_diagnostics_accepts_valid_boundary_devices():
+    layout = {
+        "rooms": [
+            {
+                "id": "r1",
+                "name": "Room",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            }
+        ],
+        "devices": [
+            {
+                "id": "d1",
+                "type": "door",
+                "name": "Boundary door",
+                "room_id": "r1",
+                "x_m": 4.0,
+                "y_m": 2.0,
+                "z_m": 0.0,
+            }
+        ],
+    }
+
+    assert spatial_diagnostics(layout) == []

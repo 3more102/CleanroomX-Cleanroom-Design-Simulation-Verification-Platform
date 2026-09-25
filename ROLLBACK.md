@@ -1,5 +1,11 @@
 # Rollback Procedure
 
+## v0.102.0 synchronized spatial closure anchor
+
+The v0.102.0 line packages the synchronized 2D/3D spatial tree merged at `d4b8f6294dd7deed207935423a52cf5f19a035eb`. That baseline passed CI run #1493 / `36167376732` with 973 tests on Python 3.11, 3.12, and 3.13, Windows checkout-launcher smoke, clean-wheel verification, performance checks, CLI smoke, and the Python 3.13 Tk/Xvfb desktop demo smoke. The v0.102 publisher creates a new tag only from a successful current-main CI commit and never moves the published `v0.101.0` tag.
+
+To return to the prior published release line, check out `v0.101.0`; do not retarget either release tag. Project schema version remains 1, and v0.102 adds only backward-compatible spatial metadata fields/defaults.
+
 ## Code rollback
 
 For the shared repository, prefer a Git revert of the release-changing commit or merge rather than rewriting shared history.

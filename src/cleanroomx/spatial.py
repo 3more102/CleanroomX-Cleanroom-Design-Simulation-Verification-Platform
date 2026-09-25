@@ -1369,7 +1369,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         return pressure_relationships(self.layout, self._analysis_getter())
 
     @staticmethod
-    def _relationship_style(status: str) -> tuple[str, tuple[int, int] | tuple[()]]:
+    def _relationship_style(status: str) -> tuple[str, tuple[int, ...]]:
         if status == "pass":
             return "#15803d", ()
         if status == "fail":

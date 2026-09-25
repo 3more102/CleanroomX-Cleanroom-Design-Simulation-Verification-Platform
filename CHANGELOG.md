@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased external project revision guard — 2026-09-25
+
+- Tracks a stable SHA-256 and byte-size fingerprint for the exact project revision opened by the desktop.
+- Makes in-place **Save Project** optimistic-concurrency safe: if the project file was changed or removed by another process after it was opened/saved, CleanroomX blocks the write before atomic replacement and leaves the external version untouched.
+- Routes **Save Project As** back through the same guarded path when the selected destination is the currently opened project, preventing an overwrite bypass.
+- Advances the tracked revision to the deterministic serialized bytes after every successful explicit save while keeping the existing atomic temp-file replacement and strict schema validation.
+- Adds backend and GUI regressions for external edits, external deletion, successful guarded saves, and Save-As bypass prevention.
+- Does not change project schema version, solver equations, numerical tolerances, uncertainty semantics, or engineering acceptance criteria.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

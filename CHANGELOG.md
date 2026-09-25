@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased scalable live spatial validation — 2026-09-25
+
+- Replaces the live room-overlap validator's unconditional all-pairs scan with an adaptive axis-sweep broad phase while preserving exact overlap semantics, warning payloads, and original room-pair ordering.
+- Centralizes the spatial geometry comparison tolerance as an explicit 1e-9 m constant shared by overlap and device-boundary checks.
+- Caches workspace validation against validation-relevant room/device state so camera/view-only redraws no longer rerun geometry validation.
+- Keeps model edits self-invalidating: room geometry/name/id and device assignment/position/name/id changes refresh validation automatically.
+- Adds correctness, tolerance-boundary, cache-invalidation, and performance-benchmark coverage without changing persisted project schema or engineering solver behavior.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

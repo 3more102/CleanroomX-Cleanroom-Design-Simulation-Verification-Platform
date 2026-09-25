@@ -3,8 +3,13 @@ from __future__ import annotations
 import math
 
 from cleanroomx.project import AnalysisDocument, ProjectDocument
+import cleanroomx.spatial as spatial_module
 from cleanroomx.spatial import (
+    SPATIAL_GEOMETRY_EPSILON_M,
     SPATIAL_METADATA_KEY,
+    SpatialDesignWorkspace,
+    _room_overlap_records,
+    _spatial_validation_key,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -179,6 +184,122 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
     ) is False
     assert analysis.input == original
 
+
+
+def test_room_overlap_broad_phase_preserves_original_pair_order_and_bounds():
+    rooms = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4},
+                {"id": "b", "name": "B", "x_m": 3, "y_m": 1, "length_m": 3, "width_m": 2},
+                {"id": "c", "name": "C", "x_m": 1, "y_m": 3, "length_m": 2, "width_m": 2},
+                {"id": "d", "name": "D", "x_m": 4, "y_m": 0, "length_m": 2, "width_m": 2},
+            ]
+        }
+    )["rooms"]
+
+    assert _room_overlap_records(rooms) == [
+        (0, 1, [3.0, 1.0, 4.0, 3.0]),
+        (0, 2, [1.0, 3.0, 3.0, 4.0]),
+        (1, 3, [4.0, 1.0, 6.0, 2.0]),
+    ]
+
+
+def test_room_overlap_broad_phase_preserves_explicit_geometry_tolerance():
+    epsilon = SPATIAL_GEOMETRY_EPSILON_M
+    touching_within_tolerance = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4},
+                {
+                    "id": "b",
+                    "name": "B",
+                    "x_m": 4 - 0.5 * epsilon,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                },
+            ]
+        }
+    )["rooms"]
+    material_overlap = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4},
+                {
+                    "id": "b",
+                    "name": "B",
+                    "x_m": 4 - 2 * epsilon,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                },
+            ]
+        }
+    )["rooms"]
+
+    assert _room_overlap_records(touching_within_tolerance) == []
+    assert [pair[:2] for pair in _room_overlap_records(material_overlap)] == [(0, 1)]
+
+
+def test_spatial_validation_key_ignores_view_state_but_tracks_validation_inputs():
+    layout = normalize_layout(
+        {
+            "rooms": [{"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4}],
+            "devices": [
+                {
+                    "id": "sensor",
+                    "type": "sensor",
+                    "name": "Sensor",
+                    "room_id": "a",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 1,
+                }
+            ],
+        }
+    )
+    baseline = _spatial_validation_key(layout)
+
+    layout["view"]["zoom_2d"] = 3.0
+    layout["view"]["azimuth_deg"] = 120.0
+    layout["rooms"][0]["pressure_pa"] = 25.0
+    assert _spatial_validation_key(layout) == baseline
+
+    layout["devices"][0]["z_m"] = 5.0
+    assert _spatial_validation_key(layout) != baseline
+
+
+def test_workspace_redraw_reuses_validation_until_model_changes(monkeypatch):
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4}
+            ]
+        }
+    )
+    workspace._validation_issues = []
+    workspace._last_validation_key = None
+    workspace._update_validation_summary = lambda: None
+    workspace._draw_2d = lambda: None
+    workspace._draw_3d = lambda: None
+    calls: list[int] = []
+
+    def counted_validate(layout):
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(spatial_module, "validate_layout", counted_validate)
+
+    workspace.redraw()
+    workspace.layout["view"]["zoom_2d"] = 2.0
+    workspace.redraw()
+    assert len(calls) == 1
+
+    workspace.layout["rooms"][0]["x_m"] = 1.0
+    workspace.redraw()
+    assert len(calls) == 2
 
 
 def test_validate_layout_detects_overlap_duplicate_names_and_device_assignment_problems():

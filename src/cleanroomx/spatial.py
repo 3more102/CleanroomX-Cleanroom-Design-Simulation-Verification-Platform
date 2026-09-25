@@ -14,6 +14,7 @@ from .spatial_history import SpatialEditHistory, SpatialHistoryState
 
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
+SPATIAL_GEOMETRY_EPSILON_M = 1e-9
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
 
 
@@ -232,6 +233,106 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def _room_overlap_records(
+    rooms: list[dict],
+) -> list[tuple[int, int, list[float]]]:
+    """Return deterministic room-overlap records using an adaptive broad phase.
+
+    The sweep axis is chosen from projected room density. Exact two-dimensional
+    overlap checks still use the same explicit engineering tolerance as before.
+    Results are sorted by original room order to preserve validation/report order.
+    """
+    if len(rooms) < 2:
+        return []
+
+    bounds = [
+        (
+            index,
+            room["x_m"],
+            room["y_m"],
+            room["x_m"] + room["length_m"],
+            room["y_m"] + room["width_m"],
+        )
+        for index, room in enumerate(rooms)
+    ]
+    min_x = min(item[1] for item in bounds)
+    min_y = min(item[2] for item in bounds)
+    max_x = max(item[3] for item in bounds)
+    max_y = max(item[4] for item in bounds)
+    x_span = max(max_x - min_x, SPATIAL_GEOMETRY_EPSILON_M)
+    y_span = max(max_y - min_y, SPATIAL_GEOMETRY_EPSILON_M)
+    x_density = sum(item[3] - item[1] for item in bounds) / x_span
+    y_density = sum(item[4] - item[2] for item in bounds) / y_span
+    sweep_x = x_density <= y_density
+
+    def axis_start(item: tuple[int, float, float, float, float]) -> float:
+        return item[1] if sweep_x else item[2]
+
+    def axis_end(item: tuple[int, float, float, float, float]) -> float:
+        return item[3] if sweep_x else item[4]
+
+    ordered = sorted(bounds, key=lambda item: (axis_start(item), item[0]))
+    active: list[tuple[int, float, float, float, float]] = []
+    overlaps: list[tuple[int, int, list[float]]] = []
+
+    for current in ordered:
+        current_start = axis_start(current)
+        active = [
+            item
+            for item in active
+            if axis_end(item) > current_start + SPATIAL_GEOMETRY_EPSILON_M
+        ]
+        for other in active:
+            x0 = max(current[1], other[1])
+            y0 = max(current[2], other[2])
+            x1 = min(current[3], other[3])
+            y1 = min(current[4], other[4])
+            if (
+                x1 > x0 + SPATIAL_GEOMETRY_EPSILON_M
+                and y1 > y0 + SPATIAL_GEOMETRY_EPSILON_M
+            ):
+                left_index, right_index = sorted((current[0], other[0]))
+                overlaps.append((left_index, right_index, [x0, y0, x1, y1]))
+
+        active.append(current)
+
+    overlaps.sort(key=lambda item: (item[0], item[1]))
+    return overlaps
+
+
+def _spatial_validation_key(layout: dict) -> tuple:
+    """Return the validation-relevant state, deliberately excluding camera/view data."""
+    rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
+    devices = layout.get("devices", []) if isinstance(layout, dict) else []
+    return (
+        tuple(
+            (
+                room.get("id"),
+                room.get("name"),
+                room.get("x_m"),
+                room.get("y_m"),
+                room.get("length_m"),
+                room.get("width_m"),
+                room.get("height_m"),
+            )
+            for room in rooms
+            if isinstance(room, dict)
+        ),
+        tuple(
+            (
+                device.get("id"),
+                device.get("name"),
+                device.get("room_id"),
+                device.get("x_m"),
+                device.get("y_m"),
+                device.get("z_m"),
+            )
+            for device in devices
+            if isinstance(device, dict)
+        ),
+    )
+
+
 def validate_layout(value: Any) -> list[dict]:
     """Return advisory spatial-edit warnings without mutating persisted layout data."""
     layout = normalize_layout(value)
@@ -257,29 +358,22 @@ def validate_layout(value: Any) -> list[dict]:
                 }
             )
 
-    for left_index, left in enumerate(rooms):
-        left_x1 = left["x_m"] + left["length_m"]
-        left_y1 = left["y_m"] + left["width_m"]
-        for right in rooms[left_index + 1 :]:
-            right_x1 = right["x_m"] + right["length_m"]
-            right_y1 = right["y_m"] + right["width_m"]
-            x0 = max(left["x_m"], right["x_m"])
-            y0 = max(left["y_m"], right["y_m"])
-            x1 = min(left_x1, right_x1)
-            y1 = min(left_y1, right_y1)
-            if x1 > x0 + 1e-9 and y1 > y0 + 1e-9:
-                issues.append(
-                    {
-                        "code": "room_overlap",
-                        "severity": "warning",
-                        "item_ids": [left["id"], right["id"]],
-                        "bounds_m": [x0, y0, x1, y1],
-                        "message": (
-                            f"Rooms '{left['name']}' and '{right['name']}' overlap "
-                            f"by {(x1 - x0) * (y1 - y0):g} m²."
-                        ),
-                    }
-                )
+    for left_index, right_index, bounds_m in _room_overlap_records(rooms):
+        left = rooms[left_index]
+        right = rooms[right_index]
+        x0, y0, x1, y1 = bounds_m
+        issues.append(
+            {
+                "code": "room_overlap",
+                "severity": "warning",
+                "item_ids": [left["id"], right["id"]],
+                "bounds_m": bounds_m,
+                "message": (
+                    f"Rooms '{left['name']}' and '{right['name']}' overlap "
+                    f"by {(x1 - x0) * (y1 - y0):g} m²."
+                ),
+            }
+        )
 
     room_by_id = {room["id"]: room for room in rooms}
     for device in devices:
@@ -314,8 +408,8 @@ def validate_layout(value: Any) -> list[dict]:
         y = device["y_m"]
         z = device["z_m"]
         inside_xy = (
-            room["x_m"] - 1e-9 <= x <= room["x_m"] + room["length_m"] + 1e-9
-            and room["y_m"] - 1e-9 <= y <= room["y_m"] + room["width_m"] + 1e-9
+            room["x_m"] - SPATIAL_GEOMETRY_EPSILON_M <= x <= room["x_m"] + room["length_m"] + SPATIAL_GEOMETRY_EPSILON_M
+            and room["y_m"] - SPATIAL_GEOMETRY_EPSILON_M <= y <= room["y_m"] + room["width_m"] + SPATIAL_GEOMETRY_EPSILON_M
         )
         if not inside_xy:
             issues.append(
@@ -328,7 +422,7 @@ def validate_layout(value: Any) -> list[dict]:
                     ),
                 }
             )
-        if z < -1e-9 or z > room["height_m"] + 1e-9:
+        if z < -SPATIAL_GEOMETRY_EPSILON_M or z > room["height_m"] + SPATIAL_GEOMETRY_EPSILON_M:
             issues.append(
                 {
                     "code": "device_elevation_outside_room",
@@ -394,6 +488,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
+        self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
         self._history = SpatialEditHistory(limit=100)
         self._history_project_token: int | None = None
@@ -649,9 +744,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
         )
 
+    def _refresh_validation(self, *, force: bool = False) -> None:
+        validation_key = _spatial_validation_key(self.layout)
+        if force or validation_key != self._last_validation_key:
+            self._validation_issues = validate_layout(self.layout)
+            self._last_validation_key = validation_key
+            self._update_validation_summary()
+
     def report_validation(self) -> None:
-        self._validation_issues = validate_layout(self.layout)
-        self._update_validation_summary()
+        self._refresh_validation(force=True)
         if not self._validation_issues:
             self._status_setter("Spatial checks: PASS")
             self.redraw()
@@ -830,8 +931,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
-        self._validation_issues = validate_layout(self.layout)
-        self._update_validation_summary()
+        self._refresh_validation()
         self._draw_2d()
         self._draw_3d()
 

@@ -21,6 +21,8 @@ A project file is loaded through `load_project_document()` and migrated only whe
 
 Result ownership remains tied to the analysis id so stale results are not silently reassigned after edits, deletion, or analysis switching. Project saves serialize schema version 1, validate the resulting document, and use an atomic replacement.
 
+Spatial validation is separated into a deterministic pure validation path and the Tk rendering shell. Room-overlap detection uses an adaptive axis sweep broad phase with the existing explicit geometry tolerance, then restores findings to original room-pair order. The desktop caches validation by a model-only validation key, excluding camera/view state and pressure-only visualization fields, so redraws that cannot change any validation result avoid repeated geometry work while model edits invalidate the cache.
+
 Recovery autosave is deliberately outside the project schema. The UI captures a model snapshot plus raw draft state on the Tk thread and submits it to a single background writer. Recovery artifacts are atomically written in a user-specific recovery directory, retain source-project fingerprint evidence, and are bounded by project identity. Explicit saves remain authoritative; recovery artifacts are never substituted for or written over the project file.
 
 Startup restoration keeps save ownership equally explicit. A recovery is parsed through the ordinary project validator, then loaded into the application with no explicit save path and a forced dirty baseline. The original source path, when present, is held separately only for relative-reference context. Therefore Ctrl+S routes through Save As, and a newer or changed source file cannot be overwritten by recovery startup logic.

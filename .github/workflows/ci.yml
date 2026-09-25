@@ -90,6 +90,9 @@ jobs:
           tests/test_gui_recovery.py
       - name: Run complete test suite
         run: python -m pytest -q
+      - name: Benchmark scalable spatial validation
+        if: matrix.python-version == '3.13'
+        run: python scripts/benchmark_spatial_validation.py
       - name: Build wheel and verify installed application
         run: |
           rm -rf /tmp/cleanroomx-wheel /tmp/cleanroomx-wheel-env

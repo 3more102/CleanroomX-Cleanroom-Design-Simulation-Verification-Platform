@@ -343,6 +343,91 @@ def validate_layout(value: Any) -> list[dict]:
 
     return issues
 
+
+def _normalized_bounds(
+    bounds_m: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Return finite viewport bounds in deterministic min/max order."""
+    if len(bounds_m) != 4:
+        raise ValueError("viewport bounds must contain exactly four values")
+    values = tuple(float(value) for value in bounds_m)
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("viewport bounds must be finite")
+    x0, y0, x1, y1 = values
+    return (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+
+
+def _rect_intersects(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+) -> bool:
+    return not (
+        left[2] < right[0]
+        or left[0] > right[2]
+        or left[3] < right[1]
+        or left[1] > right[3]
+    )
+
+
+def _visible_2d_items(
+    layout: dict,
+    validation_issues: list[dict],
+    viewport_bounds_m: tuple[float, float, float, float],
+    *,
+    device_margin_m: float = 0.0,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Select only 2D primitives that can affect the current viewport.
+
+    The helper is read-only and preserves project order. It deliberately does not
+    normalize the layout so rendering cannot repair IDs, geometry, or other
+    persistent model state as a side effect.
+    """
+    viewport = _normalized_bounds(viewport_bounds_m)
+    margin = float(device_margin_m)
+    if not math.isfinite(margin) or margin < 0:
+        raise ValueError("device viewport margin must be finite and non-negative")
+
+    visible_rooms = []
+    for room in layout.get("rooms", []):
+        room_bounds = (
+            room["x_m"],
+            room["y_m"],
+            room["x_m"] + room["length_m"],
+            room["y_m"] + room["width_m"],
+        )
+        if _rect_intersects(_normalized_bounds(room_bounds), viewport):
+            visible_rooms.append(room)
+
+    expanded = (
+        viewport[0] - margin,
+        viewport[1] - margin,
+        viewport[2] + margin,
+        viewport[3] + margin,
+    )
+    visible_devices = [
+        device
+        for device in layout.get("devices", [])
+        if expanded[0] <= device["x_m"] <= expanded[2]
+        and expanded[1] <= device["y_m"] <= expanded[3]
+    ]
+
+    visible_overlaps = []
+    for issue in validation_issues:
+        if issue.get("code") != "room_overlap":
+            continue
+        bounds = issue.get("bounds_m")
+        if not isinstance(bounds, list) or len(bounds) != 4:
+            continue
+        try:
+            issue_bounds = _normalized_bounds(tuple(bounds))
+        except (TypeError, ValueError):
+            continue
+        if _rect_intersects(issue_bounds, viewport):
+            visible_overlaps.append(issue)
+
+    return visible_rooms, visible_devices, visible_overlaps
+
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -428,7 +513,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
+        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self._draw_2d).pack(
             side="left", padx=6
         )
         ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
@@ -504,7 +589,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         inspector.columnconfigure(1, weight=1)
         inspector.columnconfigure(3, weight=1)
 
-        self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
+        self.canvas_2d.bind("<Configure>", lambda event: self._draw_2d())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
         self.canvas_2d.bind("<Motion>", self._on_motion)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
@@ -829,9 +914,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["zoom_3d"] = 1.0
         self._persist("Fit spatial views")
 
-    def redraw(self) -> None:
+    def _refresh_validation(self) -> None:
         self._validation_issues = validate_layout(self.layout)
         self._update_validation_summary()
+
+    def redraw(self) -> None:
+        self._refresh_validation()
         self._draw_2d()
         self._draw_3d()
 
@@ -840,9 +928,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         canvas.delete("all")
         w = max(1, canvas.winfo_width())
         h = max(1, canvas.winfo_height())
+        scale = self._scale_2d()
+        world_a = self._canvas_to_world(0, 0)
+        world_b = self._canvas_to_world(w, h)
+        viewport_bounds = _normalized_bounds(
+            (world_a[0], world_a[1], world_b[0], world_b[1])
+        )
         if self._show_grid.get():
             grid = max(0.1, self.layout["grid_m"])
-            scale = self._scale_2d()
             if grid * scale >= 8:
                 x0, y0 = self._canvas_to_world(0, 0)
                 x1, y1 = self._canvas_to_world(w, h)
@@ -865,8 +958,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        visible_rooms, visible_devices, visible_overlaps = _visible_2d_items(
+            self.layout,
+            self._validation_issues,
+            viewport_bounds,
+            device_margin_m=12.0 / scale,
+        )
 
-        for room in self.layout["rooms"]:
+        for room in visible_rooms:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
@@ -890,12 +989,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
 
-        for issue in self._validation_issues:
-            if issue.get("code") != "room_overlap":
-                continue
-            bounds = issue.get("bounds_m")
-            if not isinstance(bounds, list) or len(bounds) != 4:
-                continue
+        for issue in visible_overlaps:
+            bounds = issue["bounds_m"]
             x0, y0 = self._world_to_canvas(bounds[0], bounds[1])
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
@@ -1025,7 +1120,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(tag, "room3d"),
             )
 
-        for device in self.layout["devices"]:
+        for device in visible_devices:
             x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
@@ -1107,7 +1202,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         self.layout["view"]["pan_x"] = self._pan_origin[0] + event.x - self._pan_anchor[0]
         self.layout["view"]["pan_y"] = self._pan_origin[1] + event.y - self._pan_anchor[1]
-        self.redraw()
+        self._draw_2d()
 
     def _on_wheel(self, event: tk.Event) -> None:
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
@@ -1118,7 +1213,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         after = self._world_to_canvas(*before)
         self.layout["view"]["pan_x"] += x - after[0]
         self.layout["view"]["pan_y"] += y - after[1]
-        self.redraw()
+        self._draw_2d()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:
         self._zoom_3d(1.1 if event.delta > 0 else 1 / 1.1)

@@ -184,7 +184,24 @@ class DuctNetwork:
             raise ValueError("duct-path names must be unique")
 
 
-def analyze_duct_section(section: DuctSection) -> dict:
+_DUCT_SCOPE_NOTE = (
+    "Path losses use Darcy-Weisbach straight-duct friction plus explicit local "
+    "loss coefficients. Friction factor may be supplied directly or calculated "
+    "from explicit roughness and kinematic viscosity at the section airflow. "
+    "Airflow, density, geometry, and fitting coefficients remain project inputs. "
+    "The model compares user-defined paths; it "
+    "does not solve branch airflow, fan curves, system effect, leakage, acoustic "
+    "performance, or control interactions."
+)
+
+
+def calculate_duct_section(section: DuctSection) -> dict:
+    """Return full-precision section values for downstream engineering calculations.
+
+    Presentation rounding belongs in :func:`analyze_duct_section`; callers that
+    combine section values must use this calculation layer so rounded display
+    values never become solver inputs.
+    """
     airflow_m3_s = section.airflow_m3_h / 3600.0
     velocity_m_s = airflow_m3_s / section.area_m2
     friction = section.friction_analysis()
@@ -203,61 +220,113 @@ def analyze_duct_section(section: DuctSection) -> dict:
     return {
         "name": section.name,
         "shape": section.shape,
-        "length_m": round(section.length_m, 4),
-        "airflow_m3_h": round(section.airflow_m3_h, 3),
-        "airflow_m3_s": round(airflow_m3_s, 6),
-        "area_m2": round(section.area_m2, 6),
-        "hydraulic_diameter_m": round(section.hydraulic_diameter_m, 6),
-        "velocity_m_s": round(velocity_m_s, 4),
-        "air_density_kg_m3": round(section.air_density_kg_m3, 4),
-        "friction_factor": round(friction_factor, 6),
+        "length_m": section.length_m,
+        "airflow_m3_h": section.airflow_m3_h,
+        "airflow_m3_s": airflow_m3_s,
+        "area_m2": section.area_m2,
+        "hydraulic_diameter_m": section.hydraulic_diameter_m,
+        "velocity_m_s": velocity_m_s,
+        "air_density_kg_m3": section.air_density_kg_m3,
+        "friction_factor": friction_factor,
         "friction_factor_method": friction["method"],
+        "reynolds_number": friction["reynolds_number"],
+        "absolute_roughness_m": friction["absolute_roughness_m"],
+        "relative_roughness": friction["relative_roughness"],
+        "kinematic_viscosity_m2_s": friction["kinematic_viscosity_m2_s"],
+        "local_loss_coefficient": section.local_loss_coefficient,
+        "velocity_pressure_pa": velocity_pressure_pa,
+        "friction_pressure_drop_pa": friction_pressure_drop_pa,
+        "local_pressure_drop_pa": local_pressure_drop_pa,
+        "total_pressure_drop_pa": total_pressure_drop_pa,
+    }
+
+
+def _format_duct_section_calculation(calculation: dict) -> dict:
+    return {
+        "name": calculation["name"],
+        "shape": calculation["shape"],
+        "length_m": round(calculation["length_m"], 4),
+        "airflow_m3_h": round(calculation["airflow_m3_h"], 3),
+        "airflow_m3_s": round(calculation["airflow_m3_s"], 6),
+        "area_m2": round(calculation["area_m2"], 6),
+        "hydraulic_diameter_m": round(calculation["hydraulic_diameter_m"], 6),
+        "velocity_m_s": round(calculation["velocity_m_s"], 4),
+        "air_density_kg_m3": round(calculation["air_density_kg_m3"], 4),
+        "friction_factor": round(calculation["friction_factor"], 6),
+        "friction_factor_method": calculation["friction_factor_method"],
         "reynolds_number": (
             None
-            if friction["reynolds_number"] is None
-            else round(friction["reynolds_number"], 3)
+            if calculation["reynolds_number"] is None
+            else round(calculation["reynolds_number"], 3)
         ),
-        "absolute_roughness_m": friction["absolute_roughness_m"],
+        "absolute_roughness_m": calculation["absolute_roughness_m"],
         "relative_roughness": (
             None
-            if friction["relative_roughness"] is None
-            else round(friction["relative_roughness"], 9)
+            if calculation["relative_roughness"] is None
+            else round(calculation["relative_roughness"], 9)
         ),
-        "kinematic_viscosity_m2_s": friction["kinematic_viscosity_m2_s"],
-        "local_loss_coefficient": round(section.local_loss_coefficient, 6),
-        "velocity_pressure_pa": round(velocity_pressure_pa, 4),
-        "friction_pressure_drop_pa": round(friction_pressure_drop_pa, 4),
-        "local_pressure_drop_pa": round(local_pressure_drop_pa, 4),
-        "total_pressure_drop_pa": round(total_pressure_drop_pa, 4),
+        "kinematic_viscosity_m2_s": calculation["kinematic_viscosity_m2_s"],
+        "local_loss_coefficient": round(calculation["local_loss_coefficient"], 6),
+        "velocity_pressure_pa": round(calculation["velocity_pressure_pa"], 4),
+        "friction_pressure_drop_pa": round(calculation["friction_pressure_drop_pa"], 4),
+        "local_pressure_drop_pa": round(calculation["local_pressure_drop_pa"], 4),
+        "total_pressure_drop_pa": round(calculation["total_pressure_drop_pa"], 4),
+    }
+
+
+def analyze_duct_section(section: DuctSection) -> dict:
+    return _format_duct_section_calculation(calculate_duct_section(section))
+
+
+def calculate_duct_path(path: DuctPath) -> dict:
+    """Return a full-precision path calculation without presentation rounding."""
+    sections = [calculate_duct_section(section) for section in path.sections]
+    return {
+        "name": path.name,
+        "sections": sections,
+        "total_pressure_drop_pa": math.fsum(
+            section["total_pressure_drop_pa"] for section in sections
+        ),
+    }
+
+
+def _format_duct_path_calculation(calculation: dict) -> dict:
+    return {
+        "name": calculation["name"],
+        "sections": [
+            _format_duct_section_calculation(section)
+            for section in calculation["sections"]
+        ],
+        "total_pressure_drop_pa": round(calculation["total_pressure_drop_pa"], 4),
     }
 
 
 def analyze_duct_path(path: DuctPath) -> dict:
-    sections = [analyze_duct_section(section) for section in path.sections]
-    total_pressure_drop_pa = sum(
-        section["total_pressure_drop_pa"] for section in sections
-    )
-    return {
-        "name": path.name,
-        "sections": sections,
-        "total_pressure_drop_pa": round(total_pressure_drop_pa, 4),
-    }
+    return _format_duct_path_calculation(calculate_duct_path(path))
 
 
-def analyze_duct_network(network: DuctNetwork) -> dict:
-    paths = [analyze_duct_path(path) for path in network.paths]
+def calculate_duct_network(network: DuctNetwork) -> dict:
+    """Return full-precision path aggregation and critical-path selection."""
+    paths = [calculate_duct_path(path) for path in network.paths]
     critical = max(paths, key=lambda path: path["total_pressure_drop_pa"])
     return {
         "paths": paths,
         "critical_path": critical["name"],
         "critical_path_pressure_drop_pa": critical["total_pressure_drop_pa"],
-        "scope_note": (
-            "Path losses use Darcy-Weisbach straight-duct friction plus explicit local "
-            "loss coefficients. Friction factor may be supplied directly or calculated "
-            "from explicit roughness and kinematic viscosity at the section airflow. "
-            "Airflow, density, geometry, and fitting coefficients remain project inputs. "
-            "The model compares user-defined paths; it "
-            "does not solve branch airflow, fan curves, system effect, leakage, acoustic "
-            "performance, or control interactions."
-        ),
+        "scope_note": _DUCT_SCOPE_NOTE,
     }
+
+
+def _format_duct_network_calculation(calculation: dict) -> dict:
+    return {
+        "paths": [_format_duct_path_calculation(path) for path in calculation["paths"]],
+        "critical_path": calculation["critical_path"],
+        "critical_path_pressure_drop_pa": round(
+            calculation["critical_path_pressure_drop_pa"], 4
+        ),
+        "scope_note": calculation["scope_note"],
+    }
+
+
+def analyze_duct_network(network: DuctNetwork) -> dict:
+    return _format_duct_network_calculation(calculate_duct_network(network))

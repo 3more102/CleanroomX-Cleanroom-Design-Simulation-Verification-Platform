@@ -20,6 +20,8 @@ The source airflow is therefore:
 
 After branch flows are known, each branch is evaluated with the Darcy-Weisbach plus local-K pressure-loss model. When v0.21 automatic friction is selected, Reynolds number and the Darcy factor are resolved at that branch's solved airflow before its pressure loss is calculated. Pressure loss is accumulated from the source to every terminal, and the terminal path with the largest loss is reported as the critical path.
 
+Branch continuity, terminal-path pressure accumulation, and critical-terminal selection use the full-precision calculation state. Per-branch values are rounded only when the public result dictionary is formatted for presentation. Terminal-path sums use `math.fsum`, so equal-looking displayed branch losses cannot incorrectly force a critical-path tie. HVAC fan sizing consumes the same full-precision critical-path pressure before applying its existing output formatting.
+
 ## Topology validation
 
 The v0.8 solver intentionally accepts a directed tree only. It rejects:

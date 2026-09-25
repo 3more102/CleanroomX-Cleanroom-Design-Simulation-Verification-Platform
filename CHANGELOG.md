@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased precision-safe HVAC composition — 2026-09-25
+
+- Keeps full floating-point precision through duct-path, fixed-demand branch-flow, room thermal/air-balance, project aggregation, supply-fan, and fan-curve duty decisions.
+- Applies existing result rounding only at the presentation boundary, so near-ties and threshold decisions are not changed by display precision.
+- Uses `math.fsum` for pressure-path, continuity, airflow, surplus, and capacity aggregation where composition is order-sensitive.
+- Preserves existing result shapes, project schema, equations, tolerances, units, and dependencies.
+
 ## Unreleased protected legacy migration saves — 2026-09-25
 
 - Adds explicit migration provenance for both supported legacy project shapes without changing existing loader return contracts.

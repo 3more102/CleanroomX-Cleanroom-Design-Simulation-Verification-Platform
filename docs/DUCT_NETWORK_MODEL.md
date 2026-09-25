@@ -37,7 +37,9 @@ For circular ducts, hydraulic diameter equals the inside diameter.
 
 A duct path is a user-defined series of sections. CleanroomX sums section losses in each path and identifies the path with the largest calculated loss as the critical path.
 
-When a duct network is present in an HVAC project, its critical-path pressure drop replaces the manually entered duct-pressure-drop component for preliminary supply-fan power sizing. Other fan components such as coil, terminal-filter, and explicitly entered miscellaneous pressure drops remain separate.
+Section, path, and critical-path engineering calculations retain full floating-point precision internally. The rounded values in JSON/Markdown are presentation values only: section display rounding is not reused for path totals, critical-path selection, or downstream fan sizing. Path totals are accumulated with `math.fsum` and rounded only after the full-precision sum is complete. This prevents a near-tie from being resolved by display rounding and prevents per-section rounding error from accumulating into an HVAC pressure input.
+
+When a duct network is present in an HVAC project, its full-precision critical-path pressure drop replaces the manually entered duct-pressure-drop component for preliminary supply-fan power sizing. The reported pressure component remains rounded according to the existing result format. Other fan components such as coil, terminal-filter, and explicitly entered miscellaneous pressure drops remain separate.
 
 This is intentionally a **critical-path comparison**, not a full nonlinear airflow-network solver. Branch flow distribution is not inferred.
 

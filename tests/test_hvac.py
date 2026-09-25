@@ -3,7 +3,7 @@ import json
 from cleanroomx.airflow import analyze_air_balance
 from cleanroomx.fan import analyze_supply_fan
 from cleanroomx.hvac import analyze_hvac_project
-from cleanroomx.hvac_io import load_hvac_project
+from cleanroomx.hvac_io import hvac_project_from_dict, load_hvac_project
 from cleanroomx.hvac_models import AirBalanceDesign, FanSystem
 
 
@@ -109,3 +109,94 @@ def test_fan_power_uses_total_entered_static_pressure() -> None:
     assert result["air_power_kw"] == 0.6
     assert result["shaft_power_kw"] == 1.2
     assert result["estimated_electrical_input_kw"] == 1.5
+
+
+
+def test_hvac_filter_count_uses_unrounded_governing_airflow() -> None:
+
+    project = hvac_project_from_dict(
+        {
+            "name": "Filter threshold precision",
+            "filter_unit": {
+                "name": "FFU",
+                "rated_airflow_m3_h": 1000.0,
+                "design_utilization": 1.0,
+                "pressure_drop_pa": 0.0,
+            },
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 1000.0004,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    result = analyze_hvac_project(project)
+    room = result["rooms"][0]
+
+    assert room["governing_airflow_m3_h"] == 1000.0
+    assert room["filter_units"] == 2
+    assert room["delivered_airflow_m3_h"] == 2000.0
+
+
+def test_hvac_air_balance_status_uses_unrounded_governing_airflow() -> None:
+
+    project = hvac_project_from_dict(
+        {
+            "name": "Balance threshold precision",
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 1000.0004,
+                    "air_balance": {
+                        "return_airflow_m3_h": 1000.0,
+                        "minimum_surplus_m3_h": 0.0002,
+                    },
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    result = analyze_hvac_project(project)
+    balance = result["rooms"][0]["air_balance"]
+
+    assert balance["net_surplus_m3_h"] == 0.0
+    assert balance["passes_minimum_surplus"] is True
+    assert result["all_air_balances_pass"] is True
+
+
+def test_hvac_total_surplus_aggregates_before_presentation_rounding() -> None:
+
+    rooms = [
+        {
+            "name": f"Room {index}",
+            "cleanroom_airflow_m3_h": 1000.00049,
+            "air_balance": {"return_airflow_m3_h": 1000.0},
+            "thermal_design": {
+                "room_air": {
+                    "dry_bulb_c": 22.0,
+                    "relative_humidity_percent": 45.0,
+                }
+            },
+        }
+        for index in range(10)
+    ]
+    result = analyze_hvac_project(
+        hvac_project_from_dict({"name": "Aggregate precision", "rooms": rooms})
+    )
+
+    assert all(room["air_balance"]["net_surplus_m3_h"] == 0.0 for room in result["rooms"])
+    assert result["total_net_surplus_m3_h"] == 0.005

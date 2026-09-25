@@ -5,6 +5,7 @@ import math
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    _nice_ruler_step,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -177,3 +178,10 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
         analysis,
     ) is False
     assert analysis.input == original
+
+
+def test_nice_ruler_step_keeps_cad_ticks_readable_across_zoom_levels():
+    assert _nice_ruler_step(20.0) == 5.0
+    assert _nice_ruler_step(80.0) == 1.0
+    assert _nice_ruler_step(400.0) == 0.2
+    assert _nice_ruler_step(float("nan")) > 0

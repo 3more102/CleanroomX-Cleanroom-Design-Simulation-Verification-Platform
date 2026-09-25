@@ -3,8 +3,11 @@ from __future__ import annotations
 import math
 
 from .airflow import analyze_air_balance
-from .branch_network import analyze_branch_flow_network
-from .duct import analyze_duct_network
+from .branch_network import (
+    _format_branch_flow_network_calculation,
+    calculate_branch_flow_network,
+)
+from .duct import _format_duct_network_calculation, calculate_duct_network
 from .fan import analyze_supply_fan
 from .fan_curve import check_fan_duty_against_curve
 from .hvac_models import HVACProject
@@ -71,19 +74,29 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         total_cooling_kw += thermal["preliminary_cooling_capacity_kw"]
         total_heating_kw += thermal["preliminary_heating_capacity_kw"]
 
-    duct_network = (
-        analyze_duct_network(project.duct_network)
+    duct_calculation = (
+        calculate_duct_network(project.duct_network)
         if project.duct_network is not None
         else None
     )
-    branch_flow_network = (
-        analyze_branch_flow_network(project.branch_flow_network)
+    duct_network = (
+        _format_duct_network_calculation(duct_calculation)
+        if duct_calculation is not None
+        else None
+    )
+    branch_flow_calculation = (
+        calculate_branch_flow_network(project.branch_flow_network)
         if project.branch_flow_network is not None
         else None
     )
+    branch_flow_network = (
+        _format_branch_flow_network_calculation(branch_flow_calculation)
+        if branch_flow_calculation is not None
+        else None
+    )
 
-    if branch_flow_network is not None:
-        source_airflow = branch_flow_network["source_airflow_m3_h"]
+    if branch_flow_calculation is not None:
+        source_airflow = branch_flow_calculation["source_airflow_m3_h"]
         if not math.isclose(
             source_airflow,
             total_governing_airflow,
@@ -104,11 +117,13 @@ def analyze_hvac_project(project: HVACProject) -> dict:
             if project.filter_unit is not None
             else 0.0
         )
-        if branch_flow_network is not None:
-            duct_override = branch_flow_network["critical_path_pressure_drop_pa"]
+        if branch_flow_calculation is not None:
+            duct_override = branch_flow_calculation[
+                "critical_path_pressure_drop_pa"
+            ]
             duct_source = "computed_branch_flow_network"
-        elif duct_network is not None:
-            duct_override = duct_network["critical_path_pressure_drop_pa"]
+        elif duct_calculation is not None:
+            duct_override = duct_calculation["critical_path_pressure_drop_pa"]
             duct_source = "computed_duct_network"
         else:
             duct_override = None

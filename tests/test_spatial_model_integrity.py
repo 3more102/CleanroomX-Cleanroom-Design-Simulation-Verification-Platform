@@ -150,8 +150,8 @@ def test_project_loader_rejects_orphan_spatial_device_reference():
     ("field", "value", "message"),
     [
         ("length_m", 0.0, "must be greater than zero"),
-        ("width_m", float("inf"), "finite number"),
-        ("x_m", float("nan"), "finite number"),
+        ("width_m", "wide", "finite number"),
+        ("x_m", True, "finite number"),
     ],
 )
 def test_project_loader_rejects_invalid_spatial_geometry(field, value, message):

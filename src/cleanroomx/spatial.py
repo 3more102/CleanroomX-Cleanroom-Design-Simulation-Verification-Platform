@@ -58,7 +58,7 @@ def empty_layout() -> dict:
 def normalize_layout(value: Any) -> dict:
     source = migrate_spatial_layout(value, strict=False)
     defaults = empty_layout()
-    result = copy.deepcopy(source)
+    result = source
     result["version"] = SPATIAL_LAYOUT_VERSION
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
 
@@ -69,7 +69,7 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room = copy.deepcopy(raw)
+            room = raw
             room.update(
                 {
                     "id": str(raw["id"]),
@@ -97,7 +97,7 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device = copy.deepcopy(raw)
+            device = raw
             device.update(
                 {
                     "id": str(raw["id"]),
@@ -113,7 +113,7 @@ def normalize_layout(value: Any) -> dict:
     result["devices"] = devices
 
     raw_view = source.get("view", {})
-    view = copy.deepcopy(raw_view) if isinstance(raw_view, dict) else {}
+    view = raw_view if isinstance(raw_view, dict) else {}
     view_defaults = defaults["view"]
     view.update(
         {

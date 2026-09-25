@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -7,7 +8,10 @@ import pytest
 
 from cleanroomx.autosave import (
     AutosaveManager,
+    RECOVERY_INTEGRITY_ALGORITHM,
+    RECOVERY_INTEGRITY_CANONICALIZATION,
     RECOVERY_SCHEMA,
+    RecoveryFormatError,
     load_recovery_artifact,
     scan_recovery_artifacts,
 )
@@ -68,6 +72,12 @@ def test_autosave_writes_separate_artifact_and_preserves_source(tmp_path):
         assert artifact["source"]["path"] == str(source.resolve())
         assert artifact["source"]["sha256"]
         assert artifact["snapshot"]["project"]["project"]["name"] == "Autosave Demo"
+        assert artifact["integrity"]["algorithm"] == RECOVERY_INTEGRITY_ALGORITHM
+        assert (
+            artifact["integrity"]["canonicalization"]
+            == RECOVERY_INTEGRITY_CANONICALIZATION
+        )
+        assert len(artifact["integrity"]["sha256"]) == 64
     finally:
         manager.shutdown(wait=True)
 
@@ -205,3 +215,58 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
         assert not (tmp_path / "recovery").exists()
     finally:
         manager.shutdown(wait=True)
+
+
+def test_recovery_integrity_detects_valid_json_corruption(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["snapshot"]["ui_state"]["marker"] = 999
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="checksum mismatch"):
+        load_recovery_artifact(artifact_path)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.candidates == ()
+    assert len(scan.issues) == 1
+    assert scan.issues[0].path == artifact_path
+    assert "checksum mismatch" in scan.issues[0].error
+
+
+def test_legacy_schema_v1_recovery_without_integrity_remains_readable(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload.pop("integrity")
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_recovery_artifact(artifact_path)
+    assert loaded["schema"] == RECOVERY_SCHEMA
+    assert loaded["snapshot"]["project"]["project"]["name"] == "Autosave Demo"

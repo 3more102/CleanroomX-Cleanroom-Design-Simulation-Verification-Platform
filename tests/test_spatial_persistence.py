@@ -90,6 +90,10 @@ def test_spatial_layout_round_trip_preserves_stable_ids_and_references(tmp_path)
             lambda layout: layout["devices"][0].__setitem__("room_id", "missing-room"),
             "references missing room id",
         ),
+        (
+            lambda layout: layout["rooms"][0].__setitem__("id", " process "),
+            "leading or trailing whitespace",
+        ),
     ],
 )
 def test_project_save_rejects_corrupt_spatial_layout(mutator, message, tmp_path):
@@ -102,6 +106,41 @@ def test_project_save_rejects_corrupt_spatial_layout(mutator, message, tmp_path)
 
     with pytest.raises(ProjectFormatError, match=message):
         save_project_document(tmp_path / "bad.cleanroomx.json", project)
+
+
+def test_normalize_layout_keeps_trimmed_room_references_consistent():
+    normalized = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": " process ",
+                    "name": " Process ",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                }
+            ],
+            "devices": [
+                {
+                    "id": " sensor ",
+                    "type": "sensor",
+                    "name": " Sensor ",
+                    "room_id": " process ",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 1,
+                }
+            ],
+        }
+    )
+
+    assert normalized["rooms"][0]["id"] == "process"
+    assert normalized["devices"][0]["id"] == "sensor"
+    assert normalized["devices"][0]["room_id"] == "process"
+    assert normalized["devices"][0]["name"] == "Sensor"
+    validate_spatial_layout_document(normalized)
 
 
 def test_project_load_rejects_corrupt_spatial_layout_from_disk(tmp_path):

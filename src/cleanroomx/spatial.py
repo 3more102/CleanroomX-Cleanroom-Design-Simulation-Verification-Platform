@@ -7,14 +7,23 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
 
+from .spatial_engineering import (
+    create_engineering_ref,
+    engineering_sync_report,
+    establish_sync_baselines,
+    pressure_overlay,
+    refresh_sync_baselines,
+    synchronize_analysis_to_layout as _synchronize_analysis_to_layout,
+)
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_GEOMETRY_EPSILON_M,
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_transform import ViewTransform2D, snap_point
 
 
 class SpatialSyncError(ValueError):
@@ -32,6 +41,39 @@ def _finite_number(value: Any, default: float) -> float:
 def _positive(value: Any, default: float) -> float:
     number = _finite_number(value, default)
     return number if number > 0 else default
+
+
+def _optional_finite(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _normalize_engineering_ref(value: Any) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    room_name = value.get("room_name")
+    if not isinstance(room_name, str) or not room_name.strip():
+        return None
+    result: dict[str, Any] = {"room_name": room_name.strip()}
+    analysis_id = value.get("analysis_id")
+    if isinstance(analysis_id, str) and analysis_id.strip():
+        result["analysis_id"] = analysis_id.strip()
+    elif analysis_id is None:
+        result["analysis_id"] = None
+    baseline = value.get("baseline_geometry")
+    normalized_baseline: dict[str, float] = {}
+    if isinstance(baseline, dict):
+        for key in ("length_m", "width_m", "height_m"):
+            number = _optional_finite(baseline.get(key))
+            if number is not None and number > 0:
+                normalized_baseline[key] = number
+    result["baseline_geometry"] = normalized_baseline
+    return result
 
 
 def _room_id(name: str) -> str:
@@ -127,13 +169,32 @@ def normalize_layout(value: Any) -> dict:
                     raw.get("floor_elevation_m"), floor_elevation
                 ),
             }
-            if raw.get("pressure_pa") is not None:
-                room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            for field in ("classification", "analysis_room_name"):
+            for field in ("pressure_pa", "pressure_target_pa", "temperature_target_c"):
+                number = _optional_finite(raw.get(field))
+                if number is not None:
+                    room[field] = number
+            humidity = _optional_finite(raw.get("humidity_target_rh_pct"))
+            if humidity is not None and 0.0 <= humidity <= 100.0:
+                room["humidity_target_rh_pct"] = humidity
+            for field in (
+                "classification",
+                "analysis_room_name",
+                "airflow_ref",
+                "engineering_zone_id",
+            ):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
                     if text:
                         room[field] = text
+            notes = raw.get("notes")
+            if isinstance(notes, str):
+                room["notes"] = notes
+            metadata = raw.get("metadata")
+            if isinstance(metadata, dict):
+                room["metadata"] = copy.deepcopy(metadata)
+            engineering_ref = _normalize_engineering_ref(raw.get("engineering_ref"))
+            if engineering_ref is not None:
+                room["engineering_ref"] = engineering_ref
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -155,8 +216,18 @@ def normalize_layout(value: Any) -> dict:
             room_id = raw.get("room_id")
             if room_id is not None:
                 room_id = str(room_id).strip() or None
-            default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
-            default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+            default_width = {
+                "door": 0.9,
+                "window": 1.2,
+                "opening": 1.0,
+                "transfer": 0.6,
+            }.get(device_type, 0.4)
+            default_height = {
+                "door": 2.1,
+                "window": 1.2,
+                "opening": 2.1,
+                "transfer": 0.4,
+            }.get(device_type, 0.2)
             device = {
                 "id": device_id,
                 "type": device_type,
@@ -175,6 +246,9 @@ def normalize_layout(value: Any) -> dict:
             swing = str(raw.get("swing") or "").strip()
             if swing:
                 device["swing"] = swing
+            metadata = raw.get("metadata")
+            if isinstance(metadata, dict):
+                device["metadata"] = copy.deepcopy(metadata)
             devices.append(device)
     result["devices"] = devices
 
@@ -245,6 +319,8 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             "id": _unique_id(None, used_ids, fallback=_room_id(name)),
             "name": name,
             "analysis_room_name": name,
+            "engineering_zone_id": name,
+            "engineering_ref": create_engineering_ref(analysis, raw, room_name=name),
             "x_m": x_cursor,
             "y_m": 0.0,
             "length_m": length,
@@ -254,6 +330,8 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         }
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+        if raw.get("min_pressure_pa") is not None:
+            room["pressure_target_pa"] = _finite_number(raw.get("min_pressure_pa"), 0.0)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     return layout
@@ -268,6 +346,8 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
     raw = metadata.get(SPATIAL_METADATA_KEY)
     if isinstance(raw, dict):
         normalized = normalize_layout(raw)
+        if analysis is not None:
+            establish_sync_baselines(normalized, analysis)
         metadata[SPATIAL_METADATA_KEY] = normalized
         return normalized
 
@@ -327,7 +407,7 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     changed = False
     if getattr(analysis, "kind", "") == "room_verification":
         source = rooms[0]
-        for key in ("name", "length_m", "width_m", "height_m"):
+        for key in ("length_m", "width_m", "height_m"):
             value = source[key]
             if analysis.input.get(key) != value:
                 analysis.input[key] = value
@@ -336,7 +416,8 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
             if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
                 analysis.input["observed_pressure_pa"] = source["pressure_pa"]
                 changed = True
-        return changed
+        baseline_changed = refresh_sync_baselines(layout, analysis)
+        return changed or baseline_changed
 
     if getattr(analysis, "kind", "") != "project_verification":
         return False
@@ -376,7 +457,27 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
             if target.get("observed_pressure_pa") != source["pressure_pa"]:
                 target["observed_pressure_pa"] = source["pressure_pa"]
                 changed = True
-    return changed
+    baseline_changed = refresh_sync_baselines(layout, analysis)
+    return changed or baseline_changed
+
+
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicitly pull mapped engineering geometry into the spatial model."""
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return False
+    return _synchronize_analysis_to_layout(layout, analysis)
+
+
+def spatial_engineering_status(layout: dict, analysis: Any) -> dict:
+    return engineering_sync_report(normalize_layout(layout), analysis)
+
+
+def spatial_pressure_overlay(
+    layout: dict,
+    analysis: Any,
+    result: dict | None = None,
+) -> dict:
+    return pressure_overlay(normalize_layout(layout), analysis, result)
 
 
 def _room_overlap_records(
@@ -483,12 +584,89 @@ def _spatial_validation_key(layout: dict) -> tuple:
     )
 
 
-def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+def validate_layout(value: Any, analysis: Any = None) -> list[dict]:
+    """Return deterministic spatial diagnostics without hiding invalid edit state."""
+    issues: list[dict] = []
+    raw_rooms = value.get("rooms", []) if isinstance(value, dict) else []
+    raw_devices = value.get("devices", []) if isinstance(value, dict) else []
+
+    seen_room_ids: set[str] = set()
+    if isinstance(raw_rooms, list):
+        for index, raw in enumerate(raw_rooms):
+            if not isinstance(raw, dict):
+                issues.append(
+                    {
+                        "code": "malformed_room",
+                        "severity": "error",
+                        "item_ids": [],
+                        "message": f"Room entry {index + 1} is not an object.",
+                    }
+                )
+                continue
+            room_id = str(raw.get("id") or "")
+            if room_id and room_id in seen_room_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_room_id",
+                        "severity": "error",
+                        "item_ids": [room_id],
+                        "message": f"Duplicate room id '{room_id}' is not allowed.",
+                    }
+                )
+            if room_id:
+                seen_room_ids.add(room_id)
+            for field in ("length_m", "width_m", "height_m"):
+                number = _optional_finite(raw.get(field))
+                if number is None or number <= 0:
+                    issues.append(
+                        {
+                            "code": "invalid_room_geometry",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "field": field,
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' "
+                                f"has invalid {field}; it must be finite and greater than zero."
+                            ),
+                        }
+                    )
+            if (
+                "floor_elevation_m" in raw
+                and _optional_finite(raw.get("floor_elevation_m")) is None
+            ):
+                issues.append(
+                    {
+                        "code": "invalid_room_elevation",
+                        "severity": "error",
+                        "item_ids": [room_id] if room_id else [],
+                        "message": (
+                            f"Room '{raw.get('name') or room_id or index + 1}' "
+                            "has a non-finite floor elevation."
+                        ),
+                    }
+                )
+
+    seen_device_ids: set[str] = set()
+    if isinstance(raw_devices, list):
+        for raw in raw_devices:
+            if not isinstance(raw, dict):
+                continue
+            device_id = str(raw.get("id") or "")
+            if device_id and device_id in seen_device_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_device_id",
+                        "severity": "error",
+                        "item_ids": [device_id],
+                        "message": f"Duplicate spatial object id '{device_id}' is not allowed.",
+                    }
+                )
+            if device_id:
+                seen_device_ids.add(device_id)
+
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
-    issues: list[dict] = []
 
     first_room_by_name: dict[str, dict] = {}
     for room in rooms:
@@ -625,6 +803,29 @@ def validate_layout(value: Any) -> list[dict]:
                         ),
                     }
                 )
+
+    if analysis is not None and getattr(analysis, "kind", "") in {
+        "room_verification",
+        "project_verification",
+    }:
+        sync = engineering_sync_report(layout, analysis)
+        for entry in sync["rooms"]:
+            status = entry["status"]
+            if status == "synchronized":
+                continue
+            issues.append(
+                {
+                    "code": {
+                        "unmapped": "engineering_unmapped",
+                        "geometry_newer": "geometry_newer",
+                        "engineering_newer": "engineering_newer",
+                        "conflicting": "engineering_conflict",
+                    }[status],
+                    "severity": "warning",
+                    "item_ids": [entry["room_id"]],
+                    "message": f"{entry['room_name']}: {entry['message']}",
+                }
+            )
 
     return issues
 

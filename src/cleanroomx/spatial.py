@@ -614,6 +614,38 @@ def resize_room_with_devices(
     return True
 
 
+def duplicate_room_with_devices(
+    room: dict,
+    devices: list[dict],
+    *,
+    offset_m: float,
+) -> tuple[dict, list[dict]]:
+    """Duplicate a room and all devices assigned to it with a shared XY offset."""
+    offset = _finite_number(offset_m, 0.0)
+    source_room_id = room.get("id")
+
+    duplicate = copy.deepcopy(room)
+    duplicate["id"] = f"room-{uuid.uuid4().hex[:8]}"
+    duplicate["name"] = f"{room.get('name', 'Room')} Copy"
+    duplicate["x_m"] = _finite_number(room.get("x_m"), 0.0) + offset
+    duplicate["y_m"] = _finite_number(room.get("y_m"), 0.0) + offset
+
+    duplicated_devices: list[dict] = []
+    if source_room_id is not None:
+        for device in devices:
+            if device.get("room_id") != source_room_id:
+                continue
+            device_copy = copy.deepcopy(device)
+            device_copy["id"] = f"device-{uuid.uuid4().hex[:8]}"
+            device_copy["name"] = f"{device.get('name', device.get('type', 'Device'))} Copy"
+            device_copy["room_id"] = duplicate["id"]
+            device_copy["x_m"] = _finite_number(device.get("x_m"), 0.0) + offset
+            device_copy["y_m"] = _finite_number(device.get("y_m"), 0.0) + offset
+            duplicated_devices.append(device_copy)
+
+    return duplicate, duplicated_devices
+
+
 class SpatialEditHistory:
     """Bounded undo/redo history for normalized spatial-layout snapshots."""
 
@@ -1105,20 +1137,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         if item is None or self.selected is None:
             return
         before = self._snapshot_layout()
-        duplicate = copy.deepcopy(item)
-        duplicate["id"] = (
-            f"room-{uuid.uuid4().hex[:8]}"
-            if self.selected.kind == "room"
-            else f"device-{uuid.uuid4().hex[:8]}"
-        )
-        duplicate["name"] = f"{item.get('name', 'Item')} Copy"
         offset = max(0.1, self.layout["grid_m"])
-        duplicate["x_m"] += offset
-        duplicate["y_m"] += offset
         if self.selected.kind == "room":
+            duplicate, duplicated_devices = duplicate_room_with_devices(
+                item,
+                self.layout["devices"],
+                offset_m=offset,
+            )
             self.layout["rooms"].append(duplicate)
+            self.layout["devices"].extend(duplicated_devices)
             self.selected = _Hit("room", duplicate["id"])
         else:
+            duplicate = copy.deepcopy(item)
+            duplicate["id"] = f"device-{uuid.uuid4().hex[:8]}"
+            duplicate["name"] = f"{item.get('name', 'Item')} Copy"
+            duplicate["x_m"] += offset
+            duplicate["y_m"] += offset
             self.layout["devices"].append(duplicate)
             self.selected = _Hit("device", duplicate["id"])
             self._reassign_selected_device_room()

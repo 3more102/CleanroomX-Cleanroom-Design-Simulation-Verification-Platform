@@ -1,8 +1,29 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.101.0
+Release: CleanroomX v0.101.1
 Validation date: 2026-09-25
+
+FINAL SPATIAL / PATCH RELEASE CLOSURE
+PR #436 — Finish synchronized CleanroomX 2D/3D spatial design
+Exact tested PR head:
+407f1d8adf028a3ab4091ba740c027646d7acad6
+Merged main commit:
+d4b8f6294dd7deed207935423a52cf5f19a035eb
+PR CI run #1491
+run id 36166788690
+conclusion SUCCESS
+Post-merge main CI run #1493
+run id 36167376732
+conclusion SUCCESS
+Python 3.11: 973 passed
+Python 3.12: 973 passed
+Python 3.13: 973 passed
+PASS - windows-latest PowerShell checkout launcher smoke
+PASS - windows-latest CMD checkout launcher smoke
+PASS - Python 3.13 installed Tk/Xvfb CleanroomX GUI smoke
+PASS - tested PR tree and merged main tree are byte-for-byte identical
+
 
 VERIFIED RELEASE 2 CODE BASELINE
 main commit:
@@ -65,8 +86,8 @@ PASS - Python 3.13 installed Tk/Xvfb cleanroomx-gui --demo --smoke
 PASS - representative CLI JSON/Markdown smoke checks
 PASS - Release 2 spatial-validation and project-bundle performance evidence
 
-V0.101 RELEASE INTEGRITY
-PASS - package/runtime/source-demo/packaged-demo/test/CI version synchronization at 0.101.0
+V0.101.1 RELEASE INTEGRITY
+PASS - final functional tree verified before patch identity bump; package/runtime/source-demo/packaged-demo/test/CI version synchronization targets 0.101.1
 PASS - strict engineering JSON boundary rejects duplicate keys and non-finite constants
 PASS - deterministic project-level batch execution and exact source-revision checks
 PASS - durable project persistence/recovery/history and immutable run evidence

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from cleanroomx.project import AnalysisDocument
-from cleanroomx.spatial import sync_layout_to_analysis
+from cleanroomx.spatial import SpatialSyncError, sync_layout_to_analysis
 from cleanroomx.spatial_engineering import (
     engineering_mapping_diagnostics,
     pressure_relationships,
@@ -141,3 +143,17 @@ def test_explicit_geometry_sync_preserves_engineering_identity_and_non_geometry_
     assert process["observed_pressure_pa"] == 31.0
     assert process["supply_airflow_m3_h"] == 2700.0
     assert analysis.input["pressure_cascade"] == cascade
+
+
+
+def test_project_sync_preflights_all_mappings_before_mutating():
+    analysis = _analysis()
+    layout = _layout()
+    layout["rooms"][0]["length_m"] = 7.25
+    layout["rooms"][1]["analysis_room_name"] = "Removed"
+    before = copy.deepcopy(analysis.input)
+
+    with pytest.raises(SpatialSyncError, match="does not exist"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == before

@@ -251,7 +251,7 @@ def render_project_batch_markdown(batch: ProjectBatchRun) -> str:
     if not batch.source_stable_during_run:
         lines.append(
             "- Source-change boundary: "
-            markdown_text(batch.source_change_stage or "unknown")
+            + markdown_text(batch.source_change_stage or "unknown")
             + (
                 f" at analysis {markdown_text(batch.source_change_analysis_id)}"
                 if batch.source_change_analysis_id

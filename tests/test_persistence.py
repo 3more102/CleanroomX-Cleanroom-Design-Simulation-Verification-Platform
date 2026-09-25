@@ -11,6 +11,7 @@ import cleanroomx.persistence as persistence
 from cleanroomx.persistence import (
     AtomicWriteDurabilityError,
     AtomicWriteVerificationError,
+    atomic_publish_staged_file,
     atomic_write_bytes,
     atomic_write_text,
 )
@@ -205,3 +206,51 @@ def test_atomic_write_generated_pre_replace_failure_preserves_destination(tmp_pa
 
     assert target.read_bytes() == b"old"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+
+def test_atomic_publish_staged_file_streams_through_shared_commit_path(tmp_path):
+    target = tmp_path / "portable.cleanroomx.zip"
+    staged = tmp_path / ".portable.cleanroomx.zip.stage"
+    staged.write_bytes(b"streamed-bundle-bytes")
+
+    result = atomic_publish_staged_file(target, staged)
+
+    assert result == target
+    assert target.read_bytes() == b"streamed-bundle-bytes"
+    assert not staged.exists()
+
+
+def test_atomic_publish_staged_file_detects_change_after_conflict_hook(tmp_path):
+    target = tmp_path / "portable.cleanroomx.zip"
+    target.write_bytes(b"previous-bundle")
+    staged = tmp_path / ".portable.cleanroomx.zip.stage"
+    staged.write_bytes(b"verified-stage")
+
+    def mutate_stage() -> None:
+        staged.write_bytes(b"changed-after-fingerprint")
+
+    with pytest.raises(AtomicWriteVerificationError, match="staged publish") as exc_info:
+        atomic_publish_staged_file(
+            target,
+            staged,
+            before_replace=mutate_stage,
+        )
+
+    assert exc_info.value.committed is False
+    assert target.read_bytes() == b"previous-bundle"
+    assert not staged.exists()
+
+
+def test_atomic_publish_staged_file_requires_same_directory(tmp_path):
+    target = tmp_path / "destination" / "bundle.zip"
+    stage_dir = tmp_path / "staging"
+    stage_dir.mkdir()
+    staged = stage_dir / "bundle.stage"
+    staged.write_bytes(b"bundle")
+
+    with pytest.raises(ValueError, match="destination directory"):
+        atomic_publish_staged_file(target, staged)
+
+    assert staged.read_bytes() == b"bundle"
+    assert not target.exists()

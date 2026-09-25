@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased deterministic spatial identity hardening — 2026-09-25
+
+- Replaces random repair of missing/duplicate spatial IDs with deterministic collision-safe allocation for rooms and devices.
+- Guarantees unique normalized device IDs as well as room IDs, preventing ID-based selection/deletion from ambiguously matching multiple persisted objects.
+- Preserves legacy duplicate-room references using the historical first-match target while assigning later colliding rooms stable suffixed IDs.
+- Makes derived layouts with duplicate room names deterministic and unique, and uses the same collision-safe allocator for newly created workspace objects.
+- Adds idempotence, duplicate-ID repair, referential-integrity, duplicate-name derivation, and project save/reload round-trip regressions without changing project schema version, solver equations, engineering inputs, or acceptance logic.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

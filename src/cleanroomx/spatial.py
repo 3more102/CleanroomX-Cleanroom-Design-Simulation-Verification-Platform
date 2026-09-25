@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import copy
 import math
-import uuid
 from typing import Any, Callable
 
 import tkinter as tk
@@ -30,9 +29,39 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
-def _room_id(name: str) -> str:
-    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+def _slug_identifier(value: Any) -> str:
+    text = str(value or "").strip()
+    return "".join(ch.lower() if ch.isalnum() else "-" for ch in text).strip("-")
+
+
+def _unique_identifier(
+    preferred: Any,
+    *,
+    used: set[str],
+    fallback: str,
+) -> str:
+    """Allocate a deterministic non-empty identifier without colliding with used IDs."""
+    text = str(preferred).strip() if preferred is not None else ""
+    base = text or fallback
+    candidate = base
+    suffix = 2
+    while candidate in used:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
+
+
+def _room_id(
+    name: str,
+    *,
+    index: int = 0,
+    used: set[str] | None = None,
+) -> str:
+    base = _slug_identifier(name) or f"room-{index + 1}"
+    if used is None:
+        return base
+    return _unique_identifier(base, used=used, fallback=f"room-{index + 1}")
 
 
 def empty_layout() -> dict:
@@ -60,17 +89,32 @@ def normalize_layout(value: Any) -> dict:
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
 
     rooms: list[dict] = []
-    used_ids: set[str] = set()
+    used_room_ids: set[str] = set()
+    room_reference_map: dict[str, str] = {}
     raw_rooms = source.get("rooms", [])
     if isinstance(raw_rooms, list):
         for index, raw in enumerate(raw_rooms):
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            raw_room_id = raw.get("id")
+            preferred_room_id = (
+                str(raw_room_id).strip()
+                if raw_room_id is not None and str(raw_room_id).strip()
+                else _room_id(name, index=index)
+            )
+            room_id = _unique_identifier(
+                preferred_room_id,
+                used=used_room_ids,
+                fallback=f"room-{index + 1}",
+            )
+            # Duplicate legacy IDs are ambiguous. Preserve the historical first-match
+            # reference target while assigning every room its own stable canonical ID.
+            room_reference_map.setdefault(preferred_room_id, room_id)
+            if raw_room_id is not None:
+                raw_reference = str(raw_room_id).strip()
+                if raw_reference:
+                    room_reference_map.setdefault(raw_reference, room_id)
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,21 +130,36 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
-        for raw in raw_devices:
+        for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            raw_device_id = raw.get("id")
+            device_id = _unique_identifier(
+                raw_device_id,
+                used=used_device_ids,
+                fallback=f"device-{index + 1}",
+            )
+            raw_room_reference = raw.get("room_id")
+            room_reference = None
+            if raw_room_reference is not None:
+                reference_text = str(raw_room_reference).strip()
+                if reference_text:
+                    room_reference = room_reference_map.get(
+                        reference_text,
+                        reference_text,
+                    )
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "room_id": room_reference,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -140,6 +199,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_room_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -148,7 +208,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _room_id(name),
+            "id": _room_id(name, index=index, used=used_room_ids),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,
@@ -716,8 +776,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             default=0.0,
         )
         index = len(self.layout["rooms"]) + 1
+        room_id = _unique_identifier(
+            f"room-{index}",
+            used={str(item["id"]) for item in self.layout["rooms"]},
+            fallback=f"room-{index}",
+        )
         room = {
-            "id": f"room-{uuid.uuid4().hex[:8]}",
+            "id": room_id,
             "name": f"Room {index}",
             "x_m": x + (1.0 if self.layout["rooms"] else 0.0),
             "y_m": 0.0,
@@ -749,8 +814,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         else:
             x = y = z = 0.0
             room_id = None
+        device_index = len(self.layout["devices"]) + 1
+        device_id = _unique_identifier(
+            f"device-{device_index}",
+            used={str(item["id"]) for item in self.layout["devices"]},
+            fallback=f"device-{device_index}",
+        )
         device = {
-            "id": f"device-{uuid.uuid4().hex[:8]}",
+            "id": device_id,
             "type": device_type,
             "name": device_type.upper(),
             "room_id": room_id,

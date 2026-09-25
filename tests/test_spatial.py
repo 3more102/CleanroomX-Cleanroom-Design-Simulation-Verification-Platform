@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import math
 
-from cleanroomx.project import AnalysisDocument, ProjectDocument
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    save_project_document,
+)
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
     derive_layout_from_analysis,
@@ -295,3 +300,204 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
     }
 
     assert validate_layout(layout) == []
+
+
+def test_normalize_layout_repairs_duplicate_and_missing_ids_deterministically():
+    raw = {
+        "rooms": [
+            {
+                "id": "room-a",
+                "name": "A",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "room-a",
+                "name": "B",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "name": "Room 3",
+                "x_m": 10,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "device-a",
+                "type": "sensor",
+                "name": "S1",
+                "room_id": "room-a",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 1,
+            },
+            {
+                "id": "device-a",
+                "type": "sensor",
+                "name": "S2",
+                "room_id": "room-a",
+                "x_m": 2,
+                "y_m": 1,
+                "z_m": 1,
+            },
+            {
+                "type": "sensor",
+                "name": "S3",
+                "room_id": "room-a",
+                "x_m": 3,
+                "y_m": 1,
+                "z_m": 1,
+            },
+        ],
+    }
+
+    first = normalize_layout(raw)
+    second = normalize_layout(raw)
+
+    assert first == second
+    assert normalize_layout(first) == first
+    assert [room["id"] for room in first["rooms"]] == [
+        "room-a",
+        "room-a-2",
+        "room-3",
+    ]
+    assert [device["id"] for device in first["devices"]] == [
+        "device-a",
+        "device-a-2",
+        "device-3",
+    ]
+    assert len({room["id"] for room in first["rooms"]}) == len(first["rooms"])
+    assert len({device["id"] for device in first["devices"]}) == len(first["devices"])
+
+
+def test_normalize_layout_preserves_first_match_room_reference_when_duplicate_ids_are_repaired():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "shared",
+                    "name": "First",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                },
+                {
+                    "id": "shared",
+                    "name": "Second",
+                    "x_m": 5,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                },
+            ],
+            "devices": [
+                {
+                    "id": "sensor",
+                    "type": "sensor",
+                    "name": "Legacy sensor",
+                    "room_id": "shared",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 1,
+                }
+            ],
+        }
+    )
+
+    assert [room["id"] for room in layout["rooms"]] == ["shared", "shared-2"]
+    assert layout["devices"][0]["room_id"] == "shared"
+    assert validate_layout(layout) == []
+
+
+def test_derive_layout_allocates_unique_ids_for_duplicate_room_names():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Suite", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "Suite", "length_m": 4, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+
+    first = derive_layout_from_analysis(analysis)
+    second = derive_layout_from_analysis(analysis)
+
+    assert [room["id"] for room in first["rooms"]] == ["suite", "suite-2"]
+    assert first == second
+
+
+def test_spatial_identity_repairs_survive_project_save_reload_round_trip(tmp_path):
+    project = ProjectDocument(
+        name="Identity round trip",
+        metadata={
+            SPATIAL_METADATA_KEY: {
+                "rooms": [
+                    {
+                        "id": "room",
+                        "name": "A",
+                        "x_m": 0,
+                        "y_m": 0,
+                        "length_m": 4,
+                        "width_m": 4,
+                        "height_m": 3,
+                    },
+                    {
+                        "id": "room",
+                        "name": "B",
+                        "x_m": 5,
+                        "y_m": 0,
+                        "length_m": 4,
+                        "width_m": 4,
+                        "height_m": 3,
+                    },
+                ],
+                "devices": [
+                    {
+                        "id": "device",
+                        "type": "sensor",
+                        "name": "S1",
+                        "room_id": "room",
+                        "x_m": 1,
+                        "y_m": 1,
+                        "z_m": 1,
+                    },
+                    {
+                        "id": "device",
+                        "type": "sensor",
+                        "name": "S2",
+                        "room_id": "room",
+                        "x_m": 2,
+                        "y_m": 1,
+                        "z_m": 1,
+                    },
+                ],
+            }
+        },
+    )
+
+    normalized = ensure_project_layout(project)
+    path = save_project_document(tmp_path / "identity.cleanroomx.json", project)
+    loaded = load_project_document(path)
+    reloaded = ensure_project_layout(loaded)
+
+    assert reloaded == normalized
+    assert [room["id"] for room in reloaded["rooms"]] == ["room", "room-2"]
+    assert [device["id"] for device in reloaded["devices"]] == ["device", "device-2"]
+    assert all(device["room_id"] == "room" for device in reloaded["devices"])

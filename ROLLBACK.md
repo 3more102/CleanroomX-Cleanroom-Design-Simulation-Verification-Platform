@@ -32,3 +32,14 @@ A rollback is complete only when the selected baseline installs successfully, it
 ## v0.100 release anchor
 
 The validated v0.100.0 merge commit is `fa02c71f990790089cb9c64eb2e009cd984eb5db`. Its exact PR head `d8965090ee86713919079d9ee5e8a3b1d8f95e3b` passed CI run #822 before merge. Use repository history and normal revert/CI flow rather than rewriting shared history.
+
+## v0.101.0 Release 2 anchor
+
+The verified Release 2 code baseline on `main` is `0f487a7e11ad81c8bcd54eb91b6420a1d46523ea`.
+Its final consolidation PR #431 head `993a2803e1af6a37af05ac0036948cc9f7fb3fce`
+passed CI run #1463 / `36162913321`, and the post-merge `main` run #1464 /
+`36163451603` also passed. The immutable `v0.101.0` tag and GitHub Release are
+published from the final release-closure commit by
+`.github/workflows/publish-v0101-release.yml`. Preserve that tag and use normal
+revert/CI flow for any rollback from Release 2.
+

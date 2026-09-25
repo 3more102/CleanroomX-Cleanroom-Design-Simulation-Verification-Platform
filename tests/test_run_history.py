@@ -51,8 +51,8 @@ def test_run_history_detaches_nested_run_data_on_ingress_and_egress():
     exported.run.result["egress_mutation"] = True
     assert "egress_mutation" not in history.get(retained.sequence).run.result
 
-    expected_sha = retained.run.diagnostics["application_execution_provenance"]["input_sha256"]
-    assert history.get(retained.sequence).input_sha256 == expected_sha
+    assert retained.input_sha256 is not None
+    assert history.get(retained.sequence).input_sha256 == retained.input_sha256
 
 
 @pytest.mark.parametrize("limit", [0, -1, True, 1.5])

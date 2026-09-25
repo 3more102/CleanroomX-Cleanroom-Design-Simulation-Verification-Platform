@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased revision-bound file-backed CLIs — 2026-09-25
+
+- Routes `cleanroomx-consistency` and `cleanroomx-dossier` through the existing application execution service instead of bypassing its external-dependency integrity guard.
+- Fails closed with an actionable stderr diagnostic and exit code 3 when a referenced engineering input changes, disappears, or becomes unstable during execution; no requested report file is written in that failure path.
+- Preserves the existing JSON/Markdown result payloads, fsync-backed atomic `--output` writes, and existing pass/fail/attention exit semantics for stable inputs.
+- Adds CLI-level failure-injection regressions for mid-run dependency mutation plus stable-output compatibility checks.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

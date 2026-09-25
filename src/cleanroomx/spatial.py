@@ -105,9 +105,13 @@ def normalize_layout(value: Any) -> dict:
         for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
-            device_type = str(raw.get("type") or "equipment").lower()
+            device_type = str(raw.get("type") or "equipment").strip().lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
+            device_name = (
+                str(raw.get("name") or device_type.upper()).strip()
+                or device_type.upper()
+            )
             device_id = _deduplicated_id(
                 raw.get("id"),
                 used_device_ids,
@@ -124,7 +128,7 @@ def normalize_layout(value: Any) -> dict:
                 {
                     "id": device_id,
                     "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()).strip(),
+                    "name": device_name,
                     "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),

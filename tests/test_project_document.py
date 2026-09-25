@@ -6,8 +6,9 @@ import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    ProjectFormatError, ProjectWriteConflictError, atomic_write_text, file_fingerprint,
+    load_project_document, load_project_document_with_fingerprint, project_from_dict,
+    save_project_document, save_project_document_with_fingerprint,
 )
 
 
@@ -28,6 +29,80 @@ def test_project_document_round_trip(tmp_path):
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["schema"] == PROJECT_SCHEMA
     assert raw["schema_version"] == PROJECT_SCHEMA_VERSION
+
+
+def test_project_load_fingerprint_matches_exact_loaded_bytes(tmp_path):
+    path = save_project_document(
+        tmp_path / "fingerprinted.cleanroomx.json",
+        ProjectDocument(name="Fingerprinted"),
+    )
+
+    loaded, fingerprint = load_project_document_with_fingerprint(path)
+
+    payload = path.read_bytes()
+    assert loaded.name == "Fingerprinted"
+    assert fingerprint["path"] == str(path.resolve())
+    assert fingerprint["exists"] is True
+    assert fingerprint["size"] == len(payload)
+    import hashlib
+    assert fingerprint["sha256"] == hashlib.sha256(payload).hexdigest()
+
+
+def test_guarded_save_refuses_external_content_change_and_preserves_external_file(tmp_path):
+    path = save_project_document(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    _, opened_fingerprint = load_project_document_with_fingerprint(path)
+    save_project_document(path, ProjectDocument(name="External edit"))
+
+    with pytest.raises(ProjectWriteConflictError, match="changed on disk"):
+        save_project_document(
+            path,
+            ProjectDocument(name="My unsaved edit"),
+            expected_fingerprint=opened_fingerprint,
+        )
+
+    assert load_project_document(path).name == "External edit"
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_guarded_save_refuses_external_deletion(tmp_path):
+    path = save_project_document(
+        tmp_path / "deleted.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    expected = file_fingerprint(path)
+    path.unlink()
+
+    with pytest.raises(ProjectWriteConflictError, match="changed on disk"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Would recreate"),
+            expected_fingerprint=expected,
+        )
+
+    assert not path.exists()
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_guarded_save_allows_metadata_only_touch_when_content_is_unchanged(tmp_path):
+    path = save_project_document(
+        tmp_path / "touch.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    expected = file_fingerprint(path)
+    path.touch()
+
+    saved, fingerprint = save_project_document_with_fingerprint(
+        path,
+        ProjectDocument(name="Updated"),
+        expected_fingerprint=expected,
+    )
+
+    assert saved == path
+    assert fingerprint == file_fingerprint(path)
+    assert load_project_document(path).name == "Updated"
 
 
 def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):

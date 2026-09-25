@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 
+from .jsonio import strict_json_dumps
 from .project import atomic_write_text
 from .consistency import analyze_project_consistency
 from .consistency_report import markdown_consistency_report
@@ -58,7 +58,7 @@ def main() -> int:
         require_same_room_set=args.require_same_room_set,
     )
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_consistency_report(result)
     )

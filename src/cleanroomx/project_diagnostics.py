@@ -187,6 +187,7 @@ def _analysis_definition_issues(
 
 
 def _sync_issues(project: ProjectDocument, layout: dict[str, Any]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
     rooms = layout.get("rooms", [])
     if not rooms:
         return []

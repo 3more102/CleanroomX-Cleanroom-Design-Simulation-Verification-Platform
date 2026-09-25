@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 
+from .jsonio import strict_json_dumps
 from .project import atomic_write_text
 from .dossier import build_dossier
 from .dossier_report import markdown_dossier_report
@@ -23,7 +23,7 @@ def main() -> int:
     args = build_parser().parse_args()
     result = build_dossier(args.manifest)
     text = (
-        json.dumps(result, indent=2)
+        strict_json_dumps(result, indent=2)
         if args.format == "json"
         else markdown_dossier_report(result)
     )

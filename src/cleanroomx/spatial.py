@@ -30,6 +30,29 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
+def _drag_target_coordinate(
+    *,
+    item_origin: float,
+    pointer_origin: float,
+    pointer_current: float,
+    grid_m: float,
+) -> float:
+    """Return the snapped coordinate for a drag gesture from immutable origins.
+
+    Computing from the gesture start rather than the previous motion event makes
+    the final geometry independent of GUI event coalescing and pointer sampling.
+    """
+    if not all(
+        math.isfinite(value)
+        for value in (item_origin, pointer_origin, pointer_current, grid_m)
+    ):
+        raise ValueError("drag coordinates and grid must be finite")
+    if grid_m <= 0:
+        raise ValueError("drag grid must be positive")
+    target = item_origin + (pointer_current - pointer_origin)
+    return round(target / grid_m) * grid_m
+
+
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
     return slug or f"room-{uuid.uuid4().hex[:8]}"
@@ -387,6 +410,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout = empty_layout()
         self.selected: _Hit | None = None
         self._drag_anchor: tuple[float, float] | None = None
+        self._drag_item_origin: tuple[float, float] | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
@@ -538,6 +562,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         if project_token != self._history_project_token:
             self._history.clear()
             self._history_project_token = project_token
+            self._drag_anchor = None
+            self._drag_item_origin = None
             self._drag_history_before = None
         self.layout = ensure_project_layout(project, analysis)
         if self.selected and not self._selected_object():
@@ -613,7 +639,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         *,
         history_before: dict | None = None,
         selection_before: tuple[str, str] | None = None,
-    ) -> None:
+    ) -> bool:
+        if history_before is not None and history_before == self._history_layout():
+            self._status_setter("Spatial edit unchanged")
+            self._update_history_controls()
+            self.redraw()
+            return False
+
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
@@ -629,6 +661,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._status_setter(message)
         self._update_history_controls()
         self.redraw()
+        return True
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:
@@ -1055,30 +1088,50 @@ class SpatialDesignWorkspace(ttk.Frame):
         if current:
             hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
         self.selected = hit
-        self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
-        self._drag_history_before = (
-            (self._history_layout(), self._selection_state()) if hit is not None else None
-        )
+        item = self._selected_object()
+        if hit is not None and item is not None:
+            self._drag_anchor = self._canvas_to_world(event.x, event.y)
+            self._drag_item_origin = (item["x_m"], item["y_m"])
+            self._drag_history_before = (
+                self._history_layout(),
+                self._selection_state(),
+            )
+        else:
+            self._drag_anchor = None
+            self._drag_item_origin = None
+            self._drag_history_before = None
         self._load_property_panel()
         self.redraw()
 
     def _on_left_drag(self, event: tk.Event) -> None:
         item = self._selected_object()
-        if item is None or self._drag_anchor is None:
+        if (
+            item is None
+            or self._drag_anchor is None
+            or self._drag_item_origin is None
+        ):
             return
         world = self._canvas_to_world(event.x, event.y)
-        dx = world[0] - self._drag_anchor[0]
-        dy = world[1] - self._drag_anchor[1]
         grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
-        self._drag_anchor = world
+        item["x_m"] = _drag_target_coordinate(
+            item_origin=self._drag_item_origin[0],
+            pointer_origin=self._drag_anchor[0],
+            pointer_current=world[0],
+            grid_m=grid,
+        )
+        item["y_m"] = _drag_target_coordinate(
+            item_origin=self._drag_item_origin[1],
+            pointer_origin=self._drag_anchor[1],
+            pointer_current=world[1],
+            grid_m=grid,
+        )
         self._load_property_panel()
         self.redraw()
 
     def _on_left_up(self, event: tk.Event) -> None:
         if (
             self._drag_anchor is not None
+            and self._drag_item_origin is not None
             and self.selected is not None
             and self._drag_history_before is not None
         ):
@@ -1089,6 +1142,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 selection_before=selection_before,
             )
         self._drag_anchor = None
+        self._drag_item_origin = None
         self._drag_history_before = None
 
     def _on_motion(self, event: tk.Event) -> None:

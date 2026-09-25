@@ -44,10 +44,10 @@ class RecoveryCandidate:
     project_identity: str
     saved_at_utc: str
     project_name: str
-    integrity_status: str
     source_path: Path | None
     source_relation: str
     source_is_newer: bool
+    integrity_status: str = "legacy_unverified"
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased recovery artifact integrity — 2026-09-25
+
+- Upgrades newly written recovery artifacts to schema v2 with deterministic SHA-256 integrity evidence over the complete semantic recovery payload.
+- Rejects syntactically valid but altered recovery data before inspection or restoration, surfacing corrupted artifacts as preserved recovery-scan issues instead of opening them.
+- Keeps schema-v1 recovery artifacts readable for backward compatibility and marks them explicitly as legacy/unverified because those older artifacts did not contain an end-to-end checksum.
+- Displays integrity state in the Recovery Center and recovery inspection dialog without changing explicit project-save ownership, solver equations, tolerances, or engineering acceptance semantics.
+- Adds regression coverage for verified v2 writes, parseable tampering detection, legacy-v1 compatibility, scan behavior, and UI integrity evidence.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

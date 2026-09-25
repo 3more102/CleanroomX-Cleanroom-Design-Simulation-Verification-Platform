@@ -301,3 +301,50 @@ def test_new_destination_verification_failure_does_not_risk_unlink_race(
 
     assert path.exists()
     assert project_revision_dir(path).exists() is False
+
+
+def test_revision_records_source_project_application_version(tmp_path):
+    path = tmp_path / "legacy-version.cleanroomx.json"
+    payload = _project("old").to_dict()
+    payload["application_version"] = "0.99.1"
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    expected = capture_project_file_revision(path)
+
+    save_project_document_guarded(
+        path,
+        _project("new"),
+        expected_revision=expected,
+    )
+
+    revision = scan_project_revisions(path).revisions[0]
+    assert revision.application_version == "0.99.1"
+
+
+def test_revision_retention_cleanup_failure_does_not_fail_committed_save(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    save_project_document(path, _project("v0"))
+    _guarded_save(path, _project("v1"), history_limit=1)
+
+    original_unlink = project_module.Path.unlink
+
+    def fail_revision_cleanup(self, *args, **kwargs):
+        if self.name.endswith(".cleanroomx.revision.json"):
+            raise OSError("cleanup denied")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(project_module.Path, "unlink", fail_revision_cleanup)
+
+    saved_path, _ = _guarded_save(
+        path,
+        _project("v2"),
+        history_limit=1,
+    )
+
+    assert saved_path == path.resolve(strict=False)
+    assert load_project_document(path).description == "v2"
+    assert len(scan_project_revisions(path).revisions) == 2

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased spatial project data integrity — 2026-09-25
+
+- Extracts the persisted spatial-layout contract into a GUI-independent data-model module while preserving the existing desktop spatial API.
+- Validates spatial layout version, stable unique room/device ids, room references, supported device types, finite coordinates, positive room dimensions, and bounded persisted view state at the project load/save boundary.
+- Makes permissive workspace normalization deterministic: malformed duplicate or missing ids receive repeatable collision-free repair ids rather than random identities.
+- Makes project/layout refresh read-only. Derived verification geometry remains an in-memory seed until the operator performs an explicit spatial edit, preventing open/refresh from silently rewriting metadata and then marking that rewrite clean.
+- Blocks invalid in-memory spatial state before atomic project replacement, preserving the existing destination when validation fails.
+- Adds regression coverage for deterministic normalization, non-mutating refresh, identity/reference rejection, invalid geometry/version rejection, failed-save preservation, and valid round trips without changing project schema version or solver semantics.
+
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

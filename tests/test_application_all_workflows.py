@@ -21,6 +21,7 @@ _WORKFLOW_EXAMPLES = {
     "qualification_uncertainty": "qualification_uncertainty_demo.json",
     "parallel_flow": "parallel_flow_demo.json",
     "loop_flow": "looped_network_demo.json",
+    "pressure_network": "pressure_network_demo.json",
     "variable_friction_loop": "variable_friction_loop_demo.json",
     "thermal_uncertainty": "thermal_uncertainty_demo.json",
     "psychrometric_uncertainty": "psychrometric_uncertainty_demo.json",

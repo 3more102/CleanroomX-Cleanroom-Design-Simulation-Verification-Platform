@@ -37,19 +37,39 @@ def _slug_identifier(value: str) -> str:
     ).strip("-")
 
 
+def _reserved_explicit_ids(items: Any) -> set[str]:
+    """Return explicit IDs that occur exactly once and must not be stolen by repairs."""
+    counts: dict[str, int] = {}
+    if not isinstance(items, list):
+        return set()
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        value = raw.get("id")
+        identifier = str(value).strip() if value is not None else ""
+        if identifier:
+            counts[identifier] = counts.get(identifier, 0) + 1
+    return {identifier for identifier, count in counts.items() if count == 1}
+
+
 def _unique_identifier(
     preferred: Any,
     *,
     fallback: str,
     used_ids: set[str],
+    reserved_ids: set[str] | None = None,
 ) -> str:
     """Allocate a deterministic unique identifier without rewriting valid stable IDs."""
-    base = str(preferred).strip() if preferred is not None else ""
-    if not base:
-        base = fallback
+    reserved = reserved_ids or set()
+    preferred_id = str(preferred).strip() if preferred is not None else ""
+    if preferred_id and preferred_id not in used_ids:
+        used_ids.add(preferred_id)
+        return preferred_id
+
+    base = preferred_id or fallback
     candidate = base
     suffix = 2
-    while candidate in used_ids:
+    while candidate in used_ids or candidate in reserved:
         candidate = f"{base}-{suffix}"
         suffix += 1
     used_ids.add(candidate)
@@ -64,7 +84,8 @@ def _room_id(name: str, *, index: int = 0) -> str:
 def _device_id(name: str, device_type: str, *, index: int) -> str:
     slug = _slug_identifier(name)
     type_slug = _slug_identifier(device_type) or "equipment"
-    return f"device-{slug or f'{type_slug}-{index + 1}'}"
+    identifier = slug or f"{type_slug}-{index + 1}"
+    return f"device-{identifier}"
 
 
 def empty_layout() -> dict:
@@ -94,6 +115,7 @@ def normalize_layout(value: Any) -> dict:
     rooms: list[dict] = []
     used_ids: set[str] = set()
     raw_rooms = source.get("rooms", [])
+    reserved_room_ids = _reserved_explicit_ids(raw_rooms)
     if isinstance(raw_rooms, list):
         for index, raw in enumerate(raw_rooms):
             if not isinstance(raw, dict):
@@ -103,6 +125,7 @@ def normalize_layout(value: Any) -> dict:
                 raw.get("id"),
                 fallback=_room_id(name, index=index),
                 used_ids=used_ids,
+                reserved_ids=reserved_room_ids,
             )
             room = {
                 "id": room_id,
@@ -121,6 +144,7 @@ def normalize_layout(value: Any) -> dict:
     devices: list[dict] = []
     used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
+    reserved_device_ids = _reserved_explicit_ids(raw_devices)
     if isinstance(raw_devices, list):
         for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
@@ -133,6 +157,7 @@ def normalize_layout(value: Any) -> dict:
                 raw.get("id"),
                 fallback=_device_id(name, device_type, index=index),
                 used_ids=used_device_ids,
+                reserved_ids=reserved_device_ids,
             )
             raw_room_id = raw.get("room_id")
             room_id = (

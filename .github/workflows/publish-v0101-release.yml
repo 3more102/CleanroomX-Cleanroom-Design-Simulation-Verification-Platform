@@ -1,0 +1,99 @@
+name: Publish CleanroomX v0.101.0
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish immutable v0.101.0 release
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.101.0
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Qualify one-time release closure
+        id: closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/publish-v0101-release.yml
+          git cat-file -e "${TARGET_SHA}^{commit}"
+          git cat-file -e "${TARGET_SHA}:${workflow}"
+          if git cat-file -e "${TARGET_SHA}^:${workflow}" 2>/dev/null; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Release workflow already existed in the parent; skip publication."
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+            echo "This commit introduces the release workflow; publication is eligible."
+          fi
+
+      - name: Verify validated release baseline
+        if: steps.closure.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git show "${TARGET_SHA}:pyproject.toml" | grep -E '^version = "0\.101\.0"$')" = 'version = "0.101.0"'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'Release: CleanroomX v0.101.0'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'conclusion SUCCESS'
+          git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.101.0 Release 2 Test Evidence'
+
+      - name: Publish tag and GitHub Release
+        if: steps.closure.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${existing_sha}" = "${TARGET_SHA}"
+            echo "Release ${TAG} already exists at the validated closure commit; nothing to do."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            remote_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${remote_sha}" = "${TARGET_SHA}"
+          else
+            git tag "${TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          cat > /tmp/release-notes.md <<EOF
+          CleanroomX v0.101.0 is the verified Release 2 closure.
+
+          Validated evidence:
+          - Release commit: ${TARGET_SHA}
+          - Final code consolidation: 0f487a7e11ad81c8bcd54eb91b6420a1d46523ea
+          - PR #431 CI run #1463 / 36162913321: success
+          - Post-merge main CI run #1464 / 36163451603: success
+          - Python 3.11 / 3.12 / 3.13 complete suite: 960 passed on each interpreter
+          - Application/strict-ingestion/project-batch gate: 291 passed
+          - Release 2 consolidation gate: 128 passed
+          - Installed wheel, CLI, packaged demo, project-batch smoke, performance checks, and Tk/Xvfb GUI smoke: passed
+
+          Release 2 consolidates durable project lifecycle and recovery/history, plugin execution, immutable analysis evidence, dependency freshness, portable bundles/reports, deterministic project batch automation, strict engineering JSON ingestion, precision-safe composition, explicit verification completeness, presentation-boundary hardening, and numerical-integrity gates.
+
+          No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion was intentionally changed by the release closure.
+
+          See TEST_EVIDENCE.md, VALIDATION.txt, CHANGELOG.md, ARCHITECTURE.md, DEPLOYMENT.md, MIGRATIONS.md, ROLLBACK.md, and SECURITY.md.
+          EOF
+
+          gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.101.0" --notes-file /tmp/release-notes.md

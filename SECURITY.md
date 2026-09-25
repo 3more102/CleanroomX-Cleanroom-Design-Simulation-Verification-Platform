@@ -14,7 +14,7 @@ Application workflow bindings are fixed in `src/cleanroomx/application.py`. The 
 
 Some workflows, including dossier and consistency, resolve user-supplied file references relative to the saved project directory. Treat project files and referenced engineering data as trusted local inputs and review their paths before execution.
 
-Project saving uses a temporary file followed by replacement to reduce the chance of leaving a partially written project after an interrupted save.
+Project, recovery, GUI-export, and CLI-output persistence uses a shared same-directory verified atomic writer. The writer file-syncs staged exact UTF-8 bytes, verifies staged length and SHA-256 before replacement, preserves existing regular-file permission bits where supported, and synchronizes the containing directory after replacement where the filesystem supports it. A post-replace directory-sync failure is surfaced explicitly rather than being reported as a fully durable save.
 
 ## Operational guidance
 

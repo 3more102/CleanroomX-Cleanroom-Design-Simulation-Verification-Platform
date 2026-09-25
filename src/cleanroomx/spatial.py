@@ -936,6 +936,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships.set(bool(view.get("show_relationships", True)))
         if self.selected and not self._selected_object():
             self.selected = None
+        self._last_validation_key = None
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
@@ -1137,14 +1138,99 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._mapping_var.set("Engineering mapping: —")
+            self._engineering_var.set("Engineering data: —")
             for var in self._property_vars.values():
                 var.set("")
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+
+        is_room = bool(self.selected and self.selected.kind == "room")
+        prefix = "Room" if is_room else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+
+        if is_room:
+            analysis = self._analysis_getter()
+            record = next(
+                (
+                    status
+                    for status in spatial_sync_status(self.layout, analysis)
+                    if status.get("room_id") == item.get("id")
+                ),
+                None,
+            )
+            if record is None:
+                self._mapping_var.set("Engineering mapping: unavailable")
+            else:
+                state = str(record.get("state") or "unmapped").replace("_", " ")
+                self._mapping_var.set(
+                    f"Engineering mapping: {state} — {record.get('reason', '')}"
+                )
+
+            targets = engineering_rooms(analysis)
+            target = None
+            if getattr(analysis, "kind", "") == "room_verification" and targets:
+                target = targets[0]
+            elif getattr(analysis, "kind", "") == "project_verification":
+                ref = str(item.get("analysis_room_name") or "").strip().casefold()
+                target = next(
+                    (
+                        candidate
+                        for candidate in targets
+                        if str(candidate.get("name") or "").strip().casefold() == ref
+                    ),
+                    None,
+                )
+            if isinstance(target, dict):
+                engineering_parts = []
+                for key, label, unit in (
+                    ("supply_airflow_m3_h", "Supply", "m³/h"),
+                    ("min_ach", "Min ACH", "1/h"),
+                    ("min_pressure_pa", "Min P", "Pa"),
+                    ("observed_pressure_pa", "Observed P", "Pa"),
+                ):
+                    value = target.get(key)
+                    if value is not None:
+                        engineering_parts.append(f"{label} {value:g} {unit}")
+                self._engineering_var.set(
+                    "Engineering data: " + (" · ".join(engineering_parts) or "mapped")
+                )
+            else:
+                self._engineering_var.set("Engineering data: unmapped")
+        else:
+            self._mapping_var.set("Engineering mapping: not applicable")
+            self._engineering_var.set("Engineering data: —")
+
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+
+    def sync_from_analysis(self) -> None:
+        """Explicitly accept mapped engineering geometry into the shared spatial model."""
+
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room-verification or project-verification analysis first"
+            )
+            return
+
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        changed = sync_analysis_to_layout(self.layout, analysis)
+        if not changed:
+            self._status_setter("Mapped geometry already matches the active analysis")
+            self._load_property_panel()
+            self.redraw()
+            return
+        self._load_property_panel()
+        self._persist(
+            f"Accepted mapped engineering geometry from {getattr(analysis, 'name', 'active analysis')}",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def apply_properties(self) -> None:
         item = self._selected_object()

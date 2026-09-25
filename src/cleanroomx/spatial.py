@@ -23,6 +23,8 @@ from .spatial_domain import (
     mapped_pressure_values,
     mark_layout_synchronized,
     pressure_relationships,
+    room_plan_bounds,
+    room_prism_vertices,
 )
 
 
@@ -591,6 +593,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout = empty_layout()
         self.selected: _Hit | None = None
         self._drag_anchor: tuple[float, float] | None = None
+        self._drag_mode: str | None = None
+        self._hovered: _Hit | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
@@ -727,6 +731,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
         self.canvas_2d.bind("<Motion>", self._on_motion)
+        self.canvas_2d.bind("<Leave>", self._on_leave_2d)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
         self.canvas_2d.bind("<B1-Motion>", self._on_left_drag)
         self.canvas_2d.bind("<ButtonRelease-1>", self._on_left_up)
@@ -1200,20 +1205,26 @@ class SpatialDesignWorkspace(ttk.Frame):
         }
 
         for room in self.layout["rooms"]:
-            x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
-            x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
+            x0_m, y0_m, x1_m, y1_m = room_plan_bounds(room)
+            x0, y0 = self._world_to_canvas(x0_m, y0_m)
+            x1, y1 = self._world_to_canvas(x1_m, y1_m)
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hovered == _Hit("room", room["id"])
             sync_state = sync_by_id.get(room["id"], "unmapped")
             outline = (
                 "#1d4ed8"
                 if selected
                 else (
-                    "#b45309"
-                    if room["id"] in warning_ids
+                    "#0284c7"
+                    if hovered
                     else (
-                        "#b91c1c"
-                        if sync_state == "conflicting"
-                        else ("#7c3aed" if sync_state == "engineering_newer" else ("#0f766e" if sync_state == "geometry_newer" else "#34495e"))
+                        "#b45309"
+                        if room["id"] in warning_ids
+                        else (
+                            "#b91c1c"
+                            if sync_state == "conflicting"
+                            else ("#7c3aed" if sync_state == "engineering_newer" else ("#0f766e" if sync_state == "geometry_newer" else "#34495e"))
+                        )
                     )
                 )
             )
@@ -1232,6 +1243,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
             )
+            if selected:
+                handle = 6
+                canvas.create_rectangle(
+                    x1 - handle,
+                    y1 - handle,
+                    x1 + handle,
+                    y1 + handle,
+                    fill="#ffffff",
+                    outline="#1d4ed8",
+                    width=2,
+                    tags=(f"resize:{room['id']}", "resize-handle"),
+                )
 
         room_by_id = {room["id"]: room for room in self.layout["rooms"]}
         for relationship in pressure_relationships(self.layout, self._analysis_getter()):
@@ -1366,24 +1389,22 @@ class SpatialDesignWorkspace(ttk.Frame):
             key=lambda room: (room["x_m"] - cx) * math.sin(az) + (room["y_m"] - cy) * math.cos(az),
         )
         for room in ordered:
-            x0 = room["x_m"] - cx
-            y0 = room["y_m"] - cy
-            x1 = x0 + room["length_m"]
-            y1 = y0 + room["width_m"]
-            base_z = _finite_number(room.get("elevation_m"), 0.0)
-            top_z = base_z + room["height_m"]
+            prism = room_prism_vertices(room)
+            base_z = prism["base"][0][2]
+            top_z = prism["top"][0][2]
             base = [
-                self._project_3d(x0, y0, base_z),
-                self._project_3d(x1, y0, base_z),
-                self._project_3d(x1, y1, base_z),
-                self._project_3d(x0, y1, base_z),
+                self._project_3d(x - cx, y - cy, z)
+                for x, y, z in prism["base"]
             ]
             top = [
-                self._project_3d(x0, y0, top_z),
-                self._project_3d(x1, y0, top_z),
-                self._project_3d(x1, y1, top_z),
-                self._project_3d(x0, y1, top_z),
+                self._project_3d(x - cx, y - cy, z)
+                for x, y, z in prism["top"]
             ]
+            x0_m, y0_m, x1_m, y1_m = room_plan_bounds(room)
+            x0 = x0_m - cx
+            y0 = y0_m - cy
+            x1 = x1_m - cx
+            y1 = y1_m - cy
             display_pressure = pressure_by_id.get(room["id"])
             fill = _pressure_fill(display_pressure, pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
@@ -1450,8 +1471,19 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_left_down(self, event: tk.Event) -> None:
         current = self.canvas_2d.find_withtag("current")
         hit = None
+        resize_room_id = None
         if current:
-            hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
+            tags = self.canvas_2d.gettags(current[0])
+            for tag in tags:
+                if tag.startswith("resize:"):
+                    resize_room_id = tag.split(":", 1)[1]
+                    break
+            hit = self._parse_hit(tags)
+        if resize_room_id is not None:
+            hit = _Hit("room", resize_room_id)
+            self._drag_mode = "resize"
+        else:
+            self._drag_mode = "move" if hit is not None else None
         self.selected = hit
         self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
         self._drag_history_before = (
@@ -1465,15 +1497,25 @@ class SpatialDesignWorkspace(ttk.Frame):
         if item is None or self._drag_anchor is None:
             return
         world = self._canvas_to_world(event.x, event.y)
-        dx = world[0] - self._drag_anchor[0]
-        dy = world[1] - self._drag_anchor[1]
-        if self._snap_grid.get():
-            grid = self.layout["grid_m"]
-            item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-            item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self._drag_mode == "resize" and self.selected and self.selected.kind == "room":
+            length = max(0.1, world[0] - item["x_m"])
+            width = max(0.1, world[1] - item["y_m"])
+            if self._snap_grid.get():
+                grid = self.layout["grid_m"]
+                length = max(grid, round(length / grid) * grid)
+                width = max(grid, round(width / grid) * grid)
+            item["length_m"] = length
+            item["width_m"] = width
         else:
-            item["x_m"] += dx
-            item["y_m"] += dy
+            dx = world[0] - self._drag_anchor[0]
+            dy = world[1] - self._drag_anchor[1]
+            if self._snap_grid.get():
+                grid = self.layout["grid_m"]
+                item["x_m"] = round((item["x_m"] + dx) / grid) * grid
+                item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+            else:
+                item["x_m"] += dx
+                item["y_m"] += dy
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
@@ -1486,16 +1528,29 @@ class SpatialDesignWorkspace(ttk.Frame):
         ):
             history_before, selection_before = self._drag_history_before
             self._persist(
-                "Spatial item moved",
+                "Spatial room resized" if self._drag_mode == "resize" else "Spatial item moved",
                 history_before=history_before,
                 selection_before=selection_before,
             )
         self._drag_anchor = None
+        self._drag_mode = None
         self._drag_history_before = None
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        current = self.canvas_2d.find_withtag("current")
+        hovered = None
+        if current:
+            hovered = self._parse_hit(self.canvas_2d.gettags(current[0]))
+        if hovered != self._hovered:
+            self._hovered = hovered
+            self.redraw()
+
+    def _on_leave_2d(self, event=None) -> None:
+        if self._hovered is not None:
+            self._hovered = None
+            self.redraw()
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

@@ -1895,61 +1895,126 @@ class SpatialDesignWorkspace(ttk.Frame):
         min_x, min_y, max_x, max_y = self._bounds()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
-        pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
+        show_pressure = self._show_pressure.get()
+        pressures = (
+            [
+                room.get("pressure_pa")
+                for room in self.layout["rooms"]
+                if room.get("pressure_pa") is not None
+            ]
+            if show_pressure
+            else []
+        )
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        sync_records = {
+            item["room_id"]: item
+            for item in spatial_sync_status(self.layout, self._analysis_getter())
+        }
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
             self.layout["rooms"],
-            key=lambda room: (room["x_m"] - cx) * math.sin(az) + (room["y_m"] - cy) * math.cos(az),
+            key=lambda room: (
+                (room["x_m"] - cx) * math.sin(az)
+                + (room["y_m"] - cy) * math.cos(az)
+            ),
         )
         for room in ordered:
             x0 = room["x_m"] - cx
             y0 = room["y_m"] - cy
             x1 = x0 + room["length_m"]
             y1 = y0 + room["width_m"]
-            z = room["height_m"]
+            z0 = room.get("elevation_m", 0.0)
+            z1 = z0 + room["height_m"]
             base = [
-                self._project_3d(x0, y0, 0),
-                self._project_3d(x1, y0, 0),
-                self._project_3d(x1, y1, 0),
-                self._project_3d(x0, y1, 0),
+                self._project_3d(x0, y0, z0),
+                self._project_3d(x1, y0, z0),
+                self._project_3d(x1, y1, z0),
+                self._project_3d(x0, y1, z0),
             ]
             top = [
-                self._project_3d(x0, y0, z),
-                self._project_3d(x1, y0, z),
-                self._project_3d(x1, y1, z),
-                self._project_3d(x0, y1, z),
+                self._project_3d(x0, y0, z1),
+                self._project_3d(x1, y0, z1),
+                self._project_3d(x1, y1, z1),
+                self._project_3d(x0, y1, z1),
             ]
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = (
+                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                if show_pressure
+                else "#b9c7d5"
+            )
             selected = self.selected == _Hit("room", room["id"])
+            state = sync_records.get(room["id"], {}).get("state")
+            warning_outline = {
+                "geometry_newer": "#f59e0b",
+                "engineering_data_newer": "#a78bfa",
+                "conflicting": "#fb7185",
+                "missing_target": "#fb7185",
+                "unmapped": "#94a3b8",
+            }.get(state)
             outline = (
                 "#7dd3fc"
                 if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                else warning_outline
+                or ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
             )
             tag = f"room:{room['id']}"
-            canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
+            # Floor, ceiling/volume top and visible walls are derived from one room prism.
+            canvas.create_polygon(
+                *sum(base, ()),
+                fill="#273646",
+                outline=outline,
+                tags=(tag, "room3d", "floor3d"),
+            )
+            canvas.create_polygon(
+                *sum(top, ()),
+                fill=fill,
+                outline=outline,
+                width=2,
+                tags=(tag, "room3d", "ceiling3d"),
+            )
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92", outline=outline, tags=(tag, "room3d")
+                fill="#6c7f92",
+                outline=outline,
+                tags=(tag, "room3d", "wall3d"),
             )
             canvas.create_polygon(
                 *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c", outline=outline, tags=(tag, "room3d")
+                fill="#53687c",
+                outline=outline,
+                tags=(tag, "room3d", "wall3d"),
             )
+            label = room["name"]
+            if show_pressure:
+                label += (
+                    f"\n{room['pressure_pa']:g} Pa"
+                    if room.get("pressure_pa") is not None
+                    else "\nP unavailable"
+                )
             canvas.create_text(
-                *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=room["name"],
+                *self._project_3d(
+                    (x0 + x1) / 2,
+                    (y0 + y1) / 2,
+                    z1 + 0.2,
+                ),
+                text=label,
                 fill="#f0f6fc",
                 tags=(tag, "room3d"),
             )
 
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
         for device in self.layout["devices"]:
-            x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
+            room = room_by_id.get(device.get("room_id"))
+            floor_elevation = room.get("elevation_m", 0.0) if room else 0.0
+            x, y = self._project_3d(
+                device["x_m"] - cx,
+                device["y_m"] - cy,
+                floor_elevation + device["z_m"],
+            )
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
@@ -1959,10 +2024,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
             )
             canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline=device_outline,
-                width=2, tags=(tag, "device3d"),
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+                fill="#fbbf24",
+                outline=device_outline,
+                width=2,
+                tags=(tag, "device3d"),
             )
+            if device.get("type") == "door":
+                canvas.create_text(
+                    x + 8,
+                    y,
+                    text="Door",
+                    anchor="w",
+                    fill="#f6d365",
+                    tags=(tag, "device3d"),
+                )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:
@@ -1992,9 +2071,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         world = self._canvas_to_world(event.x, event.y)
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
-        grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self._snap_to_grid.get():
+            grid = self.layout["grid_m"]
+            item["x_m"] = round((item["x_m"] + dx) / grid) * grid
+            item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        else:
+            item["x_m"] += dx
+            item["y_m"] += dy
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
@@ -2036,11 +2119,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
-        before = self._canvas_to_world(x, y)
-        self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
-        after = self._world_to_canvas(*before)
-        self.layout["view"]["pan_x"] += x - after[0]
-        self.layout["view"]["pan_y"] += y - after[1]
+        viewport = self._viewport_2d().zoom_about(factor, x, y)
+        self.layout["view"]["zoom_2d"] = viewport.zoom
+        self.layout["view"]["pan_x"] = viewport.pan_x_px
+        self.layout["view"]["pan_y"] = viewport.pan_y_px
         self.redraw()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:

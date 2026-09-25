@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased versioned analysis plugin API — 2026-09-25
+
+- Adds a dependency-free, versioned `cleanroomx.analysis_plugins` entry-point contract for trusted installed Python extensions.
+- Integrates valid plugin analyses into the existing application catalog, project analysis-kind validation, parser/runner/reporter execution path, result normalization, GUI analysis picker, stale-result identity, and diagnostics.
+- Rejects API-incompatible, malformed, built-in-colliding, and duplicate-key plugins deterministically while leaving built-in workflows available and reporting discovery issues through GUI startup and `cleanroomx-gui --check`.
+- Records plugin API version, entry-point identity, distribution name, and distribution version in application execution provenance; built-in runs now also identify their implementation source.
+- Deep-copies submitted payloads before parser calls and normalized results before reporter calls, preventing ordinary plugin-side mutation from aliasing authoritative project inputs or stored result data.
+- Preserves project schema version 1, every existing built-in analysis key, solver equations, tolerances, acceptance semantics, and the no-third-party-runtime-dependency core.
+- Adds focused discovery, collision, compatibility, persistence, mutation-isolation, provenance, and end-to-end plugin execution regressions.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

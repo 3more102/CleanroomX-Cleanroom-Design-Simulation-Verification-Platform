@@ -62,7 +62,14 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
-from .spatial import SPATIAL_METADATA_KEY, SpatialDesignWorkspace, SpatialSyncError, sync_layout_to_analysis
+from .spatial import (
+    SPATIAL_METADATA_KEY,
+    SpatialDesignWorkspace,
+    SpatialSyncError,
+    normalize_layout,
+    sync_layout_to_analysis,
+)
+from .spatial_domain import mark_layout_synchronized
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
@@ -1368,10 +1375,28 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
+        engineering_changed = False
+
+        def synchronize_spatial_geometry() -> bool:
+            nonlocal engineering_changed
+            engineering_changed = sync_layout_to_analysis(
+                self.spatial_workspace.layout,
+                analysis,
+            )
+            mapping_changed = mark_layout_synchronized(
+                self.spatial_workspace.layout,
+                analysis,
+            )
+            self.project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(
+                self.spatial_workspace.layout
+            )
+            self.spatial_workspace.layout = self.project.metadata[SPATIAL_METADATA_KEY]
+            return engineering_changed or mapping_changed
+
         try:
             changed = self._perform_project_edit(
                 f"Synchronize spatial geometry to {analysis.name}",
-                lambda: sync_layout_to_analysis(self.spatial_workspace.layout, analysis),
+                synchronize_spatial_geometry,
             )
         except SpatialSyncError as exc:
             self.status_var.set("Spatial synchronization blocked by ambiguous room names")
@@ -1384,12 +1409,18 @@ class CleanroomXApp:
         if not changed:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return
-        self._invalidate_last_run_for(analysis.id)
+        if engineering_changed:
+            self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
         self._update_title()
-        self.status_var.set(
-            f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
-        )
+        if engineering_changed:
+            self.status_var.set(
+                f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
+            )
+        else:
+            self.status_var.set(
+                f"Recorded spatial-to-engineering mapping for {analysis.name}; engineering inputs unchanged."
+            )
 
     def refresh_structure(self, silent: bool = False) -> None:
         for item in self.structure_tree.get_children():

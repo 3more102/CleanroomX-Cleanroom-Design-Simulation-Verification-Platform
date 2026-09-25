@@ -9,10 +9,11 @@ from .edit_history import BoundedSnapshotHistory
 
 @dataclass(frozen=True)
 class ProjectHistoryState:
-    """Immutable-by-contract project snapshot used by desktop edit history."""
+    """Immutable-by-contract application-wide design transaction snapshot."""
 
     document: dict[str, Any]
     editor_analysis_id: str | None
+    spatial_selection: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -25,11 +26,13 @@ class ProjectHistoryEntry:
 
 
 class ProjectEditHistory:
-    """Bounded deterministic undo/redo history for non-spatial project edits.
+    """Bounded deterministic undo/redo for the complete undoable project design state.
 
-    The caller owns project validation and state restoration. History snapshots are
-    deep-copied on capture and return so later model mutations cannot rewrite
-    previously recorded states.
+    The desktop owns one instance of this history for both spatial and non-spatial
+    mutations. Audit evidence (for example persistent run history) and viewport
+    state are deliberately kept outside captured design snapshots by the caller.
+    History snapshots are deep-copied on capture and return so later model mutations
+    cannot rewrite previously recorded states.
     """
 
     def __init__(self, limit: int = 100):
@@ -50,24 +53,38 @@ class ProjectEditHistory:
         cls,
         document: dict[str, Any],
         editor_analysis_id: str | None,
+        spatial_selection: tuple[str, str] | None = None,
     ) -> ProjectHistoryState:
         if not isinstance(document, dict):
             raise ValueError("project history document must be an object")
+        if spatial_selection is not None:
+            if (
+                not isinstance(spatial_selection, tuple)
+                or len(spatial_selection) != 2
+                or spatial_selection[0] not in {"room", "device"}
+                or not isinstance(spatial_selection[1], str)
+                or not spatial_selection[1]
+            ):
+                raise ValueError(
+                    "spatial_selection must be a ('room'|'device', id) tuple or null"
+                )
         return ProjectHistoryState(
             document=copy.deepcopy(document),
             editor_analysis_id=copy.deepcopy(
                 cls._validated_editor_id(editor_analysis_id)
             ),
+            spatial_selection=copy.deepcopy(spatial_selection),
         )
 
     def capture(
         self,
         document: dict[str, Any],
         editor_analysis_id: str | None,
+        spatial_selection: tuple[str, str] | None = None,
     ) -> ProjectHistoryState:
         """Capture an isolated state suitable for a later record() call."""
 
-        return self._state(document, editor_analysis_id)
+        return self._state(document, editor_analysis_id, spatial_selection)
 
     def clear(self) -> None:
         self._history.clear()
@@ -94,6 +111,7 @@ class ProjectEditHistory:
         before: ProjectHistoryState,
         after_document: dict[str, Any],
         after_editor_analysis_id: str | None,
+        after_spatial_selection: tuple[str, str] | None = None,
         description: str,
     ) -> bool:
         """Record one completed project edit and invalidate redo history.
@@ -103,7 +121,11 @@ class ProjectEditHistory:
 
         return self._history.record(
             before=before,
-            after=self._state(after_document, after_editor_analysis_id),
+            after=self._state(
+                after_document,
+                after_editor_analysis_id,
+                after_spatial_selection,
+            ),
             description=str(description).strip() or "Project edit",
         )
 

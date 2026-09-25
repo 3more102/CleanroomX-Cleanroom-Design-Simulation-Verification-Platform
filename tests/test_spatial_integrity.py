@@ -103,6 +103,18 @@ def test_persisted_spatial_layout_accepts_valid_referentially_complete_v1():
             "finite number",
         ),
         (
+            lambda layout: layout["devices"][0].update({"type": "unknown-device"}),
+            "type must be one of",
+        ),
+        (
+            lambda layout: layout.pop("version"),
+            "version must be an integer",
+        ),
+        (
+            lambda layout: layout.update({"version": SPATIAL_LAYOUT_VERSION - 1}),
+            "legacy spatial layout version",
+        ),
+        (
             lambda layout: layout.update({"version": SPATIAL_LAYOUT_VERSION + 1}),
             "future spatial layout version",
         ),

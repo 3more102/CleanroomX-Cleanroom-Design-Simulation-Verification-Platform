@@ -9,6 +9,7 @@ import pytest
 import cleanroomx.application as application_module
 from cleanroomx.application import (
     ANALYSIS_SPECS,
+    AnalysisRun,
     ExternalDependencyChangedError,
     analysis_catalog,
     analysis_run_matches_input,
@@ -17,6 +18,7 @@ from cleanroomx.application import (
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
+    verify_analysis_run_bundle,
 )
 
 
@@ -668,3 +670,90 @@ def test_external_dependency_fingerprint_retries_a_torn_read(tmp_path, monkeypat
     assert verification["sha256_before"] == expected
     assert verification["sha256_after"] == expected
     assert verification["stable_during_run"] is True
+
+
+def test_analysis_run_preserves_legacy_positional_constructor_shape():
+    run = AnalysisRun("kind", "title", "status", {}, "", {}, None)
+    assert run.input_snapshot == {}
+
+
+def test_run_bundle_captures_immutable_input_and_verifies():
+    payload = _example("basic_room.json")
+    submitted = json.loads(json.dumps(payload))
+    run = run_analysis("room_verification", payload)
+    payload["name"] = "mutated after execution"
+
+    bundle = run.to_dict()
+    verification = verify_analysis_run_bundle(bundle)
+
+    assert run.to_dict() == bundle
+    assert bundle["schema"] == "cleanroomx.analysis-run"
+    assert bundle["schema_version"] == 1
+    assert bundle["input_snapshot"] == submitted
+    assert run.input_snapshot == submitted
+    assert len(bundle["integrity"]["sha256"]) == 64
+    assert verification["status"] == "ok"
+    assert verification["analysis_kind"] == "room_verification"
+    assert verification["input_sha256"] == run.diagnostics[
+        "application_execution_provenance"
+    ]["input_sha256"]
+    assert verification["bundle_sha256"] == bundle["integrity"]["sha256"]
+
+
+def test_run_bundle_verification_is_independent_of_current_registry(monkeypatch):
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    reduced = dict(application_module.ANALYSIS_SPECS)
+    reduced.pop("room_verification")
+    monkeypatch.setattr(application_module, "ANALYSIS_SPECS", reduced)
+
+    verification = verify_analysis_run_bundle(bundle)
+
+    assert verification["status"] == "ok"
+    assert verification["analysis_kind"] == "room_verification"
+
+
+def test_run_bundle_verification_detects_document_tampering():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["status"] = "tampered"
+
+    with pytest.raises(ValueError, match="content has changed"):
+        verify_analysis_run_bundle(bundle)
+
+
+def test_run_bundle_verification_rejects_missing_required_fields():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle.pop("result")
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="missing required field"):
+        verify_analysis_run_bundle(bundle)
+
+
+def test_run_bundle_verification_detects_input_provenance_mismatch_even_if_resigned():
+    bundle = run_analysis("room_verification", _example("basic_room.json")).to_dict()
+    bundle["input_snapshot"]["name"] = "different submitted input"
+
+    unsigned = dict(bundle)
+    unsigned.pop("integrity")
+    bundle["integrity"]["sha256"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="input snapshot does not match"):
+        verify_analysis_run_bundle(bundle)

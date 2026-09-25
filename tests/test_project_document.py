@@ -232,6 +232,17 @@ def test_known_project_fields_override_programmatic_extra_field_collisions():
     assert data["vendor_top"] == 3
 
 
+def test_programmatic_additive_field_contract_rejects_invalid_mappings():
+    project = ProjectDocument(name="Invalid extension mapping")
+    project.top_level_extra_fields = []  # type: ignore[assignment]
+    with pytest.raises(ProjectFormatError, match="must be an object"):
+        project.to_dict()
+
+    project.top_level_extra_fields = {1: "invalid-key"}  # type: ignore[dict-item]
+    with pytest.raises(ProjectFormatError, match="field names must be strings"):
+        project.to_dict()
+
+
 def test_explicit_v0_migration_preserves_additive_fields():
     project = project_from_dict(
         {

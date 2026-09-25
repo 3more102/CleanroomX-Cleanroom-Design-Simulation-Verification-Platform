@@ -17,6 +17,10 @@ SPATIAL_LAYOUT_VERSION = 1
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
 
 
+class SpatialSyncError(ValueError):
+    """Raised when spatial geometry cannot be mapped to engineering input safely."""
+
+
 def _finite_number(value: Any, default: float) -> float:
     try:
         number = float(value)
@@ -32,7 +36,20 @@ def _positive(value: Any, default: float) -> float:
 
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return slug or "room"
+
+
+def _unique_id(preferred: Any, used_ids: set[str], *, fallback: str) -> str:
+    """Return a deterministic non-empty identifier unique within one collection."""
+    base = str(preferred).strip() if preferred is not None else ""
+    base = base or fallback
+    candidate = base
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
 
 
 def empty_layout() -> dict:
@@ -67,10 +84,11 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            room_id = _unique_id(
+                raw.get("id"),
+                used_ids,
+                fallback=_room_id(name),
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,21 +104,29 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
-        for raw in raw_devices:
+        for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_id = _unique_id(
+                raw.get("id"),
+                used_device_ids,
+                fallback=f"device-{index + 1}",
+            )
+            room_id = raw.get("room_id")
+            if room_id is not None:
+                room_id = str(room_id).strip() or None
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -140,6 +166,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -148,7 +175,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _room_id(name),
+            "id": _unique_id(None, used_ids, fallback=_room_id(name)),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,
@@ -185,8 +212,40 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
     # Do not persist an empty auto-layout. This lets a later verification analysis
     # seed the workspace without overwriting a deliberately persisted empty layout.
     if normalized["rooms"]:
+        normalized = normalize_layout(normalized)
         metadata[SPATIAL_METADATA_KEY] = normalized
     return normalized
+
+
+def _duplicate_room_names(rooms: list[dict]) -> list[str]:
+    first_names: dict[str, str] = {}
+    duplicates: list[str] = []
+    duplicate_keys: set[str] = set()
+    for room in rooms:
+        if not isinstance(room, dict):
+            continue
+        name = str(room.get("name") or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        first = first_names.get(key)
+        if first is None:
+            first_names[key] = name
+        elif key not in duplicate_keys:
+            duplicates.append(first)
+            duplicate_keys.add(key)
+    return duplicates
+
+
+def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
+    duplicates = _duplicate_room_names(rooms)
+    if not duplicates:
+        return
+    labels = ", ".join(repr(name) for name in duplicates)
+    raise SpatialSyncError(
+        f"Cannot synchronize spatial geometry because {source} contains duplicate "
+        f"room name(s): {labels}. Give every room a unique name and try again."
+    )
 
 
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
@@ -216,6 +275,8 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     if not isinstance(raw_rooms, list):
         return False
 
+    _require_unique_sync_names(rooms, source="the spatial layout")
+    _require_unique_sync_names(raw_rooms, source="the active analysis")
     by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
     for source in rooms:
         target = by_name.get(source["name"])

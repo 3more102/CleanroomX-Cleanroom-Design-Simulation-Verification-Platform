@@ -27,6 +27,8 @@ Recovery autosave is deliberately outside the project schema. The UI captures a 
 
 Startup restoration keeps save ownership equally explicit. A recovery is parsed through the ordinary project validator, then loaded into the application with no explicit save path and a forced dirty baseline. The original source path, when present, is held separately only for relative-reference context. Therefore Ctrl+S routes through Save As, and a newer or changed source file cannot be overwritten by recovery startup logic.
 
+Spatial design state remains inside the schema-version-1 project metadata block. Its canonicalizer preserves valid room/device ids and repairs missing or duplicate ids deterministically, so persistence, selection, undo/redo, and redraw paths do not acquire new identities merely by normalizing the same stored state. UUID allocation is limited to explicit object creation. Multi-room spatial-to-analysis synchronization is a separate mutation boundary: because verification room inputs are keyed by name rather than spatial id, both source and target name sets must be unique case-insensitively before any engineering input is changed; ambiguous mappings fail closed.
+
 ## Engineering boundary
 
 CleanroomX produces screening and numerical/provenance evidence. It does not by itself establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance. Applicable requirements and acceptance criteria remain external project inputs.

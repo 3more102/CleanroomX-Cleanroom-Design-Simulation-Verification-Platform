@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased spatial identity and synchronization integrity — 2026-09-25
+
+- Makes spatial normalization deterministic: missing or duplicate persisted room/device ids are repaired with stable suffixes instead of random UUIDs, while UUIDs remain reserved for genuinely new user-created objects.
+- Ensures analysis-derived layouts also produce unique deterministic room ids when room names repeat.
+- Makes multi-room geometry synchronization fail closed before mutation when the spatial layout or active analysis contains case-insensitive duplicate room names, preventing name-based mapping from silently targeting the wrong engineering room.
+- Surfaces synchronization ambiguity as an actionable desktop warning and preserves the analysis input unchanged.
+- Preserves project schema version 1, spatial metadata version 1, existing valid ids, solver equations, numerical tolerances, and engineering acceptance semantics.
+- Adds model- and GUI-level regressions for deterministic id repair, duplicate-name derivation, atomic sync rejection, and operator-visible failure handling.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

@@ -33,7 +33,7 @@ def test_application_catalog_exposes_major_existing_workflows():
     keys = {item["key"] for item in analysis_catalog()}
     assert {
         "project_verification", "hvac", "fan_operating_point", "loop_flow",
-        "variable_friction_loop", "fan_variable_friction_loop",
+        "pressure_network", "variable_friction_loop", "fan_variable_friction_loop",
         "fan_variable_friction_uncertainty", "dossier", "consistency",
     } <= keys
     assert len(keys) == len(ANALYSIS_SPECS)
@@ -423,6 +423,7 @@ _APPLICATION_EXAMPLES = (
     ("qualification_uncertainty", "qualification_uncertainty_demo.json"),
     ("parallel_flow", "parallel_flow_demo.json"),
     ("loop_flow", "looped_network_demo.json"),
+    ("pressure_network", "pressure_network_demo.json"),
     ("variable_friction_loop", "variable_friction_loop_demo.json"),
     ("thermal_uncertainty", "thermal_uncertainty_demo.json"),
     ("psychrometric_uncertainty", "psychrometric_uncertainty_demo.json"),

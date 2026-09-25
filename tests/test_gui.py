@@ -727,3 +727,142 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+
+def test_save_project_blocks_external_file_change_and_routes_to_save_as(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="Working Copy")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app._sync_metadata = lambda: None
+    app.status_var = Value("")
+    save_as_calls = []
+    app.save_project_as = lambda: save_as_calls.append(True)
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    save_project_document(path, ProjectDocument(name="External Version"))
+    external_bytes = path.read_bytes()
+
+    app.save_project()
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path).name == "External Version"
+    assert save_as_calls == [True]
+    assert warnings
+    assert "changed on disk" in warnings[0][1].lower()
+    assert "will not overwrite" in warnings[0][1].lower()
+
+
+def test_save_project_as_refuses_current_path_after_external_change(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="Working Copy")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app._sync_metadata = lambda: None
+    app.status_var = Value("")
+    app._recovery_source_path = None
+    app._restored_recovery_artifact = None
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(path),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    save_project_document(path, ProjectDocument(name="External Version"))
+    external_bytes = path.read_bytes()
+
+    app.save_project_as()
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path).name == "External Version"
+    assert warnings
+    assert "will not overwrite" in warnings[0][1].lower()
+
+
+def test_project_source_guard_ignores_metadata_only_change_when_bytes_match(tmp_path):
+    path = save_project_document(
+        tmp_path / "stable.cleanroomx.json",
+        ProjectDocument(name="Stable"),
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+
+    original_bytes = path.read_bytes()
+    path.write_bytes(original_bytes)
+
+    changed, detail = app._project_source_changed_on_disk()
+
+    assert changed is False
+    assert detail == ""
+
+
+def test_successful_save_refreshes_project_source_fingerprint(tmp_path):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "demo.cleanroomx.json",
+        ProjectDocument(name="Before"),
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="After")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app._sync_metadata = lambda: None
+    app._capture_saved_state = lambda: None
+    app._notify_explicit_save = lambda saved_path: None
+    app.status_var = Value("")
+
+    app.save_project()
+
+    assert load_project_document(path).name == "After"
+    assert app._project_source_fingerprint == gui_module.source_fingerprint(path)
+    assert "Saved" in app.status_var.value

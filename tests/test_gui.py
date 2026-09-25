@@ -68,9 +68,7 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.description == "Preserve editor state"
 
 
-def test_abandon_waits_for_worker_exit_before_reenabling_ui():
-    import queue
-
+def test_cancel_terminates_worker_before_reenabling_ui():
     class Widget:
         def __init__(self):
             self.state = None
@@ -88,11 +86,23 @@ def test_abandon_waits_for_worker_exit_before_reenabling_ui():
             self.delay = delay
             self.callback = callback
 
+    class Worker:
+        def __init__(self):
+            self.cancel_calls = 0
+            self.message = None
+
+        def cancel(self):
+            self.cancel_calls += 1
+            return True
+
+        def poll(self):
+            return self.message
+
     app = CleanroomXApp.__new__(CleanroomXApp)
     app._running = True
-    app._abandon_requested = False
-    app._run_generation = 7
-    app._queue = queue.Queue()
+    app._cancel_requested = False
+    app._running_analysis_id = "analysis-a"
+    app._analysis_worker = Worker()
     app.run_button = Widget()
     app.cancel_button = Widget()
     app.input_text = Widget()
@@ -102,22 +112,23 @@ def test_abandon_waits_for_worker_exit_before_reenabling_ui():
     app.cancel_run()
 
     assert app._running is True
-    assert app._abandon_requested is True
-    assert app._run_generation == 7
+    assert app._cancel_requested is True
+    assert app._running_analysis_id == "analysis-a"
+    assert app._analysis_worker.cancel_calls == 1
     assert app.cancel_button.state == "disabled"
-    assert "waiting" in app.status_var.value.lower()
+    assert "cancelling" in app.status_var.value.lower()
 
-    app._queue.put(("success", 7, "analysis-a", object()))
+    app._analysis_worker.message = ("cancelled", None)
     app._poll_worker()
 
     assert app._running is False
-    assert app._abandon_requested is False
+    assert app._cancel_requested is False
+    assert app._running_analysis_id is None
     assert app.run_button.state == "normal"
     assert app.cancel_button.state == "disabled"
     assert app.input_text.state == "normal"
-    assert "worker finished" in app.status_var.value.lower()
+    assert "cancelled" in app.status_var.value.lower()
     assert app.root.delay == 100
-
 
 def test_running_analysis_prevents_switching_to_another_analysis():
     class Tree:

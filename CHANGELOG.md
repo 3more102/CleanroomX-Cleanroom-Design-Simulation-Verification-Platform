@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased immutable application-run snapshots — 2026-09-25
+
+- Makes completed `AnalysisRun` result, diagnostics/provenance, and plot graphs recursively immutable after construction so cached engineering evidence cannot be changed through retained aliases or extension code.
+- Breaks aliases to backend-returned dictionaries/lists when the run snapshot is created; later source mutation cannot change the accepted run.
+- Keeps JSON/export compatibility through `AnalysisRun.to_dict()`, which returns detached ordinary mutable containers rather than exposing the cached snapshot.
+- Preserves analysis inputs, solver equations, acceptance semantics, project schema, run-bundle field names, and GUI workflows.
+- Adds regressions for nested mutation rejection, source-alias isolation, strict JSON serialization, and detached export copies.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

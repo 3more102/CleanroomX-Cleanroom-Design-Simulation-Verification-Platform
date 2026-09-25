@@ -69,9 +69,13 @@ PR #474 (tested head `4e086f49cb93a4c285f36805afefb1db98313632`,
 CI #1554 / `36172740683`), PR #473 (tested head
 `332eb07ed1d4d27a028d7fe8886b3914da29c8d7`, CI #1552 / `36171783101`),
 PR #476 (tested head `df1ef16207fcca8abfbaf08a48fe13fadd77c221`,
-CI #1561 / `36183831885`), and PR #479 (tested head
+CI #1561 / `36183831885`), PR #479 (tested head
 `4a802f43be7bc891e2c4de90b631ddea7c1fa9e4`, CI #1565 / `36184210616`,
-merged as `54fc239853cf4a2ab92b7686169e07acab34b8dd`). All six pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag
-only from a successful current-main CI commit; the published tag is the
-authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
+merged as `54fc239853cf4a2ab92b7686169e07acab34b8dd`), and PR #487
+(tested head `3823a4e34d0cf855a374e1a9773dc6d059d644e5`, CI #1585 /
+`36185323572`, 1008 tests passed on Python 3.11/3.12/3.13). All seven
+pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag only
+from a successful current-main CI commit containing the #487 closure; the
+published tag is the authoritative exact release commit. Do not move v0.102.0
+or any earlier tag.
 

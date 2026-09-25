@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -16,6 +17,25 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectSaveConflictError(RuntimeError):
+    """Raised when a project changed on disk after it was opened."""
+
+
+@dataclass(frozen=True)
+class ProjectFileFingerprint:
+    """Stable content identity captured for optimistic project-save concurrency."""
+
+    size_bytes: int
+    mtime_ns: int
+    sha256: str
+
+    def same_content_as(self, other: "ProjectFileFingerprint") -> bool:
+        return (
+            self.size_bytes == other.size_bytes
+            and self.sha256 == other.sha256
+        )
 
 
 @dataclass
@@ -204,8 +224,68 @@ def load_project_document(path: str | Path) -> ProjectDocument:
     return project_from_dict(data)
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def project_file_fingerprint(path: str | Path) -> ProjectFileFingerprint:
+    """Return a stable SHA-256 content identity for a project file.
+
+    The file is re-statted after hashing so callers do not accept a fingerprint
+    captured while another process was actively rewriting the file.
+    """
+
+    source = Path(path)
+    last_error: OSError | None = None
+    for _attempt in range(3):
+        before = source.stat()
+        digest = sha256()
+        with source.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        after = source.stat()
+        if (
+            before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+        ):
+            return ProjectFileFingerprint(
+                size_bytes=after.st_size,
+                mtime_ns=after.st_mtime_ns,
+                sha256=digest.hexdigest(),
+            )
+        last_error = OSError(f"project file changed while fingerprinting: {source}")
+    assert last_error is not None
+    raise last_error
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Persist a completed rename on POSIX filesystems.
+
+    Windows does not provide the same portable directory-fsync primitive through
+    Python, so the already-fsynced file replacement remains the supported path
+    there.
+    """
+
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(directory, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    before_replace: Callable[[], None] | None = None,
+) -> Path:
+    """Durably replace a UTF-8 text file using a same-directory temporary file.
+
+    The optional pre-replace callback runs after the temporary file is flushed
+    and fsynced and immediately before replacement. Project persistence uses
+    this boundary for optimistic stale-write detection without changing
+    export/autosave callers.
+    """
+
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,7 +300,10 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if before_replace is not None:
+            before_replace()
         temp_path.replace(destination)
+        _fsync_directory(destination.parent)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -228,11 +311,56 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+def save_project_document(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: ProjectFileFingerprint | None = None,
+) -> Path:
+    """Validate and persist a project with optional stale-write protection.
+
+    When an expected fingerprint is supplied, replacement is refused if the
+    existing file content differs from the version the caller previously opened.
+    """
+
     destination = Path(path)
     data = project.to_dict()
     project_from_dict(data)
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+    encoded = text.encode("utf-8")
+    expected_digest = sha256(encoded).hexdigest()
+
+    def ensure_source_unchanged() -> None:
+        if expected_fingerprint is None:
+            return
+        try:
+            current = project_file_fingerprint(destination)
+        except FileNotFoundError as exc:
+            raise ProjectSaveConflictError(
+                f"project file was removed after it was opened: {destination}. "
+                "Use Save Project As to preserve this work."
+            ) from exc
+        if not expected_fingerprint.same_content_as(current):
+            raise ProjectSaveConflictError(
+                f"project file changed on disk after it was opened: {destination}. "
+                "CleanroomX did not overwrite the newer file. Reopen it or use "
+                "Save Project As to preserve this work."
+            )
+
+    atomic_write_text(
+        destination,
+        text,
+        before_replace=(
+            ensure_source_unchanged if expected_fingerprint is not None else None
+        ),
+    )
+
+    persisted = project_file_fingerprint(destination)
+    if persisted.size_bytes != len(encoded) or persisted.sha256 != expected_digest:
+        raise OSError(
+            f"project save verification failed after writing {destination}; "
+            "the in-memory project remains dirty and recovery data must be preserved"
+        )
+    return destination

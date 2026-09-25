@@ -6,7 +6,9 @@ import copy
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
+import sys
 import tempfile
 from typing import Any, Callable
 
@@ -52,6 +54,20 @@ class ExternalDependencyChangedError(RuntimeError):
             "External engineering input changed or became unavailable during "
             "analysis execution; the result was discarded. Stabilize the referenced "
             f"file(s) and run again: {detail}"
+        )
+
+
+class RuntimeCodeChangedError(RuntimeError):
+    """Raised when CleanroomX Python source changes during one analysis run."""
+
+    def __init__(self, before: dict, after: dict) -> None:
+        self.before = copy.deepcopy(before)
+        self.after = copy.deepcopy(after)
+        super().__init__(
+            "CleanroomX runtime code changed during analysis execution; the result "
+            "was discarded. Restart the application from one stable installation and "
+            "run again "
+            f"({before['sha256'][:12]} -> {after['sha256'][:12]})."
         )
 
 
@@ -533,6 +549,93 @@ def _canonical_input_sha256(payload: dict) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+_RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
+
+
+def _fingerprint_python_tree(root: Path) -> dict:
+    """Fingerprint Python source by relative path and exact bytes."""
+
+    root = Path(root)
+    if not root.is_dir():
+        raise RuntimeError(f"CleanroomX source root is unavailable: {root}")
+
+    try:
+        sources = sorted(
+            (
+                path
+                for path in root.rglob("*.py")
+                if path.is_file()
+                and "__pycache__" not in path.relative_to(root).parts
+            ),
+            key=lambda path: path.relative_to(root).as_posix(),
+        )
+    except OSError as exc:
+        raise RuntimeError(f"cannot enumerate CleanroomX source files: {root}") from exc
+
+    if not sources:
+        raise RuntimeError(f"no Python source files found under CleanroomX root: {root}")
+
+    digest = hashlib.sha256()
+    try:
+        for source in sources:
+            relative = source.relative_to(root).as_posix().encode("utf-8")
+            content = source.read_bytes()
+            digest.update(len(relative).to_bytes(4, "big"))
+            digest.update(relative)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+    except OSError as exc:
+        raise RuntimeError(f"cannot read CleanroomX source file: {source}") from exc
+
+    return {
+        "algorithm": _RUNTIME_CODE_FINGERPRINT_ALGORITHM,
+        "sha256": digest.hexdigest(),
+        "source_file_count": len(sources),
+    }
+
+
+def _capture_runtime_code_fingerprint() -> dict:
+    return _fingerprint_python_tree(Path(__file__).resolve().parent)
+
+
+def _runtime_environment_provenance() -> dict:
+    return {
+        "python_implementation": platform.python_implementation(),
+        "python_version": platform.python_version(),
+        "python_cache_tag": getattr(sys.implementation, "cache_tag", None),
+        "platform_system": platform.system(),
+        "platform_release": platform.release(),
+        "platform_machine": platform.machine(),
+        "byteorder": sys.byteorder,
+        "float_radix": sys.float_info.radix,
+        "float_mant_dig": sys.float_info.mant_dig,
+    }
+
+
+def _analysis_binding_provenance(kind: str) -> dict:
+    spec = ANALYSIS_SPECS[kind]
+
+    def label(target: tuple[str, str] | None) -> str | None:
+        if target is None:
+            return None
+        return f"cleanroomx.{target[0]}:{target[1]}"
+
+    return {
+        "parser": label(spec.parser),
+        "runner": label(spec.runner),
+        "reporter": (
+            label(spec.reporter)
+            if spec.reporter is not None
+            else "cleanroomx.application:_fallback_markdown"
+        ),
+        "custom_adapter": (
+            f"cleanroomx.application:_run_{kind}"
+            if kind in _CUSTOM_APPLICATION_ADAPTERS
+            else None
+        ),
+    }
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -625,6 +728,8 @@ def _application_execution_provenance(
     input_sha256: str,
     dependencies_before: list[dict],
     dependencies_after: list[dict],
+    code_before: dict,
+    code_after: dict,
 ) -> dict:
     if len(dependencies_before) != len(dependencies_after):
         raise RuntimeError("external dependency set changed during analysis execution")
@@ -655,11 +760,27 @@ def _application_execution_provenance(
             }
         )
 
+    code_stable = (
+        code_before["algorithm"] == code_after["algorithm"]
+        and code_before["sha256"] == code_after["sha256"]
+        and code_before["source_file_count"] == code_after["source_file_count"]
+    )
+
     return {
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
+        "execution_binding": _analysis_binding_provenance(kind),
+        "runtime_environment": _runtime_environment_provenance(),
+        "code_revision": {
+            "algorithm": code_before["algorithm"],
+            "sha256_before": code_before["sha256"],
+            "sha256_after": code_after["sha256"],
+            "source_file_count_before": code_before["source_file_count"],
+            "source_file_count_after": code_after["source_file_count"],
+            "stable_during_run": code_stable,
+        },
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
         "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
@@ -797,6 +918,7 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
+    code_before = _capture_runtime_code_fingerprint()
     validate_analysis_input(kind, payload, base_dir=base_dir)
     input_sha256 = _canonical_input_sha256(payload)
     spec = ANALYSIS_SPECS[kind]
@@ -818,13 +940,18 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         else _load_callable(spec.reporter)(normalized)
     )
     dependencies_after = _capture_external_dependencies(kind, payload, base)
+    code_after = _capture_runtime_code_fingerprint()
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(
         kind,
         input_sha256,
         dependencies_before,
         dependencies_after,
+        code_before,
+        code_after,
     )
+    if not provenance["code_revision"]["stable_during_run"]:
+        raise RuntimeCodeChangedError(code_before, code_after)
     if not provenance["external_dependencies_stable"]:
         raise ExternalDependencyChangedError(
             [

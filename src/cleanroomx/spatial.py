@@ -656,6 +656,76 @@ def snap_room_translation(
     return target_x + dx, target_y + dy, guides
 
 
+def room_clearance_dimensions(room: dict, rooms: list[dict]) -> list[dict]:
+    """Return nearest orthogonal room-to-room clearances on each side.
+
+    Only neighbors whose perpendicular spans overlap are considered. Touching
+    rooms are reported as a 0 m clearance, while diagonal rooms are ignored.
+    The result order is deterministic: left, right, top, bottom.
+    """
+
+    x0 = _finite_number(room.get("x_m"), 0.0)
+    y0 = _finite_number(room.get("y_m"), 0.0)
+    x1 = x0 + _positive(room.get("length_m"), 0.0)
+    y1 = y0 + _positive(room.get("width_m"), 0.0)
+    room_id = room.get("id")
+    epsilon = 1e-9
+    best: dict[str, tuple[tuple[float, str], dict]] = {}
+
+    def consider(side: str, gap: float, other: dict, start: tuple[float, float], end: tuple[float, float]) -> None:
+        reference_id = str(other.get("id") or "")
+        candidate = {
+            "side": side,
+            "gap_m": max(0.0, float(gap)),
+            "reference_room_id": reference_id,
+            "start_x_m": start[0],
+            "start_y_m": start[1],
+            "end_x_m": end[0],
+            "end_y_m": end[1],
+        }
+        key = (candidate["gap_m"], reference_id)
+        current = best.get(side)
+        if current is None or key < current[0]:
+            best[side] = (key, candidate)
+
+    for other in rooms:
+        if not isinstance(other, dict):
+            continue
+        if other is room or (
+            room_id is not None and other.get("id") == room_id
+        ):
+            continue
+
+        ox0 = _finite_number(other.get("x_m"), 0.0)
+        oy0 = _finite_number(other.get("y_m"), 0.0)
+        ox1 = ox0 + _positive(other.get("length_m"), 0.0)
+        oy1 = oy0 + _positive(other.get("width_m"), 0.0)
+
+        overlap_y0 = max(y0, oy0)
+        overlap_y1 = min(y1, oy1)
+        if overlap_y1 - overlap_y0 > epsilon:
+            measure_y = (overlap_y0 + overlap_y1) / 2.0
+            if ox1 <= x0 + epsilon:
+                consider("left", x0 - ox1, other, (ox1, measure_y), (x0, measure_y))
+            if ox0 >= x1 - epsilon:
+                consider("right", ox0 - x1, other, (x1, measure_y), (ox0, measure_y))
+
+        overlap_x0 = max(x0, ox0)
+        overlap_x1 = min(x1, ox1)
+        if overlap_x1 - overlap_x0 > epsilon:
+            measure_x = (overlap_x0 + overlap_x1) / 2.0
+            if oy1 <= y0 + epsilon:
+                consider("top", y0 - oy1, other, (measure_x, oy1), (measure_x, y0))
+            if oy0 >= y1 - epsilon:
+                consider("bottom", oy0 - y1, other, (measure_x, y1), (measure_x, oy0))
+
+    return [
+        best[side][1]
+        for side in ("left", "right", "top", "bottom")
+        if side in best
+    ]
+
+
 class SpatialEditHistory:
     """Bounded undo/redo history for normalized spatial-layout snapshots."""
 
@@ -751,6 +821,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._resize_handle: str | None = None
         self._smart_align = tk.BooleanVar(value=True)
         self._alignment_guides: list[dict] = []
+        self._show_clearances = tk.BooleanVar(value=True)
 
         self._build()
         self.refresh()
@@ -799,6 +870,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Checkbutton(toolbar, text="Align", variable=self._smart_align).pack(
             side="left", padx=2
         )
+        ttk.Checkbutton(
+            toolbar,
+            text="Gaps",
+            variable=self._show_clearances,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -814,7 +891,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left")
         ttk.Label(
             scene_bar,
-            text="2D: drag to move • smart edge/center align • wheel to zoom • middle/right drag to pan    "
+            text="2D: drag to move • smart align • live room gaps • wheel to zoom • middle/right drag to pan    "
                  "3D: click to select • wheel to zoom",
         ).pack(side="right")
 
@@ -1358,6 +1435,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                         tags=(f"resize:{handle}", f"room:{room['id']}", "resize"),
                     )
 
+        if (
+            self._show_clearances.get()
+            and self.selected is not None
+            and self.selected.kind == "room"
+        ):
+            selected_room = self._selected_object()
+            if selected_room is not None:
+                self._draw_room_clearances(selected_room)
+
         symbols = {
             "door": "D",
             "supply": "S",
@@ -1389,6 +1475,69 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
                 justify="center",
                 fill="#667788",
+            )
+
+    def _draw_room_clearances(self, room: dict) -> None:
+        canvas = self.canvas_2d
+        for dimension in room_clearance_dimensions(room, self.layout["rooms"]):
+            x0, y0 = self._world_to_canvas(
+                dimension["start_x_m"], dimension["start_y_m"]
+            )
+            x1, y1 = self._world_to_canvas(
+                dimension["end_x_m"], dimension["end_y_m"]
+            )
+            side = dimension["side"]
+            gap_m = dimension["gap_m"]
+            horizontal = side in {"left", "right"}
+            line_length_px = abs(x1 - x0) + abs(y1 - y0)
+
+            if line_length_px >= 2:
+                canvas.create_line(
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    fill="#6d28d9",
+                    width=2,
+                    arrow=tk.BOTH,
+                    arrowshape=(6, 7, 3),
+                    tags=("clearance",),
+                )
+
+            if horizontal:
+                for x in (x0, x1):
+                    canvas.create_line(
+                        x,
+                        y0 - 5,
+                        x,
+                        y0 + 5,
+                        fill="#6d28d9",
+                        width=2,
+                        tags=("clearance",),
+                    )
+                label_x = (x0 + x1) / 2.0
+                label_y = y0 - 10
+            else:
+                for y in (y0, y1):
+                    canvas.create_line(
+                        x0 - 5,
+                        y,
+                        x0 + 5,
+                        y,
+                        fill="#6d28d9",
+                        width=2,
+                        tags=("clearance",),
+                    )
+                label_x = x0 + 10
+                label_y = (y0 + y1) / 2.0
+
+            canvas.create_text(
+                label_x,
+                label_y,
+                text=f"{gap_m:.3g} m",
+                fill="#6d28d9",
+                font=("TkDefaultFont", 8, "bold"),
+                tags=("clearance",),
             )
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:

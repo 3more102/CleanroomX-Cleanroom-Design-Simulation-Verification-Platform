@@ -1,5 +1,18 @@
 # CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
+Final deterministic spatial-drag closure:
+
+- PR **#487 — Finalize deterministic spatial drag semantics on current main**
+- Exact tested PR head: `3823a4e34d0cf855a374e1a9773dc6d059d644e5`
+- PR CI run **#1585** / id `36185323572`: **success**
+- Focused spatial-design gate: **63 passed**
+- Complete suite: **1008 passed** on Python **3.11**, **3.12**, and **3.13**
+- Windows PowerShell/CMD checkout launcher smoke: **success**
+- Python 3.13 Release 2 performance evidence and installed Tk/Xvfb GUI smoke: **success**
+- Squash-merged functional main commit: `89eaf6b1548ca0748dd72431eecc101bddec9af9`
+- Verified behavior: snapped drag geometry is derived from immutable gesture-start pointer/item origins, assigned devices translate with moved rooms, and no-op drags do not dirty the project, record history, or schedule autosave.
+
+
 ## Verified final baseline
 
 Validation date: 2026-09-25

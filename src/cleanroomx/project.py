@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,17 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectConflictError(RuntimeError):
+    """Raised when a guarded save would overwrite a different on-disk revision."""
+
+
+@dataclass(frozen=True)
+class ProjectFileFingerprint:
+    sha256: str
+    size_bytes: int
+    mtime_ns: int
 
 
 @dataclass
@@ -190,22 +202,79 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
+def _stable_read_bytes(path: Path, *, attempts: int = 3) -> tuple[bytes, os.stat_result]:
+    last_error: OSError | None = None
+    for _ in range(max(1, attempts)):
+        try:
+            before = path.stat()
+            payload = path.read_bytes()
+            after = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        if (
+            before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+            and len(payload) == after.st_size
+        ):
+            return payload, after
+        last_error = OSError(f"project file changed while reading: {path}")
+    assert last_error is not None
+    raise last_error
+
+
+def project_file_fingerprint(path: str | Path) -> ProjectFileFingerprint:
     source = Path(path)
+    payload, stat_result = _stable_read_bytes(source)
+    return ProjectFileFingerprint(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        size_bytes=len(payload),
+        mtime_ns=stat_result.st_mtime_ns,
+    )
+
+
+def _same_project_file_content(
+    left: ProjectFileFingerprint, right: ProjectFileFingerprint
+) -> bool:
+    return left.sha256 == right.sha256 and left.size_bytes == right.size_bytes
+
+
+def load_project_document_with_fingerprint(
+    path: str | Path,
+) -> tuple[ProjectDocument, ProjectFileFingerprint]:
+    source = Path(path)
+    payload, stat_result = _stable_read_bytes(source)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    project = project_from_dict(data)
+    fingerprint = ProjectFileFingerprint(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        size_bytes=len(payload),
+        mtime_ns=stat_result.st_mtime_ns,
+    )
+    return project, fingerprint
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _ = load_project_document_with_fingerprint(path)
+    return project
+
+
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    expected_fingerprint: ProjectFileFingerprint | None = None,
+) -> Path:
+    """Atomically replace UTF-8 text and optionally reject stale-source overwrites."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +289,20 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if expected_fingerprint is not None:
+            try:
+                current_fingerprint = project_file_fingerprint(destination)
+            except FileNotFoundError as exc:
+                raise ProjectConflictError(
+                    f"project file was removed outside CleanroomX: {destination}"
+                ) from exc
+            if not _same_project_file_content(
+                current_fingerprint, expected_fingerprint
+            ):
+                raise ProjectConflictError(
+                    f"project file changed outside CleanroomX: {destination}"
+                )
+
         temp_path.replace(destination)
     except Exception:
         if temp_path is not None:
@@ -228,11 +311,18 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+def save_project_document(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: ProjectFileFingerprint | None = None,
+) -> Path:
     destination = Path(path)
     data = project.to_dict()
     project_from_dict(data)
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+    return atomic_write_text(
+        destination, text, expected_fingerprint=expected_fingerprint
+    )

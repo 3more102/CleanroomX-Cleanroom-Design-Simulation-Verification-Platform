@@ -11,6 +11,7 @@ from .application import (
     run_analysis,
 )
 from .project import atomic_write_text
+from .strict_json import load_strict_json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     manifest_path = Path(args.manifest)
-    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload = load_strict_json(manifest_path)
     try:
         run = run_analysis(
             "dossier",

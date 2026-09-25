@@ -51,16 +51,6 @@ The final v0.102.1 tree is composed from CI-green spatial closures plus a CI-gre
   - Windows PowerShell/CMD launcher smoke: **success**
   - Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
   - deterministic snapped drag final geometry is independent of intermediate motion-event sampling; no-op drag releases do not dirty the project, add history, or schedule autosave
-- PR **#487 — Finalize deterministic spatial drag semantics on current main**
-  - exact tested head: `3823a4e34d0cf855a374e1a9773dc6d059d644e5`
-  - PR CI **#1585** / id `36185323572`: **success**
-  - merged main commit: `89eaf6b1548ca0748dd72431eecc101bddec9af9`
-  - focused spatial gate: **63 passed**
-  - Release 2 consolidation gate: **132 passed**
-  - complete suite: **1008 passed** on Python 3.11, 3.12, and 3.13
-  - Windows PowerShell/CMD launcher smoke: **success**
-  - Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
-  - drag translation is computed from immutable gesture-start pointer/item origins, and no-op drag release does not dirty the project, record history, or schedule autosave
 
 Those successful CI jobs exercise the repository CI workflow, including the complete Python 3.11/3.12/3.13 suite, clean-wheel installation, representative CLI checks, Windows checkout launchers, and the Python 3.13 performance plus installed Tk/Xvfb GUI smoke. The immutable v0.102.1 publisher additionally refuses to tag any successful CI SHA that is no longer the current `main` commit.
 

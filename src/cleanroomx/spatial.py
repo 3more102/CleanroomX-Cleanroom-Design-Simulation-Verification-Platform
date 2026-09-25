@@ -588,6 +588,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
+        self._engineering_var = tk.StringVar(value="Engineering mapping: no selection")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
@@ -682,7 +683,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
+            ("elevation_m", "Floor elevation (m)"),
+            ("z_m", "Device Z above floor (m)"),
             ("pressure_pa", "Pressure (Pa)"),
+            ("engineering_analysis_id", "Engineering analysis ID"),
+            ("engineering_room_name", "Engineering room"),
+            ("notes", "Notes"),
         )
         for index, (key, label) in enumerate(fields):
             row = 2 + index // 2
@@ -694,6 +700,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
         button_row = 2 + (len(fields) + 1) // 2
+        ttk.Label(
+            inspector,
+            textvariable=self._engineering_var,
+            justify="left",
+            wraplength=560,
+        ).grid(row=button_row, column=0, columnspan=3, sticky="w", pady=(8, 0))
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -865,19 +877,55 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._engineering_var.set("Engineering mapping: no selection")
             for var in self._property_vars.values():
                 var.set("")
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
         for key, var in self._property_vars.items():
-            value = item.get(key, "")
+            if key == "engineering_analysis_id":
+                ref = item.get("engineering_ref") if isinstance(item, dict) else None
+                value = ref.get("analysis_id", "") if isinstance(ref, dict) else ""
+            elif key == "engineering_room_name":
+                ref = item.get("engineering_ref") if isinstance(item, dict) else None
+                value = ref.get("room_name", "") if isinstance(ref, dict) else ""
+            else:
+                value = item.get(key, "")
             var.set("" if value is None else str(value))
+
+        if self.selected and self.selected.kind == "room":
+            analysis = self._analysis_getter()
+            states = {
+                record["room_id"]: record
+                for record in engineering_sync_states(self.layout, analysis)
+            }
+            record = states.get(item["id"], {"state": "unmapped", "differences": {}})
+            state_text = str(record["state"]).replace("_", " ")
+            fields = engineering_fields_for_room(self.layout, analysis, item["id"])
+            detail = ", ".join(f"{key}={value}" for key, value in fields.items())
+            difference_fields = ", ".join(record.get("differences", {}))
+            message = f"Engineering mapping: {state_text}"
+            if difference_fields:
+                message += f" (geometry differs: {difference_fields})"
+            if detail:
+                message += f" | Inputs/results: {detail}"
+            self._engineering_var.set(message)
+        else:
+            self._engineering_var.set("Engineering mapping: spatial device")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
         if item is None:
             return
+        if self.selected and self.selected.kind == "room":
+            ref_analysis_id = self._property_vars["engineering_analysis_id"].get().strip()
+            ref_room_name = self._property_vars["engineering_room_name"].get().strip()
+            if bool(ref_analysis_id) != bool(ref_room_name):
+                self._status_setter(
+                    "Engineering mapping requires both an analysis ID and engineering room name."
+                )
+                return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         name = self._property_vars["name"].get().strip()
@@ -892,11 +940,43 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = self._property_vars[key].get().strip()
                 if text:
                     item[key] = _positive(text, item[key])
+            elevation = self._property_vars["elevation_m"].get().strip()
+            if elevation:
+                item["elevation_m"] = _finite_number(elevation, item.get("elevation_m", 0.0))
+            elif "elevation_m" in item:
+                item.pop("elevation_m", None)
             pressure = self._property_vars["pressure_pa"].get().strip()
             if pressure:
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+            notes = self._property_vars["notes"].get()
+            if notes:
+                item["notes"] = notes
+            else:
+                item.pop("notes", None)
+            ref_analysis_id = self._property_vars["engineering_analysis_id"].get().strip()
+            ref_room_name = self._property_vars["engineering_room_name"].get().strip()
+            if ref_analysis_id and ref_room_name:
+                previous = item.get("engineering_ref")
+                ref = {
+                    "analysis_id": ref_analysis_id,
+                    "room_name": ref_room_name,
+                }
+                if (
+                    isinstance(previous, dict)
+                    and previous.get("analysis_id") == ref_analysis_id
+                    and previous.get("room_name") == ref_room_name
+                    and isinstance(previous.get("synced_geometry"), dict)
+                ):
+                    ref["synced_geometry"] = copy.deepcopy(previous["synced_geometry"])
+                item["engineering_ref"] = ref
+            else:
+                item.pop("engineering_ref", None)
+        elif self.selected and self.selected.kind == "device":
+            z_text = self._property_vars["z_m"].get().strip()
+            if z_text:
+                item["z_m"] = _finite_number(z_text, item.get("z_m", 0.0))
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",
@@ -920,6 +1000,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "length_m": 4.0,
             "width_m": 4.0,
             "height_m": 3.0,
+            "elevation_m": 0.0,
         }
         self.layout["rooms"].append(room)
         self.selected = _Hit("room", room["id"])
@@ -966,6 +1047,14 @@ class SpatialDesignWorkspace(ttk.Frame):
     def delete_selected(self) -> None:
         if self.selected is None:
             return
+        item = self._selected_object()
+        item_name = item.get("name", "selected item") if isinstance(item, dict) else "selected item"
+        if not messagebox.askyesno(
+            "Delete spatial item",
+            f"Delete {item_name!r}? This can be undone with project Undo.",
+            parent=self.winfo_toplevel(),
+        ):
+            return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         collection_name = "rooms" if self.selected.kind == "room" else "devices"
@@ -996,19 +1085,20 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _scale_2d(self) -> float:
         return 55.0 * self.layout["view"]["zoom_2d"]
 
-    def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            self.canvas_2d.winfo_width() / 2 + self.layout["view"]["pan_x"] + x * scale,
-            self.canvas_2d.winfo_height() / 2 + self.layout["view"]["pan_y"] + y * scale,
+    def _transform_2d(self) -> SpatialTransform2D:
+        return SpatialTransform2D(
+            width_px=max(1.0, float(self.canvas_2d.winfo_width())),
+            height_px=max(1.0, float(self.canvas_2d.winfo_height())),
+            pixels_per_m=self._scale_2d(),
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
         )
 
+    def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
+        return self._transform_2d().model_to_screen(x, y)
+
     def _canvas_to_world(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            (x - self.canvas_2d.winfo_width() / 2 - self.layout["view"]["pan_x"]) / scale,
-            (y - self.canvas_2d.winfo_height() / 2 - self.layout["view"]["pan_y"]) / scale,
-        )
+        return self._transform_2d().screen_to_model(x, y)
 
     def fit_views(self) -> None:
         min_x, min_y, max_x, max_y = self._bounds()
@@ -1308,11 +1398,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
-        before = self._canvas_to_world(x, y)
-        self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
-        after = self._world_to_canvas(*before)
-        self.layout["view"]["pan_x"] += x - after[0]
-        self.layout["view"]["pan_y"] += y - after[1]
+        transformed = self._transform_2d().zoom_about(factor, x, y)
+        self.layout["view"]["zoom_2d"] = transformed.pixels_per_m / 55.0
+        self.layout["view"]["pan_x"] = transformed.pan_x_px
+        self.layout["view"]["pan_y"] = transformed.pan_y_px
         self.redraw()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:

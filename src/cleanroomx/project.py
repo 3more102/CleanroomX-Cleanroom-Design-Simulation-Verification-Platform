@@ -42,6 +42,24 @@ class AtomicWriteVerificationError(OSError):
         )
 
 
+class AtomicWriteDurabilityError(OSError):
+    """Raised when verified replacement bytes cannot be durably committed."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        current_revision: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.current_revision = current_revision
+        super().__init__(
+            "atomic replacement bytes were verified, but the directory durability "
+            f"flush failed for {self.path}; retry the save before relying on "
+            "crash/power-loss durability"
+        )
+
+
 class ProjectWriteConflictError(RuntimeError):
     """Raised when an explicit save would overwrite a different on-disk revision."""
 
@@ -417,7 +435,13 @@ def _atomic_write_text(
                 current_revision=current,
             )
 
-        _fsync_directory(destination.parent)
+        try:
+            _fsync_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(
+                destination,
+                current_revision=current,
+            ) from exc
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

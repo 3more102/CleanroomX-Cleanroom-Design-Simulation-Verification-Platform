@@ -17,6 +17,7 @@ SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
 SPATIAL_HISTORY_LIMIT = 100
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+CEILING_DEVICE_TYPES = frozenset({"ffu", "supply", "return", "exhaust", "sensor"})
 RESIZE_HANDLES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 
 
@@ -539,6 +540,10 @@ def remap_room_devices(
     new_y = _finite_number(room_after.get("y_m"), old_y)
     new_length = _positive(room_after.get("length_m"), old_length)
     new_width = _positive(room_after.get("width_m"), old_width)
+    new_height = _positive(
+        room_after.get("height_m"),
+        _positive(room_before.get("height_m"), 3.0),
+    )
 
     changed = 0
     for device in devices:
@@ -550,9 +555,18 @@ def remap_room_devices(
         v = (old_device_y - old_y) / old_width
         new_device_x = new_x + u * new_length
         new_device_y = new_y + v * new_width
-        if new_device_x != old_device_x or new_device_y != old_device_y:
+        device_changed = (
+            new_device_x != old_device_x or new_device_y != old_device_y
+        )
+        if device_changed:
             device["x_m"] = new_device_x
             device["y_m"] = new_device_y
+        if device.get("type") in CEILING_DEVICE_TYPES:
+            old_z = _finite_number(device.get("z_m"), new_height)
+            if old_z != new_height:
+                device["z_m"] = new_height
+                device_changed = True
+        if device_changed:
             changed += 1
     return changed
 
@@ -1064,7 +1078,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if room:
             x = room["x_m"] + room["length_m"] / 2.0
             y = room["y_m"] + room["width_m"] / 2.0
-            z = room["height_m"] if device_type in {"ffu", "supply", "return", "exhaust", "sensor"} else 0.0
+            z = room["height_m"] if device_type in CEILING_DEVICE_TYPES else 0.0
             room_id = room["id"]
         else:
             x = y = z = 0.0
@@ -1525,9 +1539,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         room = self._room_at(device["x_m"], device["y_m"])
         device["room_id"] = None if room is None else room["id"]
-        if room is not None and device["type"] in {
-            "ffu", "supply", "return", "exhaust", "sensor"
-        }:
+        if room is not None and device["type"] in CEILING_DEVICE_TYPES:
             device["z_m"] = room["height_m"]
 
     def _on_left_up(self, event: tk.Event) -> None:

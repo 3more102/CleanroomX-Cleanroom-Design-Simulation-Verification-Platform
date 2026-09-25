@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased transactional project edit history — 2026-09-25
+
+- Adds bounded project-level undo/redo for non-spatial desktop edits, separate from the existing spatial workspace history.
+- Routes analysis input commits, project metadata edits, analysis add/rename/remove, imported inputs, and explicit spatial-to-analysis synchronization through validate-before-commit transactions.
+- Rolls back mutations that raise or produce an invalid `ProjectDocument`; failed edits do not enter history.
+- Restores undo/redo snapshots through the ordinary project validator and clears cached engineering results on replay so stale analysis evidence cannot survive an input revision change.
+- Keeps `spatial_layout` outside project history ownership, blocks history changes during active analysis runs, and refuses to discard malformed pending JSON.
+- Keeps project schema version 1 and adds no runtime dependency; in-memory history is cleared when project identity/path context changes.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

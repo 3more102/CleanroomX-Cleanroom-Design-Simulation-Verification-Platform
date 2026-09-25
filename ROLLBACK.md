@@ -43,3 +43,7 @@ published from the final release-closure commit by
 `.github/workflows/publish-v0101-release.yml`. Preserve that tag and use normal
 revert/CI flow for any rollback from Release 2.
 
+
+## v0.101.0 final launcher integration
+
+The final repository-checkout launcher integration is PR #434, merged as `1acbaa1b67f624ae495590f78d5bccfc038fbd82` after CI run #1472 / `36164491604` passed on Python 3.11, 3.12, and 3.13 with **961 passed** per interpreter plus the Windows PowerShell/CMD launcher smoke. Treat this commit as part of the v0.101.0 release closure; roll back through normal revert and CI rather than moving the release tag.

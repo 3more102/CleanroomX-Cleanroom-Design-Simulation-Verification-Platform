@@ -25,6 +25,12 @@ The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `
 
 Unknown future project formats are rejected rather than silently reinterpreted.
 
+## Same-schema extension preservation
+
+Schema-version-1 files may contain fields that CleanroomX does not interpret at the top-level document, inside the `project` block, or on individual analysis entries. The loader preserves those fields as opaque extension data and the serializer writes them back unchanged on the next save. This prevents a normal open/edit/save cycle from deleting metadata owned by plugins, downstream engineering systems, or other same-schema producers.
+
+CleanroomX does not infer behavior from opaque extensions. Its reserved core keys remain authoritative, so extension data cannot override the project schema/version, project name/description/metadata, analysis id/name/kind/input, or active-analysis reference. Unsupported future schema versions are still rejected.
+
 ## Save behavior after migration
 
 Loading a supported legacy file does not overwrite it automatically. If the migrated project is saved, CleanroomX writes schema version 1 using the current document model. Saving is validated first and uses an atomic temporary-file replacement.

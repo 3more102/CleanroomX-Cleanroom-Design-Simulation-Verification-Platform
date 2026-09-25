@@ -76,3 +76,17 @@ def test_release2_supported_extensions_survive_parse_serialize_parse():
     assert second.to_dict()["extension"] == raw["extension"]
     assert second.to_dict()["project"]["site_extension"] == raw["project"]["site_extension"]
     assert second.to_dict()["analyses"][0]["analysis_extension"] == raw["analyses"][0]["analysis_extension"]
+
+
+def test_release2_analysis_lifecycle_uses_full_unique_uuid_ids():
+    project = ProjectDocument(name="P")
+    first = project.create_analysis(kind="room_verification", name="A")
+    second = project.create_analysis(kind="room_verification", name="B")
+    assert first.id.startswith("room_verification-")
+    assert second.id.startswith("room_verification-")
+    assert len(first.id.split("-", 1)[1]) == 32
+    assert first.id != second.id
+    assert project.analysis_by_id(first.id) is first
+    removed = project.remove_analysis(first.id)
+    assert removed is first
+    assert project.active_analysis_id == second.id

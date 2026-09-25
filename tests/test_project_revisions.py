@@ -249,3 +249,55 @@ def test_revision_with_non_finite_json_is_reported_not_raised_from_scan(tmp_path
     assert scan.revisions == ()
     assert len(scan.issues) == 1
     assert "non-finite" in scan.issues[0].error
+
+
+def test_identical_guarded_save_still_performs_stable_verification(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "demo.cleanroomx.json"
+    project = _project("same")
+    save_project_document(path, project)
+    expected = capture_project_file_revision(path)
+    calls = []
+    original_verify = project_module._verify_saved_project
+
+    def verify(destination, candidate, expected_bytes):
+        calls.append((destination, candidate))
+        return original_verify(destination, candidate, expected_bytes)
+
+    monkeypatch.setattr(project_module, "_verify_saved_project", verify)
+
+    _, revision = save_project_document_guarded(
+        path,
+        project,
+        expected_revision=expected,
+    )
+
+    assert calls == [(path.resolve(strict=False), project)]
+    assert revision == capture_project_file_revision(path)
+    assert scan_project_revisions(path).revisions == ()
+
+
+def test_new_destination_verification_failure_does_not_risk_unlink_race(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "new.cleanroomx.json"
+    expected = capture_project_file_revision(path)
+
+    monkeypatch.setattr(
+        project_module,
+        "_verify_saved_project",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OSError("injected verification failure")
+        ),
+    )
+
+    with pytest.raises(OSError, match="no safe rollback"):
+        save_project_document_guarded(
+            path,
+            _project("new"),
+            expected_revision=expected,
+        )
+
+    assert path.exists()
+    assert project_revision_dir(path).exists() is False

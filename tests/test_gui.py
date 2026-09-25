@@ -542,6 +542,89 @@ def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeyp
 
 
 
+def test_verify_run_bundle_json_reports_verified_bundle(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app.status_var = Status()
+    bundle_path = tmp_path / "run-bundle.json"
+    run = run_analysis(
+        "fan_operating_point",
+        json.loads(
+            (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+    )
+    bundle_path.write_text(
+        json.dumps(run.to_dict(), indent=2, ensure_ascii=False, allow_nan=False),
+        encoding="utf-8",
+    )
+
+    shown = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(bundle_path),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: shown.append((title, message)),
+    )
+
+    app.verify_run_bundle_json()
+
+    assert app.status_var.value == f"Verified run bundle — {bundle_path.name}"
+    assert shown
+    assert shown[0][0] == "Run bundle verified"
+    assert "fan_operating_point" in shown[0][1]
+    assert "Input SHA-256:" in shown[0][1]
+    assert "Bundle SHA-256:" in shown[0][1]
+
+
+def test_verify_run_bundle_json_reports_tampering(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app.status_var = Status()
+    bundle = run_analysis("room_verification", json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )).to_dict()
+    bundle["status"] = "tampered"
+    bundle_path = tmp_path / "tampered-run-bundle.json"
+    bundle_path.write_text(
+        json.dumps(bundle, indent=2, ensure_ascii=False, allow_nan=False),
+        encoding="utf-8",
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "askopenfilename",
+        lambda **kwargs: str(bundle_path),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.verify_run_bundle_json()
+
+    assert app.status_var.value == "Run bundle verification failed"
+    assert errors
+    assert "content has changed" in errors[0][1]
+
+
 def test_bundled_demo_project_is_self_contained_and_active_analysis_runs():
     path = gui_module.bundled_demo_project_path()
     assert path.is_file()

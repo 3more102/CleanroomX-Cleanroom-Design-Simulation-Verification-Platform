@@ -251,7 +251,7 @@ def render_project_batch_markdown(batch: ProjectBatchRun) -> str:
     if not batch.source_stable_during_run:
         lines.append(
             "- Source-change boundary: "
-            f"{batch.source_change_stage or 'unknown'}"
+            + markdown_text(batch.source_change_stage or "unknown")
             + (
                 f" at analysis {markdown_text(batch.source_change_analysis_id)}"
                 if batch.source_change_analysis_id
@@ -273,7 +273,9 @@ def render_project_batch_markdown(batch: ProjectBatchRun) -> str:
         if outcome.execution_state == "completed":
             assert outcome.run is not None
             lines.append(f"- Execution: completed")
-            lines.append(f"- Analysis status: {outcome.run.get('status', 'complete')}")
+            lines.append(
+                f"- Analysis status: {markdown_text(outcome.run.get('status', 'complete'))}"
+            )
             diagnostics = outcome.run.get("diagnostics")
             provenance = (
                 diagnostics.get("application_execution_provenance")

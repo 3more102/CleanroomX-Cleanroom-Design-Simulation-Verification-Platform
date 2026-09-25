@@ -2696,9 +2696,20 @@ def main(argv: list[str] | None = None) -> int:
                     raise RuntimeError("3D viewer did not render demo rooms")
                 if not app.spatial_workspace.canvas_2d.find_withtag("pressure_relationship"):
                     raise RuntimeError("pressure-cascade relationships did not render")
+                spatial_run = app._spatial_fresh_run()
+                if spatial_run is None:
+                    editor = app._editor_analysis()
+                    raise RuntimeError(
+                        "fresh solver run is unavailable to spatial view "
+                        f"(editor={getattr(editor, 'id', None)!r}, "
+                        f"selected={getattr(app._current_analysis(), 'id', None)!r}, "
+                        f"cached={sorted(app._runs_by_analysis)})"
+                    )
                 overlay = app.spatial_workspace._overlay()
                 if not any(room.get("source") == "result" for room in overlay["rooms"]):
-                    raise RuntimeError("solver-backed pressure evidence did not reach spatial view")
+                    raise RuntimeError(
+                        "fresh solver run reached spatial view but pressure result projection failed"
+                    )
                 if not any(
                     relationship.get("source") == "result"
                     for relationship in overlay["relationships"]

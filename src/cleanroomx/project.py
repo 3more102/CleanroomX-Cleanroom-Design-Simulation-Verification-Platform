@@ -19,6 +19,53 @@ class ProjectFormatError(ValueError):
     pass
 
 
+class AtomicWriteVerificationError(OSError):
+    """Raised when staged or committed bytes differ from the requested payload."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        phase: str,
+        expected_size: int,
+        expected_sha256: str,
+        actual_revision: "ProjectFileRevision | None" = None,
+    ):
+        self.path = Path(path)
+        self.phase = phase
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.actual_revision = actual_revision
+        actual = (
+            "unavailable"
+            if actual_revision is None
+            else (
+                f"exists={actual_revision.exists}, size={actual_revision.size}, "
+                f"sha256={actual_revision.sha256}"
+            )
+        )
+        super().__init__(
+            f"{phase} verification failed for {self.path}: expected "
+            f"size={expected_size}, sha256={expected_sha256}; actual {actual}. "
+            "Keep the current CleanroomX session open and save to a different path "
+            "if the destination may have been changed externally."
+        )
+
+
+class AtomicWriteDurabilityError(OSError):
+    """Raised after replace when directory durability cannot be confirmed."""
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+        self.committed = True
+        super().__init__(
+            f"file replacement completed for {self.path}, but durable directory "
+            "synchronization failed. The new bytes may already be visible, but "
+            "crash/power-loss durability could not be confirmed; keep the current "
+            "session open and save again or use Save As."
+        )
+
+
 class ProjectWriteConflictError(RuntimeError):
     """Raised when an explicit save would overwrite a different on-disk revision."""
 
@@ -235,6 +282,14 @@ def _normalized_project_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
+def _sha256_path(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     """Capture a stable content revision for optimistic project-save protection."""
     source = _normalized_project_path(path)
@@ -249,22 +304,24 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     last_error: OSError | None = None
     for _attempt in range(3):
         before = source.stat()
-        digest = sha256()
         try:
-            with source.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
+            digest = _sha256_path(source)
         except OSError as exc:
             last_error = exc
             continue
         after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+        if (
+            before.st_dev == after.st_dev
+            and before.st_ino == after.st_ino
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+        ):
             return ProjectFileRevision(
                 path=normalized,
                 exists=True,
                 size=after.st_size,
                 mtime_ns=after.st_mtime_ns,
-                sha256=digest.hexdigest(),
+                sha256=digest,
             )
         last_error = OSError(f"project file changed while fingerprinting: {source}")
 
@@ -310,6 +367,57 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _text_identity(text: str) -> tuple[int, str]:
+    payload = text.encode("utf-8")
+    return len(payload), sha256(payload).hexdigest()
+
+
+def _verify_text_revision(
+    path: str | Path,
+    text: str,
+    *,
+    phase: str,
+) -> ProjectFileRevision:
+    expected_size, expected_sha256 = _text_identity(text)
+    try:
+        current = capture_project_file_revision(path)
+    except OSError as exc:
+        raise AtomicWriteVerificationError(
+            path,
+            phase=phase,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_revision=None,
+        ) from exc
+    if (
+        not current.exists
+        or current.size != expected_size
+        or current.sha256 != expected_sha256
+    ):
+        raise AtomicWriteVerificationError(
+            path,
+            phase=phase,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_revision=current,
+        )
+    return current
+
+
+def _fsync_directory(path: Path) -> None:
+    """Durably commit a directory-entry change where Python exposes POSIX semantics."""
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -330,9 +438,22 @@ def _atomic_write_text(
             handle.flush()
             os.fsync(handle.fileno())
 
+        # Never replace an existing file with bytes that cannot be read back exactly
+        # from the flushed staging file.
+        _verify_text_revision(temp_path, text, phase="staged write")
+
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+
+        try:
+            _fsync_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(destination) from exc
+
+        # Detect an immediate external rewrite or an unexpected commit/readback
+        # mismatch instead of reporting a successful save for different bytes.
+        _verify_text_revision(destination, text, phase="committed write")
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -341,13 +462,16 @@ def _atomic_write_text(
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    """Atomically replace UTF-8 text with staged/readback verification and durability."""
     return _atomic_write_text(path, text)
 
 
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    """Save a project atomically without an external-revision precondition."""
-    return atomic_write_text(path, _project_document_text(project))
+    """Save and verify a project without an external-revision precondition."""
+    text = _project_document_text(project)
+    saved_path = atomic_write_text(path, text)
+    _verify_text_revision(saved_path, text, phase="project save")
+    return saved_path
 
 
 def save_project_document_guarded(
@@ -371,4 +495,5 @@ def save_project_document_guarded(
         text,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    saved_revision = _verify_text_revision(saved_path, text, phase="project save")
+    return saved_path, saved_revision

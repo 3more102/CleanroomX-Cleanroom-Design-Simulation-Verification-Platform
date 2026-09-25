@@ -43,7 +43,11 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
-from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .spatial import (
+    SpatialDesignWorkspace,
+    SpatialSynchronizationError,
+    sync_layout_to_analysis,
+)
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
@@ -892,7 +896,18 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
-        changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
+        try:
+            changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
+        except SpatialSynchronizationError as exc:
+            messagebox.showerror(
+                "Cannot synchronize geometry",
+                f"{exc}\n\nNo geometry changes were applied to the active analysis.",
+                parent=self.root,
+            )
+            self.status_var.set(
+                "Spatial geometry was not synchronized; resolve room identity errors first."
+            )
+            return
         if not changed:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return

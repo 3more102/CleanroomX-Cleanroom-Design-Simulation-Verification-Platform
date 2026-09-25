@@ -528,11 +528,23 @@ def engineering_sync_status(layout: dict, analysis: Any) -> dict:
                 message = f"Analysis room {link!r} is not available."
             else:
                 target = targets[0]
-                state = _classify_sync_state(
-                    room, target, baseline_by_room.get(room["id"])
+                baseline_room = baseline_by_room.get(room["id"])
+                baseline_link = (
+                    str(baseline_room.get("analysis_room_name") or "").strip().casefold()
+                    if baseline_room is not None
+                    else ""
                 )
-                differences = _geometry_differences(room, target)
-                message = ""
+                if baseline_link and baseline_link != key:
+                    state = "conflicting"
+                    differences = _geometry_differences(room, target)
+                    message = (
+                        "The engineering-room mapping changed since the last explicit "
+                        "synchronization."
+                    )
+                else:
+                    state = _classify_sync_state(room, target, baseline_room)
+                    differences = _geometry_differences(room, target)
+                    message = ""
             statuses.append(
                 {
                     "room_id": room["id"],

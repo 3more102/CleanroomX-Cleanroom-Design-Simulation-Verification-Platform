@@ -23,6 +23,7 @@ from cleanroomx.spatial import (
     layout_metrics,
     normalize_layout,
     pressure_overlay_state,
+    pressure_relationship_state,
     sync_layout_to_analysis,
     validate_layout,
 )
@@ -1161,3 +1162,173 @@ def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
     assert status["rooms"][0]["state"] == "conflicting"
     assert "mapping changed" in status["rooms"][0]["message"]
 
+
+
+
+def test_pressure_overlay_prefers_current_active_engineering_pressure():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "High",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 31.0,
+                },
+                {
+                    "name": "Low",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 9.0,
+                },
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "high",
+                "name": "High display",
+                "analysis_room_name": "High",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+                "pressure_pa": 20.0,
+            },
+            {
+                "id": "low",
+                "name": "Low display",
+                "analysis_room_name": "Low",
+                "x_m": 5.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+                "pressure_pa": 15.0,
+            },
+        ]
+    }
+
+    overlay = pressure_overlay_state(layout, analysis)
+    by_id = {item["room_id"]: item for item in overlay["rooms"]}
+
+    assert by_id["high"]["pressure_pa"] == 31.0
+    assert by_id["high"]["pressure_source"] == "engineering"
+    assert by_id["low"]["pressure_pa"] == 9.0
+    assert by_id["low"]["pressure_source"] == "engineering"
+    assert overlay["minimum_pressure_pa"] == 9.0
+    assert overlay["maximum_pressure_pa"] == 31.0
+
+
+def test_pressure_overlay_falls_back_to_spatial_value_when_engineering_pressure_absent():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Room A",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                }
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "Room A",
+                "analysis_room_name": "Room A",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+                "pressure_pa": 12.5,
+            }
+        ]
+    }
+
+    overlay = pressure_overlay_state(layout, analysis)
+
+    assert overlay["rooms"][0]["pressure_pa"] == 12.5
+    assert overlay["rooms"][0]["pressure_source"] == "spatial"
+
+
+def test_pressure_relationship_state_reports_pass_warning_and_unavailable_without_inference():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "High",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                },
+                {
+                    "name": "Low",
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 10.0,
+                },
+            ],
+            "pressure_cascade": [
+                {
+                    "higher_pressure_room": "High",
+                    "lower_pressure_room": "Low",
+                    "min_delta_pa": 15.0,
+                }
+            ],
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "high",
+                "name": "High",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+            {
+                "id": "low",
+                "name": "Low",
+                "x_m": 5.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+        ]
+    }
+
+    relationship = pressure_relationship_state(layout, analysis)[0]
+    assert relationship["delta_pa"] == 20.0
+    assert relationship["status"] == "pass"
+
+    analysis.input["rooms"][1]["observed_pressure_pa"] = 20.0
+    relationship = pressure_relationship_state(layout, analysis)[0]
+    assert relationship["delta_pa"] == 10.0
+    assert relationship["status"] == "warning"
+
+    analysis.input["rooms"][1].pop("observed_pressure_pa")
+    relationship = pressure_relationship_state(layout, analysis)[0]
+    assert relationship["delta_pa"] is None
+    assert relationship["status"] == "unavailable"

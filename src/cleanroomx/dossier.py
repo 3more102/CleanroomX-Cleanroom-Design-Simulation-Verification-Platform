@@ -696,6 +696,12 @@ def _clean_source(record: dict) -> dict:
 
 
 def build_dossier(manifest_path: str | Path) -> dict:
+    manifest_path = Path(manifest_path)
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return _build_dossier_from_dict(data, manifest_path.resolve().parent)
+
+
+def _build_dossier_from_dict(data: dict, manifest_dir: str | Path) -> dict:
     from .consistency import (
         analyze_hvac_fan_airflow_consistency,
         analyze_project_consistency,
@@ -749,13 +755,13 @@ def build_dossier(manifest_path: str | Path) -> dict:
     from .uncertainty import analyze_room_uncertainty
     from .uncertainty_io import load_uncertain_room
 
-    manifest_path = Path(manifest_path)
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("dossier manifest must contain a JSON object")
+    manifest_dir = Path(manifest_dir).resolve()
     name = str(data.get("name", "")).strip()
     if not name:
         raise ValueError("dossier name cannot be empty")
 
-    manifest_dir = manifest_path.resolve().parent
     source_records: list[dict] = []
 
     verification = None

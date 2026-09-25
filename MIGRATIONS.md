@@ -25,6 +25,12 @@ The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `
 
 Unknown future project formats are rejected rather than silently reinterpreted.
 
+## Additive-field round-trip contract
+
+Within supported schema version 1, fields that this CleanroomX build does not interpret are preserved as opaque strict-JSON data when a project is opened, edited, and saved. Preservation applies to unknown fields at the document top level, inside the `project` block, and inside individual analysis records. Known CleanroomX fields remain authoritative and cannot be overridden by an opaque extension field with the same key.
+
+The same preservation rule is applied during supported legacy migration where an unconsumed source field has a lossless schema-v1 destination. The explicit schema-v0 shape carries unconsumed top-level and analysis fields forward. The older pre-schema single-analysis shape carries unconsumed top-level fields forward without reinterpreting them as current project metadata. CleanroomX does not interpret, validate the domain meaning of, or update opaque extension content beyond the normal strict-JSON requirement; extensions that require incompatible semantics should use an appropriate schema/version contract rather than relying on an unknown field.
+
 ## Save behavior after migration
 
 Loading a supported legacy file does not overwrite it automatically. If the migrated project is saved, CleanroomX writes schema version 1 using the current document model. Saving is validated first and uses an atomic temporary-file replacement.

@@ -31,7 +31,10 @@
                 "max_concentration_per_m3": 400000,
                 "observed_concentration_per_m3": 120000
               }
-            ]
+            ],
+            "x_m": 0,
+            "y_m": 0,
+            "min_pressure_pa": 25
           },
           {
             "name": "Preparation",
@@ -40,7 +43,10 @@
             "height_m": 3,
             "supply_airflow_m3_h": 1200,
             "min_ach": 20,
-            "observed_pressure_pa": 16
+            "observed_pressure_pa": 16,
+            "x_m": 6.5,
+            "y_m": 0,
+            "min_pressure_pa": 10
           },
           {
             "name": "Ante",
@@ -49,7 +55,10 @@
             "height_m": 3,
             "supply_airflow_m3_h": 720,
             "min_ach": 20,
-            "observed_pressure_pa": 8
+            "observed_pressure_pa": 8,
+            "x_m": 12,
+            "y_m": 0,
+            "min_pressure_pa": 5
           }
         ],
         "pressure_cascade": [
@@ -424,5 +433,5 @@
       }
     }
   ],
-  "active_analysis_id": "hvac"
+  "active_analysis_id": "verification"
 }

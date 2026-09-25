@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 
 import pytest
 
@@ -14,7 +15,12 @@ from cleanroomx.application import (
     validate_application_registry,
 )
 from cleanroomx.plugin_api import AnalysisPlugin, PLUGIN_API_VERSION, PluginAnalysisSpec
-from cleanroomx.project import PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, project_from_dict
+from cleanroomx.project import (
+    PROJECT_SCHEMA,
+    PROJECT_SCHEMA_VERSION,
+    ProjectFormatError,
+    project_from_dict,
+)
 
 
 class FakeEntryPoint:
@@ -226,3 +232,95 @@ def test_plugin_discovery_order_is_deterministic():
         "plugin.acme.engineering.first",
         "plugin.zeta.engineering.second",
     ]
+
+
+def test_missing_plugin_project_fails_closed_with_actionable_error():
+    load_analysis_plugins(force=True, entry_points_override=[])
+
+    with pytest.raises(ProjectFormatError, match="install a compatible plugin"):
+        project_from_dict(
+            {
+                "schema": PROJECT_SCHEMA,
+                "schema_version": PROJECT_SCHEMA_VERSION,
+                "project": {"name": "Unavailable plugin"},
+                "analyses": [
+                    {
+                        "id": "plugin-1",
+                        "name": "Missing",
+                        "kind": "plugin.acme.engineering.double",
+                        "input": {"value": 1},
+                    }
+                ],
+                "active_analysis_id": "plugin-1",
+            }
+        )
+
+
+def test_plugin_registration_is_atomic_when_one_analysis_is_invalid():
+    valid = _plugin().analyses[0]
+    invalid = replace(
+        valid,
+        key="plugin.other.invalid",
+        title="Invalid sibling",
+    )
+    descriptor = replace(_plugin(), analyses=(valid, invalid))
+
+    report = load_analysis_plugins(
+        force=True,
+        entry_points_override=[FakeEntryPoint("atomic", descriptor)],
+    )
+
+    assert report["status"] == "degraded"
+    assert report["loaded_analysis_count"] == 0
+    assert "plugin.acme.engineering.double" not in application_module.ANALYSIS_SPECS
+
+
+def test_plugin_parser_and_reporter_receive_isolated_snapshots():
+    def parser(payload: dict) -> dict:
+        payload["mutated_by_parser"] = True
+        return {"value": float(payload["value"])}
+
+    def runner(model: dict) -> dict:
+        return {"status": "complete", "value": model["value"]}
+
+    def reporter(result: dict) -> str:
+        result["mutated_by_reporter"] = True
+        return "# Isolated"
+
+    descriptor = AnalysisPlugin(
+        name="isolation.engineering",
+        version="1.0",
+        analyses=(
+            PluginAnalysisSpec(
+                key="plugin.isolation.engineering.check",
+                title="Isolation check",
+                category="Extensions",
+                parser=parser,
+                runner=runner,
+                reporter=reporter,
+                description="Verify boundary snapshot isolation.",
+            ),
+        ),
+    )
+    load_analysis_plugins(
+        force=True,
+        entry_points_override=[FakeEntryPoint("isolation", descriptor)],
+    )
+    payload = {"value": 4}
+
+    run = run_analysis("plugin.isolation.engineering.check", payload)
+
+    assert payload == {"value": 4}
+    assert run.result == {"status": "complete", "value": 4.0}
+
+
+def test_plugin_reporter_must_return_text():
+    spec = replace(_plugin().analyses[0], reporter=lambda result: {"not": "text"})
+    descriptor = replace(_plugin(), analyses=(spec,))
+    load_analysis_plugins(
+        force=True,
+        entry_points_override=[FakeEntryPoint("bad-reporter", descriptor)],
+    )
+
+    with pytest.raises(TypeError, match="reporter must return a string"):
+        run_analysis("plugin.acme.engineering.double", {"value": 1})

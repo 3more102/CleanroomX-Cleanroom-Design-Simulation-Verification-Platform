@@ -460,13 +460,18 @@ def validate_application_registry() -> dict:
         elif spec.provider == "plugin":
             if (
                 spec.plugin_name is None
+                or not _PLUGIN_NAME_PATTERN.fullmatch(spec.plugin_name)
                 or spec.plugin_version is None
+                or not spec.plugin_version.strip()
                 or spec.plugin_api_version != PLUGIN_API_VERSION
             ):
                 raise RuntimeError(
                     f"{spec.key} plugin workflow has incomplete plugin identity"
                 )
-            if not spec.key.startswith(f"plugin.{spec.plugin_name}."):
+            if (
+                not _PLUGIN_KEY_PATTERN.fullmatch(spec.key)
+                or not spec.key.startswith(f"plugin.{spec.plugin_name}.")
+            ):
                 raise RuntimeError(
                     f"{spec.key} plugin workflow is outside its provider namespace"
                 )
@@ -1056,6 +1061,7 @@ def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
                 "hvac_fan_operating_airflow consistency requires hvac_project"
             )
 
+
 def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
     spec = get_analysis_spec(kind)
     if spec is None:
@@ -1070,7 +1076,8 @@ def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
         _validate_dossier(payload, base)
         return
     assert spec.parser is not None
-    _load_callable(spec.parser)(payload)
+    parser_input = copy.deepcopy(payload) if spec.provider == "plugin" else payload
+    _load_callable(spec.parser)(parser_input)
 
 
 def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
@@ -1124,14 +1131,18 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         result = _run_dossier(payload, base)
     else:
         assert spec.parser is not None and spec.runner is not None
-        result = _load_callable(spec.runner)(_load_callable(spec.parser)(payload))
+        parser_input = copy.deepcopy(payload) if spec.provider == "plugin" else payload
+        result = _load_callable(spec.runner)(_load_callable(spec.parser)(parser_input))
 
     normalized = _normalize_result(result)
+    reporter_input = copy.deepcopy(normalized) if spec.provider == "plugin" else normalized
     markdown = (
         _fallback_markdown(spec.title, normalized)
         if spec.reporter is None
-        else _load_callable(spec.reporter)(normalized)
+        else _load_callable(spec.reporter)(reporter_input)
     )
+    if not isinstance(markdown, str):
+        raise TypeError(f"{spec.key} reporter must return a string")
     dependencies_after = _capture_external_dependencies(kind, payload, base)
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(

@@ -79,9 +79,9 @@ The entire descriptor is validated before any of its analyses are registered. A 
 
 ## Runtime contracts
 
-The parser receives the analysis input JSON object and should validate all plugin-specific engineering assumptions. The runner receives the parser output. The reporter, when supplied, receives CleanroomX's normalized result dictionary.
+The parser receives an isolated copy of the analysis input JSON object and should validate all plugin-specific engineering assumptions. The runner receives the parser output. The reporter, when supplied, receives an isolated copy of CleanroomX's normalized result dictionary. These snapshot boundaries prevent plugin-side mutation from changing the caller's canonical input or the published result by aliasing.
 
-Runner results must be a dictionary, dataclass, or expose `to_dict()`. CleanroomX converts the result to a dictionary and verifies that it is strict JSON with no NaN or Infinity before publishing it. The existing application result, diagnostic, plotting, export, and background execution behavior remains in force.
+Runner results must be a dictionary, dataclass, or expose `to_dict()`. CleanroomX converts the result to a dictionary and verifies that it is strict JSON with no NaN or Infinity before publishing it. A reporter must return text. The existing application result, diagnostic, plotting, export, and background execution behavior remains in force.
 
 Plugins should keep engineering units explicit in field names, reject invalid/non-finite numerical inputs, document tolerances and assumptions, avoid mutable module-global run state, and make deterministic calculations where technically possible.
 
@@ -102,3 +102,7 @@ cleanroomx-gui --check
 ```
 
 The JSON output includes `plugin_api_version`, the deterministic plugin-discovery report, registry counts, and the full analysis catalog. A clean installation with no plugins reports zero discovered plugins and status `ok`.
+
+## API-v1 limitation
+
+API v1 has no external-file dependency declaration hook for plugins. A plugin may execute arbitrary trusted Python code, but CleanroomX cannot automatically fingerprint files that a plugin opens internally. Engineering plugins that require revision-bound external inputs should place the relevant data or an independently verified content identity in the analysis input and expose that provenance in their result. A future plugin API revision can add an explicit dependency contract without weakening the v1 behavior.

@@ -3,15 +3,15 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import multiprocessing
 from pathlib import Path
-import queue
-import threading
 import uuid
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__
+from .analysis_process import AnalysisProcess
 from .autosave import (
     DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
     AutosaveManager,
@@ -204,10 +204,10 @@ class CleanroomXApp:
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
 
-        self._queue: queue.Queue = queue.Queue()
-        self._run_generation = 0
+        self._analysis_worker = AnalysisProcess()
         self._running = False
-        self._abandon_requested = False
+        self._running_analysis_id: str | None = None
+        self._cancel_requested = False
 
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
@@ -261,7 +261,7 @@ class CleanroomXApp:
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Validate Input", command=self.validate_current)
         analysis_menu.add_command(label="Run Analysis", accelerator="F5", command=self.run_current)
-        analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
+        analysis_menu.add_command(label="Cancel Current Run", command=self.cancel_run)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         view_menu = tk.Menu(menubar, tearoff=False)
@@ -308,7 +308,7 @@ class CleanroomXApp:
         self.run_button = ttk.Button(metadata, text="Run", command=self.run_current)
         self.run_button.grid(row=0, column=5, padx=3)
         self.cancel_button = ttk.Button(
-            metadata, text="Abandon", command=self.cancel_run, state="disabled"
+            metadata, text="Cancel", command=self.cancel_run, state="disabled"
         )
         self.cancel_button.grid(row=0, column=6, padx=3)
         metadata.columnconfigure(1, weight=1)
@@ -816,7 +816,7 @@ class CleanroomXApp:
             finally:
                 self._selection_guard = False
             self.status_var.set(
-                f"Running {previous.name} — abandon the current run before switching analyses."
+                f"Running {previous.name} — cancel the current run before switching analyses."
             )
             return
         if previous is not None and previous.id != analysis.id:
@@ -862,7 +862,7 @@ class CleanroomXApp:
         if self._running:
             messagebox.showwarning(
                 "Analysis running",
-                "Abandon the current run before synchronizing spatial geometry.",
+                "Cancel the current run before synchronizing spatial geometry.",
                 parent=self.root,
             )
             return
@@ -1017,7 +1017,7 @@ class CleanroomXApp:
 
     def new_project(self) -> None:
         if self._running:
-            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            messagebox.showwarning("Analysis running", "Cancel the current run first.")
             return
         if not self._confirm_project_replacement():
             return
@@ -1038,7 +1038,7 @@ class CleanroomXApp:
 
     def open_project(self) -> None:
         if self._running:
-            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            messagebox.showwarning("Analysis running", "Cancel the current run first.")
             return
         path = filedialog.askopenfilename(
             parent=self.root,
@@ -1240,7 +1240,7 @@ class CleanroomXApp:
 
     def add_analysis(self) -> None:
         if self._running:
-            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            messagebox.showwarning("Analysis running", "Cancel the current run first.")
             return
         previous = self._editor_analysis()
         if previous is not None:
@@ -1274,7 +1274,7 @@ class CleanroomXApp:
 
     def rename_analysis(self) -> None:
         if self._running:
-            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            messagebox.showwarning("Analysis running", "Cancel the current run first.")
             return
         analysis = self._current_analysis()
         if analysis is None:
@@ -1289,7 +1289,7 @@ class CleanroomXApp:
 
     def remove_analysis(self) -> None:
         if self._running:
-            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            messagebox.showwarning("Analysis running", "Cancel the current run first.")
             return
         analysis = self._current_analysis()
         if analysis is None:
@@ -1310,7 +1310,7 @@ class CleanroomXApp:
 
     def import_input_json(self) -> None:
         if self._running:
-            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            messagebox.showwarning("Analysis running", "Cancel the current run first.")
             return
         analysis = self._current_analysis()
         if analysis is None:
@@ -1394,39 +1394,43 @@ class CleanroomXApp:
             return
         try:
             analysis = self._commit_editor()
-            validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
+            validate_analysis_input(
+                analysis.kind,
+                analysis.input,
+                base_dir=self._base_dir(),
+            )
         except Exception as exc:
             self.status_var.set("Cannot run — invalid input")
             messagebox.showerror("Cannot run analysis", str(exc), parent=self.root)
             return
 
-        self._run_generation += 1
-        generation = self._run_generation
         analysis_id = analysis.id
         kind = analysis.kind
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
-        self._abandon_requested = False
+        self._cancel_requested = False
+        self._running_analysis_id = analysis_id
+        self.status_var.set(f"Starting {analysis.name}...")
+
+        try:
+            self._analysis_worker.start(kind, payload, base_dir=base_dir)
+        except Exception as exc:
+            self._running_analysis_id = None
+            self.status_var.set("Cannot start analysis")
+            messagebox.showerror("Cannot start analysis", str(exc), parent=self.root)
+            return
+
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
 
-        def worker() -> None:
-            try:
-                result = run_analysis(kind, payload, base_dir=base_dir)
-                self._queue.put(("success", generation, analysis_id, result))
-            except Exception as exc:
-                self._queue.put(("error", generation, analysis_id, str(exc)))
-
-        threading.Thread(target=worker, daemon=True).start()
-
     def cancel_run(self) -> None:
-        if not self._running or self._abandon_requested:
+        if not self._running or self._cancel_requested:
             return
-        self._abandon_requested = True
+        if not self._analysis_worker.cancel():
+            return
+        self._cancel_requested = True
         self.cancel_button.configure(state="disabled")
-        self.status_var.set(
-            "Run abandoned in the UI; waiting for the backend worker to finish before another run."
-        )
+        self.status_var.set("Cancelling analysis...")
 
     def _set_running(self, running: bool) -> None:
         self._running = running
@@ -1436,46 +1440,72 @@ class CleanroomXApp:
 
     def _poll_worker(self) -> None:
         try:
-            while True:
-                kind, generation, analysis_id, payload = self._queue.get_nowait()
-                if generation != self._run_generation:
-                    continue
-                if self._abandon_requested:
-                    self._abandon_requested = False
-                    self._set_running(False)
-                    self.status_var.set("Run abandoned; backend worker finished. Ready.")
-                    continue
-                self._set_running(False)
-                if kind == "error":
-                    self.status_var.set("Analysis failed")
-                    messagebox.showerror("Analysis failed", str(payload), parent=self.root)
+            message = self._analysis_worker.poll()
+        except Exception as exc:
+            try:
+                self._analysis_worker.shutdown()
+            except Exception as shutdown_exc:
+                message = (
+                    "error",
+                    "Analysis worker monitoring failed and cleanup also failed: "
+                    f"{exc}; {shutdown_exc}",
+                )
+            else:
+                message = ("error", f"Analysis worker monitoring failed: {exc}")
+
+        if message is not None:
+            kind, payload = message
+            analysis_id = self._running_analysis_id
+            self._running_analysis_id = None
+            self._cancel_requested = False
+            self._set_running(False)
+
+            if kind == "cancelled":
+                self.status_var.set("Analysis cancelled. Ready.")
+            elif kind == "error":
+                self.status_var.set("Analysis failed")
+                messagebox.showerror(
+                    "Analysis failed",
+                    str(payload),
+                    parent=self.root,
+                )
+            elif kind == "success" and analysis_id is not None:
+                try:
+                    analysis = self.project.analysis_by_id(analysis_id)
+                except KeyError:
+                    self._invalidate_last_run_for(analysis_id)
+                    self.status_var.set(
+                        "Completed result discarded — the analysis no longer exists."
+                    )
                 else:
-                    try:
-                        analysis = self.project.analysis_by_id(analysis_id)
-                    except KeyError:
-                        self._invalidate_last_run_for(analysis_id)
-                        self.status_var.set(
-                            "Completed result discarded — the analysis no longer exists."
-                        )
-                        continue
                     if not analysis_run_matches_input(
-                        payload, analysis.kind, analysis.input
+                        payload,
+                        analysis.kind,
+                        analysis.input,
                     ):
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
                         )
-                        continue
-                    self._runs_by_analysis[analysis_id] = payload
-                    self.last_run = payload
-                    self.last_run_analysis_id = analysis_id
-                    self._render_run(payload)
-                    self.status_var.set(
-                        f"Completed — {payload.title} — status: {payload.status}"
-                    )
-        except queue.Empty:
-            pass
+                    else:
+                        self._runs_by_analysis[analysis_id] = payload
+                        self.last_run = payload
+                        self.last_run_analysis_id = analysis_id
+                        self._render_run(payload)
+                        self.status_var.set(
+                            f"Completed — {payload.title} — status: {payload.status}"
+                        )
+            else:
+                self.status_var.set(
+                    "Analysis worker returned an invalid terminal state"
+                )
+                messagebox.showerror(
+                    "Analysis failed",
+                    "Analysis worker returned an invalid terminal state.",
+                    parent=self.root,
+                )
+
         self.root.after(100, self._poll_worker)
 
     def _render_run(self, run: AnalysisRun, *, select_results: bool = True) -> None:
@@ -1673,6 +1703,9 @@ class CleanroomXApp:
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)
+        worker = getattr(self, "_analysis_worker", None)
+        if worker is not None:
+            worker.shutdown()
         self.root.destroy()
 
 
@@ -1718,6 +1751,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    multiprocessing.freeze_support()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.demo and args.project:

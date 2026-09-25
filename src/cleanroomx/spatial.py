@@ -1771,6 +1771,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 key = str(name or "").strip().casefold()
                 if key and key not in rooms_by_name:
                     rooms_by_name[key] = room
+        overlay = pressure_overlay_state(self.layout, analysis)
+        pressure_by_room = {
+            item["room_id"]: item["pressure_pa"] for item in overlay["rooms"]
+        }
         relationships: list[
             tuple[dict, dict, float | None, float | None, str]
         ] = []
@@ -1791,17 +1795,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 if delta is not None
                 else None
             )
-            observed_delta = None
-            if high.get("pressure_pa") is not None and low.get("pressure_pa") is not None:
-                observed_delta = (
-                    _finite_number(high.get("pressure_pa"), 0.0)
-                    - _finite_number(low.get("pressure_pa"), 0.0)
-                )
+            high_pressure = pressure_by_room.get(high["id"])
+            low_pressure = pressure_by_room.get(low["id"])
+            observed_delta = (
+                high_pressure - low_pressure
+                if high_pressure is not None and low_pressure is not None
+                else None
+            )
             if observed_delta is None:
                 state = "unavailable"
             elif delta_value is None:
                 state = "available"
-            elif observed_delta + SPATIAL_GEOMETRY_EPSILON_M >= delta_value:
+            elif observed_delta >= delta_value:
                 state = "pass"
             else:
                 state = "fail"
@@ -1900,9 +1905,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
+                overlay_room = overlay_by_room[room["id"]]
                 pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
+                    f"\n{overlay_room['pressure_pa']:g} Pa"
+                    if self._show_pressure.get()
+                    and overlay_room["availability"] == "available"
                     else ""
                 )
                 canvas.create_text(

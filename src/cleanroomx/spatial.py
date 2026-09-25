@@ -7,13 +7,20 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from .spatial_integrity import (
     DEVICE_TYPES,
     SPATIAL_GEOMETRY_EPSILON_M,
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
+)
+from .spatial_domain import (
+    SpatialTransform2D,
+    engineering_fields_for_room,
+    engineering_sync_states,
+    mark_layout_synchronized,
+    pressure_relationships,
 )
 
 
@@ -98,8 +105,31 @@ def normalize_layout(value: Any) -> dict:
                 "width_m": _positive(raw.get("width_m"), 4.0),
                 "height_m": _positive(raw.get("height_m"), 3.0),
             }
+            if raw.get("elevation_m") is not None:
+                room["elevation_m"] = _finite_number(raw.get("elevation_m"), 0.0)
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+            if raw.get("notes") is not None:
+                room["notes"] = str(raw.get("notes"))
+            if isinstance(raw.get("metadata"), dict):
+                room["metadata"] = copy.deepcopy(raw["metadata"])
+            ref = raw.get("engineering_ref")
+            if isinstance(ref, dict):
+                analysis_id = str(ref.get("analysis_id") or "").strip()
+                room_name = str(ref.get("room_name") or "").strip()
+                if analysis_id and room_name:
+                    normalized_ref = {
+                        "analysis_id": analysis_id,
+                        "room_name": room_name,
+                    }
+                    synced = ref.get("synced_geometry")
+                    if isinstance(synced, dict):
+                        normalized_ref["synced_geometry"] = {
+                            "length_m": _positive(synced.get("length_m"), room["length_m"]),
+                            "width_m": _positive(synced.get("width_m"), room["width_m"]),
+                            "height_m": _positive(synced.get("height_m"), room["height_m"]),
+                        }
+                    room["engineering_ref"] = normalized_ref
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -182,11 +212,13 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "elevation_m": 0.0,
         }
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
+    mark_layout_synchronized(layout, analysis)
     return layout
 
 

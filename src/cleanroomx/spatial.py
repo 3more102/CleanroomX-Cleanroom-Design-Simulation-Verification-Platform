@@ -188,8 +188,8 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
         project.metadata = {}
         metadata = project.metadata
 
-    raw = metadata.get(SPATIAL_METADATA_KEY)
-    if raw is not None:
+    if SPATIAL_METADATA_KEY in metadata:
+        raw = metadata[SPATIAL_METADATA_KEY]
         validate_spatial_layout_document(raw)
         normalized = normalize_layout(raw)
         metadata[SPATIAL_METADATA_KEY] = normalized

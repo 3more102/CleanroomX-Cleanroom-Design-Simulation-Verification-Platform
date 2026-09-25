@@ -43,6 +43,7 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .runtime_diagnostics import RuntimeEventJournal, build_diagnostic_bundle
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -176,6 +177,7 @@ class CleanroomXApp:
         *,
         autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
         autosave_manager: AutosaveManager | None = None,
+        event_journal: RuntimeEventJournal | None = None,
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
@@ -200,6 +202,7 @@ class CleanroomXApp:
             else 0
         )
         self._autosave_manager = autosave_manager or AutosaveManager()
+        self._event_journal = event_journal or RuntimeEventJournal()
         self._autosave_manager.begin_project(None)
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
@@ -233,6 +236,66 @@ class CleanroomXApp:
         if self._autosave_interval_ms:
             self.root.after(self._autosave_interval_ms, self._autosave_tick)
             self.root.after(500, self._poll_autosave_status)
+        self._record_runtime_event(
+            "application.started",
+            message="Desktop application initialized",
+            autosave_enabled=bool(self._autosave_interval_ms),
+        )
+
+    def _record_runtime_event(
+        self,
+        event: str,
+        *,
+        level: str = "info",
+        message: str = "",
+        **context,
+    ) -> None:
+        journal = getattr(self, "_event_journal", None)
+        if journal is None:
+            return
+        try:
+            journal.record(event, level=level, message=message, **context)
+        except (TypeError, ValueError):
+            # Runtime diagnostics must never destabilize engineering workflows.
+            return
+
+    def _diagnostic_project_summary(self) -> dict:
+        project_path = getattr(self, "project_path", None)
+        project = self.project
+        return {
+            "name": project.name,
+            "project_file_name": project_path.name if project_path is not None else None,
+            "analysis_count": len(project.analyses),
+            "active_analysis_id": project.active_analysis_id,
+            "analyses": [
+                {"id": item.id, "name": item.name, "kind": item.kind}
+                for item in project.analyses
+            ],
+        }
+
+    def _diagnostic_runtime_state(self) -> dict:
+        dirty = None
+        try:
+            dirty = self._has_unsaved_changes()
+        except (AttributeError, TypeError, ValueError, tk.TclError):
+            dirty = None
+        autosave_status = None
+        autosave_var = getattr(self, "autosave_status_var", None)
+        if autosave_var is not None:
+            try:
+                autosave_status = autosave_var.get()
+            except (AttributeError, TypeError, ValueError, tk.TclError):
+                autosave_status = None
+        return {
+            "running": bool(getattr(self, "_running", False)),
+            "abandon_requested": bool(getattr(self, "_abandon_requested", False)),
+            "run_generation": int(getattr(self, "_run_generation", 0)),
+            "editor_analysis_id": getattr(self, "_editor_analysis_id", None),
+            "last_run_analysis_id": getattr(self, "last_run_analysis_id", None),
+            "dirty": dirty,
+            "autosave_status": autosave_status,
+            "recovered_copy": getattr(self, "_restored_recovery_artifact", None) is not None,
+        }
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -250,6 +313,10 @@ class CleanroomXApp:
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
+        file_menu.add_command(
+            label="Export Diagnostic Bundle JSON...",
+            command=self.export_diagnostic_bundle_json,
+        )
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -1073,6 +1140,12 @@ class CleanroomXApp:
         self._refresh_analysis_list()
         self._capture_saved_state()
         self.status_var.set(f"Opened {project_path.name}")
+        self._record_runtime_event(
+            "project.opened",
+            message="Project loaded and validated",
+            file_name=project_path.name,
+            analysis_count=len(project.analyses),
+        )
         self._update_title()
 
     def _update_title(self) -> None:
@@ -1130,10 +1203,23 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
-        except ProjectWriteConflictError:
+        except ProjectWriteConflictError as exc:
+            self._record_runtime_event(
+                "project.save_conflict",
+                level="warning",
+                message=str(exc),
+                file_name=self.project_path.name,
+            )
             self._report_external_save_conflict(self.project_path)
             return
         except Exception as exc:
+            self._record_runtime_event(
+                "project.save_failed",
+                level="error",
+                message=str(exc),
+                file_name=self.project_path.name,
+                error_type=type(exc).__name__,
+            )
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
@@ -1142,6 +1228,12 @@ class CleanroomXApp:
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
+        self._record_runtime_event(
+            "project.saved",
+            message="Project saved with external-change guard",
+            file_name=self.project_path.name,
+            analysis_count=len(self.project.analyses),
+        )
 
     def save_project_as(self) -> None:
         try:
@@ -1214,10 +1306,23 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
-        except ProjectWriteConflictError:
+        except ProjectWriteConflictError as exc:
+            self._record_runtime_event(
+                "project.save_as_conflict",
+                level="warning",
+                message=str(exc),
+                file_name=destination.name,
+            )
             self._report_external_save_conflict(destination)
             return
         except Exception as exc:
+            self._record_runtime_event(
+                "project.save_as_failed",
+                level="error",
+                message=str(exc),
+                file_name=destination.name,
+                error_type=type(exc).__name__,
+            )
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
@@ -1236,6 +1341,12 @@ class CleanroomXApp:
         self._notify_explicit_save(self.project_path)
         self._discard_restored_recovery()
         self.status_var.set(f"Saved {self.project_path.name}")
+        self._record_runtime_event(
+            "project.saved_as",
+            message="Project saved to selected destination",
+            file_name=self.project_path.name,
+            analysis_count=len(self.project.analyses),
+        )
         self._update_title()
 
     def add_analysis(self) -> None:
@@ -1348,6 +1459,14 @@ class CleanroomXApp:
         try:
             atomic_write_text(target, content)
         except Exception as exc:
+            self._record_runtime_event(
+                "export.failed",
+                level="error",
+                message=str(exc),
+                label=label,
+                file_name=target.name,
+                error_type=type(exc).__name__,
+            )
             self.status_var.set(f"{label} export failed")
             messagebox.showerror(
                 f"{label} export failed",
@@ -1355,6 +1474,12 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return False
+        self._record_runtime_event(
+            "export.succeeded",
+            message="Atomic export completed",
+            label=label,
+            file_name=target.name,
+        )
         self.status_var.set(f"Exported {label.lower()} — {target.name}")
         return True
 
@@ -1382,9 +1507,21 @@ class CleanroomXApp:
             analysis = self._commit_editor()
             validate_analysis_input(analysis.kind, analysis.input, base_dir=self._base_dir())
         except Exception as exc:
+            self._record_runtime_event(
+                "analysis.validation_failed",
+                level="warning",
+                message=str(exc),
+                error_type=type(exc).__name__,
+            )
             self.status_var.set("Validation failed")
             messagebox.showerror("Validation failed", str(exc), parent=self.root)
             return
+        self._record_runtime_event(
+            "analysis.validated",
+            message="Analysis input passed backend validation",
+            analysis_id=analysis.id,
+            analysis_kind=analysis.kind,
+        )
         self.refresh_structure(silent=True)
         self.status_var.set(f"Input valid — {analysis.name}")
         messagebox.showinfo("Validation", "Input is valid for the selected backend workflow.")
@@ -1408,6 +1545,13 @@ class CleanroomXApp:
         base_dir = self._base_dir()
         self._abandon_requested = False
         self._set_running(True)
+        self._record_runtime_event(
+            "analysis.run_started",
+            message="Background analysis started",
+            generation=generation,
+            analysis_id=analysis_id,
+            analysis_kind=kind,
+        )
         self.status_var.set(f"Running {analysis.name}...")
 
         def worker() -> None:
@@ -1423,6 +1567,12 @@ class CleanroomXApp:
         if not self._running or self._abandon_requested:
             return
         self._abandon_requested = True
+        self._record_runtime_event(
+            "analysis.run_abandoned",
+            level="warning",
+            message="Result will be suppressed until the active worker exits",
+            generation=self._run_generation,
+        )
         self.cancel_button.configure(state="disabled")
         self.status_var.set(
             "Run abandoned in the UI; waiting for the backend worker to finish before another run."
@@ -1443,10 +1593,23 @@ class CleanroomXApp:
                 if self._abandon_requested:
                     self._abandon_requested = False
                     self._set_running(False)
+                    self._record_runtime_event(
+                        "analysis.abandoned_worker_finished",
+                        message="Abandoned backend worker exited; application is ready",
+                        generation=generation,
+                        analysis_id=analysis_id,
+                    )
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    self._record_runtime_event(
+                        "analysis.run_failed",
+                        level="error",
+                        message=str(payload),
+                        generation=generation,
+                        analysis_id=analysis_id,
+                    )
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
@@ -1454,6 +1617,14 @@ class CleanroomXApp:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
                         self._invalidate_last_run_for(analysis_id)
+                        self._record_runtime_event(
+                            "analysis.result_discarded",
+                            level="warning",
+                            message="Completed result discarded because the analysis no longer exists",
+                            generation=generation,
+                            analysis_id=analysis_id,
+                            reason="analysis_missing",
+                        )
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
                         )
@@ -1462,6 +1633,14 @@ class CleanroomXApp:
                         payload, analysis.kind, analysis.input
                     ):
                         self._invalidate_last_run_for(analysis_id)
+                        self._record_runtime_event(
+                            "analysis.result_discarded",
+                            level="warning",
+                            message="Completed result discarded because analysis input identity changed",
+                            generation=generation,
+                            analysis_id=analysis_id,
+                            reason="input_changed",
+                        )
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
                             "run the analysis again."
@@ -1471,6 +1650,14 @@ class CleanroomXApp:
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
+                    self._record_runtime_event(
+                        "analysis.run_completed",
+                        message="Background analysis completed and result was accepted",
+                        generation=generation,
+                        analysis_id=analysis_id,
+                        analysis_kind=payload.kind,
+                        status=payload.status,
+                    )
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
                     )
@@ -1620,6 +1807,51 @@ class CleanroomXApp:
                 label="Run bundle",
             )
 
+    def export_diagnostic_bundle_json(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX diagnostic bundle",
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if not path:
+            return
+        destination = Path(path)
+        self._record_runtime_event(
+            "diagnostics.export_requested",
+            message="Operator requested a local runtime diagnostic bundle",
+            file_name=destination.name,
+        )
+        try:
+            bundle = build_diagnostic_bundle(
+                self._event_journal,
+                project=self._diagnostic_project_summary(),
+                runtime_state=self._diagnostic_runtime_state(),
+                current_run=getattr(self, "last_run", None),
+            )
+            content = json.dumps(
+                bundle,
+                indent=2,
+                ensure_ascii=False,
+                allow_nan=False,
+                sort_keys=True,
+            ) + "\n"
+        except (OSError, TypeError, ValueError) as exc:
+            self._record_runtime_event(
+                "diagnostics.bundle_failed",
+                level="error",
+                message=str(exc),
+                error_type=type(exc).__name__,
+            )
+            self.status_var.set("Diagnostic bundle export failed")
+            messagebox.showerror(
+                "Diagnostic bundle export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        self._write_export_file(path, content, label="Diagnostic bundle")
+
     def export_report_markdown(self) -> None:
         run = self._current_fresh_run()
         if run is None:
@@ -1673,6 +1905,11 @@ class CleanroomXApp:
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)
+        self._record_runtime_event(
+            "application.closed",
+            message="Desktop application shutdown requested",
+            analysis_running=bool(self._running),
+        )
         self.root.destroy()
 
 

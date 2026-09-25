@@ -9,6 +9,7 @@ import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.runtime_diagnostics import RuntimeEventJournal
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -597,6 +598,108 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     assert captured["title"] == "Result export failed"
     assert captured["message"] == "disk full"
     assert captured["parent"] is app.root
+
+
+def test_export_diagnostic_bundle_is_reachable_and_omits_raw_analysis_input(
+    tmp_path, monkeypatch
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(
+        name="Support Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="Room",
+                kind="room_verification",
+                input={"confidential_engineering_input": 987654321},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app.project_path = tmp_path / "source" / "demo.cleanroomx.json"
+    app._running = False
+    app._abandon_requested = False
+    app._run_generation = 3
+    app._editor_analysis_id = "a"
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app._restored_recovery_artifact = None
+    app._event_journal = RuntimeEventJournal(
+        clock=lambda: "2026-09-25T10:00:00.000Z"
+    )
+    app._has_unsaved_changes = lambda: True
+    app.status_var = Status()
+    destination = tmp_path / "diagnostics.json"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+
+    app.export_diagnostic_bundle_json()
+
+    bundle = json.loads(destination.read_text(encoding="utf-8"))
+    assert bundle["schema"] == "cleanroomx.runtime-diagnostics"
+    assert bundle["project"]["project_file_name"] == "demo.cleanroomx.json"
+    assert bundle["runtime_state"]["dirty"] is True
+    assert bundle["runtime_state"]["running"] is False
+    serialized = json.dumps(bundle)
+    assert "confidential_engineering_input" not in serialized
+    assert "987654321" not in serialized
+    assert str(app.project_path.parent) not in serialized
+    assert any(
+        event["event"] == "diagnostics.export_requested"
+        for event in bundle["events"]
+    )
+    assert any(
+        event["event"] == "export.succeeded"
+        for event in app._event_journal.snapshot()
+    )
+    assert app.status_var.value.startswith("Exported diagnostic bundle")
+
+
+def test_runtime_journal_records_abandonment_and_worker_exit():
+    class Widget:
+        def configure(self, **kwargs):
+            self.state = kwargs.get("state", getattr(self, "state", None))
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._abandon_requested = False
+    app._run_generation = 7
+    app._queue = gui_module.queue.Queue()
+    app._event_journal = RuntimeEventJournal(
+        clock=lambda: "2026-09-25T10:00:00.000Z"
+    )
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+
+    app.cancel_run()
+    app._queue.put(("success", 7, "analysis-a", object()))
+    app._poll_worker()
+
+    names = [event["event"] for event in app._event_journal.snapshot()]
+    assert names == [
+        "analysis.run_abandoned",
+        "analysis.abandoned_worker_finished",
+    ]
+    assert app._running is False
 
 
 def test_remove_analysis_invalidates_matching_result(monkeypatch):

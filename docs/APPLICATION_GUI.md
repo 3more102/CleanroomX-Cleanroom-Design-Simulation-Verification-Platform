@@ -82,9 +82,15 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, report Markdown, or a local diagnostic bundle and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
+
+### Runtime diagnostic bundle
+
+The desktop keeps a bounded, thread-safe in-memory event journal per application instance. It records application startup/shutdown, project open/save outcomes, guarded-save conflicts, export outcomes, validation failures, analysis start/completion/failure, result discard reasons, and abandon/worker-exit transitions. The journal is local only: CleanroomX does not transmit these events or enable mandatory telemetry.
+
+Use **File → Export Diagnostic Bundle JSON...** to create a strict-JSON support artifact. The bundle contains CleanroomX/Python/platform metadata, project structure and active-analysis identity, dirty/running/autosave state, sanitized current-run execution provenance, and the recent runtime event sequence. It intentionally does **not** copy full engineering analysis inputs or result payloads. External-dependency provenance retains SHA-256/size/stability evidence while reducing referenced paths to file basenames plus an absolute/relative flag. The export uses the same atomic-write path as other desktop exports.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
@@ -118,7 +124,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, bounded runtime-event journaling, diagnostic-bundle privacy/strict-JSON behavior, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

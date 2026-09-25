@@ -30,6 +30,7 @@ from .application import (
     validate_analysis_input,
     validate_application_registry,
 )
+from .engineering_report import engineering_report_html
 from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
@@ -378,6 +379,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
+        file_menu.add_command(label="Export Portable HTML Report...", command=self.export_report_html)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
         menubar.add_cascade(label="File", menu=file_menu)
@@ -2139,6 +2141,50 @@ class CleanroomXApp:
         )
         if path:
             self._write_export_file(path, run.markdown, label="Report")
+
+    def export_report_html(self) -> None:
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current report",
+                "Run the current analysis before exporting a portable report.",
+                parent=self.root,
+            )
+            return
+        analysis_id = self.last_run_analysis_id
+        if analysis_id is None:
+            return
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+            document = engineering_report_html(
+                run,
+                project_name=self.project.name,
+                project_description=self.project.description,
+                analysis_id=analysis.id,
+                analysis_name=analysis.name,
+                analysis_kind=analysis.kind,
+                input_payload=analysis.input,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            self.status_var.set("HTML report export failed")
+            messagebox.showerror(
+                "HTML report export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".html",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+        )
+        if path:
+            self._write_export_file(
+                path,
+                document,
+                label="HTML report",
+            )
 
     def show_about(self) -> None:
         messagebox.showinfo(

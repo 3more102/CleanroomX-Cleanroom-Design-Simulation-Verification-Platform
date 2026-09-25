@@ -99,6 +99,10 @@ def test_persisted_spatial_layout_accepts_valid_referentially_complete_v1():
             "greater than zero",
         ),
         (
+            lambda layout: layout["rooms"][0].update({"x_m": float("inf")}),
+            "finite number",
+        ),
+        (
             lambda layout: layout.update({"version": SPATIAL_LAYOUT_VERSION + 1}),
             "future spatial layout version",
         ),

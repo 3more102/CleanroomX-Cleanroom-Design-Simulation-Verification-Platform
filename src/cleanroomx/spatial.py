@@ -19,6 +19,13 @@ SPATIAL_HISTORY_LIMIT = 100
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
 RESIZE_HANDLES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 SMART_ALIGN_TOLERANCE_PX = 8.0
+ORBIT_SENSITIVITY_DEG_PER_PX = 0.35
+SPATIAL_3D_CAMERA_PRESETS = {
+    "iso": (35.0, 28.0),
+    "front": (0.0, 8.0),
+    "right": (90.0, 8.0),
+    "top": (0.0, 75.0),
+}
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -32,6 +39,37 @@ def _finite_number(value: Any, default: float) -> float:
 def _positive(value: Any, default: float) -> float:
     number = _finite_number(value, default)
     return number if number > 0 else default
+
+
+def orbit_camera_angles(
+    azimuth_deg: Any,
+    elevation_deg: Any,
+    delta_x_px: Any,
+    delta_y_px: Any,
+    *,
+    sensitivity_deg_per_px: float = ORBIT_SENSITIVITY_DEG_PER_PX,
+) -> tuple[float, float]:
+    """Return stable 3D orbit angles for a screen-space drag."""
+    sensitivity = max(
+        0.01,
+        _positive(sensitivity_deg_per_px, ORBIT_SENSITIVITY_DEG_PER_PX),
+    )
+    azimuth = (
+        _finite_number(azimuth_deg, 35.0)
+        + _finite_number(delta_x_px, 0.0) * sensitivity
+    ) % 360.0
+    elevation = _finite_number(elevation_deg, 28.0) - (
+        _finite_number(delta_y_px, 0.0) * sensitivity
+    )
+    return azimuth, max(5.0, min(75.0, elevation))
+
+
+def spatial_3d_camera_preset(name: Any) -> tuple[float, float]:
+    """Resolve a named, dependency-free 3D camera preset."""
+    key = str(name).strip().lower()
+    if key not in SPATIAL_3D_CAMERA_PRESETS:
+        raise ValueError(f"Unknown 3D camera preset: {name!r}")
+    return SPATIAL_3D_CAMERA_PRESETS[key]
 
 
 def _room_id(name: str) -> str:
@@ -822,6 +860,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._smart_align = tk.BooleanVar(value=True)
         self._alignment_guides: list[dict] = []
         self._show_clearances = tk.BooleanVar(value=True)
+        self._orbit_anchor: tuple[int, int] | None = None
+        self._orbit_origin: tuple[float, float] | None = None
 
         self._build()
         self.refresh()
@@ -892,7 +932,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(
             scene_bar,
             text="2D: drag to move • smart align • live room gaps • wheel to zoom • middle/right drag to pan    "
-                 "3D: click to select • wheel to zoom",
+                 "3D: click to select • Shift-drag to orbit • wheel to zoom",
         ).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="horizontal")
@@ -925,6 +965,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(header3, textvariable=self._view_3d_var).pack(
             side="left", padx=(8, 4), pady=(2, 4)
         )
+        for preset in ("Top", "Right", "Front", "Iso"):
+            ttk.Button(
+                header3,
+                text=preset,
+                width=5,
+                command=lambda p=preset: self.set_3d_preset(p),
+            ).pack(side="right", padx=1)
         for label, delta in (("↺", -15), ("↻", 15)):
             ttk.Button(header3, text=label, width=3, command=lambda d=delta: self.rotate_3d(d)).pack(
                 side="right", padx=2
@@ -987,6 +1034,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
+        self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
+        self.canvas_3d.bind("<Shift-ButtonRelease-1>", self._on_orbit_3d_up)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
@@ -1833,14 +1883,52 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._update_scene_status()
         self._draw_3d()
 
+    def set_3d_preset(self, preset: str) -> None:
+        azimuth, elevation = spatial_3d_camera_preset(preset)
+        self.layout["view"]["azimuth_deg"] = azimuth
+        self.layout["view"]["elevation_deg"] = elevation
+        self._update_scene_status()
+        self._draw_3d()
+
     def reset_3d(self) -> None:
         self.layout["view"]["azimuth_deg"] = 35.0
         self.layout["view"]["elevation_deg"] = 28.0
         self.layout["view"]["zoom_3d"] = 1.0
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
+        self._orbit_anchor = None
+        self._orbit_origin = None
         self._update_scene_status()
         self._draw_3d()
+
+    def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        self.canvas_3d.focus_set()
+        self._orbit_anchor = (event.x, event.y)
+        self._orbit_origin = (
+            self.layout["view"]["azimuth_deg"],
+            self.layout["view"]["elevation_deg"],
+        )
+        return "break"
+
+    def _on_orbit_3d_drag(self, event: tk.Event) -> str:
+        if self._orbit_anchor is None or self._orbit_origin is None:
+            return "break"
+        azimuth, elevation = orbit_camera_angles(
+            self._orbit_origin[0],
+            self._orbit_origin[1],
+            event.x - self._orbit_anchor[0],
+            event.y - self._orbit_anchor[1],
+        )
+        self.layout["view"]["azimuth_deg"] = azimuth
+        self.layout["view"]["elevation_deg"] = elevation
+        self._update_scene_status()
+        self._draw_3d()
+        return "break"
+
+    def _on_orbit_3d_up(self, event: tk.Event) -> str:
+        self._orbit_anchor = None
+        self._orbit_origin = None
+        return "break"
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

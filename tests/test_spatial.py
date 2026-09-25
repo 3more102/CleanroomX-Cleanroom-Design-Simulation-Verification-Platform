@@ -7,7 +7,10 @@ from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
     derive_layout_from_analysis,
     ensure_project_layout,
+    find_room_for_point,
     normalize_layout,
+    reassociate_device,
+    spatial_issues,
     sync_layout_to_analysis,
 )
 
@@ -177,3 +180,139 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
         analysis,
     ) is False
     assert analysis.input == original
+
+
+
+def test_find_room_for_point_prefers_current_room_when_overlaps_exist():
+    layout = {
+        "rooms": [
+            {
+                "id": "large",
+                "name": "Large",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 6,
+                "width_m": 6,
+                "height_m": 3,
+            },
+            {
+                "id": "small",
+                "name": "Small",
+                "x_m": 2,
+                "y_m": 2,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    assert find_room_for_point(layout, 3, 3, preferred_room_id="large") == "large"
+    assert find_room_for_point(layout, 3, 3) == "small"
+    assert find_room_for_point(layout, 20, 20) is None
+
+
+def test_reassociate_device_tracks_plan_position_across_rooms():
+    layout = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "A",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "b",
+                "name": "B",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ]
+    }
+    device = {
+        "id": "sensor",
+        "type": "sensor",
+        "name": "DP Sensor",
+        "room_id": "a",
+        "x_m": 6,
+        "y_m": 2,
+        "z_m": 1.5,
+    }
+
+    assert reassociate_device(layout, device) == "b"
+    assert device["room_id"] == "b"
+
+    device["x_m"] = 20
+    assert reassociate_device(layout, device) is None
+    assert device["room_id"] is None
+
+
+def test_spatial_issues_reports_overlaps_and_bad_device_placement_but_not_touching_edges():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "overlap",
+                "name": "Overlap",
+                "x_m": 4,
+                "y_m": 1,
+                "length_m": 3,
+                "width_m": 2,
+                "height_m": 3,
+            },
+            {
+                "id": "touching",
+                "name": "Touching",
+                "x_m": 0,
+                "y_m": 4,
+                "length_m": 3,
+                "width_m": 2,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "ffu",
+                "type": "ffu",
+                "name": "FFU-1",
+                "room_id": "process",
+                "x_m": 6,
+                "y_m": 2,
+                "z_m": 3,
+            },
+            {
+                "id": "sensor",
+                "type": "sensor",
+                "name": "Sensor-1",
+                "room_id": None,
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 1,
+            },
+        ],
+    }
+
+    issues = spatial_issues(layout)
+    codes = [issue["code"] for issue in issues]
+
+    assert codes.count("ROOM_OVERLAP") == 1
+    assert "DEVICE_ROOM_MISMATCH" in codes
+    assert "DEVICE_UNASSIGNED" in codes
+    assert not any(
+        issue.get("room_ids") == ["process", "touching"]
+        for issue in issues
+    )

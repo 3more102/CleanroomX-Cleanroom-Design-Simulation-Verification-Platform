@@ -735,24 +735,26 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _update_history_controls(self) -> None:
         if hasattr(self, "_undo_button"):
             self._undo_button.configure(
-                state="normal" if self._history_can_undo else "disabled"
+                state="normal" if getattr(self, "_history_can_undo", False) else "disabled"
             )
         if hasattr(self, "_redo_button"):
             self._redo_button.configure(
-                state="normal" if self._history_can_redo else "disabled"
+                state="normal" if getattr(self, "_history_can_redo", False) else "disabled"
             )
 
     def undo_edit(self) -> bool:
-        if self._on_undo_requested is None:
+        callback = getattr(self, "_on_undo_requested", None)
+        if callback is None:
             self._status_setter("Project undo is unavailable")
             return False
-        return bool(self._on_undo_requested())
+        return bool(callback())
 
     def redo_edit(self) -> bool:
-        if self._on_redo_requested is None:
+        callback = getattr(self, "_on_redo_requested", None)
+        if callback is None:
             self._status_setter("Project redo is unavailable")
             return False
-        return bool(self._on_redo_requested())
+        return bool(callback())
 
     def _on_undo_shortcut(self, event=None):
         self.undo_edit()
@@ -772,8 +774,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
-        if history_before is not None and self._on_history_record is not None:
-            self._on_history_record(
+        history_callback = getattr(self, "_on_history_record", None)
+        if history_before is not None and history_callback is not None:
+            history_callback(
                 history_before,
                 selection_before,
                 self._history_layout(),

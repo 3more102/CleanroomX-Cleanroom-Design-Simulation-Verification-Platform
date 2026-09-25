@@ -25,6 +25,8 @@ from .spatial_domain import (
     pressure_relationships,
     room_plan_bounds,
     room_prism_vertices,
+    resized_room_dimensions,
+    translated_position,
 )
 
 
@@ -597,6 +599,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._hovered: _Hit | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
+        self._orbit_anchor: tuple[int, int] | None = None
+        self._orbit_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
         self._snap_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
@@ -746,6 +750,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
+        self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
@@ -874,6 +880,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             (
                 record["room_id"],
                 record["state"],
+                record.get("analysis_id"),
+                record.get("engineering_room_name"),
                 tuple(record.get("differences", {})),
             )
             for record in mapping_records
@@ -1414,6 +1422,13 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
             )
             tag = f"room:{room['id']}"
+            canvas.create_polygon(
+                *sum(base, ()),
+                fill="#263746",
+                outline=outline,
+                width=1,
+                tags=(tag, "room3d", "floor3d"),
+            )
             canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
             canvas.create_polygon(
                 *sum((base[1], base[2], top[2], top[1]), ()),
@@ -1498,24 +1513,24 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         world = self._canvas_to_world(event.x, event.y)
         if self._drag_mode == "resize" and self.selected and self.selected.kind == "room":
-            length = max(0.1, world[0] - item["x_m"])
-            width = max(0.1, world[1] - item["y_m"])
-            if self._snap_grid.get():
-                grid = self.layout["grid_m"]
-                length = max(grid, round(length / grid) * grid)
-                width = max(grid, round(width / grid) * grid)
+            length, width = resized_room_dimensions(
+                item,
+                world[0],
+                world[1],
+                grid_m=self.layout["grid_m"] if self._snap_grid.get() else None,
+            )
             item["length_m"] = length
             item["width_m"] = width
         else:
             dx = world[0] - self._drag_anchor[0]
             dy = world[1] - self._drag_anchor[1]
-            if self._snap_grid.get():
-                grid = self.layout["grid_m"]
-                item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-                item["y_m"] = round((item["y_m"] + dy) / grid) * grid
-            else:
-                item["x_m"] += dx
-                item["y_m"] += dy
+            item["x_m"], item["y_m"] = translated_position(
+                item["x_m"],
+                item["y_m"],
+                dx,
+                dy,
+                grid_m=self.layout["grid_m"] if self._snap_grid.get() else None,
+            )
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
@@ -1600,6 +1615,27 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
         self._draw_3d()
+
+    def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        self._orbit_anchor = (event.x, event.y)
+        self._orbit_origin = (
+            self.layout["view"]["azimuth_deg"],
+            self.layout["view"]["elevation_deg"],
+        )
+        return "break"
+
+    def _on_orbit_3d_drag(self, event: tk.Event) -> str:
+        if self._orbit_anchor is None or self._orbit_origin is None:
+            return "break"
+        dx = event.x - self._orbit_anchor[0]
+        dy = event.y - self._orbit_anchor[1]
+        self.layout["view"]["azimuth_deg"] = (self._orbit_origin[0] + dx * 0.5) % 360
+        self.layout["view"]["elevation_deg"] = max(
+            5.0,
+            min(75.0, self._orbit_origin[1] - dy * 0.35),
+        )
+        self._draw_3d()
+        return "break"
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

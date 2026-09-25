@@ -2,6 +2,7 @@
 
 ## v0.102.1 final spatial production closure — 2026-09-25
 
+- Makes snapped 2D drag translation deterministic from immutable gesture-start coordinates and suppresses no-op drag persistence/history/autosave churn.
 - Finalizes the post-v0.102 synchronized spatial workspace without moving the published `v0.102.0` tag.
 - Keeps spatial-to-engineering synchronization strictly dimension-only, so spatial pressure never overwrites engineering `observed_pressure_pa` evidence.
 - Adds explicit engineering-to-spatial **dimension-only** pull with complete mapping/value preflight and persisted synchronization provenance.

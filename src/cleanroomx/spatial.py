@@ -130,6 +130,9 @@ def normalize_layout(value: Any) -> dict:
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+                source_name = str(raw.get("pressure_source") or "").strip().lower()
+                if source_name in {"user", "engineering_input"}:
+                    room["pressure_source"] = source_name
             for field in ("classification", "analysis_room_name"):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
@@ -299,6 +302,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         }
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+            room["pressure_source"] = "engineering_input"
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     analysis_id = str(getattr(analysis, "id", "") or "").strip()
@@ -1508,8 +1512,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             pressure = self._property_vars["pressure_pa"].get().strip()
             if pressure:
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
+                item["pressure_source"] = "user"
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+                item.pop("pressure_source", None)
             for key in ("classification", "analysis_room_name"):
                 text = self._property_vars[key].get().strip()
                 if text:
@@ -1865,11 +1871,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
-                pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
-                )
+                if self._show_pressure.get() and room.get("pressure_pa") is not None:
+                    pressure_source = {
+                        "user": "user",
+                        "engineering_input": "engineering input",
+                    }.get(room.get("pressure_source"), "spatial")
+                    pressure_text = f"\n{room['pressure_pa']:g} Pa · {pressure_source}"
+                elif self._show_pressure.get():
+                    pressure_text = "\nPressure unavailable"
+                else:
+                    pressure_text = ""
                 canvas.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2,

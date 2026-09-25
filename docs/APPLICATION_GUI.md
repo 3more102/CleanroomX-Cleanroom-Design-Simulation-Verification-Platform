@@ -46,7 +46,7 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use the shared verified atomic persistence path. CleanroomX encodes exact UTF-8 bytes, stages them beside the destination, flushes and file-syncs the staging file, verifies its byte length and SHA-256 before replacement, preserves existing regular-file permission bits where supported, then synchronizes the containing directory after replacement on filesystems that support directory `fsync`. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ### External-change write protection
 
@@ -55,6 +55,8 @@ When a saved project is opened, CleanroomX records a stable content revision usi
 If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
+
+If the replacement becomes visible but the filesystem reports a failure while synchronizing the containing directory, CleanroomX reports that durability could not be confirmed. It refreshes the open file revision so a retry does not conflict with its own visible replacement, but it does not declare the save durably complete or clear crash-recovery data.
 
 ## Recovery autosave
 

@@ -8,6 +8,7 @@ import cleanroomx.gui as gui_module
 import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
+    AnalysisDocument,
     ProjectDocument,
     ProjectWriteConflictError,
     capture_project_file_revision,
@@ -148,6 +149,7 @@ def _minimal_gui_app(path, project):
     app._notify_explicit_save = lambda _path: None
     app._clear_run_cache = lambda: None
     app._discard_restored_recovery = lambda: None
+    app._update_title = lambda: None
     return app
 
 
@@ -176,6 +178,53 @@ def test_gui_save_blocks_external_change_without_overwrite(tmp_path, monkeypatch
     assert warnings
     assert "changed on disk" in app.status_var.value
     assert errors == []
+
+
+def test_gui_save_as_preserves_additive_project_fields(tmp_path, monkeypatch):
+    source = tmp_path / "source" / "project.cleanroomx.json"
+    project = ProjectDocument(
+        name="Extension Project",
+        analyses=[
+            AnalysisDocument(
+                id="room-1",
+                name="Room",
+                kind="room_verification",
+                input={"room": {"length_m": 5.0, "width_m": 4.0, "height_m": 3.0}},
+                extra_fields={"vendor_analysis": {"revision": 3}},
+            )
+        ],
+        active_analysis_id="room-1",
+        project_extra_fields={"vendor_project": {"facility_code": "FAB-01"}},
+        top_level_extra_fields={"vendor_top": {"revision": 7}},
+    )
+    save_project_document(source, project)
+    app = _minimal_gui_app(source, load_project_document(source))
+    destination = tmp_path / "moved" / "project-copy.cleanroomx.json"
+
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("Save As should preserve additive project fields")
+        ),
+    )
+
+    app.save_project_as()
+
+    saved = load_project_document(destination)
+    assert saved.top_level_extra_fields == {"vendor_top": {"revision": 7}}
+    assert saved.project_extra_fields == {
+        "vendor_project": {"facility_code": "FAB-01"}
+    }
+    assert saved.analysis_by_id("room-1").extra_fields == {
+        "vendor_analysis": {"revision": 3}
+    }
+    assert app.project_path == destination.resolve(strict=False)
 
 
 def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypatch):

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased persisted analysis run audit history — 2026-09-25
+
+- Adds a bounded hash-chained run ledger under the existing project metadata block for fresh desktop analysis results accepted by the current ownership/input-freshness guards.
+- Records the exact submitted input snapshot, execution provenance, run status, CleanroomX version, and SHA-256 identities for result, diagnostics, report, and optional plot content; file-backed workflows retain their dependency-revision evidence.
+- Adds **Analysis → Run History…** for read-only inspection and makes accepted runs dirty project state so explicit save and recovery-autosave preserve the ledger.
+- Validates the complete retained chain before display or append and refuses to overwrite malformed/tampered history; the finished current-session result remains available for manual run-bundle export.
+- Bounds retained history to 50 records by default and preserves an anchor digest when pruning older records, without changing solver equations, numerical tolerances, analysis acceptance semantics, or top-level project schema version 1.
+- Adds tamper, transaction, pruning, project round-trip, external-dependency provenance, and GUI integration regressions plus operator/architecture documentation. The digest chain is corruption evidence, not a cryptographic authenticity signature.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

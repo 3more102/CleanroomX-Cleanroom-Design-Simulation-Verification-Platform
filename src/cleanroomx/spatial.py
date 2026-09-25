@@ -296,12 +296,15 @@ def resolve_room_overlaps(rooms: list[dict]) -> list[dict]:
 
 
 def next_room_overlap_conflict(
-    rooms: list[dict], cursor: Any = -1
+    rooms: list[dict], cursor: Any = -1, *, direction: Any = 1
 ) -> dict | None:
-    """Return the next overlap conflict in stable pair order for operator review.
+    """Return an overlap conflict in stable pair order for operator review.
 
-    The returned record is a copy enriched with a zero-based cursor, total
-    conflict count, and human-readable room names. The input is never mutated.
+    Direction selects forward (positive/invalid) or backward (negative)
+    traversal. Invalid/out-of-range cursors start at the first conflict when
+    moving forward and the last conflict when moving backward. The returned
+    record is a copy enriched with a zero-based cursor, total conflict count,
+    and human-readable room names. The input is never mutated.
     """
 
     conflicts = room_overlap_conflicts(rooms)
@@ -312,7 +315,15 @@ def next_room_overlap_conflict(
         previous = int(cursor)
     except (TypeError, ValueError):
         previous = -1
-    index = (previous + 1) % len(conflicts)
+    try:
+        step = -1 if int(direction) < 0 else 1
+    except (TypeError, ValueError):
+        step = 1
+
+    if previous < 0 or previous >= len(conflicts):
+        index = 0 if step > 0 else len(conflicts) - 1
+    else:
+        index = (previous + step) % len(conflicts)
 
     room_names = {
         str(room.get("id") or ""): str(
@@ -1097,6 +1108,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
+            text="Prev conflict",
+            command=self.select_previous_overlap_conflict,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
             text="Next conflict",
             command=self.select_next_overlap_conflict,
         ).pack(side="left", padx=2)
@@ -1231,6 +1247,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-z>", lambda event: self.undo_edit())
             canvas.bind("<Control-y>", lambda event: self.redo_edit())
             canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
+            canvas.bind(
+                "<KeyPress-bracketleft>",
+                lambda event: self.select_previous_overlap_conflict(),
+            )
+            canvas.bind(
+                "<KeyPress-bracketright>",
+                lambda event: self.select_next_overlap_conflict(),
+            )
             canvas.bind("<Left>", lambda event: self.nudge_selected(-1, 0))
             canvas.bind("<Right>", lambda event: self.nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self.nudge_selected(0, -1))
@@ -1496,9 +1520,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._load_property_panel()
         self._persist("Nudged spatial item", history_before=before)
 
-    def select_next_overlap_conflict(self) -> None:
+    def _select_overlap_conflict(self, direction: int) -> None:
         conflict = next_room_overlap_conflict(
-            self.layout["rooms"], self._conflict_cursor
+            self.layout["rooms"],
+            self._conflict_cursor,
+            direction=direction,
         )
         if conflict is None:
             self._conflict_cursor = -1
@@ -1523,6 +1549,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             f"{conflict['room_a_name']} ↔ {conflict['room_b_name']} · "
             f"{conflict['area_m2']:.2f} m² overlap; selected {target_name}"
         )
+
+    def select_previous_overlap_conflict(self) -> None:
+        self._select_overlap_conflict(-1)
+
+    def select_next_overlap_conflict(self) -> None:
+        self._select_overlap_conflict(1)
 
     def resolve_selected_overlap(self) -> None:
         if self.selected is None or self.selected.kind != "room":
@@ -1632,6 +1664,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlap_text = (
             f" • {summary['room_overlap_count']} overlap"
             f"{'s' if summary['room_overlap_count'] != 1 else ''}"
+            f" • {summary['room_overlap_area_m2']:.2f} m² overlap"
             if summary["room_overlap_count"]
             else ""
         )

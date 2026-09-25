@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from html import escape
 import copy
+import csv
+import io
 import math
 import uuid
 from typing import Any, Callable
@@ -439,6 +441,84 @@ def spatial_layout_svg(
     return "\n".join(lines)
 
 
+def spatial_layout_schedule_csv(value: Any) -> str:
+    """Export a deterministic room/device engineering schedule as UTF-8 CSV."""
+
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    devices = layout["devices"]
+    room_names = {room["id"]: room["name"] for room in rooms}
+    fieldnames = [
+        "record_type",
+        "id",
+        "name",
+        "device_type",
+        "room_id",
+        "room_name",
+        "x_m",
+        "y_m",
+        "z_m",
+        "length_m",
+        "width_m",
+        "height_m",
+        "area_m2",
+        "volume_m3",
+        "pressure_pa",
+    ]
+
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        stream,
+        fieldnames=fieldnames,
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    writer.writeheader()
+
+    for room in rooms:
+        writer.writerow(
+            {
+                "record_type": "room",
+                "id": room["id"],
+                "name": room["name"],
+                "room_id": room["id"],
+                "room_name": room["name"],
+                "x_m": f'{room["x_m"]:g}',
+                "y_m": f'{room["y_m"]:g}',
+                "length_m": f'{room["length_m"]:g}',
+                "width_m": f'{room["width_m"]:g}',
+                "height_m": f'{room["height_m"]:g}',
+                "area_m2": f'{room["length_m"] * room["width_m"]:g}',
+                "volume_m3": (
+                    f'{room["length_m"] * room["width_m"] * room["height_m"]:g}'
+                ),
+                "pressure_pa": (
+                    ""
+                    if room.get("pressure_pa") is None
+                    else f'{room["pressure_pa"]:g}'
+                ),
+            }
+        )
+
+    for device in devices:
+        room_id = device.get("room_id")
+        writer.writerow(
+            {
+                "record_type": "device",
+                "id": device["id"],
+                "name": device["name"],
+                "device_type": device["type"],
+                "room_id": "" if room_id is None else room_id,
+                "room_name": room_names.get(room_id, ""),
+                "x_m": f'{device["x_m"]:g}',
+                "y_m": f'{device["y_m"]:g}',
+                "z_m": f'{device["z_m"]:g}',
+            }
+        )
+
+    return stream.getvalue()
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -505,6 +585,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export SVG", command=self.export_svg).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Export CSV", command=self.export_schedule_csv).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=(6, 2)
         )
@@ -667,6 +748,28 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             return
         self._status_setter(f"Exported 2D plan SVG: {path}")
+
+    def export_schedule_csv(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export spatial engineering schedule as CSV",
+            defaultextension=".csv",
+            initialfile="cleanroomx-spatial-schedule.csv",
+            filetypes=(("CSV schedule", "*.csv"), ("All files", "*.*")),
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as handle:
+                handle.write(spatial_layout_schedule_csv(self.layout))
+        except OSError as exc:
+            messagebox.showerror(
+                "Export CSV",
+                f"Could not export the spatial schedule:\n{exc}",
+                parent=self,
+            )
+            return
+        self._status_setter(f"Exported spatial schedule CSV: {path}")
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:

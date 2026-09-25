@@ -80,11 +80,13 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 2. Add an analysis from the application catalog, or select an existing analysis.
 3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
 4. Use **Validate** to run the real backend parser/validation path.
-5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
+5. Use **Run** to execute the real backend workflow in an isolated child process while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
 
-The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
+The **Cancel** action terminates the isolated analysis process instead of merely hiding its result. Editing and new runs remain locked until the child has actually exited, so cancellation cannot create overlapping backend execution. A result that finishes at the same time as cancellation is discarded. If the child does not exit after termination is requested, CleanroomX escalates to a process kill after a bounded grace period where the platform supports it. Unexpected child-process exits and worker-monitoring failures are surfaced as analysis errors rather than being mistaken for completed engineering results.
+
+Project ownership remains in the desktop process: the worker receives a deep-copied analysis input plus base-directory context and returns the existing `AnalysisRun` value. It does not own project saves or mutate the live `ProjectDocument`. Cancellation is therefore forceful task isolation, not cooperative solver checkpointing; no partial result is published after cancellation.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
@@ -116,7 +118,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, isolated worker success/error/cancellation/overlap behavior, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased durable project I/O — 2026-09-25
+
+- Binds desktop project parsing to the exact SHA-256/size revision of the byte stream that was read; transient malformed/torn reads are retried only when revision evidence proves instability.
+- Writes deterministic UTF-8 bytes to a same-directory temporary file, fsyncs the file, atomically replaces the destination, then verifies destination size and SHA-256 before reporting success.
+- Flushes the containing directory on supported POSIX filesystems so the rename itself is covered by the durability boundary; unsupported directory-fsync semantics are detected explicitly.
+- Surfaces post-replace durability uncertainty separately from write conflicts, retains dirty/recovery state, and keeps the verified revision token needed for a safe retry.
+- Preserves project schema version 1, supported legacy migrations, solver behavior, engineering tolerances, and existing save/load call signatures.
+- Adds failure-injection regressions, focused release-CI coverage, and a retained small/medium/large/stress project-I/O benchmark without machine-dependent pass/fail timing thresholds.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

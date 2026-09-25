@@ -10,6 +10,7 @@
 - Centralizes deterministic 2D/3D viewport transforms, adds exact 3D fit-to-view, explicit 2D reset, and Shift+left-drag 3D orbit, and strengthens the installed-demo smoke to prove rooms and pressure relationships render in both views.
 - Makes **Fit** compute the 3D camera zoom and both pan axes from every room corner at its real floor and ceiling elevation, with deterministic regression coverage; PR #473 head `332eb07ed1d4d27a028d7fe8886b3914da29c8d7` passed CI #1552 / `36171783101` before merge.
 - Adds windows and generic wall openings as first-class persisted spatial object types.
+- Fixes the recovery autosave Future-completion race: a finished worker remains coordinator-owned until its completion callback finalizes state, stale callbacks cannot clear newer work, and `wait_for_idle()` requires no active, pending, or tracked request; PR #479 head `4a802f43be7bc891e2c4de90b631ddea7c1fa9e4` passed CI #1565 / `36184210616`.
 - PR #467 head `4be4fb840480df7a5f1e0313a73830313150d9dd` passed CI #1540 / `36170548238`; PR #472 head `8a34c3d649aee54c377b4194a6d619559d219421` passed CI #1551 / `36171758793`.
 - Preserves spatial X/Y placement during pulls, engineering ownership of pressure evidence, project schema version 1, solver equations, numerical tolerances, and engineering acceptance criteria.
 

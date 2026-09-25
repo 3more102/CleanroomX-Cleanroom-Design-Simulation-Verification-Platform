@@ -156,6 +156,21 @@ def test_project_loader_rejects_duplicate_persisted_spatial_ids(
         project_from_dict(_project_payload(spatial))
 
 
+def test_project_loader_accepts_unversioned_legacy_spatial_shape_as_v1():
+    project = project_from_dict(
+        _project_payload(
+            {
+                "rooms": [{"name": "Legacy Room"}],
+                "devices": [],
+            }
+        )
+    )
+
+    spatial = project.metadata["spatial_layout"]
+    assert spatial["version"] == 1
+    assert spatial["rooms"][0]["id"] == "legacy-room"
+
+
 def test_project_loader_rejects_future_spatial_layout_version():
     with pytest.raises(
         ProjectFormatError,
@@ -178,6 +193,28 @@ def test_project_loader_rejects_malformed_spatial_collection_shapes(
 ):
     with pytest.raises(ProjectFormatError, match=message):
         project_from_dict(_project_payload(spatial_layout))
+
+
+def test_project_save_rejects_future_spatial_version_without_creating_file(tmp_path):
+    project = ProjectDocument(
+        name="Future spatial",
+        metadata={
+            "spatial_layout": {
+                "version": 2,
+                "rooms": [],
+                "devices": [],
+            }
+        },
+    )
+    path = tmp_path / "future.cleanroomx.json"
+
+    with pytest.raises(
+        ProjectFormatError,
+        match="unsupported future spatial layout version 2",
+    ):
+        save_project_document(path, project)
+
+    assert not path.exists()
 
 
 def test_project_save_canonicalizes_spatial_identity_and_round_trips(tmp_path):

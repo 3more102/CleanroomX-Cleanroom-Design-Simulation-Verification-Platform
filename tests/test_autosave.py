@@ -205,3 +205,16 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
         assert not (tmp_path / "recovery").exists()
     finally:
         manager.shutdown(wait=True)
+
+def test_recovery_loader_rejects_duplicate_json_keys(tmp_path):
+    path = tmp_path / "duplicate.recovery.json"
+    path.write_text(
+        '{"schema":"cleanroomx.autosave","schema":"cleanroomx.autosave",'
+        '"schema_version":1,"project_identity":"x",'
+        '"saved_at_utc":"2026-09-25T00:00:00Z","source":{},'
+        '"snapshot":{"project":{}}}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate JSON object key.*schema"):
+        load_recovery_artifact(path)

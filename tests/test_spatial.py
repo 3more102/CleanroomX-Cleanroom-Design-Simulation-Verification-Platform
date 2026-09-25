@@ -12,6 +12,8 @@ from cleanroomx.spatial import (
     normalize_layout,
     nearest_nonoverlap_room_position,
     next_room_overlap_conflict,
+    fit_2d_view_to_bounds,
+    room_overlap_focus_bounds,
     resolve_room_overlaps,
     resize_room,
     room_clearance_dimensions,
@@ -865,6 +867,73 @@ def test_next_room_overlap_conflict_returns_none_for_edge_touching_rooms():
     ]
 
     assert next_room_overlap_conflict(rooms) is None
+
+
+def test_room_overlap_focus_bounds_frames_both_rooms_with_padding():
+    rooms = [
+        {
+            "id": "a",
+            "x_m": 0.0,
+            "y_m": 1.0,
+            "length_m": 4.0,
+            "width_m": 3.0,
+        },
+        {
+            "id": "b",
+            "x_m": 3.0,
+            "y_m": -1.0,
+            "length_m": 5.0,
+            "width_m": 4.0,
+        },
+    ]
+    conflict = room_overlap_conflicts(rooms)[0]
+
+    assert room_overlap_focus_bounds(conflict, rooms, padding_m=0.5) == (
+        -0.5,
+        -1.5,
+        8.5,
+        4.5,
+    )
+
+
+def test_room_overlap_focus_bounds_falls_back_to_intersection_geometry():
+    conflict = {
+        "room_a_id": "missing-a",
+        "room_b_id": "missing-b",
+        "x_m": 2.0,
+        "y_m": 3.0,
+        "length_m": 1.5,
+        "width_m": 2.0,
+    }
+
+    assert room_overlap_focus_bounds(conflict, [], padding_m=0.25) == (
+        1.75,
+        2.75,
+        3.75,
+        5.25,
+    )
+
+
+def test_fit_2d_view_to_bounds_centers_and_scales_deterministically():
+    transform = fit_2d_view_to_bounds(
+        (-1.0, -2.0, 9.0, 6.0),
+        1000,
+        800,
+        margin=0.8,
+    )
+
+    assert math.isclose(transform["zoom_2d"], 1.4545454545454546)
+    scale = 55.0 * transform["zoom_2d"]
+    assert math.isclose(transform["pan_x"], -4.0 * scale)
+    assert math.isclose(transform["pan_y"], -2.0 * scale)
+
+
+def test_fit_2d_view_to_bounds_clamps_zoom_limits():
+    close = fit_2d_view_to_bounds((0.0, 0.0, 0.1, 0.1), 2000, 1200)
+    far = fit_2d_view_to_bounds((0.0, 0.0, 1000.0, 1000.0), 200, 200)
+
+    assert close["zoom_2d"] == 5.0
+    assert far["zoom_2d"] == 0.2
 
 
 def test_spatial_layout_summary_counts_room_overlap_conflicts():

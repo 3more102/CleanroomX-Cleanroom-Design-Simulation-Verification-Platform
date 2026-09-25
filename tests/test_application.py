@@ -11,6 +11,7 @@ from cleanroomx.application import (
     ANALYSIS_SPECS,
     ExternalDependencyChangedError,
     analysis_catalog,
+    analysis_run_matches_input,
     application_info,
     rebase_analysis_file_references,
     run_analysis,
@@ -191,6 +192,37 @@ def test_application_execution_provenance_hashes_inline_input_canonically():
     assert second_provenance["input_sha256"] == expected
     assert first_provenance["external_dependency_count"] == 0
     assert first_provenance["external_dependencies_stable"] is True
+
+
+def test_analysis_run_matches_only_its_exact_canonical_input():
+    payload = _example("basic_room.json")
+    run = run_analysis("room_verification", payload)
+
+    reordered = dict(reversed(list(payload.items())))
+    assert analysis_run_matches_input(run, "room_verification", reordered) is True
+
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+    assert analysis_run_matches_input(run, "room_verification", changed) is False
+    assert analysis_run_matches_input(run, "hvac", payload) is False
+
+
+def test_analysis_run_input_match_fails_closed_without_valid_provenance():
+    payload = _example("basic_room.json")
+    run = run_analysis("room_verification", payload)
+    corrupted = application_module.AnalysisRun(
+        kind=run.kind,
+        title=run.title,
+        status=run.status,
+        result=run.result,
+        markdown=run.markdown,
+        diagnostics={},
+        plot=run.plot,
+    )
+
+    assert analysis_run_matches_input(
+        corrupted, "room_verification", payload
+    ) is False
 
 
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased strict project JSON ownership boundary — 2026-09-25
+
+- Replaces permissive project-state JSON probing with a path-aware strict-JSON snapshot boundary before persistence.
+- Adds one shared strict parser for project files and the desktop JSON editor, rejecting duplicate object keys and non-finite constants instead of silently taking the last duplicate value.
+- Rejects non-string object keys, Python-only containers such as tuples, cyclic structures, invalid UTF-8 surrogate text, and non-finite numbers instead of allowing silent JSON coercion or late write failures.
+- Detaches nested project metadata and analysis input data on both parse and serialization boundaries so caller-owned dictionaries and returned snapshots cannot mutate one another through aliases.
+- Requires an actual integer project schema version, so JSON booleans cannot alias numeric schema versions.
+- Validates invalid in-memory project state before atomic replacement, preserving an existing project file when serialization invariants fail.
+- Keeps `cleanroomx.project` schema version 1 and does not change solver equations, numerical tolerances, analysis acceptance semantics, or existing valid project files.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

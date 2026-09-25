@@ -123,6 +123,10 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
         record = deepcopy(raw)
         explicit = _identifier_text(record.get("id"))
         if explicit is not None:
+            if strict and explicit in room_reserved:
+                raise SpatialLayoutFormatError(
+                    f"spatial_layout room ids must be unique; duplicate id {explicit!r}"
+                )
             room_reserved.add(explicit)
         room_records.append(record)
 
@@ -158,6 +162,10 @@ def migrate_spatial_layout(value: Any, *, strict: bool) -> dict:
         record = deepcopy(raw)
         explicit = _identifier_text(record.get("id"))
         if explicit is not None:
+            if strict and explicit in device_reserved:
+                raise SpatialLayoutFormatError(
+                    f"spatial_layout device ids must be unique; duplicate id {explicit!r}"
+                )
             device_reserved.add(explicit)
         device_records.append(record)
 

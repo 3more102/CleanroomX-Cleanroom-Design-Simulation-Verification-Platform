@@ -30,7 +30,7 @@ from .project import (
     new_project,
     save_project_document,
 )
-from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .spatial import SpatialDesignWorkspace, spatial_audit_json, sync_layout_to_analysis
 
 
 _UNIT_SUFFIXES = (
@@ -200,6 +200,7 @@ class CleanroomXApp:
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
         file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
+        file_menu.add_command(label="Export Spatial Audit JSON...", command=self.export_spatial_audit_json)
         file_menu.add_separator()
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
@@ -951,6 +952,25 @@ class CleanroomXApp:
                 ) + "\n",
                 label="Input",
             )
+
+    def export_spatial_audit_json(self) -> None:
+        try:
+            content = spatial_audit_json(self.spatial_workspace.layout)
+        except Exception as exc:
+            self.status_var.set("Spatial audit export failed")
+            messagebox.showerror(
+                "Spatial audit export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json")],
+        )
+        if path:
+            self._write_export_file(path, content, label="Spatial audit")
 
     def validate_current(self) -> None:
         try:

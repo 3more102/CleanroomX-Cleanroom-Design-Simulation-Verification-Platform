@@ -56,8 +56,8 @@ def main(argv: list[str] | None = None) -> int:
             atomic_write_text(args.output, text)
         else:
             print(text, end="")
-    except (ParameterSweepFormatError, ParameterSweepDependencyChangedError, OSError) as exc:
-        print(f"cleanroomx-sweep: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"cleanroomx-sweep: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 
     return 0 if result["error_case_count"] == 0 else 2

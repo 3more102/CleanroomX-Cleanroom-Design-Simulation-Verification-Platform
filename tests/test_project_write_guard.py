@@ -9,6 +9,7 @@ import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
     ProjectDocument,
+    ProjectSaveVerificationError,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
@@ -208,3 +209,72 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+
+def test_atomic_write_fsyncs_directory_after_replacement(tmp_path, monkeypatch):
+    target = tmp_path / "durable.txt"
+    observed = []
+
+    def record_directory_fsync(directory):
+        observed.append((directory, target.read_text(encoding="utf-8")))
+
+    monkeypatch.setattr(project_module, "_fsync_directory", record_directory_fsync)
+
+    project_module.atomic_write_text(target, "committed\n")
+
+    assert observed == [(tmp_path, "committed\n")]
+
+
+def test_atomic_write_surfaces_directory_fsync_failure(tmp_path, monkeypatch):
+    target = tmp_path / "durability-unknown.txt"
+
+    def fail_directory_fsync(directory):
+        raise OSError("directory fsync failed")
+
+    monkeypatch.setattr(project_module, "_fsync_directory", fail_directory_fsync)
+
+    with pytest.raises(OSError, match="directory fsync failed"):
+        project_module.atomic_write_text(target, "new content\n")
+
+    assert target.read_text(encoding="utf-8") == "new content\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_project_save_detects_post_replace_byte_corruption(tmp_path, monkeypatch):
+    path = tmp_path / "corrupted-after-replace.cleanroomx.json"
+    path_type = type(path)
+    original_replace = path_type.replace
+
+    def corrupt_after_replace(self, destination):
+        replaced = original_replace(self, destination)
+        destination_path = type(self)(destination)
+        destination_path.write_text('{"corrupted": true}\n', encoding="utf-8")
+        return replaced
+
+    monkeypatch.setattr(path_type, "replace", corrupt_after_replace)
+
+    with pytest.raises(ProjectSaveVerificationError) as exc_info:
+        save_project_document(path, ProjectDocument(name="Verified"))
+
+    assert exc_info.value.path == path
+    assert exc_info.value.expected_size > 0
+    assert len(exc_info.value.expected_sha256) == 64
+    assert exc_info.value.current.sha256 != exc_info.value.expected_sha256
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_guarded_save_returns_revision_of_verified_persisted_bytes(tmp_path):
+    path = tmp_path / "verified-guard.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    expected = capture_project_file_revision(path)
+
+    saved_path, verified_revision = save_project_document_guarded(
+        path,
+        ProjectDocument(name="Verified update"),
+        expected_revision=expected,
+    )
+
+    assert saved_path == path.resolve(strict=False)
+    assert verified_revision == capture_project_file_revision(path)
+    assert load_project_document(path).name == "Verified update"

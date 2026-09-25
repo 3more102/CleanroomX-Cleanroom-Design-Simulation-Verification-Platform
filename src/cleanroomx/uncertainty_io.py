@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .jsonio import load_strict_json
 
 from .uncertainty_models import Provenance, UncertainRoom, UncertainValue
 
@@ -33,5 +34,5 @@ def uncertain_room_from_dict(data: dict) -> UncertainRoom:
 
 
 def load_uncertain_room(path: str | Path) -> UncertainRoom:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_strict_json(path)
     return uncertain_room_from_dict(data)

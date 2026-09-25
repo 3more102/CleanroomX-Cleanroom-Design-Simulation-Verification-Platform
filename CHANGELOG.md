@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased isolated single-parse analysis execution — 2026-09-25
+
+- Executes every standard application workflow from one isolated deep copy of the exact submitted JSON input, rather than validating with one parse and executing from a second parse.
+- Binds the isolated snapshot to the existing canonical input SHA-256 and fails closed with `AnalysisInputMutationError` if parser, backend execution, or result-plot construction mutates that snapshot.
+- Prevents backend aliasing from mutating the caller/project input while keeping the existing `run_analysis()` and `validate_analysis_input()` signatures.
+- Adds the input execution policy to existing application provenance without changing its schema version.
+- Preserves project schema version 1, solver equations, numerical tolerances, external-dependency checks, result/report shapes, and application workflow bindings.
+- Adds regressions for exactly-once parsing, parsed-model identity, parser mutation, backend alias mutation, caller-input isolation, and provenance policy evidence.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

@@ -7,6 +7,10 @@ from .history import SnapshotHistory
 from .project import ProjectDocument, project_from_dict
 
 
+DEFAULT_PROJECT_HISTORY_LIMIT = 100
+DEFAULT_PROJECT_HISTORY_MAX_BYTES = 64 * 1024 * 1024
+
+
 @dataclass(frozen=True)
 class ProjectHistoryState:
     """Complete undoable project/UI state for one desktop document transaction."""
@@ -16,6 +20,17 @@ class ProjectHistoryState:
     description_text: str
     editor_analysis_id: str | None
     editor_text: str
+
+    @property
+    def approximate_bytes(self) -> int:
+        values = (
+            self.project_json,
+            self.name_text,
+            self.description_text,
+            self.editor_analysis_id or "",
+            self.editor_text,
+        )
+        return sum(len(value.encode("utf-8")) for value in values)
 
 
 def make_project_history_state(
@@ -48,14 +63,28 @@ def project_from_history_state(state: ProjectHistoryState) -> ProjectDocument:
 
 
 class ProjectEditHistory:
-    """Bounded undo/redo for project-level desktop editing transactions."""
+    """Count- and byte-bounded undo/redo for desktop project transactions."""
 
-    def __init__(self, limit: int = 100):
-        self._history = SnapshotHistory[ProjectHistoryState](limit=limit)
+    def __init__(
+        self,
+        limit: int = DEFAULT_PROJECT_HISTORY_LIMIT,
+        *,
+        max_bytes: int = DEFAULT_PROJECT_HISTORY_MAX_BYTES,
+    ):
+        self.max_bytes = max_bytes
+        self._history = SnapshotHistory[ProjectHistoryState](
+            limit=limit,
+            max_weight=max_bytes,
+            measure=lambda state: state.approximate_bytes,
+        )
 
     @property
     def limit(self) -> int:
         return self._history.limit
+
+    @property
+    def approximate_bytes(self) -> int:
+        return self._history.approximate_weight or 0
 
     def clear(self) -> None:
         self._history.clear()

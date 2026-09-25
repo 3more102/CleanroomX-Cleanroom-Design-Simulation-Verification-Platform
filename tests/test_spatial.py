@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     spatial_layout_schedule_csv,
     spatial_layout_summary,
     spatial_layout_svg,
+    spatial_sync_preview,
     sync_layout_to_analysis,
 )
 
@@ -152,6 +153,143 @@ def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_en
     assert room["supply_airflow_m3_h"] == 2700
     assert room["min_ach"] == 25
     assert analysis.input["pressure_cascade"][0]["min_delta_pa"] == 10
+
+
+def test_spatial_sync_preview_reports_exact_changes_without_mutating_analysis():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6,
+                    "width_m": 5,
+                    "height_m": 3,
+                    "observed_pressure_pa": 30,
+                    "supply_airflow_m3_h": 2700,
+                },
+                {
+                    "name": "Ante",
+                    "length_m": 4,
+                    "width_m": 3,
+                    "height_m": 2.8,
+                },
+            ]
+        },
+    )
+    original = {
+        "rooms": [dict(room) for room in analysis.input["rooms"]]
+    }
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 5,
+                "height_m": 3.2,
+                "pressure_pa": 32,
+            },
+            {
+                "id": "new-room",
+                "name": "Packaging",
+                "x_m": 8,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    preview = spatial_sync_preview(layout, analysis)
+
+    assert preview["supported"] is True
+    assert preview["blocked"] is False
+    assert preview["matched_rooms"] == 1
+    assert preview["unmatched_layout_rooms"] == ["Packaging"]
+    assert preview["unmatched_analysis_rooms"] == ["Ante"]
+    assert [
+        (change["field"], change["analysis_value"], change["spatial_value"])
+        for change in preview["changes"]
+    ] == [
+        ("length_m", 6, 7.0),
+        ("height_m", 3, 3.2),
+        ("observed_pressure_pa", 30, 32.0),
+    ]
+    assert analysis.input == original
+
+
+def test_spatial_sync_preview_blocks_duplicate_room_names_and_sync_is_non_mutating():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "Process", "length_m": 4, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+    original = {
+        "rooms": [dict(room) for room in analysis.input["rooms"]]
+    }
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 8,
+                "width_m": 5,
+                "height_m": 3,
+            }
+        ]
+    }
+
+    preview = spatial_sync_preview(layout, analysis)
+
+    assert preview["blocked"] is True
+    assert any("Duplicate analysis room names" in warning for warning in preview["warnings"])
+    assert sync_layout_to_analysis(layout, analysis) is False
+    assert analysis.input == original
+
+
+def test_spatial_sync_preview_explains_unsupported_analysis_kind():
+    analysis = AnalysisDocument(
+        id="fan",
+        name="Fan",
+        kind="fan_operating_point",
+        input={"name": "Fan"},
+    )
+
+    preview = spatial_sync_preview(
+        {
+            "rooms": [
+                {
+                    "id": "room",
+                    "name": "Room",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                }
+            ]
+        },
+        analysis,
+    )
+
+    assert preview["supported"] is False
+    assert preview["blocked"] is False
+    assert preview["changes"] == []
+    assert any("no spatial room-geometry" in warning for warning in preview["warnings"])
 
 
 def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():

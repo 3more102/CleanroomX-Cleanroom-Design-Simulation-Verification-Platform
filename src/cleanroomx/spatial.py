@@ -10,11 +10,11 @@ import tkinter as tk
 from tkinter import ttk
 
 from .spatial_history import SpatialEditHistory, SpatialHistoryState
-
-
-SPATIAL_METADATA_KEY = "spatial_layout"
-SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+from .spatial_integrity import (
+    DEVICE_TYPES,
+    SPATIAL_LAYOUT_VERSION,
+    SPATIAL_METADATA_KEY,
+)
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -32,7 +32,41 @@ def _positive(value: Any, default: float) -> float:
 
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return slug or "room"
+
+
+def _declared_identifiers(items: list[Any]) -> set[str]:
+    return {
+        str(item.get("id")).strip()
+        for item in items
+        if isinstance(item, dict)
+        and item.get("id") is not None
+        and str(item.get("id")).strip()
+    }
+
+
+def _unique_identifier(
+    value: Any,
+    fallback: str,
+    used_ids: set[str],
+    reserved_ids: set[str] | None = None,
+) -> str:
+    """Return a deterministic id while preserving other declared stable ids."""
+
+    base = str(value).strip() if value is not None else ""
+    base = base or fallback
+    if base not in used_ids:
+        used_ids.add(base)
+        return base
+
+    reserved = reserved_ids or set()
+    suffix = 2
+    candidate = f"{base}-{suffix}"
+    while candidate in used_ids or candidate in reserved:
+        suffix += 1
+        candidate = f"{base}-{suffix}"
+    used_ids.add(candidate)
+    return candidate
 
 
 def empty_layout() -> dict:
@@ -63,14 +97,17 @@ def normalize_layout(value: Any) -> dict:
     used_ids: set[str] = set()
     raw_rooms = source.get("rooms", [])
     if isinstance(raw_rooms, list):
+        reserved_room_ids = _declared_identifiers(raw_rooms)
         for index, raw in enumerate(raw_rooms):
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            room_id = _unique_identifier(
+                raw.get("id"),
+                _room_id(name),
+                used_ids,
+                reserved_room_ids,
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,15 +123,22 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
-        for raw in raw_devices:
+        reserved_device_ids = _declared_identifiers(raw_devices)
+        for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_id = _unique_identifier(
+                raw.get("id"),
+                f"device-{index + 1}",
+                used_device_ids,
+                reserved_device_ids,
+            )
             devices.append(
                 {
                     "id": device_id,
@@ -140,6 +184,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -148,7 +193,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _room_id(name),
+            "id": _unique_identifier(None, _room_id(name), used_ids),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,

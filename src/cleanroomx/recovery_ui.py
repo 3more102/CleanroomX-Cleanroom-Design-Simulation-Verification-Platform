@@ -10,6 +10,7 @@ from .autosave import (
     RecoveryScan,
     discard_recovery_artifact,
     load_recovery_artifact,
+    quarantine_recovery_artifact,
 )
 from .recovery_diff import compare_recovery_to_source, format_recovery_comparison
 
@@ -248,6 +249,7 @@ class RecoveryCenter(tk.Toplevel):
         self.grab_set()
         self.result: Path | None = None
         self._candidates = {str(item.path): item for item in scan.candidates}
+        self._issues = list(scan.issues)
 
         header = ttk.Frame(self, padding=(12, 12, 12, 6))
         header.pack(fill="x")
@@ -313,22 +315,14 @@ class RecoveryCenter(tk.Toplevel):
         )
         message.pack(fill="x")
 
-        if scan.issues:
-            issue_lines = "; ".join(
-                f"{issue.path.name}: {issue.error}" for issue in scan.issues[:3]
-            )
-            suffix = (
-                f" (+{len(scan.issues) - 3} more)" if len(scan.issues) > 3 else ""
-            )
-            ttk.Label(
-                self,
-                text=(
-                    f"{len(scan.issues)} recovery artifact(s) could not be read and "
-                    f"were preserved: {issue_lines}{suffix}"
-                ),
-                wraplength=940,
-                padding=(12, 6, 12, 0),
-            ).pack(fill="x")
+        self.issue_var = tk.StringVar(self)
+        ttk.Label(
+            self,
+            textvariable=self.issue_var,
+            wraplength=940,
+            padding=(12, 6, 12, 0),
+        ).pack(fill="x")
+        self._refresh_issue_summary()
 
         buttons = ttk.Frame(self)
         buttons.pack(fill="x", padx=12, pady=12)
@@ -349,6 +343,13 @@ class RecoveryCenter(tk.Toplevel):
             buttons, text="Inspect…", command=self._inspect
         )
         self.inspect_button.pack(side="left", padx=(6, 0))
+        self.quarantine_button = ttk.Button(
+            buttons,
+            text="Quarantine Invalid Artifacts…",
+            command=self._quarantine_issues,
+        )
+        self.quarantine_button.pack(side="left", padx=(6, 0))
+        self._refresh_quarantine_button()
 
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._selection_changed())
         self.tree.bind("<Double-1>", lambda event: self._inspect())
@@ -363,6 +364,69 @@ class RecoveryCenter(tk.Toplevel):
         if not selection:
             return None
         return self._candidates.get(selection[0])
+
+    def _refresh_issue_summary(self) -> None:
+        if not self._issues:
+            self.issue_var.set("")
+            return
+        issue_lines = "; ".join(
+            f"{issue.path.name}: {issue.error}" for issue in self._issues[:3]
+        )
+        suffix = f" (+{len(self._issues) - 3} more)" if len(self._issues) > 3 else ""
+        self.issue_var.set(
+            f"{len(self._issues)} invalid recovery artifact(s) were preserved. "
+            f"They can be quarantined without changing their suspect bytes: "
+            f"{issue_lines}{suffix}"
+        )
+
+    def _refresh_quarantine_button(self) -> None:
+        if hasattr(self, "quarantine_button"):
+            self.quarantine_button.configure(
+                state="normal" if self._issues else "disabled"
+            )
+
+    def _quarantine_issues(self) -> None:
+        if not self._issues:
+            return
+        if not messagebox.askyesno(
+            "Quarantine invalid recovery artifacts",
+            (
+                f"Move {len(self._issues)} invalid recovery artifact(s) into the "
+                "private recovery quarantine?\n\nOriginal bytes are preserved "
+                "with SHA-256, size, reason, and timestamp audit metadata."
+            ),
+            parent=self,
+        ):
+            return
+        remaining = []
+        failures: list[str] = []
+        quarantined = 0
+        for issue in self._issues:
+            try:
+                quarantine_recovery_artifact(
+                    issue.path,
+                    recovery_dir=issue.path.parent,
+                    reason=issue.error,
+                )
+            except (OSError, ValueError) as exc:
+                remaining.append(issue)
+                failures.append(f"{issue.path.name}: {exc}")
+            else:
+                quarantined += 1
+        self._issues = remaining
+        self._refresh_issue_summary()
+        self._refresh_quarantine_button()
+        if failures:
+            messagebox.showerror(
+                "Quarantine incomplete",
+                f"Quarantined {quarantined}; {len(failures)} failed:\n\n"
+                + "\n".join(failures[:5]),
+                parent=self,
+            )
+        else:
+            self.message_var.set(
+                f"Quarantined {quarantined} invalid recovery artifact(s)."
+            )
 
     def _selection_changed(self) -> None:
         candidate = self._selected_candidate()

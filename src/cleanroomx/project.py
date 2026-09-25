@@ -45,6 +45,44 @@ class ProjectFileRevision:
     sha256: str | None
 
 
+class AtomicWriteDurabilityError(OSError):
+    """Raised after replacement when directory durability cannot be confirmed."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        super().__init__(
+            "atomic replacement completed but directory durability sync failed for "
+            f"{self.path}; the file may contain the new data, but crash durability "
+            "was not confirmed"
+        )
+
+
+class AtomicWriteVerificationError(OSError):
+    """Raised when an atomic text write cannot be verified byte-for-byte."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        stage: str,
+        expected_size: int,
+        expected_sha256: str,
+        actual_size: int | None,
+        actual_sha256: str | None,
+    ) -> None:
+        self.path = Path(path)
+        self.stage = stage
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.actual_size = actual_size
+        self.actual_sha256 = actual_sha256
+        super().__init__(
+            f"{stage} verification failed for {self.path}: "
+            f"expected {expected_size} bytes / sha256 {expected_sha256}, "
+            f"got {actual_size!r} bytes / sha256 {actual_sha256!r}"
+        )
+
+
 @dataclass
 class AnalysisDocument:
     id: str
@@ -310,6 +348,47 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _verify_file_payload(path: Path, payload: bytes, *, stage: str) -> ProjectFileRevision:
+    """Re-read a stable file revision and require exact requested bytes."""
+    revision = capture_project_file_revision(path)
+    expected_sha256 = sha256(payload).hexdigest()
+    expected_size = len(payload)
+    if (
+        not revision.exists
+        or revision.size != expected_size
+        or revision.sha256 != expected_sha256
+    ):
+        raise AtomicWriteVerificationError(
+            path,
+            stage=stage,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_size=revision.size,
+            actual_sha256=revision.sha256,
+        )
+    return revision
+
+
+def _fsync_parent_directory(directory: Path) -> None:
+    """Durably commit a rename on POSIX filesystems.
+
+    Python does not expose a portable way to fsync a directory handle on Windows,
+    so Windows relies on the completed atomic replacement plus byte verification.
+    POSIX failures are propagated because rename durability could not be confirmed.
+    """
+    if os.name == "nt":
+        return
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    fd = os.open(directory, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -318,21 +397,37 @@ def _atomic_write_text(
 ) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = text.encode("utf-8")
 
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
+            mode="wb", prefix=f".{destination.name}.",
             suffix=".tmp", dir=destination.parent, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+
+        # Verify the exact persisted staging bytes before the authoritative file
+        # can be replaced. This preserves the previous destination on staging
+        # corruption or short/incomplete writes.
+        _verify_file_payload(temp_path, payload, stage="staged write")
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        temp_path = None
+
+        # A successful rename is not crash-durable on POSIX until the containing
+        # directory entry is synced. Re-read the destination afterwards so callers
+        # only receive success for the exact UTF-8 payload they requested.
+        try:
+            _fsync_parent_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(destination) from exc
+        _verify_file_payload(destination, payload, stage="committed write")
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

@@ -230,6 +230,14 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def _snap_coordinate(value: float, grid_m: float, enabled: bool = True) -> float:
+    """Snap a metric coordinate to the configured grid when snapping is enabled."""
+    if not enabled:
+        return _finite_number(value, 0.0)
+    grid = max(0.01, _positive(grid_m, 0.5))
+    return round(_finite_number(value, 0.0) / grid) * grid
+
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -277,8 +285,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
+        self._grid_var = tk.StringVar(value="0.50")
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._workspace_var = tk.StringVar(value="0 rooms · 0 devices · 100%")
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -304,11 +315,30 @@ class SpatialDesignWorkspace(ttk.Frame):
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Button(toolbar, text="Duplicate", command=self.duplicate_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+        ttk.Button(toolbar, text="−", width=3, command=lambda: self._zoom_center(1 / 1.15)).pack(
+            side="left", padx=(6, 1)
         )
+        ttk.Button(toolbar, text="+", width=3, command=lambda: self._zoom_center(1.15)).pack(
+            side="left", padx=1
+        )
+        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
+            side="left", padx=(8, 2)
+        )
+        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(side="left", padx=2)
+        ttk.Label(toolbar, text="Grid").pack(side="left", padx=(8, 2))
+        grid_box = ttk.Combobox(
+            toolbar,
+            textvariable=self._grid_var,
+            values=("0.10", "0.25", "0.50", "1.00", "2.00"),
+            state="readonly",
+            width=5,
+        )
+        grid_box.pack(side="left", padx=(0, 2))
+        grid_box.bind("<<ComboboxSelected>>", lambda event: self._apply_grid_size())
+        ttk.Label(toolbar, text="m").pack(side="left")
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -325,7 +355,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
         self.canvas_2d.pack(fill="both", expand=True)
-        ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=2)
+        footer2 = ttk.Frame(two_d)
+        footer2.pack(fill="x", padx=4, pady=2)
+        ttk.Label(footer2, textvariable=self._coord_var, anchor="w").pack(side="left")
+        ttk.Label(footer2, textvariable=self._workspace_var, anchor="e").pack(side="right")
 
         right = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=4)
@@ -401,11 +434,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
+        for canvas in (self.canvas_2d, self.canvas_3d):
+            canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
+            canvas.bind("<Control-D>", lambda event: self.duplicate_selected())
+            canvas.bind("<Escape>", lambda event: self.clear_selection())
+            canvas.bind("<Control-0>", lambda event: self.fit_views())
+            canvas.bind("<Left>", lambda event: self.nudge_selected(-1, 0))
+            canvas.bind("<Right>", lambda event: self.nudge_selected(1, 0))
+            canvas.bind("<Up>", lambda event: self.nudge_selected(0, -1))
+            canvas.bind("<Down>", lambda event: self.nudge_selected(0, 1))
 
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        self._grid_var.set(f"{self.layout['grid_m']:.2f}")
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
@@ -509,6 +553,43 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._load_property_panel()
         self._persist(f"Added {device_type}")
 
+    def duplicate_selected(self) -> None:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            return
+        clone = copy.deepcopy(item)
+        clone["id"] = f"{self.selected.kind}-{uuid.uuid4().hex[:8]}"
+        clone["name"] = f"{item.get('name', self.selected.kind.title())} Copy"
+        step = max(0.1, self.layout["grid_m"])
+        clone["x_m"] = _snap_coordinate(item.get("x_m", 0.0) + step, step, True)
+        clone["y_m"] = _snap_coordinate(item.get("y_m", 0.0) + step, step, True)
+        collection = self.layout["rooms"] if self.selected.kind == "room" else self.layout["devices"]
+        collection.append(clone)
+        self.selected = _Hit(self.selected.kind, clone["id"])
+        self._load_property_panel()
+        self._persist(f"Duplicated {clone['name']}")
+
+    def clear_selection(self) -> None:
+        self.selected = None
+        self._load_property_panel()
+        self.redraw()
+
+    def nudge_selected(self, dx_steps: int, dy_steps: int) -> None:
+        item = self._selected_object()
+        if item is None:
+            return
+        step = max(0.01, self.layout["grid_m"])
+        item["x_m"] = _snap_coordinate(item.get("x_m", 0.0) + dx_steps * step, step, True)
+        item["y_m"] = _snap_coordinate(item.get("y_m", 0.0) + dy_steps * step, step, True)
+        self._load_property_panel()
+        self._persist("Spatial item nudged")
+
+    def _apply_grid_size(self) -> None:
+        grid = _positive(self._grid_var.get(), self.layout.get("grid_m", 0.5))
+        self.layout["grid_m"] = max(0.01, min(10.0, grid))
+        self._grid_var.set(f"{self.layout['grid_m']:.2f}")
+        self._persist(f"Spatial grid set to {self.layout['grid_m']:g} m")
+
     def delete_selected(self) -> None:
         if self.selected is None:
             return
@@ -566,8 +647,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
+        self._workspace_var.set(
+            f"{len(self.layout['rooms'])} rooms · {len(self.layout['devices'])} devices · "
+            f"{self.layout['view']['zoom_2d'] * 100:.0f}%"
+        )
         self._draw_2d()
         self._draw_3d()
+
+    def _zoom_center(self, factor: float) -> None:
+        self._zoom_at(
+            factor,
+            max(1, self.canvas_2d.winfo_width()) / 2,
+            max(1, self.canvas_2d.winfo_height()) / 2,
+        )
 
     def _draw_2d(self) -> None:
         canvas = self.canvas_2d
@@ -594,6 +686,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                     _, cy = self._world_to_canvas(0, y)
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
+
+        # Metric axes make orientation obvious even after aggressive panning/zooming.
+        axis_x, _ = self._world_to_canvas(0.0, 0.0)
+        _, axis_y = self._world_to_canvas(0.0, 0.0)
+        canvas.create_line(axis_x, 0, axis_x, h, fill="#c2cbd4", dash=(4, 4), tags=("axis",))
+        canvas.create_line(0, axis_y, w, axis_y, fill="#c2cbd4", dash=(4, 4), tags=("axis",))
 
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
@@ -640,6 +738,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             canvas.create_text(
                 x, y, text=symbols.get(device["type"], "?"),
+                tags=(f"device:{device['id']}", "device"),
+            )
+            canvas.create_text(
+                x,
+                y + radius + 9,
+                text=device.get("name", device["type"].upper()),
+                fill="#334155",
+                font=("TkDefaultFont", 8),
                 tags=(f"device:{device['id']}", "device"),
             )
 
@@ -737,6 +843,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
                 width=2, tags=(tag, "device3d"),
             )
+            canvas.create_text(
+                x,
+                y - 11,
+                text=device.get("name", device["type"].upper()),
+                fill="#e6edf3",
+                font=("TkDefaultFont", 8),
+                tags=(tag, "device3d"),
+            )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:
         for tag in tags:
@@ -751,6 +865,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = None
         if current:
             hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
+        self.canvas_2d.focus_set()
         self.selected = hit
         self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
         self._load_property_panel()
@@ -764,8 +879,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
         grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        item["x_m"] = _snap_coordinate(
+            item["x_m"] + dx, grid, self._snap_to_grid.get()
+        )
+        item["y_m"] = _snap_coordinate(
+            item["y_m"] + dy, grid, self._snap_to_grid.get()
+        )
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
@@ -850,6 +969,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         hit = self._parse_hit(self.canvas_3d.gettags(current[0]))
         if hit is None:
             return
+        self.canvas_3d.focus_set()
         self.selected = hit
         self._load_property_panel()
         self.redraw()

@@ -423,3 +423,49 @@ def mapped_pressure_values(layout: Any, analysis: Any) -> dict[str, float | None
             value = _finite(room.get("pressure_pa"))
         result[room_id] = value
     return result
+
+
+def room_plan_bounds(room: Any) -> tuple[float, float, float, float]:
+    """Return canonical plan bounds (x0, y0, x1, y1) for one valid room."""
+
+    if not isinstance(room, dict):
+        raise ValueError("room must be an object")
+    x = _finite(room.get("x_m"))
+    y = _finite(room.get("y_m"))
+    geometry = _geometry(room)
+    if x is None or y is None or geometry is None:
+        raise ValueError("room geometry must contain finite coordinates and positive dimensions")
+    return (
+        x,
+        y,
+        x + geometry["length_m"],
+        y + geometry["width_m"],
+    )
+
+
+def room_prism_vertices(
+    room: Any,
+) -> dict[str, tuple[tuple[float, float, float], ...]]:
+    """Return deterministic 3D prism vertices from the same canonical room state."""
+
+    x0, y0, x1, y1 = room_plan_bounds(room)
+    geometry = _geometry(room)
+    if geometry is None:
+        raise ValueError("room geometry must be valid")
+    elevation = _finite(room.get("elevation_m"))
+    base_z = 0.0 if elevation is None else elevation
+    top_z = base_z + geometry["height_m"]
+    return {
+        "base": (
+            (x0, y0, base_z),
+            (x1, y0, base_z),
+            (x1, y1, base_z),
+            (x0, y1, base_z),
+        ),
+        "top": (
+            (x0, y0, top_z),
+            (x1, y0, top_z),
+            (x1, y1, top_z),
+            (x0, y1, top_z),
+        ),
+    }

@@ -8,6 +8,7 @@ from cleanroomx.spatial import SpatialDesignWorkspace, empty_layout
 from cleanroomx.spatial_transforms import (
     MAX_ZOOM,
     MIN_ZOOM,
+    fit_3d_view,
     model_to_screen_2d,
     project_3d,
     screen_to_model_2d,
@@ -31,7 +32,9 @@ def _workspace() -> SpatialDesignWorkspace:
     workspace = object.__new__(SpatialDesignWorkspace)
     workspace.layout = empty_layout()
     workspace.canvas_2d = _Canvas()
+    workspace.canvas_3d = _Canvas(1200, 760)
     workspace.redraw = lambda: None
+    workspace._persist = lambda message: None
     return workspace
 
 
@@ -137,3 +140,60 @@ def test_pure_3d_projection_is_deterministic_and_elevation_moves_upward():
     assert floor == project_3d(2.0, 3.0, 0.0, **args)
     assert elevated[0] == pytest.approx(floor[0])
     assert elevated[1] < floor[1]
+
+
+def test_fit_3d_view_keeps_room_extents_inside_requested_padding():
+    points = [
+        (x, y, z)
+        for x in (-8.0, 8.0)
+        for y in (-3.0, 3.0)
+        for z in (0.0, 3.5)
+    ]
+    width = 1200
+    height = 760
+    zoom, pan_x, pan_y = fit_3d_view(
+        points,
+        width_px=width,
+        height_px=height,
+        azimuth_deg=35,
+        elevation_deg=28,
+        padding_fraction=0.10,
+    )
+    projected = [
+        project_3d(
+            *point,
+            width_px=width,
+            height_px=height,
+            azimuth_deg=35,
+            elevation_deg=28,
+            zoom=zoom,
+            pan_x_px=pan_x,
+            pan_y_px=pan_y,
+        )
+        for point in points
+    ]
+
+    assert all(width * 0.10 - 1e-9 <= x <= width * 0.90 + 1e-9 for x, _ in projected)
+    assert all(height * 0.10 - 1e-9 <= y <= height * 0.90 + 1e-9 for _, y in projected)
+
+
+def test_workspace_fit_views_updates_3d_camera_from_geometry():
+    workspace = _workspace()
+    workspace.layout["rooms"] = [
+        {
+            "id": "large-room",
+            "name": "Large Room",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 40.0,
+            "width_m": 20.0,
+            "height_m": 4.0,
+            "floor_elevation_m": 1.5,
+        }
+    ]
+
+    workspace.fit_views()
+
+    assert workspace.layout["view"]["zoom_3d"] < 1.0
+    assert math.isfinite(workspace.layout["view"]["pan_3d_x"])
+    assert math.isfinite(workspace.layout["view"]["pan_3d_y"])

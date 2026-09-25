@@ -1111,3 +1111,53 @@ def test_room_verification_dimension_sync_preserves_engineering_room_identity():
     assert analysis.input["observed_pressure_pa"] == 18.0
     assert layout["engineering_sync"]["rooms"][0]["analysis_room_name"] == "Engineering Room A"
 
+def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "A", "length_m": 4.0, "width_m": 4.0, "height_m": 3.0},
+                {"name": "B", "length_m": 4.0, "width_m": 4.0, "height_m": 3.0},
+            ]
+        },
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "room",
+                    "name": "Display",
+                    "analysis_room_name": "A",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                }
+            ],
+            "engineering_sync": {
+                "analysis_id": "verification",
+                "rooms": [
+                    {
+                        "room_id": "room",
+                        "analysis_room_name": "A",
+                        "length_m": 4.0,
+                        "width_m": 4.0,
+                        "height_m": 3.0,
+                    }
+                ],
+            },
+        }
+    )
+
+    assert engineering_sync_status(layout, analysis)["overall"] == "synchronized"
+
+    layout["rooms"][0]["analysis_room_name"] = "B"
+    status = engineering_sync_status(layout, analysis)
+
+    assert status["overall"] == "conflicting"
+    assert status["rooms"][0]["state"] == "conflicting"
+    assert "mapping changed" in status["rooms"][0]["message"]
+

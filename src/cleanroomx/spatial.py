@@ -1296,9 +1296,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
-        validation_key = _spatial_validation_key(self.layout)
+        analysis = self._analysis_getter()
+        validation_key = _spatial_validation_key(self.layout, analysis)
         if force or validation_key != self._last_validation_key:
-            self._validation_issues = validate_layout(self.layout)
+            self._validation_issues = validate_layout(self.layout, analysis)
             self._last_validation_key = validation_key
             self._update_validation_summary()
 
@@ -1321,11 +1322,36 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._mapping_var.set("Engineering mapping: —")
             for var in self._property_vars.values():
                 var.set("")
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+
+        is_room = bool(self.selected and self.selected.kind == "room")
+        prefix = "Room" if is_room else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+        if is_room:
+            record = next(
+                (
+                    status
+                    for status in spatial_sync_status(self.layout, self._analysis_getter())
+                    if status["room_id"] == item["id"]
+                ),
+                None,
+            )
+            if record is None:
+                self._mapping_var.set("Engineering mapping: unavailable")
+            else:
+                label = record["state"].replace("_", " ")
+                self._mapping_var.set(
+                    f"Engineering mapping: {label} — {record.get('reason', '')}"
+                )
+        else:
+            room_id = item.get("room_id")
+            self._mapping_var.set(
+                f"Object assignment: {room_id}" if room_id else "Object assignment: unassigned"
+            )
+
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -1336,26 +1362,122 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
+        is_room = bool(self.selected and self.selected.kind == "room")
+        updates: dict[str, Any] = {}
+        clear_fields: set[str] = set()
+
         name = self._property_vars["name"].get().strip()
-        if name:
-            item["name"] = name
-        for key in ("x_m", "y_m"):
+        if not name:
+            self._status_setter("Spatial name cannot be empty")
+            return
+        updates["name"] = name
+
+        def parse_finite(key: str, *, positive: bool = False) -> float | None:
             text = self._property_vars[key].get().strip()
-            if text:
-                item[key] = _finite_number(text, item.get(key, 0.0))
-        if self.selected and self.selected.kind == "room":
-            for key in ("length_m", "width_m", "height_m"):
-                text = self._property_vars[key].get().strip()
-                if text:
-                    item[key] = _positive(text, item[key])
-            pressure = self._property_vars["pressure_pa"].get().strip()
-            if pressure:
-                item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
-            elif "pressure_pa" in item:
-                item.pop("pressure_pa", None)
+            if not text:
+                return None
+            try:
+                value = float(text)
+            except ValueError:
+                self._status_setter(f"{key} must be a number")
+                raise
+            if not math.isfinite(value):
+                self._status_setter(f"{key} must be finite")
+                raise ValueError(key)
+            if positive and value <= 0:
+                self._status_setter(f"{key} must be greater than zero")
+                raise ValueError(key)
+            return value
+
+        try:
+            for key in ("x_m", "y_m"):
+                value = parse_finite(key)
+                if value is not None:
+                    updates[key] = value
+
+            engineering_ref = self._property_vars["engineering_ref"].get().strip()
+            if engineering_ref:
+                updates["engineering_ref"] = engineering_ref
+            else:
+                clear_fields.add("engineering_ref")
+            notes = self._property_vars["notes"].get()
+            if notes.strip():
+                updates["notes"] = notes
+            else:
+                clear_fields.add("notes")
+
+            if is_room:
+                for key in ("length_m", "width_m", "height_m"):
+                    value = parse_finite(key, positive=True)
+                    if value is not None:
+                        updates[key] = value
+                elevation = parse_finite("elevation_m")
+                if elevation is not None:
+                    updates["elevation_m"] = elevation
+                for key in (
+                    "pressure_pa",
+                    "pressure_target_pa",
+                    "temperature_target_c",
+                    "humidity_target_rh_pct",
+                ):
+                    value = parse_finite(key)
+                    if value is None:
+                        clear_fields.add(key)
+                    else:
+                        updates[key] = value
+                humidity = updates.get("humidity_target_rh_pct")
+                if humidity is not None and not 0 <= humidity <= 100:
+                    self._status_setter("humidity_target_rh_pct must be between 0 and 100")
+                    return
+                classification = self._property_vars["classification"].get().strip()
+                if classification:
+                    updates["classification"] = classification
+                else:
+                    clear_fields.add("classification")
+            else:
+                room_id = self._property_vars["room_id"].get().strip()
+                updates["room_id"] = room_id or None
+                z_value = parse_finite("z_m")
+                if z_value is not None:
+                    updates["z_m"] = z_value
+        except ValueError:
+            return
+
+        old_ref = item.get("engineering_ref")
+        for key in clear_fields:
+            item.pop(key, None)
+        item.update(updates)
+        if is_room and old_ref != item.get("engineering_ref"):
+            # A new target cannot inherit provenance from the previous mapping.
+            item.pop("engineering_baseline", None)
+
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
+
+    def sync_from_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None:
+            self._status_setter("Select a verification analysis before synchronizing geometry")
+            return
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        try:
+            changed = sync_analysis_to_layout(self.layout, analysis)
+        except SpatialSyncError as exc:
+            self._status_setter(str(exc))
+            return
+        if not changed:
+            self._status_setter("Mapped spatial geometry already matches the active analysis")
+            self._load_property_panel()
+            self.redraw()
+            return
+        self._load_property_panel()
+        self._persist(
+            f"Accepted engineering geometry from {getattr(analysis, 'name', 'active analysis')}",
             history_before=history_before,
             selection_before=selection_before,
         )
@@ -1376,6 +1498,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "length_m": 4.0,
             "width_m": 4.0,
             "height_m": 3.0,
+            "elevation_m": 0.0,
         }
         self.layout["rooms"].append(room)
         self.selected = _Hit("room", room["id"])

@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+from pathlib import Path
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    AnalysisDocument, AtomicWriteDurabilityError, AtomicWriteVerificationError,
+    PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError,
+    atomic_write_text, capture_project_file_revision, load_project_document,
+    project_from_dict, save_project_document,
 )
 
 
@@ -52,6 +57,131 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
 
     assert not target.exists()
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+
+
+def test_atomic_write_text_verifies_staged_bytes_before_replacing_destination(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_text("old", encoding="utf-8")
+    original_sha256_path = project_module._sha256_path
+
+    def corrupt_staging_digest(path):
+        if Path(path).name.endswith(".tmp"):
+            return "0" * 64
+        return original_sha256_path(Path(path))
+
+    monkeypatch.setattr(project_module, "_sha256_path", corrupt_staging_digest)
+
+    with pytest.raises(AtomicWriteVerificationError, match="staged write"):
+        atomic_write_text(target, "new\n")
+
+    assert target.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_syncs_parent_directory_after_replace(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    synced = []
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_directory",
+        lambda directory: synced.append(Path(directory)),
+    )
+
+    atomic_write_text(target, "durable\n")
+
+    assert target.read_text(encoding="utf-8") == "durable\n"
+    assert synced == [tmp_path]
+
+
+def test_atomic_write_text_reports_directory_sync_failure_after_commit(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_text("old", encoding="utf-8")
+
+    def fail_directory_sync(_directory):
+        raise OSError("directory fsync failed")
+
+    monkeypatch.setattr(project_module, "_fsync_directory", fail_directory_sync)
+
+    with pytest.raises(AtomicWriteDurabilityError, match="durability could not be confirmed") as raised:
+        atomic_write_text(target, "new\n")
+
+    assert raised.value.committed is True
+    assert target.read_text(encoding="utf-8") == "new\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_detects_immediate_post_commit_rewrite(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    original_verify = project_module._verify_text_revision
+    changed = {"done": False}
+
+    def verify_with_external_rewrite(path, text, *, phase):
+        if phase == "committed write" and not changed["done"]:
+            changed["done"] = True
+            Path(path).write_text("foreign\n", encoding="utf-8")
+        return original_verify(path, text, phase=phase)
+
+    monkeypatch.setattr(project_module, "_verify_text_revision", verify_with_external_rewrite)
+
+    with pytest.raises(AtomicWriteVerificationError, match="committed write"):
+        atomic_write_text(target, "new\n")
+
+    assert target.read_text(encoding="utf-8") == "foreign\n"
+
+
+def test_project_save_performs_final_revision_verification(tmp_path, monkeypatch):
+    target = tmp_path / "project.cleanroomx.json"
+    original_atomic = project_module._atomic_write_text
+
+    def write_then_rewrite(path, text, *, before_replace=None):
+        saved = original_atomic(path, text, before_replace=before_replace)
+        Path(saved).write_text("external replacement\n", encoding="utf-8")
+        return saved
+
+    monkeypatch.setattr(project_module, "_atomic_write_text", write_then_rewrite)
+
+    with pytest.raises(AtomicWriteVerificationError, match="project save"):
+        save_project_document(target, ProjectDocument(name="Protected"))
+
+    assert target.read_text(encoding="utf-8") == "external replacement\n"
+
+
+def test_revision_capture_retries_same_size_same_mtime_identity_swap(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "project.cleanroomx.json"
+    target.write_text("AAAA", encoding="utf-8")
+    original_stat = target.stat()
+    original_sha256_path = project_module._sha256_path
+    calls = {"count": 0}
+
+    def swap_after_first_hash(path):
+        digest = original_sha256_path(Path(path))
+        if calls["count"] == 0:
+            replacement = tmp_path / "replacement.tmp"
+            replacement.write_text("BBBB", encoding="utf-8")
+            os.utime(
+                replacement,
+                ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+            )
+            replacement.replace(target)
+        calls["count"] += 1
+        return digest
+
+    monkeypatch.setattr(project_module, "_sha256_path", swap_after_first_hash)
+
+    revision = capture_project_file_revision(target)
+
+    assert calls["count"] == 2
+    assert revision.size == 4
+    assert revision.mtime_ns == original_stat.st_mtime_ns
+    assert revision.sha256 == hashlib.sha256(b"BBBB").hexdigest()
 
 
 def test_project_loader_migrates_legacy_single_analysis_shape():

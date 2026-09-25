@@ -17,6 +17,7 @@ from .spatial_integrity import (
 )
 from .spatial_transforms import (
     BASE_2D_PIXELS_PER_M,
+    fit_3d_view,
     model_to_screen_2d,
     project_3d,
     screen_to_model_2d,
@@ -1880,7 +1881,32 @@ class SpatialDesignWorkspace(ttk.Frame):
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+        points_3d: list[tuple[float, float, float]] = []
+        for room in self.layout["rooms"]:
+            x0 = room["x_m"] - cx
+            x1 = x0 + room["length_m"]
+            y0 = room["y_m"] - cy
+            y1 = y0 + room["width_m"]
+            z0 = room.get(
+                "floor_elevation_m",
+                self.layout["floor"]["elevation_m"],
+            )
+            z1 = z0 + room["height_m"]
+            for x in (x0, x1):
+                for y in (y0, y1):
+                    points_3d.append((x, y, z0))
+                    points_3d.append((x, y, z1))
+
+        zoom_3d, pan_3d_x, pan_3d_y = fit_3d_view(
+            points_3d,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+        )
+        self.layout["view"]["zoom_3d"] = zoom_3d
+        self.layout["view"]["pan_3d_x"] = pan_3d_x
+        self.layout["view"]["pan_3d_y"] = pan_3d_y
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:

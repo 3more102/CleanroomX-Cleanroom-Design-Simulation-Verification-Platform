@@ -15,6 +15,7 @@ from . import __version__
 from .autosave import (
     DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
     AutosaveManager,
+    AutosaveStatus,
     discard_recovery_artifact,
     restore_recovery_artifact,
     scan_recovery_artifacts,

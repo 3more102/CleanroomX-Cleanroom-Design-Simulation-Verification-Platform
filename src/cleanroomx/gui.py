@@ -32,8 +32,10 @@ from .application import (
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectSaveConflictError,
     atomic_write_text,
-    load_project_document,
+    file_fingerprint,
+    load_project_document_with_fingerprint,
     new_project,
     save_project_document,
 )
@@ -179,6 +181,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_disk_fingerprint = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -891,6 +894,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = recovered.project
         self.project_path = None
+        self._project_disk_fingerprint = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -983,6 +987,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_disk_fingerprint = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -1017,10 +1022,11 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
-        project = load_project_document(project_path)
+        project, fingerprint = load_project_document_with_fingerprint(project_path)
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_disk_fingerprint = fingerprint
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1062,10 +1068,28 @@ class CleanroomXApp:
             self.save_project_as()
             return
         try:
-            save_project_document(self.project_path, self.project)
+            save_project_document(
+                self.project_path,
+                self.project,
+                expected_fingerprint=getattr(self, "_project_disk_fingerprint", None),
+            )
+        except ProjectSaveConflictError as exc:
+            self.status_var.set("Save blocked — project changed on disk")
+            messagebox.showerror(
+                "Save conflict",
+                (
+                    f"{exc}\n\n"
+                    "No project data was overwritten. Your in-memory edits and "
+                    "recovery autosave remain available; reload the file or use "
+                    "Save Project As to keep both versions."
+                ),
+                parent=self.root,
+            )
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._project_disk_fingerprint = file_fingerprint(self.project_path)
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
@@ -1123,14 +1147,45 @@ class CleanroomXApp:
                     target_base=destination.parent,
                 )
 
+        current_path = getattr(self, "project_path", None)
+        same_as_current = (
+            current_path is not None
+            and destination.resolve(strict=False)
+            == current_path.resolve(strict=False)
+        )
+        expected_destination = (
+            getattr(self, "_project_disk_fingerprint", None)
+            if same_as_current
+            else file_fingerprint(destination)
+        )
+        if expected_destination is None:
+            expected_destination = file_fingerprint(destination)
+
         try:
-            saved_path = save_project_document(destination, candidate)
+            saved_path = save_project_document(
+                destination,
+                candidate,
+                expected_fingerprint=expected_destination,
+            )
+        except ProjectSaveConflictError as exc:
+            self.status_var.set("Save As blocked — destination changed on disk")
+            messagebox.showerror(
+                "Save conflict",
+                (
+                    f"{exc}\n\n"
+                    "No project data was overwritten. Choose a different destination "
+                    "or retry after reviewing the file that changed."
+                ),
+                parent=self.root,
+            )
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
         self.project = candidate
         self.project_path = saved_path
+        self._project_disk_fingerprint = file_fingerprint(saved_path)
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

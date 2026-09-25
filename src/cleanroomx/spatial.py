@@ -1011,7 +1011,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "equipment": "Q",
             "sensor": "●",
         }
-        for device in self.layout["devices"]:
+        for device in visible_devices:
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
             radius = 9 if selected else 7
@@ -1120,7 +1120,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(tag, "room3d"),
             )
 
-        for device in visible_devices:
+        for device in self.layout["devices"]:
             x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])

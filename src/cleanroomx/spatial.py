@@ -564,6 +564,56 @@ def resize_room(
     return (x0, y0, x1, y1) != original
 
 
+def resize_room_with_devices(
+    room: dict,
+    devices: list[dict],
+    handle: str,
+    target_x_m: float,
+    target_y_m: float,
+    *,
+    grid_m: float | None = None,
+    min_size_m: float = 0.25,
+) -> bool:
+    """Resize a room and preserve assigned-device relative XY placement."""
+    room_id = room.get("id")
+    old_x = _finite_number(room.get("x_m"), 0.0)
+    old_y = _finite_number(room.get("y_m"), 0.0)
+    old_length = _positive(room.get("length_m"), 4.0)
+    old_width = _positive(room.get("width_m"), 4.0)
+
+    attached: list[tuple[dict, float, float]] = []
+    if room_id is not None:
+        for device in devices:
+            if device.get("room_id") != room_id:
+                continue
+            relative_x = (
+                _finite_number(device.get("x_m"), old_x) - old_x
+            ) / old_length
+            relative_y = (
+                _finite_number(device.get("y_m"), old_y) - old_y
+            ) / old_width
+            attached.append((device, relative_x, relative_y))
+
+    if not resize_room(
+        room,
+        handle,
+        target_x_m,
+        target_y_m,
+        grid_m=grid_m,
+        min_size_m=min_size_m,
+    ):
+        return False
+
+    new_x = room["x_m"]
+    new_y = room["y_m"]
+    new_length = room["length_m"]
+    new_width = room["width_m"]
+    for device, relative_x, relative_y in attached:
+        device["x_m"] = new_x + relative_x * new_length
+        device["y_m"] = new_y + relative_y * new_width
+    return True
+
+
 class SpatialEditHistory:
     """Bounded undo/redo history for normalized spatial-layout snapshots."""
 
@@ -1427,8 +1477,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         world = self._canvas_to_world(event.x, event.y)
         if self._resize_handle and self.selected and self.selected.kind == "room":
             grid = self.layout["grid_m"] if self._snap_to_grid.get() else None
-            if resize_room(
+            if resize_room_with_devices(
                 item,
+                self.layout["devices"],
                 self._resize_handle,
                 world[0],
                 world[1],

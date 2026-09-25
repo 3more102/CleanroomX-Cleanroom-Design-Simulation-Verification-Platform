@@ -68,9 +68,64 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.description == "Preserve editor state"
 
 
-def test_abandon_waits_for_worker_exit_before_reenabling_ui():
-    import queue
+def test_run_current_starts_isolated_task_and_locks_editor(monkeypatch):
+    class Widget:
+        def __init__(self):
+            self.state = None
 
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    calls = []
+
+    class Task:
+        cancel_requested = False
+
+    task = Task()
+
+    def start(kind, payload, *, base_dir):
+        calls.append((kind, payload, base_dir))
+        return task
+
+    monkeypatch.setattr(gui_module.AnalysisTask, "start", start)
+    monkeypatch.setattr(gui_module, "validate_analysis_input", lambda *args, **kwargs: None)
+
+    analysis = AnalysisDocument(
+        id="analysis-a",
+        name="A",
+        kind="room_verification",
+        input={"value": 3},
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app._analysis_task = None
+    app._commit_editor = lambda: analysis
+    app._base_dir = lambda: Path("/project")
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+
+    app.run_current()
+
+    assert calls == [
+        ("room_verification", {"value": 3}, Path("/project"))
+    ]
+    assert app._analysis_task is task
+    assert app._running_analysis_id == "analysis-a"
+    assert app._running is True
+    assert app.run_button.state == "disabled"
+    assert app.cancel_button.state == "normal"
+    assert app.input_text.state == "disabled"
+    assert "running" in app.status_var.value.lower()
+
+
+def test_cancel_terminates_worker_and_reenables_ui_after_cancelled_outcome():
     class Widget:
         def __init__(self):
             self.state = None
@@ -88,11 +143,34 @@ def test_abandon_waits_for_worker_exit_before_reenabling_ui():
             self.delay = delay
             self.callback = callback
 
+    class Outcome:
+        status = "cancelled"
+        run = None
+        error = None
+        error_type = None
+
+    class Task:
+        cancel_requested = False
+
+        def __init__(self):
+            self.cancel_calls = 0
+
+        def cancel(self):
+            self.cancel_calls += 1
+            self.cancel_requested = True
+            return True
+
+        def poll(self):
+            return Outcome()
+
+        def shutdown(self):
+            raise AssertionError("normal cancellation completion must not force shutdown")
+
+    task = Task()
     app = CleanroomXApp.__new__(CleanroomXApp)
     app._running = True
-    app._abandon_requested = False
-    app._run_generation = 7
-    app._queue = queue.Queue()
+    app._analysis_task = task
+    app._running_analysis_id = "analysis-a"
     app.run_button = Widget()
     app.cancel_button = Widget()
     app.input_text = Widget()
@@ -102,20 +180,18 @@ def test_abandon_waits_for_worker_exit_before_reenabling_ui():
     app.cancel_run()
 
     assert app._running is True
-    assert app._abandon_requested is True
-    assert app._run_generation == 7
+    assert task.cancel_calls == 1
     assert app.cancel_button.state == "disabled"
-    assert "waiting" in app.status_var.value.lower()
+    assert "cancelling" in app.status_var.value.lower()
 
-    app._queue.put(("success", 7, "analysis-a", object()))
     app._poll_worker()
 
     assert app._running is False
-    assert app._abandon_requested is False
+    assert app._analysis_task is None
     assert app.run_button.state == "normal"
     assert app.cancel_button.state == "disabled"
     assert app.input_text.state == "normal"
-    assert "worker finished" in app.status_var.value.lower()
+    assert "cancelled" in app.status_var.value.lower()
     assert app.root.delay == 100
 
 
@@ -162,7 +238,7 @@ def test_running_analysis_prevents_switching_to_another_analysis():
 
     assert app.analysis_tree.selection() == ("a",)
     assert app.project.active_analysis_id == "a"
-    assert "abandon" in app.status_var.value.lower()
+    assert "cancel" in app.status_var.value.lower()
 
 
 def test_unsaved_state_detects_uncommitted_editor_changes():

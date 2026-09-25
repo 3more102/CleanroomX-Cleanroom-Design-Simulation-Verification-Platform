@@ -48,6 +48,14 @@ Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stor
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
+### External-change write protection
+
+When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
+
+If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
+
+For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

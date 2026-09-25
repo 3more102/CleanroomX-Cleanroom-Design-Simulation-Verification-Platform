@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased external project write protection — 2026-09-25
+
+- Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.
+- Protects explicit project saves with SHA-256 optimistic write checks before serialization and immediately before atomic replacement.
+- Blocks silent overwrite when another CleanroomX session or external editor changes, deletes, replaces, or races to create the destination.
+- Keeps the user's in-memory work available for Save As, and prevents same-path Save As from bypassing the guard.
+- Preserves the low-latency recovery checkpoint workflow, project schema, engineering solver behavior, and the legacy unguarded persistence helper for non-GUI callers.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

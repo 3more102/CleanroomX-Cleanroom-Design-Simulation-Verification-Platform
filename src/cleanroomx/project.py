@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+import errno
 from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -33,6 +36,17 @@ class ProjectWriteConflictError(RuntimeError):
         self.current = current
         super().__init__(
             f"project file changed on disk since it was opened or last saved: {self.path}"
+        )
+
+
+class ProjectFileBusyError(RuntimeError):
+    """Raised when another cooperating CleanroomX writer owns the save lock."""
+
+    def __init__(self, path: str | Path, lock_path: str | Path):
+        self.path = Path(path)
+        self.lock_path = Path(lock_path)
+        super().__init__(
+            f"another CleanroomX process is currently saving {self.path}"
         )
 
 
@@ -284,6 +298,80 @@ def project_file_revision_matches(
     return expected.size == current.size and expected.sha256 == current.sha256
 
 
+def project_save_lock_path(path: str | Path) -> Path:
+    """Return the stable adjacent sidecar used to coordinate CleanroomX writers."""
+
+    destination = _normalized_project_path(path)
+    key = sha256(os.fsencode(os.path.normcase(str(destination)))).hexdigest()[:24]
+    return destination.parent / f".cleanroomx-save-{key}.lock"
+
+
+def _lock_descriptor_nonblocking(descriptor: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        if os.fstat(descriptor).st_size == 0:
+            os.write(descriptor, b"\0")
+            os.fsync(descriptor)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            busy_errnos = {
+                errno.EACCES,
+                errno.EAGAIN,
+                getattr(errno, "EDEADLK", -1),
+            }
+            if exc.errno in busy_errnos:
+                raise BlockingIOError(exc.errno, str(exc)) from exc
+            raise
+        return
+
+    import fcntl
+
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if isinstance(exc, BlockingIOError) or exc.errno in {
+            errno.EACCES,
+            errno.EAGAIN,
+        }:
+            raise BlockingIOError(exc.errno, str(exc)) from exc
+        raise
+
+
+@contextmanager
+def project_save_lock(path: str | Path) -> Iterator[Path]:
+    """Acquire the non-blocking advisory save lock for one project destination.
+
+    The sidecar intentionally persists after release. Deleting a lock file can
+    split cooperating writers across different inodes while one process still
+    owns the old lock. Closing the descriptor releases the OS lock automatically,
+    including when a process exits unexpectedly.
+    """
+
+    destination = _normalized_project_path(path)
+    lock_path = project_save_lock_path(destination)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    flags = os.O_RDWR | os.O_CREAT
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+
+    descriptor = os.open(lock_path, flags, 0o666)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError(f"project save lock is not a regular file: {lock_path}")
+        try:
+            _lock_descriptor_nonblocking(descriptor)
+        except BlockingIOError as exc:
+            raise ProjectFileBusyError(destination, lock_path) from exc
+        yield lock_path
+    finally:
+        os.close(descriptor)
+
+
 def load_project_document_with_revision(
     path: str | Path,
     *,
@@ -356,7 +444,8 @@ def save_project_document_guarded(
     *,
     expected_revision: ProjectFileRevision,
 ) -> tuple[Path, ProjectFileRevision]:
-    """Save only while the destination still matches the expected content revision."""
+    """Save while holding the cooperative lock and matching the expected revision."""
+
     destination = _normalized_project_path(path)
 
     def assert_unchanged() -> None:
@@ -364,11 +453,12 @@ def save_project_document_guarded(
         if not project_file_revision_matches(expected_revision, current):
             raise ProjectWriteConflictError(destination, expected_revision, current)
 
-    assert_unchanged()
-    text = _project_document_text(project)
-    saved_path = _atomic_write_text(
-        destination,
-        text,
-        before_replace=assert_unchanged,
-    )
-    return saved_path, capture_project_file_revision(saved_path)
+    with project_save_lock(destination):
+        assert_unchanged()
+        text = _project_document_text(project)
+        saved_path = _atomic_write_text(
+            destination,
+            text,
+            before_replace=assert_unchanged,
+        )
+        return saved_path, capture_project_file_revision(saved_path)

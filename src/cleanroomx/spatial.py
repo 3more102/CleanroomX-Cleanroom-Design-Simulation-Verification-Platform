@@ -1157,12 +1157,7 @@ def pressure_overlay_state(
                     if math.isfinite(limit):
                         target_value = limit
 
-        if pressure_value is None and target is not None:
-            configured = _geometry_number(target.get("observed_pressure_pa"))
-            if math.isfinite(configured):
-                pressure_value = configured
-                source = "configured"
-                status = "configured"
+        if target is not None:
             target_pressure = _geometry_number(target.get("min_pressure_pa"))
             if math.isfinite(target_pressure):
                 target_value = target_pressure
@@ -1173,6 +1168,13 @@ def pressure_overlay_state(
                 pressure_value = spatial
                 source = "spatial"
                 status = "spatial"
+
+        if pressure_value is None and target is not None:
+            configured = _geometry_number(target.get("observed_pressure_pa"))
+            if math.isfinite(configured):
+                pressure_value = configured
+                source = "configured"
+                status = "configured"
 
         evidence.append(
             {
@@ -1941,7 +1943,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay = pressure_overlay_state(
             self.layout,
             analysis,
-            self._result_getter(),
+            getattr(self, "_result_getter", lambda: None)(),
         )
         pressure_by_room = {
             item["room_id"]: item.get("pressure_pa") for item in overlay["rooms"]
@@ -2050,7 +2052,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay = pressure_overlay_state(
             self.layout,
             self._analysis_getter(),
-            self._result_getter(),
+            getattr(self, "_result_getter", lambda: None)(),
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
@@ -2280,7 +2282,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         overlay = pressure_overlay_state(
             self.layout,
             self._analysis_getter(),
-            self._result_getter(),
+            getattr(self, "_result_getter", lambda: None)(),
         )
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()

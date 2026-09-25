@@ -31,6 +31,7 @@ from .application import (
 )
 from .project import (
     AnalysisDocument,
+    AtomicWriteDurabilityError,
     ProjectDocument,
     ProjectWriteConflictError,
     atomic_write_text,
@@ -1073,6 +1074,29 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def _report_save_durability_warning(
+        self,
+        error: AtomicWriteDurabilityError,
+        *,
+        adopt_revision: bool,
+    ) -> None:
+        if adopt_revision:
+            self._project_file_revision = error.current_revision
+        self.status_var.set(
+            f"Save durability uncertain for {error.path.name}; autosave retained. Retry save."
+        )
+        messagebox.showwarning(
+            "Save durability uncertain",
+            (
+                f"CleanroomX verified the new bytes in {error.path.name}, but could "
+                "not confirm that the directory update is durable against an immediate "
+                "crash or power loss.\n\n"
+                "Your in-memory work and recovery data are retained. Retry the save "
+                "before closing CleanroomX."
+            ),
+            parent=self.root,
+        )
+
     def save_project(self) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -1097,6 +1121,9 @@ class CleanroomXApp:
             )
         except ProjectWriteConflictError:
             self._report_external_save_conflict(self.project_path)
+            return
+        except AtomicWriteDurabilityError as exc:
+            self._report_save_durability_warning(exc, adopt_revision=True)
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
@@ -1181,6 +1208,9 @@ class CleanroomXApp:
             )
         except ProjectWriteConflictError:
             self._report_external_save_conflict(destination)
+            return
+        except AtomicWriteDurabilityError as exc:
+            self._report_save_durability_warning(exc, adopt_revision=False)
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)

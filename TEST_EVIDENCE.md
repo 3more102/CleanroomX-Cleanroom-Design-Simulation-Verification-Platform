@@ -34,6 +34,16 @@ The final v0.102.1 tree is composed from CI-green spatial closures plus a CI-gre
   - complete suite: **1003 passed** on Python 3.11, 3.12, and 3.13
   - Windows PowerShell/CMD launcher smoke: **success**
   - Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+- PR **#479 — Fix v0.102.1 autosave completion race on current main**
+  - exact tested head: `4a802f43be7bc891e2c4de90b631ddea7c1fa9e4`
+  - PR CI **#1565** / id `36184210616`: **success**
+  - merged main commit: `54fc239853cf4a2ab92b7686169e07acab34b8dd`
+  - application/desktop gate: **292 passed**
+  - Release 2 consolidation gate: **132 passed**
+  - complete suite: **1002 passed** on Python 3.11, 3.12, and 3.13
+  - Windows launcher smoke: **success**
+  - Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+  - deterministically covers the `Future.done()`-before-callback ownership race and requires no active/pending autosave work before idle is reported.
 
 Those successful CI jobs exercise the repository CI workflow, including the complete Python 3.11/3.12/3.13 suite, clean-wheel installation, representative CLI checks, Windows checkout launchers, and the Python 3.13 performance plus installed Tk/Xvfb GUI smoke. The immutable v0.102.1 publisher additionally refuses to tag any successful CI SHA that is no longer the current `main` commit.
 

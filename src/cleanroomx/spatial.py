@@ -15,6 +15,14 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_mapping import (
+    SpatialMappingError,
+    engineering_sync_status,
+    pressure_relationships,
+    pull_analysis_to_layout,
+    push_layout_to_analysis,
+)
+from .spatial_transform import IsometricProjector3D, ViewTransform2D
 
 
 class SpatialSyncError(ValueError):
@@ -97,9 +105,46 @@ def normalize_layout(value: Any) -> dict:
                 "length_m": _positive(raw.get("length_m"), 4.0),
                 "width_m": _positive(raw.get("width_m"), 4.0),
                 "height_m": _positive(raw.get("height_m"), 3.0),
+                "elevation_m": _finite_number(raw.get("elevation_m"), 0.0),
             }
-            if raw.get("pressure_pa") is not None:
-                room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+            for key in (
+                "pressure_pa",
+                "pressure_target_pa",
+                "temperature_target_c",
+                "humidity_target_percent",
+            ):
+                if raw.get(key) is not None:
+                    room[key] = _finite_number(raw.get(key), 0.0)
+            for key in (
+                "classification",
+                "airflow_ref",
+                "engineering_ref",
+                "engineering_analysis_id",
+                "notes",
+            ):
+                if raw.get(key) is not None:
+                    text = str(raw.get(key)).strip()
+                    if text:
+                        room[key] = text
+            if isinstance(raw.get("metadata"), dict):
+                room["metadata"] = copy.deepcopy(raw["metadata"])
+            if isinstance(raw.get("engineering_snapshot"), dict):
+                snapshot = raw["engineering_snapshot"]
+                analysis_id = str(snapshot.get("analysis_id") or "").strip()
+                room_ref = str(snapshot.get("room_ref") or "").strip()
+                if analysis_id and room_ref:
+                    normalized_snapshot = {
+                        "analysis_id": analysis_id,
+                        "room_ref": room_ref,
+                        "length_m": _positive(snapshot.get("length_m"), room["length_m"]),
+                        "width_m": _positive(snapshot.get("width_m"), room["width_m"]),
+                        "height_m": _positive(snapshot.get("height_m"), room["height_m"]),
+                    }
+                    if snapshot.get("observed_pressure_pa") is not None:
+                        normalized_snapshot["observed_pressure_pa"] = _finite_number(
+                            snapshot.get("observed_pressure_pa"), 0.0
+                        )
+                    room["engineering_snapshot"] = normalized_snapshot
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -121,17 +166,25 @@ def normalize_layout(value: Any) -> dict:
             room_id = raw.get("room_id")
             if room_id is not None:
                 room_id = str(room_id).strip() or None
-            devices.append(
-                {
-                    "id": device_id,
-                    "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": room_id,
-                    "x_m": _finite_number(raw.get("x_m"), 0.0),
-                    "y_m": _finite_number(raw.get("y_m"), 0.0),
-                    "z_m": _finite_number(raw.get("z_m"), 0.0),
-                }
-            )
+            device = {
+                "id": device_id,
+                "type": device_type,
+                "name": str(raw.get("name") or device_type.upper()),
+                "room_id": room_id,
+                "x_m": _finite_number(raw.get("x_m"), 0.0),
+                "y_m": _finite_number(raw.get("y_m"), 0.0),
+                "z_m": _finite_number(raw.get("z_m"), 0.0),
+            }
+            for key in ("width_m", "height_m"):
+                if raw.get(key) is not None:
+                    device[key] = _positive(raw.get(key), 1.0)
+            if raw.get("orientation_deg") is not None:
+                device["orientation_deg"] = _finite_number(
+                    raw.get("orientation_deg"), 0.0
+                )
+            if isinstance(raw.get("metadata"), dict):
+                device["metadata"] = copy.deepcopy(raw["metadata"])
+            devices.append(device)
     result["devices"] = devices
 
     view = source.get("view", {})
@@ -182,9 +235,27 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "elevation_m": 0.0,
+            "engineering_ref": name,
         }
+        analysis_id = str(getattr(analysis, "id", "") or "").strip()
+        if analysis_id:
+            room["engineering_analysis_id"] = analysis_id
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+        if analysis_id:
+            room["engineering_snapshot"] = {
+                "analysis_id": analysis_id,
+                "room_ref": name,
+                "length_m": length,
+                "width_m": width,
+                "height_m": height,
+                **(
+                    {"observed_pressure_pa": room["pressure_pa"]}
+                    if "pressure_pa" in room
+                    else {}
+                ),
+            }
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     return layout
@@ -249,48 +320,23 @@ def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
 
 
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+    """Backward-compatible explicit geometry -> engineering synchronization."""
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
-    rooms = normalize_layout(layout)["rooms"]
-    if not rooms:
-        return False
+    try:
+        return push_layout_to_analysis(layout, analysis)
+    except SpatialMappingError as exc:
+        raise SpatialSyncError(str(exc)) from exc
 
-    changed = False
-    if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
-        for key in ("name", "length_m", "width_m", "height_m"):
-            value = source[key]
-            if analysis.input.get(key) != value:
-                analysis.input[key] = value
-                changed = True
-        if "observed_pressure_pa" in analysis.input and "pressure_pa" in source:
-            if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
-                analysis.input["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-        return changed
 
-    if getattr(analysis, "kind", "") != "project_verification":
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicit engineering -> geometry synchronization preserving solver provenance."""
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
-    raw_rooms = analysis.input.get("rooms")
-    if not isinstance(raw_rooms, list):
-        return False
-
-    _require_unique_sync_names(rooms, source="the spatial layout")
-    _require_unique_sync_names(raw_rooms, source="the active analysis")
-    by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
-    for source in rooms:
-        target = by_name.get(source["name"])
-        if target is None:
-            continue
-        for key in ("length_m", "width_m", "height_m"):
-            if target.get(key) != source[key]:
-                target[key] = source[key]
-                changed = True
-        if "observed_pressure_pa" in target and "pressure_pa" in source:
-            if target.get("observed_pressure_pa") != source["pressure_pa"]:
-                target["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-    return changed
+    try:
+        return pull_analysis_to_layout(layout, analysis)
+    except SpatialMappingError as exc:
+        raise SpatialSyncError(str(exc)) from exc
 
 
 def _room_overlap_records(
@@ -374,6 +420,9 @@ def _spatial_validation_key(layout: dict) -> tuple:
                 room.get("length_m"),
                 room.get("width_m"),
                 room.get("height_m"),
+                room.get("elevation_m"),
+                room.get("engineering_ref"),
+                room.get("engineering_analysis_id"),
             )
             for room in rooms
             if isinstance(room, dict)

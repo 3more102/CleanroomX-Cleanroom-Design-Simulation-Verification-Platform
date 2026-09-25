@@ -88,6 +88,11 @@ def test_strict_json_loads_rejects_non_finite_constants(constant) -> None:
         strict_json_loads(f'{{"value": {constant}}}')
 
 
+def test_strict_json_loads_rejects_float_overflow() -> None:
+    with pytest.raises(ValueError, match="outside finite float range"):
+        strict_json_loads('{"value": 1e9999}')
+
+
 @pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
 def test_strict_json_dumps_rejects_non_finite_values(value) -> None:
     with pytest.raises(ValueError, match="Out of range float values"):

@@ -169,6 +169,27 @@ def spatial_layout_summary(value: Any) -> dict:
     }
 
 
+def spatial_measurement(
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> dict[str, float]:
+    """Return deterministic CAD measurement deltas and Euclidean distance in metres."""
+    x0 = _finite_number(start[0], 0.0)
+    y0 = _finite_number(start[1], 0.0)
+    x1 = _finite_number(end[0], 0.0)
+    y1 = _finite_number(end[1], 0.0)
+    dx = x1 - x0
+    dy = y1 - y0
+    distance = math.hypot(dx, dy)
+    angle = math.degrees(math.atan2(dy, dx)) if distance > 0 else 0.0
+    return {
+        "dx_m": dx,
+        "dy_m": dy,
+        "distance_m": distance,
+        "angle_deg": angle,
+    }
+
+
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
@@ -612,6 +633,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._history = SpatialEditHistory()
         self._drag_before: dict | None = None
         self._drag_changed = False
+        self._measure_enabled = tk.BooleanVar(value=False)
+        self._measure_start: tuple[float, float] | None = None
+        self._measure_end: tuple[float, float] | None = None
+        self._measure_hover: tuple[float, float] | None = None
 
         self._build()
         self.refresh()
@@ -648,6 +673,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="left", padx=2
         )
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            toolbar,
+            text="Measure",
+            variable=self._measure_enabled,
+            command=self._toggle_measure,
+        ).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export SVG", command=self.export_svg).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export CSV", command=self.export_schedule_csv).pack(side="left", padx=2)
@@ -672,7 +703,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left")
         ttk.Label(
             scene_bar,
-            text="2D: drag to move • wheel to zoom • middle/right drag to pan    "
+            text="2D: drag to move • M measure • Esc clear • wheel to zoom • middle/right drag to pan    "
                  "3D: click to select • wheel to zoom",
         ).pack(side="right")
 
@@ -764,6 +795,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Button-5>", lambda event: self._zoom_at(1 / 1.1, event.x, event.y))
         self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
         self.canvas_2d.bind("<Key-f>", lambda event: self.fit_views())
+        self.canvas_2d.bind("<Key-m>", lambda event: self._toggle_measure_from_key())
+        self.canvas_2d.bind("<Escape>", lambda event: self.clear_measurement())
         self.canvas_3d.bind("<MouseWheel>", self._on_wheel_3d)
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
@@ -788,6 +821,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
         self._history.clear()
+        self._measure_start = None
+        self._measure_end = None
+        self._measure_hover = None
         self._update_history_controls()
         if self.selected and not self._selected_object():
             self.selected = None
@@ -796,6 +832,35 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _snapshot_layout(self) -> dict:
         return copy.deepcopy(normalize_layout(self.layout))
+
+    def _toggle_measure_from_key(self) -> None:
+        self._measure_enabled.set(not self._measure_enabled.get())
+        self._toggle_measure()
+
+    def _toggle_measure(self) -> None:
+        self._measure_start = None
+        self._measure_end = None
+        self._measure_hover = None
+        if self._measure_enabled.get():
+            self._status_setter("Measure mode: click two points in the 2D plan")
+        else:
+            self._status_setter("Measure mode off")
+        self._draw_2d()
+
+    def clear_measurement(self) -> None:
+        self._measure_start = None
+        self._measure_end = None
+        self._measure_hover = None
+        self._status_setter(
+            "Measurement cleared" if self._measure_enabled.get() else "Ready"
+        )
+        self._draw_2d()
+
+    def _measurement_point(self, x: float, y: float) -> tuple[float, float]:
+        if not self._snap_to_grid.get():
+            return (x, y)
+        grid = max(0.1, self.layout["grid_m"])
+        return (round(x / grid) * grid, round(y / grid) * grid)
 
     def _update_history_controls(self) -> None:
         if hasattr(self, "_undo_button"):
@@ -1200,6 +1265,46 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"device:{device['id']}", "device"),
             )
 
+        measure_end = self._measure_end or self._measure_hover
+        if self._measure_start is not None and measure_end is not None:
+            start_px = self._world_to_canvas(*self._measure_start)
+            end_px = self._world_to_canvas(*measure_end)
+            summary = spatial_measurement(self._measure_start, measure_end)
+            preview = self._measure_end is None
+            canvas.create_line(
+                *start_px,
+                *end_px,
+                fill="#7c3aed",
+                width=2,
+                dash=(5, 3) if preview else (),
+                arrow=tk.BOTH,
+                tags=("measurement",),
+            )
+            for px, py in (start_px, end_px):
+                canvas.create_oval(
+                    px - 4,
+                    py - 4,
+                    px + 4,
+                    py + 4,
+                    fill="#ffffff",
+                    outline="#7c3aed",
+                    width=2,
+                    tags=("measurement",),
+                )
+            mx = (start_px[0] + end_px[0]) / 2.0
+            my = (start_px[1] + end_px[1]) / 2.0
+            canvas.create_text(
+                mx,
+                my - 12,
+                text=(
+                    f"{summary['distance_m']:.3f} m   "
+                    f"ΔX {summary['dx_m']:+.3f}   ΔY {summary['dy_m']:+.3f}"
+                ),
+                fill="#5b21b6",
+                font=("TkDefaultFont", 9, "bold"),
+                tags=("measurement",),
+            )
+
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
                 w / 2,
@@ -1335,6 +1440,29 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_down(self, event: tk.Event) -> None:
         self.canvas_2d.focus_set()
+        if self._measure_enabled.get():
+            world = self._canvas_to_world(event.x, event.y)
+            point = self._measurement_point(*world)
+            if self._measure_start is None or self._measure_end is not None:
+                self._measure_start = point
+                self._measure_end = None
+                self._measure_hover = point
+                self._status_setter(
+                    f"Measure start: x {point[0]:.3f} m, y {point[1]:.3f} m"
+                )
+            else:
+                self._measure_end = point
+                self._measure_hover = point
+                summary = spatial_measurement(self._measure_start, self._measure_end)
+                self._status_setter(
+                    "Measured "
+                    f"{summary['distance_m']:.3f} m "
+                    f"(ΔX {summary['dx_m']:+.3f} m, "
+                    f"ΔY {summary['dy_m']:+.3f} m, "
+                    f"{summary['angle_deg']:+.1f}°)"
+                )
+            self._draw_2d()
+            return
         current = self.canvas_2d.find_withtag("current")
         hit = None
         if current:
@@ -1410,6 +1538,13 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        if (
+            self._measure_enabled.get()
+            and self._measure_start is not None
+            and self._measure_end is None
+        ):
+            self._measure_hover = self._measurement_point(x, y)
+            self._draw_2d()
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

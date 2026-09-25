@@ -90,3 +90,34 @@ def test_release2_analysis_lifecycle_uses_full_unique_uuid_ids():
     removed = project.remove_analysis(first.id)
     assert removed is first
     assert project.active_analysis_id == second.id
+
+
+def test_release2_project_model_rejects_non_json_keys_and_non_finite_values():
+    import math
+    import pytest
+    from cleanroomx.project import ProjectFormatError
+
+    with pytest.raises(ProjectFormatError):
+        ProjectDocument(name="P", metadata={1: "coerced"})
+    with pytest.raises(ProjectFormatError):
+        AnalysisDocument(
+            id="a",
+            name="A",
+            kind="room_verification",
+            input={"value": math.inf},
+        )
+
+
+def test_release2_strict_loader_rejects_duplicate_object_keys(tmp_path):
+    import pytest
+    from cleanroomx.project import ProjectFormatError, load_project_document
+
+    path = tmp_path / "dup.cleanroomx.json"
+    path.write_text(
+        '{"schema":"cleanroomx.project","schema_version":1,'
+        '"project":{"name":"P","name":"Q","description":"","metadata":{}},'
+        '"analyses":[],"active_analysis_id":null}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ProjectFormatError):
+        load_project_document(path)

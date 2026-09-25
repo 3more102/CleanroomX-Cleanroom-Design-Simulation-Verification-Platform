@@ -30,25 +30,49 @@ class Value:
         self.value = value
 
 
-def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
+def test_stable_load_retries_when_file_changes_during_snapshot_read(
+    tmp_path, monkeypatch
+):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
+    original_read_bytes = type(path).read_bytes
     calls = {"count": 0}
 
-    def changing_load(source):
-        project = original_load(source)
-        if calls["count"] == 0:
+    def changing_read_bytes(self):
+        payload = original_read_bytes(self)
+        if self == path and calls["count"] == 0:
             save_project_document(path, ProjectDocument(name="Second"))
-        calls["count"] += 1
-        return project
+        if self == path:
+            calls["count"] += 1
+        return payload
 
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+    monkeypatch.setattr(type(path), "read_bytes", changing_read_bytes)
 
     project, revision = load_project_document_with_revision(path)
 
     assert calls["count"] == 2
     assert project.name == "Second"
+    assert revision == capture_project_file_revision(path)
+
+
+def test_stable_load_revision_cannot_describe_different_bytes_than_parsed(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="First"))
+    original_load = project_module.load_project_document
+
+    def transient_separate_load(source):
+        save_project_document(path, ProjectDocument(name="Transient"))
+        project = original_load(source)
+        save_project_document(path, ProjectDocument(name="First"))
+        return project
+
+    monkeypatch.setattr(project_module, "load_project_document", transient_separate_load)
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert project.name == "First"
     assert revision == capture_project_file_revision(path)
 
 

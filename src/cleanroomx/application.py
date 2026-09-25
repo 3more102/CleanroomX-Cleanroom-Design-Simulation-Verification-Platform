@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass
 from importlib import import_module
 import copy
 import hashlib
@@ -20,6 +20,21 @@ from .plugins import (
 
 
 BindingTarget = tuple[str, str] | Callable[..., Any]
+
+_RUN_BUNDLE_SCHEMA = "cleanroomx.analysis-run"
+_RUN_BUNDLE_SCHEMA_VERSION = 1
+_RUN_BUNDLE_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+
+
+def _canonical_json_sha256(payload: dict) -> str:
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 class _FrozenDict(dict):
@@ -129,9 +144,11 @@ class AnalysisRun:
     markdown: str
     diagnostics: dict
     plot: dict | None
+    input_snapshot: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         memo: dict[int, Any] = {}
+        object.__setattr__(self, "input_snapshot", _freeze_json_snapshot(self.input_snapshot, memo))
         object.__setattr__(self, "result", _freeze_json_snapshot(self.result, memo))
         object.__setattr__(self, "diagnostics", _freeze_json_snapshot(self.diagnostics, memo))
         object.__setattr__(
@@ -141,15 +158,125 @@ class AnalysisRun:
         )
 
     def to_dict(self) -> dict:
-        return {
+        document = {
+            "schema": _RUN_BUNDLE_SCHEMA,
+            "schema_version": _RUN_BUNDLE_SCHEMA_VERSION,
+            "cleanroomx_version": __version__,
             "kind": self.kind,
             "title": self.title,
             "status": self.status,
+            "input_snapshot": _thaw_json_snapshot(self.input_snapshot),
             "result": _thaw_json_snapshot(self.result),
             "markdown": self.markdown,
             "diagnostics": _thaw_json_snapshot(self.diagnostics),
             "plot": None if self.plot is None else _thaw_json_snapshot(self.plot),
         }
+        document["integrity"] = {
+            "algorithm": "sha256",
+            "canonicalization": _RUN_BUNDLE_CANONICALIZATION,
+            "sha256": _canonical_json_sha256(document),
+        }
+        return document
+
+
+def verify_analysis_run_bundle(document: dict) -> dict:
+    """Validate a versioned exported run bundle without re-running the solver."""
+    if not isinstance(document, dict):
+        raise ValueError("run bundle must be a JSON object")
+    if document.get("schema") != _RUN_BUNDLE_SCHEMA:
+        raise ValueError(f"unsupported run bundle schema: {document.get('schema')!r}")
+    if document.get("schema_version") != _RUN_BUNDLE_SCHEMA_VERSION:
+        raise ValueError(
+            f"unsupported run bundle schema version: {document.get('schema_version')!r}"
+        )
+
+    expected_keys = {
+        "schema", "schema_version", "cleanroomx_version", "kind", "title",
+        "status", "input_snapshot", "result", "markdown", "diagnostics",
+        "plot", "integrity",
+    }
+    missing_keys = expected_keys - set(document)
+    unknown_keys = set(document) - expected_keys
+    if missing_keys:
+        raise ValueError(
+            "run bundle is missing required field(s): " + ", ".join(sorted(missing_keys))
+        )
+    if unknown_keys:
+        raise ValueError(
+            "run bundle contains unsupported field(s): " + ", ".join(sorted(unknown_keys))
+        )
+
+    bundle_version = document.get("cleanroomx_version")
+    if not isinstance(bundle_version, str) or not bundle_version:
+        raise ValueError("run bundle cleanroomx_version must be a non-empty string")
+    integrity = document.get("integrity")
+    if not isinstance(integrity, dict):
+        raise ValueError("run bundle integrity record is missing")
+    if integrity.get("algorithm") != "sha256":
+        raise ValueError("run bundle integrity algorithm must be sha256")
+    if integrity.get("canonicalization") != _RUN_BUNDLE_CANONICALIZATION:
+        raise ValueError("unsupported run bundle canonicalization")
+    expected_digest = integrity.get("sha256")
+    if not isinstance(expected_digest, str) or len(expected_digest) != 64:
+        raise ValueError("run bundle integrity sha256 must be a 64-character digest")
+
+    unsigned = copy.deepcopy(document)
+    unsigned.pop("integrity", None)
+    actual_digest = _canonical_json_sha256(unsigned)
+    if actual_digest != expected_digest:
+        raise ValueError("run bundle integrity check failed: content has changed")
+
+    kind = document.get("kind")
+    if not isinstance(kind, str) or not kind:
+        raise ValueError("run bundle analysis kind must be a non-empty string")
+    if not isinstance(document.get("title"), str) or not document["title"]:
+        raise ValueError("run bundle title must be a non-empty string")
+    if not isinstance(document.get("status"), str) or not document["status"]:
+        raise ValueError("run bundle status must be a non-empty string")
+    if not isinstance(document.get("result"), dict):
+        raise ValueError("run bundle result must be a JSON object")
+    if not isinstance(document.get("markdown"), str):
+        raise ValueError("run bundle markdown must be a string")
+    if document.get("plot") is not None and not isinstance(document["plot"], dict):
+        raise ValueError("run bundle plot must be a JSON object or null")
+    input_snapshot = document.get("input_snapshot")
+    if not isinstance(input_snapshot, dict):
+        raise ValueError("run bundle input_snapshot must be a JSON object")
+
+    diagnostics = document.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        raise ValueError("run bundle diagnostics must be a JSON object")
+    provenance = diagnostics.get("application_execution_provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("run bundle execution provenance is missing")
+    if provenance.get("analysis_kind") != kind:
+        raise ValueError("run bundle analysis kind disagrees with execution provenance")
+    if provenance.get("cleanroomx_version") != bundle_version:
+        raise ValueError("run bundle version disagrees with execution provenance")
+    if provenance.get("input_canonicalization") != _APPLICATION_INPUT_CANONICALIZATION:
+        raise ValueError("unsupported application input canonicalization")
+    input_sha256 = _canonical_input_sha256(input_snapshot)
+    if provenance.get("input_sha256") != input_sha256:
+        raise ValueError("run bundle input snapshot does not match execution provenance")
+
+    dependency_count = provenance.get("external_dependency_count")
+    dependencies = provenance.get("external_dependencies")
+    if not isinstance(dependency_count, int) or dependency_count < 0:
+        raise ValueError("run bundle external dependency count is invalid")
+    if not isinstance(dependencies, list) or len(dependencies) != dependency_count:
+        raise ValueError("run bundle external dependency manifest is inconsistent")
+
+    return {
+        "status": "ok",
+        "schema": _RUN_BUNDLE_SCHEMA,
+        "schema_version": _RUN_BUNDLE_SCHEMA_VERSION,
+        "cleanroomx_version": bundle_version,
+        "analysis_kind": kind,
+        "input_sha256": input_sha256,
+        "bundle_sha256": actual_digest,
+        "external_dependency_count": dependency_count,
+        "external_dependencies_stable": provenance.get("external_dependencies_stable"),
+    }
 
 
 class ExternalDependencySnapshotError(RuntimeError):
@@ -1374,6 +1501,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         markdown=markdown,
         diagnostics=diagnostics,
         plot=plot,
+        input_snapshot=copy.deepcopy(prepared.payload),
     )
 
 def application_info() -> dict:

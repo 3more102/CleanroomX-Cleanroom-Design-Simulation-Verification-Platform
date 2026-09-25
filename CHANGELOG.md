@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.102.1 final spatial UX closure — 2026-09-25
+
+- Makes spatial pressure overlays consume the active mapped engineering room's current `observed_pressure_pa` when available, with the persisted spatial pressure retained only as an explicit fallback.
+- Evaluates configured pressure-cascade relationships as pass, warning, or unavailable from actual mapped pressure evidence; unavailable data is displayed without inference.
+- Completes navigation with true 3D fit-to-model, explicit 2D reset, and Shift-drag 3D orbit while retaining rotate/tilt buttons, pan, zoom, selection, and camera reset.
+- Adds focused regressions for pressure-source precedence, pressure-cascade status, 3D fit, 2D reset, and orbit behavior; solver equations, engineering acceptance criteria, and project schema remain unchanged.
+
+
 ## v0.102.0 synchronized 2D/3D spatial closure — 2026-09-25
 
 - Ships the completed synchronized **Design 2D + 3D** workspace from one canonical spatial model: floor metadata, room elevations/classification/stable analysis links, doors and transfer openings, device placement, resize/drag/nudge, view toggles, deterministic metrics, and explicit pressure-cascade relationships.

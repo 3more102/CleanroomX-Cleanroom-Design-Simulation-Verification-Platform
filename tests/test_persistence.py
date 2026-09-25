@@ -170,3 +170,38 @@ def test_atomic_write_rejects_committed_content_corruption(tmp_path, monkeypatch
 
     assert exc_info.value.committed is True
     assert target.read_bytes() == b"corrupted"
+
+
+def test_atomic_write_generated_publishes_incremental_file(tmp_path):
+    from cleanroomx.persistence import atomic_write_generated
+
+    target = tmp_path / "bundle.bin"
+
+    def generate(path):
+        with path.open("wb") as handle:
+            handle.write(b"header")
+            handle.write(b"-payload")
+
+    result = atomic_write_generated(target, generate)
+
+    assert result == target
+    assert target.read_bytes() == b"header-payload"
+
+
+def test_atomic_write_generated_pre_replace_failure_preserves_destination(tmp_path):
+    from cleanroomx.persistence import atomic_write_generated
+
+    target = tmp_path / "bundle.bin"
+    target.write_bytes(b"old")
+
+    def generate(path):
+        path.write_bytes(b"new")
+
+    def fail():
+        raise RuntimeError("conflict")
+
+    with pytest.raises(RuntimeError, match="conflict"):
+        atomic_write_generated(target, generate, before_replace=fail)
+
+    assert target.read_bytes() == b"old"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []

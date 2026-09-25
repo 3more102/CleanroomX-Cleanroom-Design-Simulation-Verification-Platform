@@ -17,6 +17,7 @@ from .application import (
     _resolve_relative,
 )
 from .persistence import (
+    _ensure_directory_durable,
     _fsync_directory,
     atomic_write_generated,
     stable_file_sha256,
@@ -627,7 +628,7 @@ def extract_project_bundle(
             raise ProjectBundleError(
                 f"extraction destination must be empty: {target}"
             )
-    target.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory_durable(target.parent)
     stage = Path(
         tempfile.mkdtemp(
             prefix=f".{target.name or 'cleanroomx-bundle'}.",

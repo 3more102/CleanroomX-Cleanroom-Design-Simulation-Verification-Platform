@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+import errno
 from hashlib import sha256
 import json
 import os
@@ -17,6 +19,17 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectFileBusyError(RuntimeError):
+    """Raised when another CleanroomX process owns the guarded-save lock."""
+
+    def __init__(self, path: str | Path, lock_path: str | Path):
+        self.path = Path(path)
+        self.lock_path = Path(lock_path)
+        super().__init__(
+            f"project is currently being saved by another CleanroomX process: {self.path}"
+        )
 
 
 class ProjectWriteConflictError(RuntimeError):
@@ -302,6 +315,79 @@ def load_project_document_with_revision(
     raise OSError(f"project file changed repeatedly while opening: {source}")
 
 
+def _project_save_lock_path(path: str | Path) -> Path:
+    destination = _normalized_project_path(path)
+    return destination.with_name(f".{destination.name}.cleanroomx.lock")
+
+
+def _is_lock_contention(exc: OSError) -> bool:
+    deadlock_errno = getattr(errno, "EDEADLK", errno.EACCES)
+    return exc.errno in {errno.EACCES, errno.EAGAIN, deadlock_errno} or getattr(
+        exc, "winerror", None
+    ) in {32, 33, 36}
+
+
+def _acquire_project_save_lock(handle, destination: Path, lock_path: Path) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"\0")
+            handle.flush()
+        handle.seek(0)
+        try:
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if _is_lock_contention(exc):
+                raise ProjectFileBusyError(destination, lock_path) from exc
+            raise
+        return
+
+    import fcntl
+
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if _is_lock_contention(exc):
+            raise ProjectFileBusyError(destination, lock_path) from exc
+        raise
+
+
+def _release_project_save_lock(handle) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _project_save_lock(path: str | Path):
+    """Hold a non-blocking cross-process lock for one guarded project save."""
+    destination = _normalized_project_path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = _project_save_lock_path(destination)
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    handle = os.fdopen(fd, "r+b", buffering=0)
+    locked = False
+    try:
+        _acquire_project_save_lock(handle, destination, lock_path)
+        locked = True
+        yield
+    finally:
+        try:
+            if locked:
+                _release_project_save_lock(handle)
+        finally:
+            handle.close()
+
+
 def _project_document_text(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)
@@ -356,7 +442,7 @@ def save_project_document_guarded(
     *,
     expected_revision: ProjectFileRevision,
 ) -> tuple[Path, ProjectFileRevision]:
-    """Save only while the destination still matches the expected content revision."""
+    """Save only while the expected revision remains current and the save lock is held."""
     destination = _normalized_project_path(path)
 
     def assert_unchanged() -> None:
@@ -366,9 +452,11 @@ def save_project_document_guarded(
 
     assert_unchanged()
     text = _project_document_text(project)
-    saved_path = _atomic_write_text(
-        destination,
-        text,
-        before_replace=assert_unchanged,
-    )
-    return saved_path, capture_project_file_revision(saved_path)
+    with _project_save_lock(destination):
+        assert_unchanged()
+        saved_path = _atomic_write_text(
+            destination,
+            text,
+            before_replace=assert_unchanged,
+        )
+        return saved_path, capture_project_file_revision(saved_path)

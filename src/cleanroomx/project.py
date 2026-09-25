@@ -9,7 +9,7 @@ from typing import Any
 
 from . import __version__
 from .application import ANALYSIS_SPECS
-from .persistence import atomic_write_text
+from .persistence import AtomicWriteDurabilityError, atomic_write_text
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -33,6 +33,22 @@ class ProjectWriteConflictError(RuntimeError):
         self.current = current
         super().__init__(
             f"project file changed on disk since it was opened or last saved: {self.path}"
+        )
+
+
+class ProjectSaveDurabilityError(RuntimeError):
+    """Raised when project bytes were committed but crash durability is uncertain."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        committed_revision: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.committed_revision = committed_revision
+        super().__init__(
+            "project bytes were written and verified, but filesystem directory "
+            f"durability could not be confirmed: {self.path}"
         )
 
 
@@ -331,9 +347,24 @@ def save_project_document_guarded(
 
     assert_unchanged()
     text = _project_document_text(project)
-    saved_path = atomic_write_text(
-        destination,
-        text,
-        before_replace=assert_unchanged,
-    )
+    payload = text.encode("utf-8")
+    expected_sha256 = sha256(payload).hexdigest()
+    try:
+        saved_path = atomic_write_text(
+            destination,
+            text,
+            before_replace=assert_unchanged,
+        )
+    except AtomicWriteDurabilityError as exc:
+        committed_revision = capture_project_file_revision(destination)
+        if (
+            committed_revision.exists
+            and committed_revision.size == len(payload)
+            and committed_revision.sha256 == expected_sha256
+        ):
+            raise ProjectSaveDurabilityError(
+                destination,
+                committed_revision,
+            ) from exc
+        raise
     return saved_path, capture_project_file_revision(saved_path)

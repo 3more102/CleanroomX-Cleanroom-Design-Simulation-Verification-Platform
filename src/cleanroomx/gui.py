@@ -34,6 +34,7 @@ from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectSaveDurabilityError,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
@@ -1108,6 +1109,22 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def _report_save_durability_uncertain(self, path: Path) -> None:
+        self.status_var.set(
+            f"Save durability not confirmed for {path.name}; recovery state retained."
+        )
+        messagebox.showwarning(
+            "Save durability not confirmed",
+            (
+                f"CleanroomX wrote and verified the new bytes for {path.name}, but "
+                "the filesystem could not confirm that the directory update is "
+                "crash-durable.\n\n"
+                "This window remains marked as unsaved and recovery data is retained. "
+                "Retry Save; if the warning continues, save to another location."
+            ),
+            parent=self.root,
+        )
+
     def save_project(self) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -1130,6 +1147,10 @@ class CleanroomXApp:
                 self.project,
                 expected_revision=expected_revision,
             )
+        except ProjectSaveDurabilityError as exc:
+            self._project_file_revision = exc.committed_revision
+            self._report_save_durability_uncertain(self.project_path)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(self.project_path)
             return
@@ -1196,12 +1217,12 @@ class CleanroomXApp:
                     target_base=destination.parent,
                 )
 
+        same_as_open_project = (
+            self.project_path is not None
+            and destination.resolve(strict=False)
+            == self.project_path.resolve(strict=False)
+        )
         try:
-            same_as_open_project = (
-                self.project_path is not None
-                and destination.resolve(strict=False)
-                == self.project_path.resolve(strict=False)
-            )
             expected_revision = (
                 getattr(self, "_project_file_revision", None)
                 if same_as_open_project
@@ -1214,6 +1235,11 @@ class CleanroomXApp:
                 candidate,
                 expected_revision=expected_revision,
             )
+        except ProjectSaveDurabilityError as exc:
+            if same_as_open_project:
+                self._project_file_revision = exc.committed_revision
+            self._report_save_durability_uncertain(destination)
+            return
         except ProjectWriteConflictError:
             self._report_external_save_conflict(destination)
             return

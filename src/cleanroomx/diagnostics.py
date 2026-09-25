@@ -88,7 +88,21 @@ def _json_safe(value: Any, *, depth: int = 0) -> Any:
             _json_safe(item, depth=depth + 1)
             for item in sorted(value, key=repr)
         ]
-    return repr(value)
+    value_type = type(value)
+    return f"<{value_type.__module__}.{value_type.__qualname__}>"
+
+
+class _PrivateRotatingFileHandler(RotatingFileHandler):
+    """Rotating handler that reapplies owner-only permissions on POSIX."""
+
+    def _open(self):
+        stream = super()._open()
+        if os.name != "nt":
+            try:
+                Path(self.baseFilename).chmod(0o600)
+            except OSError:
+                pass
+        return stream
 
 
 class _JsonLineFormatter(logging.Formatter):
@@ -154,7 +168,7 @@ def configure_local_diagnostics(
             logger.removeHandler(handler)
             handler.close()
 
-    handler = RotatingFileHandler(
+    handler = _PrivateRotatingFileHandler(
         log_path,
         maxBytes=max_bytes,
         backupCount=backup_count,

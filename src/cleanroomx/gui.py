@@ -1056,6 +1056,19 @@ class CleanroomXApp:
         dirty = " *" if has_unsaved_changes else ""
         title_method(f"CleanroomX {__version__}{suffix}{dirty}")
 
+    def _report_save_conflict(self) -> None:
+        self.status_var.set("Save conflict — disk file preserved")
+        messagebox.showerror(
+            "Save conflict",
+            (
+                "The project file changed on disk after it was opened or last saved. "
+                "CleanroomX did not overwrite the on-disk version.\n\n"
+                "Use Save Project As to preserve your local work in a separate file, "
+                "or reopen the project to use the on-disk version."
+            ),
+            parent=self.root,
+        )
+
     def save_project(self) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -1075,17 +1088,7 @@ class CleanroomXApp:
                 expected_revision=getattr(self, "_project_disk_revision", None),
             )
         except ProjectSaveConflictError:
-            self.status_var.set("Save conflict — disk file preserved")
-            messagebox.showerror(
-                "Save conflict",
-                (
-                    "The project file changed on disk after it was opened or last saved. "
-                    "CleanroomX did not overwrite the on-disk version.\n\n"
-                    "Use Save Project As to preserve your local work in a separate file, "
-                    "or reopen the project to use the on-disk version."
-                ),
-                parent=self.root,
-            )
+            self._report_save_conflict()
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
@@ -1148,8 +1151,23 @@ class CleanroomXApp:
                     target_base=destination.parent,
                 )
 
+        expected_revision = None
+        current_path = getattr(self, "project_path", None)
+        if (
+            current_path is not None
+            and destination.resolve(strict=False) == current_path.resolve(strict=False)
+        ):
+            expected_revision = getattr(self, "_project_disk_revision", None)
+
         try:
-            saved_path = save_project_document(destination, candidate)
+            saved_path = save_project_document(
+                destination,
+                candidate,
+                expected_revision=expected_revision,
+            )
+        except ProjectSaveConflictError:
+            self._report_save_conflict()
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return

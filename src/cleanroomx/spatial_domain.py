@@ -469,3 +469,58 @@ def room_prism_vertices(
             (x0, y1, top_z),
         ),
     }
+
+
+def translated_position(
+    x_m: float,
+    y_m: float,
+    dx_m: float,
+    dy_m: float,
+    *,
+    grid_m: float | None = None,
+) -> tuple[float, float]:
+    """Translate a plan point, optionally snapping the result to a metric grid."""
+
+    values = [_finite(value) for value in (x_m, y_m, dx_m, dy_m)]
+    if any(value is None for value in values):
+        raise ValueError("translation coordinates must be finite")
+    x, y, dx, dy = (float(value) for value in values if value is not None)
+    result_x = x + dx
+    result_y = y + dy
+    if grid_m is not None:
+        grid = _finite(grid_m)
+        if grid is None or grid <= 0:
+            raise ValueError("grid_m must be a finite positive number")
+        result_x = round(result_x / grid) * grid
+        result_y = round(result_y / grid) * grid
+    return result_x, result_y
+
+
+def resized_room_dimensions(
+    room: Any,
+    pointer_x_m: float,
+    pointer_y_m: float,
+    *,
+    grid_m: float | None = None,
+    minimum_m: float = 0.1,
+) -> tuple[float, float]:
+    """Return positive room plan dimensions for a lower-right resize handle."""
+
+    if not isinstance(room, dict):
+        raise ValueError("room must be an object")
+    x = _finite(room.get("x_m"))
+    y = _finite(room.get("y_m"))
+    pointer_x = _finite(pointer_x_m)
+    pointer_y = _finite(pointer_y_m)
+    minimum = _finite(minimum_m)
+    if None in (x, y, pointer_x, pointer_y, minimum) or minimum <= 0:
+        raise ValueError("resize coordinates and minimum must be finite and valid")
+    length = max(float(minimum), float(pointer_x) - float(x))
+    width = max(float(minimum), float(pointer_y) - float(y))
+    if grid_m is not None:
+        grid = _finite(grid_m)
+        if grid is None or grid <= 0:
+            raise ValueError("grid_m must be a finite positive number")
+        length = max(float(grid), round(length / float(grid)) * float(grid))
+        width = max(float(grid), round(width / float(grid)) * float(grid))
+    return length, width

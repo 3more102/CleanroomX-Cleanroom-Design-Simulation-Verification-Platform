@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased cooperative guarded-save locking — 2026-09-25
+
+- Serializes guarded explicit project saves across CleanroomX processes with a non-blocking operating-system advisory lock on a stable adjacent sidecar file.
+- Closes the simultaneous-save time-of-check/time-of-use gap between the final SHA-256 revision check and atomic replacement for cooperating CleanroomX writers.
+- Keeps external-change revision checks before serialization, after lock acquisition, and immediately before replacement, so non-cooperating editors remain protected by the existing optimistic-content guard.
+- Reports lock contention as an actionable desktop warning without blocking the Tk event loop or modifying the project file.
+- Releases the OS lock on success and failure; the stable lock sidecar intentionally remains so competing processes never switch to different lock-file inodes.
+- Preserves project schema version 1, solver behavior, autosave/recovery behavior, and the legacy unguarded persistence helper.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

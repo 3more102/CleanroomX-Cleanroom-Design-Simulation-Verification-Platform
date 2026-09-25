@@ -949,6 +949,39 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
+    """Describe pressure rendering without inventing unavailable engineering data."""
+    normalized = normalize_layout(layout)
+    pressures = [
+        room["pressure_pa"]
+        for room in normalized["rooms"]
+        if room.get("pressure_pa") is not None
+    ]
+    minimum = min(pressures) if pressures else None
+    maximum = max(pressures) if pressures else None
+    sync = engineering_sync_status(normalized, analysis)
+    mapping_by_room = {
+        record["room_id"]: record["state"] for record in sync["rooms"]
+    }
+    rooms = []
+    for room in normalized["rooms"]:
+        available = room.get("pressure_pa") is not None
+        rooms.append(
+            {
+                "room_id": room["id"],
+                "availability": "available" if available else "unavailable",
+                "pressure_pa": room.get("pressure_pa") if available else None,
+                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
+            }
+        )
+    return {
+        "minimum_pressure_pa": minimum,
+        "maximum_pressure_pa": maximum,
+        "rooms": rooms,
+    }
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -1728,13 +1761,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        pressures = [
-            room.get("pressure_pa")
-            for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
-        ]
-        pmin = min(pressures) if pressures else None
-        pmax = max(pressures) if pressures else None
+        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
         for room in self.layout["rooms"]:
@@ -1750,7 +1778,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else ("#b45309" if room["id"] in warning_ids else "#34495e")
             )
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                overlay_by_room[room["id"]]["fill"]
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
@@ -1909,13 +1937,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        pressures = [
-            room.get("pressure_pa")
-            for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
-        ]
-        pmin = min(pressures) if pressures else None
-        pmax = max(pressures) if pressures else None
+        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -1946,7 +1969,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x0, y1, z1),
             ]
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                overlay_by_room[room["id"]]["fill"]
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )

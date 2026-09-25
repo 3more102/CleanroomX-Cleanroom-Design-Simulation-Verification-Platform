@@ -537,6 +537,9 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()
     app._running = False
+    app.project = ProjectDocument(
+        name="Import", analyses=[analysis], active_analysis_id=analysis.id
+    )
     app.project_path = project_dir / "project.cleanroomx.json"
     app.status_var = Status()
     app._current_analysis = lambda: analysis

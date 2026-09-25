@@ -1055,3 +1055,61 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+def test_completed_fresh_run_submits_durable_history_archive():
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    analysis = AnalysisDocument(
+        id="a",
+        name="Room",
+        kind="room_verification",
+        input=payload,
+    )
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id="a",
+    )
+    app._queue = queue.Queue()
+    app._queue.put(("success", 4, "a", run))
+    app._run_generation = 4
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    archived = []
+    app._render_run = lambda value: rendered.append(value)
+    app._submit_run_history_archive = (
+        lambda selected, value: archived.append((selected.id, value)) or True
+    )
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._runs_by_analysis == {"a": run}
+    assert app.last_run == run
+    assert app.last_run_analysis_id == "a"
+    assert rendered == [run]
+    assert archived == [("a", run)]
+    assert "session result only" not in app.status_var.value

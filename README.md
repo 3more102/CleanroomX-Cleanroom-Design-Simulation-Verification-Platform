@@ -30,6 +30,10 @@ CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused
 | v0.100 | execution provenance, portable path context, atomic exports, fan/system plot evidence, and consolidated installed-desktop release |
 
 
+### Unreleased session run history
+
+The desktop now keeps a bounded immutable history of accepted runs for the active project/path-context session instead of overwriting all prior evidence on every rerun. The **Run History** tab shows the analysis name at execution, result status, submitted-input SHA-256, and whether the run still matches the committed analysis input. Historical snapshots remain separate from the current-result freshness guard and can be exported explicitly with the existing run-bundle JSON shape. The history is session-only and is cleared on project/recovery replacement or Save-As path-context changes; project schema version 1 is unchanged.
+
 ### v0.100 consolidated desktop release
 
 v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves and GUI exports use same-directory atomic replacement; export failures are surfaced in the desktop UI.

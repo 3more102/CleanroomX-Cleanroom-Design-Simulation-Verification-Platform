@@ -7,7 +7,7 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -15,6 +15,14 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_mapping import (
+    SpatialMappingError,
+    engineering_sync_status,
+    pressure_relationships as mapped_pressure_relationships,
+    pull_analysis_to_layout,
+    push_layout_to_analysis,
+)
+from .spatial_transform import IsometricProjector3D, ViewTransform2D
 
 
 class SpatialSyncError(ValueError):
@@ -127,13 +135,44 @@ def normalize_layout(value: Any) -> dict:
                     raw.get("floor_elevation_m"), floor_elevation
                 ),
             }
-            if raw.get("pressure_pa") is not None:
-                room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            for field in ("classification", "analysis_room_name"):
+            for field in (
+                "pressure_pa",
+                "pressure_target_pa",
+                "temperature_target_c",
+                "humidity_target_percent",
+            ):
+                if raw.get(field) is not None:
+                    room[field] = _finite_number(raw.get(field), 0.0)
+            for field in (
+                "classification",
+                "analysis_room_name",
+                "analysis_id",
+                "airflow_ref",
+                "notes",
+            ):
                 if raw.get(field) is not None:
                     text = str(raw.get(field)).strip()
                     if text:
                         room[field] = text
+            if isinstance(raw.get("metadata"), dict):
+                room["metadata"] = copy.deepcopy(raw["metadata"])
+            if isinstance(raw.get("engineering_snapshot"), dict):
+                snapshot = raw["engineering_snapshot"]
+                analysis_id = str(snapshot.get("analysis_id") or "").strip()
+                room_ref = str(snapshot.get("room_ref") or "").strip()
+                if analysis_id and room_ref:
+                    normalized_snapshot = {
+                        "analysis_id": analysis_id,
+                        "room_ref": room_ref,
+                        "length_m": _positive(snapshot.get("length_m"), room["length_m"]),
+                        "width_m": _positive(snapshot.get("width_m"), room["width_m"]),
+                        "height_m": _positive(snapshot.get("height_m"), room["height_m"]),
+                    }
+                    if snapshot.get("observed_pressure_pa") is not None:
+                        normalized_snapshot["observed_pressure_pa"] = _finite_number(
+                            snapshot.get("observed_pressure_pa"), 0.0
+                        )
+                    room["engineering_snapshot"] = normalized_snapshot
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -155,8 +194,16 @@ def normalize_layout(value: Any) -> dict:
             room_id = raw.get("room_id")
             if room_id is not None:
                 room_id = str(room_id).strip() or None
-            default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
-            default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+            default_width = (
+                0.9
+                if device_type == "door"
+                else (1.2 if device_type == "window" else (0.6 if device_type == "transfer" else 0.4))
+            )
+            default_height = (
+                2.1
+                if device_type == "door"
+                else (1.0 if device_type == "window" else (0.4 if device_type == "transfer" else 0.2))
+            )
             device = {
                 "id": device_id,
                 "type": device_type,
@@ -175,6 +222,8 @@ def normalize_layout(value: Any) -> dict:
             swing = str(raw.get("swing") or "").strip()
             if swing:
                 device["swing"] = swing
+            if isinstance(raw.get("metadata"), dict):
+                device["metadata"] = copy.deepcopy(raw["metadata"])
             devices.append(device)
     result["devices"] = devices
 
@@ -252,8 +301,24 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             "height_m": height,
             "floor_elevation_m": layout["floor"]["elevation_m"],
         }
+        analysis_id = str(getattr(analysis, "id", "") or "").strip()
+        if analysis_id:
+            room["analysis_id"] = analysis_id
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+        if analysis_id:
+            room["engineering_snapshot"] = {
+                "analysis_id": analysis_id,
+                "room_ref": name,
+                "length_m": length,
+                "width_m": width,
+                "height_m": height,
+                **(
+                    {"observed_pressure_pa": room["pressure_pa"]}
+                    if "pressure_pa" in room
+                    else {}
+                ),
+            }
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     return layout
@@ -318,65 +383,23 @@ def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
 
 
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+    """Explicitly push spatial geometry into a compatible engineering analysis."""
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
-    rooms = normalize_layout(layout)["rooms"]
-    if not rooms:
-        return False
+    try:
+        return push_layout_to_analysis(layout, analysis)
+    except SpatialMappingError as exc:
+        raise SpatialSyncError(str(exc)) from exc
 
-    changed = False
-    if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
-        for key in ("name", "length_m", "width_m", "height_m"):
-            value = source[key]
-            if analysis.input.get(key) != value:
-                analysis.input[key] = value
-                changed = True
-        if "observed_pressure_pa" in analysis.input and "pressure_pa" in source:
-            if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
-                analysis.input["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-        return changed
 
-    if getattr(analysis, "kind", "") != "project_verification":
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicitly pull engineering geometry into the authoritative spatial model."""
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
-    raw_rooms = analysis.input.get("rooms")
-    if not isinstance(raw_rooms, list):
-        return False
-
-    _require_unique_sync_names(rooms, source="the spatial layout")
-    _require_unique_sync_names(raw_rooms, source="the active analysis")
-    by_name = {
-        str(room.get("name")).strip().casefold(): room
-        for room in raw_rooms
-        if isinstance(room, dict) and str(room.get("name") or "").strip()
-    }
-    used_source_links: set[str] = set()
-    for source in rooms:
-        source_name = str(source.get("analysis_room_name") or source["name"]).strip()
-        source_key = source_name.casefold()
-        if source_key in used_source_links:
-            raise SpatialSyncError(
-                "Cannot synchronize spatial geometry because multiple layout rooms "
-                f"map to analysis room {source_name!r}."
-            )
-        used_source_links.add(source_key)
-        target = by_name.get(source_key)
-        if target is None:
-            if source.get("analysis_room_name"):
-                raise SpatialSyncError(
-                    f"Linked analysis room {source_name!r} does not exist in the active analysis."
-                )
-            continue
-        for key in ("length_m", "width_m", "height_m"):
-            if target.get(key) != source[key]:
-                target[key] = source[key]
-                changed = True
-        if "observed_pressure_pa" in target and "pressure_pa" in source:
-            if target.get("observed_pressure_pa") != source["pressure_pa"]:
-                target["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-    return changed
+    try:
+        return pull_analysis_to_layout(layout, analysis)
+    except SpatialMappingError as exc:
+        raise SpatialSyncError(str(exc)) from exc
 
 
 def _room_overlap_records(

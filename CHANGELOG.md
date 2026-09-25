@@ -1,11 +1,15 @@
 # Changelog
 
-## Unreleased final spatial production finish — 2026-09-25
+## v0.102.1 final spatial production closure — 2026-09-25
 
-- Adds explicit engineering-to-spatial **dimension-only** pull alongside the existing spatial-to-engineering push, with complete mapping/value preflight and persisted synchronization provenance.
+- Finalizes the post-v0.102 synchronized spatial workspace without moving the published `v0.102.0` tag.
+- Keeps spatial-to-engineering synchronization strictly dimension-only, so spatial pressure never overwrites engineering `observed_pressure_pa` evidence.
+- Adds explicit engineering-to-spatial **dimension-only** pull with complete mapping/value preflight and persisted synchronization provenance.
 - Projects fresh completed verification pressure evidence into the 2D/3D view without persisting it into geometry; explicit spatial pressure remains the fallback and missing evidence remains unavailable.
 - Uses the same fresh-or-spatial pressure evidence for synchronized 2D/3D pressure-cascade visualization.
+- Centralizes deterministic 2D/3D viewport transforms and strengthens the installed-demo smoke to prove rooms and pressure relationships render in both views.
 - Adds windows and generic wall openings as first-class persisted spatial object types.
+- PR #467 head `4be4fb840480df7a5f1e0313a73830313150d9dd` passed CI #1540 / `36170548238`; PR #472 head `8a34c3d649aee54c377b4194a6d619559d219421` passed CI #1551 / `36171758793`.
 - Preserves spatial X/Y placement during pulls, engineering ownership of pressure evidence, project schema version 1, solver equations, numerical tolerances, and engineering acceptance criteria.
 
 ## v0.102.0 synchronized spatial closure — 2026-09-25

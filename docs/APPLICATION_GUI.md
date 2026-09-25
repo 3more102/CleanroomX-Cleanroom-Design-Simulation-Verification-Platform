@@ -56,6 +56,12 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+### Concurrent CleanroomX save serialization
+
+Guarded saves also use a non-blocking operating-system advisory lock on a stable hashed `.cleanroomx-save-*.lock` sidecar beside the destination. The lock is held across both revision checks, serialization, atomic replacement, and capture of the new saved revision. If another CleanroomX process already owns that lock, **Save Project** or **Save Project As** returns immediately with a **Project save in progress** warning; the window remains responsive and no project bytes are written by the contending save.
+
+The sidecar intentionally remains after the lock is released. The operating system releases the actual advisory lock when its descriptor closes, including process termination; keeping the sidecar prevents lock-file deletion/recreation from splitting writers across different filesystem objects. This is cooperative protection: external editors that do not honor the CleanroomX sidecar are still covered by the SHA-256 revision checks, but a non-cooperating writer can theoretically race in the final filesystem commit window.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

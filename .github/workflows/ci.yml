@@ -84,6 +84,7 @@ jobs:
           tests/test_project_document.py
           tests/test_autosave.py
           tests/test_crash_recovery.py
+          tests/test_recovery_diff.py
           tests/test_gui.py
           tests/test_gui_autosave.py
           tests/test_gui_recovery.py

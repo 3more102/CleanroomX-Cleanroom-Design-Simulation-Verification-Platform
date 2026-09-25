@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass
 from importlib import import_module
 import copy
 import hashlib
@@ -45,11 +45,11 @@ class AnalysisRun:
     kind: str
     title: str
     status: str
-    input_snapshot: dict
     result: dict
     markdown: str
     diagnostics: dict
     plot: dict | None
+    input_snapshot: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         document = {

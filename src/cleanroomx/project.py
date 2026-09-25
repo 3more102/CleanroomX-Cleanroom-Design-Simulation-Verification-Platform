@@ -27,18 +27,27 @@ _PROJECT_BLOCK_FIELDS = frozenset({"name", "description", "metadata"})
 _ANALYSIS_FIELDS = frozenset({"id", "name", "kind", "input"})
 
 
+def _copy_extra_fields(extra_fields: Any) -> dict[str, Any]:
+    """Validate and detach an opaque additive-field mapping."""
+    if not isinstance(extra_fields, dict):
+        raise ProjectFormatError("additive project fields must be an object")
+    if any(not isinstance(key, str) for key in extra_fields):
+        raise ProjectFormatError("additive project field names must be strings")
+    return copy.deepcopy(extra_fields)
+
+
 def _extra_fields(data: dict, known_fields: frozenset[str]) -> dict[str, Any]:
     """Return a detached copy of additive fields this build does not interpret."""
-    return {
-        key: copy.deepcopy(value)
+    return _copy_extra_fields({
+        key: value
         for key, value in data.items()
         if key not in known_fields
-    }
+    })
 
 
 def _merge_extra_fields(extra_fields: dict[str, Any], known: dict[str, Any]) -> dict:
     """Serialize opaque extensions losslessly while keeping known fields authoritative."""
-    merged = copy.deepcopy(extra_fields)
+    merged = _copy_extra_fields(extra_fields)
     merged.update(known)
     return merged
 

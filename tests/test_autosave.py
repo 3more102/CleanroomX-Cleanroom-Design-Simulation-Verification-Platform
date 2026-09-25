@@ -281,5 +281,6 @@ def test_autosave_reports_failure_when_committed_bytes_change(tmp_path, monkeypa
 
         assert manager.status().state == "failed"
         assert "write verification failed" in manager.status().message
+        assert list((tmp_path / "recovery").glob("*.recovery.json")) == []
     finally:
         manager.shutdown(wait=True)

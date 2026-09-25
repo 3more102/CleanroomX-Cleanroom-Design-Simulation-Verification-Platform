@@ -8,6 +8,10 @@ The current release line is **CleanroomX v0.100.0**, built directly on the verif
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
 
+### Current unreleased persistence hardening
+
+The current development line adds crash-recovery/autosave, startup recovery, low-latency checkpoints, external-change save guarding, and self-verifying persistence around the v0.100 desktop format. Newly written project files and recovery envelopes carry deterministic SHA-256 integrity evidence over canonical strict JSON. Project saves are also read back and checked against the exact serialized bytes before success is reported. Existing unsigned schema-v1 and legacy-compatible files remain readable; the checksum detects content change/corruption but is not a digital signature or proof of source authenticity.
+
 ### Network-state replay provenance ladder
 
 | Version | Audited state |

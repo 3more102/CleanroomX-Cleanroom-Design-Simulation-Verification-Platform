@@ -82,6 +82,7 @@ jobs:
           tests/test_application.py
           tests/test_application_all_workflows.py
           tests/test_project_document.py
+          tests/test_project_validation.py
           tests/test_autosave.py
           tests/test_crash_recovery.py
           tests/test_gui.py
@@ -96,6 +97,7 @@ jobs:
           python -m venv /tmp/cleanroomx-wheel-env
           /tmp/cleanroomx-wheel-env/bin/python -m pip install --no-index /tmp/cleanroomx-wheel/cleanroomx-*.whl
           /tmp/cleanroomx-wheel-env/bin/cleanroomx-gui --check
+          /tmp/cleanroomx-wheel-env/bin/cleanroomx-project-validate --help >/dev/null
           /tmp/cleanroomx-wheel-env/bin/python - <<'PY'
           from pathlib import Path
           import cleanroomx

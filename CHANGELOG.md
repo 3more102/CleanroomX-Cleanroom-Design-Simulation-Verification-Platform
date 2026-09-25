@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased isolated analysis execution and true cancellation — 2026-09-25
+
+- Replaces the desktop's non-cancellable daemon analysis thread with a one-run-at-a-time spawned child-process boundary while preserving the existing `run_analysis()` and `AnalysisRun` contracts.
+- Changes **Abandon Current Run** to **Cancel Current Run**: cancellation terminates the child, keeps the UI locked until exit is confirmed, escalates to kill after a bounded grace period where supported, and discards results that race with cancellation.
+- Keeps project mutation, result publication, and all explicit persistence in the parent desktop process; the child receives only a deep-copied analysis input and base-directory context.
+- Surfaces unexpected worker exit codes and parent-side monitoring failures as actionable analysis errors instead of publishing incomplete work or silently unlocking overlapping execution.
+- Adds focused real-process and GUI state-machine regressions for success, backend errors, cancellation races, overlap rejection, and monitoring-failure cleanup without changing project schema, solver equations, tolerances, CLI behavior, or engineering acceptance semantics.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

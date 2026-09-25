@@ -55,6 +55,26 @@ class ExternalDependencyChangedError(RuntimeError):
         )
 
 
+class AnalysisInputMutationError(RuntimeError):
+    """Raised when application execution mutates its isolated submitted-input snapshot."""
+
+    def __init__(self, kind: str, phase: str) -> None:
+        self.kind = kind
+        self.phase = phase
+        super().__init__(
+            f"{kind} mutated its submitted analysis input during {phase}; "
+            "the result was discarded to preserve deterministic execution provenance"
+        )
+
+
+@dataclass(frozen=True)
+class _PreparedAnalysisInput:
+    payload: dict
+    parsed: Any | None
+    base_dir: Path | None
+    input_sha256: str
+
+
 def _spec(key, title, category, parser, runner, reporter, description):
     return AnalysisSpec(key, title, category, parser, runner, reporter, description)
 
@@ -520,6 +540,7 @@ def rebase_analysis_file_references(
 
 
 _APPLICATION_INPUT_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+_APPLICATION_INPUT_EXECUTION_POLICY = "isolated-copy-single-parse-sha256-guard-v1"
 
 
 def _canonical_input_sha256(payload: dict) -> str:
@@ -531,6 +552,17 @@ def _canonical_input_sha256(payload: dict) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _assert_input_snapshot_unchanged(
+    kind: str,
+    payload: dict,
+    input_sha256: str,
+    *,
+    phase: str,
+) -> None:
+    if _canonical_input_sha256(payload) != input_sha256:
+        raise AnalysisInputMutationError(kind, phase)
 
 
 def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bool:
@@ -680,6 +712,7 @@ def _application_execution_provenance(
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
+        "input_execution_policy": _APPLICATION_INPUT_EXECUTION_POLICY,
         "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
         "external_dependencies_stable": all(
@@ -761,21 +794,48 @@ def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
                 "hvac_fan_operating_airflow consistency requires hvac_project"
             )
 
-def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
+def _prepare_analysis_input(
+    kind: str,
+    payload: dict,
+    *,
+    base_dir=None,
+) -> _PreparedAnalysisInput:
+    """Isolate, validate, and parse one exact submitted input revision."""
     if kind not in ANALYSIS_SPECS:
         raise ValueError(f"unsupported analysis kind: {kind}")
     if not isinstance(payload, dict):
         raise ValueError("analysis input must be a JSON object")
+
+    snapshot = copy.deepcopy(payload)
+    input_sha256 = _canonical_input_sha256(snapshot)
     base = Path(base_dir) if base_dir is not None else None
+    parsed: Any | None = None
+
     if kind == "consistency":
-        _validate_consistency(payload, base)
-        return
-    if kind == "dossier":
-        _validate_dossier(payload, base)
-        return
-    spec = ANALYSIS_SPECS[kind]
-    assert spec.parser is not None
-    _load_callable(spec.parser)(payload)
+        _validate_consistency(snapshot, base)
+    elif kind == "dossier":
+        _validate_dossier(snapshot, base)
+    else:
+        spec = ANALYSIS_SPECS[kind]
+        assert spec.parser is not None
+        parsed = _load_callable(spec.parser)(snapshot)
+
+    _assert_input_snapshot_unchanged(
+        kind,
+        snapshot,
+        input_sha256,
+        phase="input validation/parsing",
+    )
+    return _PreparedAnalysisInput(
+        payload=snapshot,
+        parsed=parsed,
+        base_dir=base,
+        input_sha256=input_sha256,
+    )
+
+
+def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
+    _prepare_analysis_input(kind, payload, base_dir=base_dir)
 
 
 def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
@@ -816,31 +876,43 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
-    validate_analysis_input(kind, payload, base_dir=base_dir)
-    input_sha256 = _canonical_input_sha256(payload)
+    prepared = _prepare_analysis_input(kind, payload, base_dir=base_dir)
     spec = ANALYSIS_SPECS[kind]
-    base = Path(base_dir) if base_dir is not None else None
-    dependencies_before = _capture_external_dependencies(kind, payload, base)
+    dependencies_before = _capture_external_dependencies(
+        kind,
+        prepared.payload,
+        prepared.base_dir,
+    )
 
     if kind == "consistency":
-        result = _run_consistency(payload, base)
+        result = _run_consistency(prepared.payload, prepared.base_dir)
     elif kind == "dossier":
-        result = _run_dossier(payload, base)
+        result = _run_dossier(prepared.payload, prepared.base_dir)
     else:
-        assert spec.parser is not None and spec.runner is not None
-        result = _load_callable(spec.runner)(_load_callable(spec.parser)(payload))
+        assert spec.runner is not None
+        result = _load_callable(spec.runner)(prepared.parsed)
 
+    _assert_input_snapshot_unchanged(
+        kind,
+        prepared.payload,
+        prepared.input_sha256,
+        phase="backend execution",
+    )
     normalized = _normalize_result(result)
     markdown = (
         _fallback_markdown(spec.title, normalized)
         if spec.reporter is None
         else _load_callable(spec.reporter)(normalized)
     )
-    dependencies_after = _capture_external_dependencies(kind, payload, base)
+    dependencies_after = _capture_external_dependencies(
+        kind,
+        prepared.payload,
+        prepared.base_dir,
+    )
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(
         kind,
-        input_sha256,
+        prepared.input_sha256,
         dependencies_before,
         dependencies_after,
     )
@@ -863,6 +935,13 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
             ]
         )
     diagnostics["application_execution_provenance"] = provenance
+    plot = build_plot_model(prepared.payload, normalized)
+    _assert_input_snapshot_unchanged(
+        kind,
+        prepared.payload,
+        prepared.input_sha256,
+        phase="result presentation",
+    )
     return AnalysisRun(
         kind=kind,
         title=spec.title,
@@ -870,7 +949,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         result=normalized,
         markdown=markdown,
         diagnostics=diagnostics,
-        plot=build_plot_model(payload, normalized),
+        plot=plot,
     )
 
 

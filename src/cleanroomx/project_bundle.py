@@ -26,6 +26,7 @@ from .project import (
     project_file_revision_matches,
     project_from_dict,
 )
+from .strict_json import StrictJSONError, strict_json_loads
 
 
 PROJECT_BUNDLE_SCHEMA = "cleanroomx.project-bundle"
@@ -317,20 +318,15 @@ def _load_manifest(
     try:
         raw_bytes = archive.read(info)
         raw = raw_bytes.decode("utf-8")
-        data = json.loads(
-            raw,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ProjectBundleError(
-                    f"non-finite JSON constant is not allowed in bundle manifest: {value}"
-                )
-            ),
-        )
+        data = strict_json_loads(raw)
     except UnicodeDecodeError as exc:
         raise ProjectBundleError("bundle manifest is not UTF-8") from exc
     except json.JSONDecodeError as exc:
         raise ProjectBundleError(
             f"invalid bundle manifest JSON at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except StrictJSONError as exc:
+        raise ProjectBundleError(f"invalid strict bundle manifest JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise ProjectBundleError("bundle manifest must be a JSON object")
     return data, raw_bytes
@@ -398,14 +394,9 @@ def _read_project_member(
     except UnicodeDecodeError as exc:
         raise ProjectBundleError("bundled project is not UTF-8") from exc
     try:
-        data = json.loads(
-            text,
-            parse_constant=lambda value: (_ for _ in ()).throw(
-                ProjectFormatError(f"non-finite JSON constant is not allowed: {value}")
-            ),
-        )
+        data = strict_json_loads(text)
         return project_from_dict(data)
-    except (json.JSONDecodeError, ProjectFormatError) as exc:
+    except (json.JSONDecodeError, StrictJSONError, ProjectFormatError) as exc:
         raise ProjectBundleError(f"bundled project is invalid: {exc}") from exc
 
 

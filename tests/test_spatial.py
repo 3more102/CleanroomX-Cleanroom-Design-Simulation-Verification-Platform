@@ -697,6 +697,7 @@ def test_packaged_gui_demo_contains_explicit_spatial_design():
     project = project_from_dict(payload)
     layout = project.metadata[SPATIAL_METADATA_KEY]
 
+    assert project.active_analysis_id == "verification"
     assert layout["floor"]["name"] == "Main Cleanroom Floor"
     assert [room["analysis_room_name"] for room in layout["rooms"]] == [
         "Process",

@@ -4,7 +4,7 @@ CleanroomX v0.3 adds transparent steady-state airflow-balance checks and prelimi
 
 ## Room airflow balance
 
-For each room the HVAC module uses the governing supply airflow already selected by the cleanroom/thermal calculation and accepts explicit:
+For each room the HVAC module uses the full-precision governing supply airflow selected by the cleanroom/thermal calculation and accepts explicit:
 
 - return airflow;
 - exhaust airflow;
@@ -19,6 +19,8 @@ The steady-state net surplus is:
 The reported margin is:
 
     surplus margin = net surplus - minimum required surplus
+
+Balance pass/fail is evaluated from the unrounded airflow state. Room and project totals are rounded only for presentation; project aggregation uses the full-precision room values.
 
 A positive net surplus represents airflow available for exfiltration or another unmodeled outflow path at steady state. A negative value means infiltration or another unmodeled inflow would be required to close the mass balance.
 
@@ -45,7 +47,7 @@ with airflow converted to m³/s. Shaft power and estimated electrical input are 
 
 ## Fan-curve design-duty verification (v0.12)
 
-An HVAC project may optionally include a supplied fan curve as airflow/pressure points. After CleanroomX determines the project governing airflow and the preliminary fan static-pressure duty, including a computed duct or branch-network critical-path loss when configured, it checks the fan curve at that exact design airflow.
+An HVAC project may optionally include a supplied fan curve as airflow/pressure points. After CleanroomX determines the project governing airflow and the preliminary fan static-pressure duty, including a computed duct or branch-network critical-path loss when configured, it checks the fan curve at that exact design airflow and exact static pressure. The displayed supply-fan pressure remains rounded for reporting, but that rounded display value is never reused as the duty-check input.
 
 The fan pressure is piecewise-linearly interpolated only between supplied points. The result is:
 

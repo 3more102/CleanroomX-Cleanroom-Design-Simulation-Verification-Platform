@@ -82,11 +82,13 @@ jobs:
           tests/test_application.py
           tests/test_application_all_workflows.py
           tests/test_project_document.py
+          tests/test_project_revisions.py
           tests/test_autosave.py
           tests/test_crash_recovery.py
           tests/test_gui.py
           tests/test_gui_autosave.py
           tests/test_gui_recovery.py
+          tests/test_gui_project_revisions.py
       - name: Run complete test suite
         run: python -m pytest -q
       - name: Build wheel and verify installed application

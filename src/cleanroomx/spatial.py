@@ -402,6 +402,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
         self._property_vars: dict[str, tk.StringVar] = {}
+        self._property_entries: dict[str, ttk.Entry] = {}
         self._history = SpatialEditHistory(limit=100)
         self._history_project_token: int | None = None
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
@@ -437,7 +438,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             toolbar, text="Lock", command=self.toggle_selected_lock, state="disabled"
         )
         self._lock_button.pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
+        self._delete_button = ttk.Button(
+            toolbar, text="Delete", command=self.delete_selected, state="disabled"
+        )
+        self._delete_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=6
@@ -505,13 +509,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
             self._property_vars[key] = var
-            ttk.Entry(inspector, textvariable=var, width=18).grid(
-                row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
-            )
+            entry = ttk.Entry(inspector, textvariable=var, width=18, state="disabled")
+            entry.grid(row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2)
+            self._property_entries[key] = entry
         button_row = 2 + (len(fields) + 1) // 2
-        ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
-            row=button_row, column=3, sticky="e", pady=(8, 0)
+        self._apply_button = ttk.Button(
+            inspector, text="Apply", command=self.apply_properties, state="disabled"
         )
+        self._apply_button.grid(row=button_row, column=3, sticky="e", pady=(8, 0))
         inspector.columnconfigure(1, weight=1)
         inspector.columnconfigure(3, weight=1)
 
@@ -589,11 +594,20 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._undo_button.configure(state="normal" if self._history.can_undo else "disabled")
         if hasattr(self, "_redo_button"):
             self._redo_button.configure(state="normal" if self._history.can_redo else "disabled")
+        item = self._selected_object()
+        locked = is_spatial_item_locked(item)
         if hasattr(self, "_lock_button"):
-            item = self._selected_object()
             self._lock_button.configure(
                 state="normal" if item is not None else "disabled",
-                text="Unlock" if is_spatial_item_locked(item) else "Lock",
+                text="Unlock" if locked else "Lock",
+            )
+        if hasattr(self, "_delete_button"):
+            self._delete_button.configure(
+                state="normal" if item is not None and not locked else "disabled"
+            )
+        if hasattr(self, "_apply_button"):
+            self._apply_button.configure(
+                state="normal" if item is not None and not locked else "disabled"
             )
 
     def undo_edit(self) -> bool:
@@ -712,13 +726,20 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._selection_var.set("No selection")
             for var in self._property_vars.values():
                 var.set("")
+            for entry in self._property_entries.values():
+                entry.configure(state="disabled")
+            self._update_history_controls()
             return
+        locked = is_spatial_item_locked(item)
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
-        lock_suffix = " [Locked]" if is_spatial_item_locked(item) else ""
+        lock_suffix = " [Locked]" if locked else ""
         self._selection_var.set(f"{prefix}: {item.get('name', '')}{lock_suffix}")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        for entry in self._property_entries.values():
+            entry.configure(state="disabled" if locked else "normal")
+        self._update_history_controls()
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -819,6 +840,18 @@ class SpatialDesignWorkspace(ttk.Frame):
         if is_spatial_item_locked(item):
             self._status_setter("Locked spatial item; unlock it before deleting")
             return
+        if self.selected.kind == "room":
+            locked_children = [
+                device
+                for device in self.layout["devices"]
+                if device.get("room_id") == self.selected.item_id
+                and is_spatial_item_locked(device)
+            ]
+            if locked_children:
+                self._status_setter(
+                    "Room contains locked device(s); unlock them before deleting the room"
+                )
+                return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         collection_name = "rooms" if self.selected.kind == "room" else "devices"

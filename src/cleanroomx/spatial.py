@@ -18,6 +18,7 @@ SPATIAL_LAYOUT_VERSION = 1
 SPATIAL_HISTORY_LIMIT = 100
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
 RESIZE_HANDLES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
+SMART_ALIGN_TOLERANCE_PX = 8.0
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -564,6 +565,102 @@ def resize_room(
     return (x0, y0, x1, y1) != original
 
 
+def snap_room_translation(
+    room: dict,
+    rooms: list[dict],
+    target_x_m: float,
+    target_y_m: float,
+    *,
+    tolerance_m: float = 0.15,
+) -> tuple[float, float, list[dict]]:
+    """Snap a moving room to nearby room edges/centers and return guide metadata."""
+    target_x = _finite_number(target_x_m, _finite_number(room.get("x_m"), 0.0))
+    target_y = _finite_number(target_y_m, _finite_number(room.get("y_m"), 0.0))
+    length = _positive(room.get("length_m"), 4.0)
+    width = _positive(room.get("width_m"), 4.0)
+    tolerance = max(0.0, _finite_number(tolerance_m, 0.15))
+    moving_id = str(room.get("id") or "")
+
+    reference_x: list[tuple[str, float, str]] = []
+    reference_y: list[tuple[str, float, str]] = []
+    for other in rooms:
+        if not isinstance(other, dict):
+            continue
+        other_id = str(other.get("id") or "")
+        if other is room or (moving_id and other_id == moving_id):
+            continue
+        ox = _finite_number(other.get("x_m"), 0.0)
+        oy = _finite_number(other.get("y_m"), 0.0)
+        ol = _positive(other.get("length_m"), 4.0)
+        ow = _positive(other.get("width_m"), 4.0)
+        reference_x.extend(
+            (
+                ("left", ox, other_id),
+                ("center", ox + ol / 2.0, other_id),
+                ("right", ox + ol, other_id),
+            )
+        )
+        reference_y.extend(
+            (
+                ("top", oy, other_id),
+                ("center", oy + ow / 2.0, other_id),
+                ("bottom", oy + ow, other_id),
+            )
+        )
+
+    def best_snap(
+        moving: tuple[tuple[str, float], ...],
+        references: list[tuple[str, float, str]],
+        axis: str,
+    ) -> tuple[float, dict | None]:
+        best: tuple[tuple, float, dict] | None = None
+        for moving_anchor, moving_value in moving:
+            for reference_anchor, reference_value, reference_room_id in references:
+                delta = reference_value - moving_value
+                distance = abs(delta)
+                if distance > tolerance + 1e-12:
+                    continue
+                key = (
+                    round(distance, 12),
+                    reference_room_id,
+                    reference_anchor,
+                    moving_anchor,
+                )
+                guide = {
+                    "axis": axis,
+                    "value_m": reference_value,
+                    "reference_room_id": reference_room_id,
+                    "moving_anchor": moving_anchor,
+                    "reference_anchor": reference_anchor,
+                }
+                if best is None or key < best[0]:
+                    best = (key, delta, guide)
+        if best is None:
+            return 0.0, None
+        return best[1], best[2]
+
+    dx, guide_x = best_snap(
+        (
+            ("left", target_x),
+            ("center", target_x + length / 2.0),
+            ("right", target_x + length),
+        ),
+        reference_x,
+        "x",
+    )
+    dy, guide_y = best_snap(
+        (
+            ("top", target_y),
+            ("center", target_y + width / 2.0),
+            ("bottom", target_y + width),
+        ),
+        reference_y,
+        "y",
+    )
+    guides = [guide for guide in (guide_x, guide_y) if guide is not None]
+    return target_x + dx, target_y + dy, guides
+
+
 class SpatialEditHistory:
     """Bounded undo/redo history for normalized spatial-layout snapshots."""
 
@@ -657,6 +754,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_before: dict | None = None
         self._drag_changed = False
         self._resize_handle: str | None = None
+        self._smart_align = tk.BooleanVar(value=True)
+        self._alignment_guides: list[dict] = []
 
         self._build()
         self.refresh()
@@ -702,6 +801,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(
             side="left", padx=2
         )
+        ttk.Checkbutton(toolbar, text="Align", variable=self._smart_align).pack(
+            side="left", padx=2
+        )
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -717,7 +819,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left")
         ttk.Label(
             scene_bar,
-            text="2D: drag to move • wheel to zoom • middle/right drag to pan    "
+            text="2D: drag to move • smart edge/center align • wheel to zoom • middle/right drag to pan    "
                  "3D: click to select • wheel to zoom",
         ).pack(side="right")
 
@@ -832,6 +934,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        self._alignment_guides = []
         self._history.clear()
         self._update_history_controls()
         if self.selected and not self._selected_object():
@@ -1187,6 +1290,22 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
+        for guide in self._alignment_guides:
+            axis = guide.get("axis")
+            value = guide.get("value_m")
+            if axis == "x":
+                cx, _ = self._world_to_canvas(_finite_number(value, 0.0), 0.0)
+                canvas.create_line(
+                    cx, 0, cx, h,
+                    fill="#0f766e", width=2, dash=(5, 3), tags=("alignment-guide",)
+                )
+            elif axis == "y":
+                _, cy = self._world_to_canvas(0.0, _finite_number(value, 0.0))
+                canvas.create_line(
+                    0, cy, w, cy,
+                    fill="#0f766e", width=2, dash=(5, 3), tags=("alignment-guide",)
+                )
+
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
@@ -1406,6 +1525,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         current = self.canvas_2d.find_withtag("current")
         hit = None
         self._resize_handle = None
+        self._alignment_guides = []
         if current:
             tags = self.canvas_2d.gettags(current[0])
             self._resize_handle = next(
@@ -1425,6 +1545,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if item is None or self._drag_anchor is None:
             return
         world = self._canvas_to_world(event.x, event.y)
+        self._alignment_guides = []
         if self._resize_handle and self.selected and self.selected.kind == "room":
             grid = self.layout["grid_m"] if self._snap_to_grid.get() else None
             if resize_room(
@@ -1449,6 +1570,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         else:
             target_x = old_x + dx
             target_y = old_y + dy
+        if (
+            self.selected
+            and self.selected.kind == "room"
+            and self._smart_align.get()
+        ):
+            tolerance_m = max(
+                0.02,
+                SMART_ALIGN_TOLERANCE_PX / max(1.0, self._scale_2d()),
+            )
+            target_x, target_y, self._alignment_guides = snap_room_translation(
+                item,
+                self.layout["rooms"],
+                target_x,
+                target_y,
+                tolerance_m=tolerance_m,
+            )
         actual_dx = target_x - old_x
         actual_dy = target_y - old_y
         if self._translate_selected(actual_dx, actual_dy):
@@ -1482,6 +1619,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             device["z_m"] = room["height_m"]
 
     def _on_left_up(self, event: tk.Event) -> None:
+        had_guides = bool(self._alignment_guides)
+        self._alignment_guides = []
         if (
             self._drag_anchor is not None
             and self.selected is not None
@@ -1498,6 +1637,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_before = None
         self._drag_changed = False
         self._resize_handle = None
+        if had_guides and not self._drag_changed:
+            self.redraw()
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)

@@ -30,9 +30,41 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
-def _room_id(name: str) -> str:
-    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+def _slug_identifier(value: str) -> str:
+    return "".join(
+        ch.lower() if ch.isalnum() else "-"
+        for ch in str(value)
+    ).strip("-")
+
+
+def _unique_identifier(
+    preferred: Any,
+    *,
+    fallback: str,
+    used_ids: set[str],
+) -> str:
+    """Allocate a deterministic unique identifier without rewriting valid stable IDs."""
+    base = str(preferred).strip() if preferred is not None else ""
+    if not base:
+        base = fallback
+    candidate = base
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
+
+
+def _room_id(name: str, *, index: int = 0) -> str:
+    slug = _slug_identifier(name)
+    return slug or f"room-{index + 1}"
+
+
+def _device_id(name: str, device_type: str, *, index: int) -> str:
+    slug = _slug_identifier(name)
+    type_slug = _slug_identifier(device_type) or "equipment"
+    return f"device-{slug or f'{type_slug}-{index + 1}'}"
 
 
 def empty_layout() -> dict:
@@ -67,10 +99,11 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            room_id = _unique_identifier(
+                raw.get("id"),
+                fallback=_room_id(name, index=index),
+                used_ids=used_ids,
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,21 +119,33 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
-        for raw in raw_devices:
+        for index, raw in enumerate(raw_devices):
             if not isinstance(raw, dict):
                 continue
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            name = str(raw.get("name") or device_type.upper()).strip() or device_type.upper()
+            device_id = _unique_identifier(
+                raw.get("id"),
+                fallback=_device_id(name, device_type, index=index),
+                used_ids=used_device_ids,
+            )
+            raw_room_id = raw.get("room_id")
+            room_id = (
+                str(raw_room_id).strip()
+                if raw_room_id is not None and str(raw_room_id).strip()
+                else None
+            )
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "name": name,
+                    "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -140,6 +185,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -148,7 +194,11 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _room_id(name),
+            "id": _unique_identifier(
+                None,
+                fallback=_room_id(name, index=index),
+                used_ids=used_ids,
+            ),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,

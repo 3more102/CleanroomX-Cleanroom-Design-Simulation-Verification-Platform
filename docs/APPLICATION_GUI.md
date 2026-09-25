@@ -88,6 +88,16 @@ The **Abandon** action suppresses the pending result but does not force-terminat
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
+## Durable analysis run history
+
+After a background analysis completes and passes the existing input-freshness check, CleanroomX automatically archives the accepted result when the project has an explicit saved path. The archive is separate from the project file and contains the exact analysis input snapshot, the complete run bundle, the analysis identity/name/kind, whether the in-memory project had unsaved changes, and both the loaded-project revision and current on-disk revision relationship. This preserves the evidence required to understand which input and project context produced a historical result without altering project schema version 1.
+
+Run-history writes execute on a single background worker so the Tk event loop is not blocked by history I/O. Input and run data are converted to strict-JSON snapshots before queueing. Each record has a deterministic SHA-256 record identity plus a second SHA-256 integrity digest; the file is reopened and fully verified before older verified records may be rotated. The hashes detect accidental or unexplained corruption but are not digital signatures and do not establish source authenticity.
+
+Use **File → Run History...** to browse verified records for the current saved project. The browser exposes timestamp, analysis, status, project-revision relationship, unsaved-edit state, complete stored evidence, and any malformed/unreadable history artifacts. Historical records can be exported either as the complete evidence envelope or as the original run bundle. Corrupt artifacts are reported and preserved for inspection instead of being silently deleted.
+
+The default retention limit is 100 verified records per saved project. History is stored in the per-user application-state directory; set `CLEANROOMX_RUN_HISTORY_DIR` to override it. Unsaved projects remain session-only because there is no durable project identity/path to bind evidence to; save the project and rerun an analysis to create durable history. If history persistence fails, the completed current result remains available and the GUI shows an explicit warning so evidence loss is not silent.
+
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import Any
 
 from .autosave import (
     RecoveryCandidate,
@@ -11,6 +13,7 @@ from .autosave import (
     discard_recovery_artifact,
     load_recovery_artifact,
 )
+from .project import load_project_document, project_from_dict
 
 
 _RELATION_LABELS = {
@@ -54,6 +57,193 @@ def recovery_safety_message(candidate: RecoveryCandidate) -> str:
 
 
 @dataclass(frozen=True)
+class RecoveryDifference:
+    path: str
+    change: str
+    original: Any
+    recovered: Any
+
+
+@dataclass(frozen=True)
+class RecoveryComparison:
+    state: str
+    summary: str
+    differences: tuple[RecoveryDifference, ...]
+    truncated: bool = False
+
+
+def _identified_list(items: list[Any]) -> dict[str, Any] | None:
+    mapped: dict[str, Any] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            return None
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or not item_id or item_id in mapped:
+            return None
+        mapped[item_id] = item
+    return mapped
+
+
+def _project_differences(
+    original: Any,
+    recovered: Any,
+    *,
+    max_changes: int,
+) -> tuple[tuple[RecoveryDifference, ...], bool]:
+    changes: list[RecoveryDifference] = []
+    truncated = False
+
+    def add(path: str, change: str, before: Any, after: Any) -> None:
+        nonlocal truncated
+        if len(changes) >= max_changes:
+            truncated = True
+            return
+        changes.append(
+            RecoveryDifference(
+                path=path or "<project>",
+                change=change,
+                original=before,
+                recovered=after,
+            )
+        )
+
+    def walk(before: Any, after: Any, path: str, depth: int = 0) -> None:
+        if before == after:
+            return
+        if len(changes) >= max_changes:
+            truncated = True
+            return
+        if depth >= 64:
+            add(path, "changed", before, after)
+            return
+        if isinstance(before, dict) and isinstance(after, dict):
+            for key in sorted(set(before) | set(after), key=str):
+                child = f"{path}.{key}" if path else str(key)
+                if key not in before:
+                    add(child, "added", None, after[key])
+                elif key not in after:
+                    add(child, "removed", before[key], None)
+                else:
+                    walk(before[key], after[key], child, depth + 1)
+            return
+        if isinstance(before, list) and isinstance(after, list):
+            before_by_id = _identified_list(before)
+            after_by_id = _identified_list(after)
+            if before_by_id is not None and after_by_id is not None:
+                for item_id in sorted(set(before_by_id) | set(after_by_id)):
+                    child = f"{path}[{item_id}]"
+                    if item_id not in before_by_id:
+                        add(child, "added", None, after_by_id[item_id])
+                    elif item_id not in after_by_id:
+                        add(child, "removed", before_by_id[item_id], None)
+                    else:
+                        walk(
+                            before_by_id[item_id],
+                            after_by_id[item_id],
+                            child,
+                            depth + 1,
+                        )
+                return
+            common = min(len(before), len(after))
+            for index in range(common):
+                walk(before[index], after[index], f"{path}[{index}]", depth + 1)
+            for index in range(common, len(before)):
+                add(f"{path}[{index}]", "removed", before[index], None)
+            for index in range(common, len(after)):
+                add(f"{path}[{index}]", "added", None, after[index])
+            return
+        add(path, "changed", before, after)
+
+    walk(original, recovered, "")
+    return tuple(changes), truncated
+
+
+def compare_recovery_to_source(
+    candidate: RecoveryCandidate,
+    *,
+    max_changes: int = 200,
+) -> RecoveryComparison:
+    """Compare recovered project semantics with the current original project.
+
+    File timestamps, whitespace, and serialized application-version text do not
+    count as project changes. Analysis lists are matched by stable analysis id so
+    harmless ordering differences do not obscure the recovered engineering edits.
+    """
+    if max_changes < 1:
+        raise ValueError("max_changes must be at least 1")
+    if candidate.source_path is None:
+        return RecoveryComparison(
+            state="unsaved",
+            summary="No original project had been saved, so there is no source file to compare.",
+            differences=(),
+        )
+    source = candidate.source_path
+    if not source.exists():
+        return RecoveryComparison(
+            state="source_missing",
+            summary="The original project file is missing; semantic comparison is unavailable.",
+            differences=(),
+        )
+    try:
+        payload = load_recovery_artifact(candidate.path)
+        raw_project = payload["snapshot"].get("project")
+        if not isinstance(raw_project, dict):
+            raise ValueError("snapshot.project must be an object")
+        recovered_project = project_from_dict(raw_project).to_dict()
+        source_project = load_project_document(source).to_dict()
+    except (OSError, UnicodeError, ValueError) as exc:
+        return RecoveryComparison(
+            state="unavailable",
+            summary=f"Project comparison is unavailable: {exc}",
+            differences=(),
+        )
+
+    # Application version is serialization/runtime evidence, not an operator edit.
+    recovered_project.pop("application_version", None)
+    source_project.pop("application_version", None)
+    differences, truncated = _project_differences(
+        source_project,
+        recovered_project,
+        max_changes=max_changes,
+    )
+    if not differences:
+        return RecoveryComparison(
+            state="identical",
+            summary=(
+                "Recovered project content matches the current original project. "
+                "Any fingerprint difference is file-level only."
+            ),
+            differences=(),
+        )
+    count_text = f"{len(differences)}+" if truncated else str(len(differences))
+    return RecoveryComparison(
+        state="different",
+        summary=(
+            f"{count_text} semantic project difference(s) found. "
+            "Review the exact paths below before restoring."
+        ),
+        differences=differences,
+        truncated=truncated,
+    )
+
+
+def _display_difference_value(value: Any, *, limit: int = 180) -> str:
+    try:
+        text = json.dumps(
+            value,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        text = repr(value)
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+@dataclass(frozen=True)
 class RecoveryInspection:
     project_name: str
     project_identity: str
@@ -66,6 +256,7 @@ class RecoveryInspection:
     editor_analysis_id: str | None
     editor_json_valid: bool | None
     editor_text: str
+    comparison: RecoveryComparison
 
 
 def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
@@ -116,6 +307,7 @@ def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
         editor_analysis_id=editor_id,
         editor_json_valid=editor_valid,
         editor_text=editor_text,
+        comparison=compare_recovery_to_source(candidate),
     )
 
 
@@ -123,8 +315,8 @@ class RecoveryInspectDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, candidate: RecoveryCandidate):
         super().__init__(parent)
         self.title("Inspect recovery")
-        self.geometry("760x580")
-        self.minsize(620, 430)
+        self.geometry("920x760")
+        self.minsize(720, 560)
         self.transient(parent)
         self.grab_set()
 
@@ -140,7 +332,7 @@ class RecoveryInspectDialog(tk.Toplevel):
         ttk.Label(
             header,
             text=recovery_safety_message(candidate),
-            wraplength=710,
+            wraplength=860,
         ).pack(anchor="w", pady=(6, 0))
 
         details = ttk.LabelFrame(self, text="Recovery evidence", padding=10)
@@ -175,7 +367,49 @@ class RecoveryInspectDialog(tk.Toplevel):
         analyses_frame = ttk.LabelFrame(self, text="Recovered analyses", padding=8)
         analyses_frame.pack(fill="x", padx=12, pady=(0, 10))
         analyses_text = ", ".join(inspection.analysis_names) or "No analyses"
-        ttk.Label(analyses_frame, text=analyses_text, wraplength=700).pack(anchor="w")
+        ttk.Label(analyses_frame, text=analyses_text, wraplength=860).pack(anchor="w")
+
+        comparison_frame = ttk.LabelFrame(
+            self, text="Changes versus original project", padding=8
+        )
+        comparison_frame.pack(fill="both", padx=12, pady=(0, 10))
+        ttk.Label(
+            comparison_frame,
+            text=inspection.comparison.summary,
+            wraplength=860,
+        ).pack(anchor="w")
+        if inspection.comparison.differences:
+            table = ttk.Frame(comparison_frame)
+            table.pack(fill="both", expand=True, pady=(6, 0))
+            diff_tree = ttk.Treeview(
+                table,
+                columns=("change", "original", "recovered"),
+                show="tree headings",
+                height=min(8, len(inspection.comparison.differences)),
+            )
+            diff_tree.heading("#0", text="Project path")
+            diff_tree.heading("change", text="Change")
+            diff_tree.heading("original", text="Original")
+            diff_tree.heading("recovered", text="Recovered")
+            diff_tree.column("#0", width=260, stretch=True)
+            diff_tree.column("change", width=85, stretch=False)
+            diff_tree.column("original", width=230, stretch=True)
+            diff_tree.column("recovered", width=230, stretch=True)
+            yscroll = ttk.Scrollbar(table, orient="vertical", command=diff_tree.yview)
+            diff_tree.configure(yscrollcommand=yscroll.set)
+            diff_tree.pack(side="left", fill="both", expand=True)
+            yscroll.pack(side="right", fill="y")
+            for difference in inspection.comparison.differences:
+                diff_tree.insert(
+                    "",
+                    "end",
+                    text=difference.path,
+                    values=(
+                        difference.change,
+                        _display_difference_value(difference.original),
+                        _display_difference_value(difference.recovered),
+                    ),
+                )
 
         draft_frame = ttk.LabelFrame(self, text="Recovered editor draft", padding=8)
         draft_frame.pack(fill="both", expand=True, padx=12, pady=(0, 10))

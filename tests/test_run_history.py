@@ -11,6 +11,7 @@ from cleanroomx.project import (
     AnalysisDocument,
     PROJECT_SCHEMA_VERSION,
     ProjectDocument,
+    ProjectFormatError,
     load_project_document,
     save_project_document,
 )
@@ -330,3 +331,79 @@ def test_run_history_byte_budget_prunes_oldest_evidence_but_keeps_latest():
     assert records[0]["sequence"] == 4
     assert records[0]["result"] == run.to_dict()["result"]
     assert metadata[RUN_HISTORY_METADATA_KEY]["anchor_record_sha256"] is not None
+
+def test_project_load_rejects_tampered_run_history(tmp_path):
+    payload = _room_payload()
+    run = run_analysis("room_verification", payload)
+    project = ProjectDocument(
+        name="Audited project",
+        analyses=[
+            AnalysisDocument(
+                id="room-1",
+                name="Room verification",
+                kind="room_verification",
+                input=payload,
+            )
+        ],
+        active_analysis_id="room-1",
+    )
+    append_run_history_record(
+        project.metadata,
+        analysis_id="room-1",
+        analysis_name="Room verification",
+        analysis_kind="room_verification",
+        input_payload=payload,
+        run=run,
+        completed_at_utc="2026-09-25T11:00:00Z",
+    )
+
+    path = save_project_document(tmp_path / "tampered.cleanroomx.json", project)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["project"]["metadata"][RUN_HISTORY_METADATA_KEY]["records"][0]["status"] = "tampered"
+    path.write_text(
+        json.dumps(raw, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ProjectFormatError,
+        match="invalid project run history: .*integrity digest",
+    ):
+        load_project_document(path)
+
+
+def test_project_save_rejects_tampered_in_memory_run_history(tmp_path):
+    payload = _room_payload()
+    run = run_analysis("room_verification", payload)
+    project = ProjectDocument(
+        name="Audited project",
+        analyses=[
+            AnalysisDocument(
+                id="room-1",
+                name="Room verification",
+                kind="room_verification",
+                input=payload,
+            )
+        ],
+        active_analysis_id="room-1",
+    )
+    append_run_history_record(
+        project.metadata,
+        analysis_id="room-1",
+        analysis_name="Room verification",
+        analysis_kind="room_verification",
+        input_payload=payload,
+        run=run,
+        completed_at_utc="2026-09-25T11:00:00Z",
+    )
+    project.metadata[RUN_HISTORY_METADATA_KEY]["records"][0]["status"] = "tampered"
+
+    destination = tmp_path / "must-not-write.cleanroomx.json"
+    with pytest.raises(
+        ProjectFormatError,
+        match="invalid project run history: .*integrity digest",
+    ):
+        save_project_document(destination, project)
+
+    assert destination.exists() is False
+

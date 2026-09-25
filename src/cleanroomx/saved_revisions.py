@@ -217,10 +217,13 @@ def _validate_saved_revision_payload(data: Any) -> dict[str, Any]:
 def load_saved_revision_artifact(path: str | Path) -> dict[str, Any]:
     artifact = Path(path)
     try:
-        data = json.loads(
-            artifact.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        text = artifact.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise SavedRevisionFormatError(
+            "saved-revision artifact is not valid UTF-8"
+        ) from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise SavedRevisionFormatError(
             f"invalid saved-revision JSON at line {exc.lineno}, column {exc.colno}"
@@ -321,13 +324,6 @@ def archive_project_revision(
         raise OSError(f"project path is not a file: {source}")
 
     stat, raw = _read_stable_bytes(source)
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise SavedRevisionFormatError(
-            "existing project cannot be archived because it is not valid UTF-8"
-        ) from exc
-    project = _validated_project_text(text)
     digest = sha256(raw).hexdigest()
     current_revision = ProjectFileRevision(
         path=os.path.normcase(str(source)),
@@ -341,6 +337,14 @@ def archive_project_revision(
         and not project_file_revision_matches(expected_revision, current_revision)
     ):
         raise ProjectWriteConflictError(source, expected_revision, current_revision)
+
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise SavedRevisionFormatError(
+            "existing project cannot be archived because it is not valid UTF-8"
+        ) from exc
+    project = _validated_project_text(text)
 
     directory = _ensure_saved_revision_dir(
         Path(revision_dir) if revision_dir is not None else default_saved_revision_dir()

@@ -1238,6 +1238,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()
+        previous_analysis_room = item.get("analysis_room_name")
         name = self._property_vars["name"].get().strip()
         if name:
             item["name"] = name
@@ -1266,6 +1267,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                     item[key] = text
                 else:
                     item.pop(key, None)
+            if previous_analysis_room != item.get("analysis_room_name"):
+                item.pop(BASELINE_KEY, None)
         elif self.selected and self.selected.kind == "device":
             z_text = self._property_vars["z_m"].get().strip()
             if z_text:

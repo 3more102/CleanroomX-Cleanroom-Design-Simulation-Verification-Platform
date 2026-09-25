@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased spatial production closure — 2026-09-25
+
+- Adds explicit room-to-engineering synchronization provenance with synchronized, geometry-newer, engineering-newer, conflicting, and unmapped states.
+- Keeps directional freshness evidence fail-closed: opening matching legacy spatial data does not invent a last-synchronized baseline; provenance is established only by derivation from engineering data or an explicit successful push/pull.
+- Preflights all project-verification room mappings before mutation so invalid or duplicate links cannot leave a partially synchronized engineering input.
+- Adds explicit engineering-to-layout pull alongside the existing layout-to-engineering push.
+- Projects only fresh completed verification evidence into pressure overlays when available, otherwise falling back to configured observed pressure without inventing solver results.
+- Adds result-backed pressure-cascade status visualization, centralized tested 2D coordinate transforms, stricter raw editor diagnostics, windows/generic openings, richer room/device metadata, and production regression coverage.
+- Preserves project schema version 1 and does not change solver equations, numerical tolerances, root-selection behavior, or engineering acceptance criteria.
+
 ## v0.101.0 Release 2 closure — 2026-09-25
 
 - Assigns a new package/release identity to the completed Release 2 tree instead of moving or rewriting the already-published `v0.100.0` tag.

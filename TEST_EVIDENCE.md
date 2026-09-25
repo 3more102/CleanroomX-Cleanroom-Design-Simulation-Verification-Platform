@@ -167,3 +167,7 @@ The tested tree includes the consolidated Release 2 architecture and final corre
 The v0.91-v0.95 compatibility suites remain green on the same final tree. No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, engineering acceptance criterion, or unit convention was intentionally changed by the final release-identity and presentation-boundary closure.
 
 CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence; it does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.
+
+## Final combined-tree release gate
+
+This documentation-only gate binds CI to the composed v0.102.1 tree after the spatial viewport closure and autosave completion-race fix are both present. It changes no runtime code, solver equation, tolerance, project schema, spatial geometry behavior, or engineering acceptance criterion. The branch must pass the complete Python 3.11/3.12/3.13 matrix, clean-wheel install, CLI/GUI checks, Windows launcher smoke, and installed Tk/Xvfb demo smoke before merge.

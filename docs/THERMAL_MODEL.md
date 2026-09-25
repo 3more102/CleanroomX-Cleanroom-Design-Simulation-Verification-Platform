@@ -39,7 +39,7 @@ CleanroomX compares three explicit airflow drivers when available:
 2. required makeup airflow;
 3. airflow required to remove entered internal sensible load at the entered supply-air temperature.
 
-The largest becomes the preliminary governing airflow. If an FFU/filter-unit model is supplied, the program rounds up the unit count using its rated airflow multiplied by the entered design-utilization factor.
+The largest becomes the preliminary governing airflow. CleanroomX keeps the unrounded calculated airflow for downstream engineering decisions and rounds only when formatting reported values. If an FFU/filter-unit model is supplied, the program rounds up the unit count from that full-precision governing airflow using its rated airflow multiplied by the entered design-utilization factor; display rounding cannot reduce the required unit count.
 
 ## Capacity
 

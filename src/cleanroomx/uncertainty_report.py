@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_uncertainty_report(result: dict) -> str:
     volume = result["volume_m3"]
@@ -7,7 +9,7 @@ def markdown_uncertainty_report(result: dict) -> str:
     requirement = result["requirement"]
     traceability = result["traceability"]
 
-    lines = [f"# CleanroomX Uncertainty Report — {result['room']}", ""]
+    lines = [f"# CleanroomX Uncertainty Report — {markdown_text(result['room'])}", ""]
     lines.extend(
         [
             "## Conservative intervals",
@@ -34,10 +36,10 @@ def markdown_uncertainty_report(result: dict) -> str:
         source = provenance.get("source_name") or "missing"
         reference = provenance.get("reference") or "—"
         lines.append(
-            f"| {item['name']} | {item['value']} {item['unit']} | "
-            f"{item['uncertainty_abs']} {item['unit']} | "
-            f"{item['lower']} to {item['upper']} {item['unit']} | "
-            f"{source} | {reference} |"
+            f"| {markdown_text(item['name'])} | {item['value']} {markdown_text(item['unit'])} | "
+            f"{item['uncertainty_abs']} {markdown_text(item['unit'])} | "
+            f"{item['lower']} to {item['upper']} {markdown_text(item['unit'])} | "
+            f"{markdown_text(source)} | {markdown_text(reference)} |"
         )
 
     if traceability["missing_provenance"]:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_fan_speed_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Fan-Speed Study — {result['study']}",
+        f"# CleanroomX Fan-Speed Study — {markdown_text(result['study'])}",
         "",
         f"- Reference fan curve: **{result['reference_fan_curve']}**",
         f"- System curve: **{result['system_curve']}**",

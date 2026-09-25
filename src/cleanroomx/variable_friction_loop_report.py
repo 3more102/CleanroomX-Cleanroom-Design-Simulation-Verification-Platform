@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 from .loop_network_report import markdown_looped_network_report
 
 
@@ -50,7 +52,7 @@ def markdown_variable_friction_loop_report(result: dict) -> str:
             else row["target_reynolds_number"]
         )
         lines.append(
-            f"| {row['name']} | {row['state']} | "
+            f"| {markdown_text(row['name'])} | {row['state']} | "
             f"{row['airflow_m3_h']} | "
             f"{row['used_resistance_pa_per_m3_s_squared']} | "
             f"{target_r} | {row['relative_resistance_change']} | "

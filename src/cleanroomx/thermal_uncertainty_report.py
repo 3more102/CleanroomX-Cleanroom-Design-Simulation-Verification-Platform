@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def _fmt(value: float) -> str:
     return f"{value:.6g}"
@@ -31,13 +33,13 @@ def _append_psychrometric_state(
         lines.append(
             f"| {name} | {_fmt(item['nominal'])} | "
             f"{_fmt(item['lower'])} | {_fmt(item['upper'])} | "
-            f"{item['unit']} |"
+            f"{markdown_text(item['unit'])} |"
         )
     for name, item in state["derived"].items():
         lines.append(
             f"| {name} | {_fmt(item['nominal'])} | "
             f"{_fmt(item['lower'])} | {_fmt(item['upper'])} | "
-            f"{item['unit']} |"
+            f"{markdown_text(item['unit'])} |"
         )
     lines.append("")
 
@@ -49,7 +51,7 @@ def markdown_thermal_uncertainty_report(result: dict) -> str:
     traceability = result["traceability"]
 
     lines = [
-        f"# CleanroomX Thermal Uncertainty Report — {result['analysis']}",
+        f"# CleanroomX Thermal Uncertainty Report — {markdown_text(result['analysis'])}",
         "",
         f"- Overall capacity status: **{result['overall_status'].upper()}**",
         f"- Method: **{result['method']}**",
@@ -138,10 +140,10 @@ def markdown_thermal_uncertainty_report(result: dict) -> str:
         source = provenance.get("source_name") or "missing"
         reference = provenance.get("reference") or "—"
         lines.append(
-            f"| {item['name']} | {_fmt(item['value'])} {item['unit']} | "
-            f"{_fmt(item['uncertainty_abs'])} {item['unit']} | "
-            f"{_fmt(item['lower'])} to {_fmt(item['upper'])} {item['unit']} | "
-            f"{source} | {reference} |"
+            f"| {markdown_text(item['name'])} | {_fmt(item['value'])} {markdown_text(item['unit'])} | "
+            f"{_fmt(item['uncertainty_abs'])} {markdown_text(item['unit'])} | "
+            f"{_fmt(item['lower'])} to {_fmt(item['upper'])} {markdown_text(item['unit'])} | "
+            f"{markdown_text(source)} | {markdown_text(reference)} |"
         )
 
     if traceability["missing_provenance"]:

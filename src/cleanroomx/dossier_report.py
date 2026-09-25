@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def _fmt_counts(counts: dict) -> str:
     if not counts:
@@ -9,14 +11,14 @@ def _fmt_counts(counts: dict) -> str:
 
 def markdown_dossier_report(result: dict) -> str:
     summary = result["executive_summary"]
-    lines = [f"# CleanroomX Engineering Dossier — {result['dossier']}", ""]
+    lines = [f"# CleanroomX Engineering Dossier — {markdown_text(result['dossier'])}", ""]
 
     metadata = result["metadata"]
     if any(value is not None for value in metadata.values()):
         lines.extend(["## Dossier metadata", ""])
         for key, value in metadata.items():
             if value is not None:
-                lines.append(f"- {key.replace('_', ' ').title()}: {value}")
+                lines.append(f"- {key.replace('_', ' ').title()}: {markdown_text(value)}")
         lines.append("")
 
     lines.extend(
@@ -119,7 +121,7 @@ def markdown_dossier_report(result: dict) -> str:
                 item["status"] == "not_checked" for item in room["findings"]
             )
             lines.append(
-                f"- **{room['room']}** — ACH {room['ach']:.3f} 1/h; "
+                f"- **{markdown_text(room['room'])}** — ACH {room['ach']:.3f} 1/h; "
                 f"failures {fail_count}; unchecked {unchecked}."
             )
         if verification["pressure_cascade"]:
@@ -147,13 +149,13 @@ def markdown_dossier_report(result: dict) -> str:
         if hvac.get("duct_network") is not None:
             network = hvac["duct_network"]
             lines.append(
-                f"- Critical duct path: **{network['critical_path']}** at "
+                f"- Critical duct path: **{markdown_text(network['critical_path'])}** at "
                 f"**{network['critical_path_pressure_drop_pa']} Pa**"
             )
         if hvac.get("branch_flow_network") is not None:
             network = hvac["branch_flow_network"]
             lines.append(
-                f"- Critical branch-flow terminal: **{network['critical_terminal']}** at "
+                f"- Critical branch-flow terminal: **{markdown_text(network['critical_terminal'])}** at "
                 f"**{network['critical_path_pressure_drop_pa']} Pa**"
             )
         if hvac.get("supply_fan") is not None:
@@ -208,7 +210,7 @@ def markdown_dossier_report(result: dict) -> str:
             )
             for item in consistency["room_airflow_checks"]:
                 lines.append(
-                    f"| {item['room']} | "
+                    f"| {markdown_text(item['room'])} | "
                     f"{item['verification_supply_airflow_m3_h']} | "
                     f"{item['hvac_cleanroom_airflow_m3_h']} | "
                     f"{item['difference_m3_h']} | "
@@ -218,12 +220,12 @@ def markdown_dossier_report(result: dict) -> str:
         if consistency["verification_only_rooms"]:
             lines.append(
                 "- Verification-only rooms: "
-                + ", ".join(consistency["verification_only_rooms"])
+                + ", ".join(markdown_text(name) for name in consistency["verification_only_rooms"])
             )
         if consistency["hvac_only_rooms"]:
             lines.append(
                 "- HVAC-only rooms: "
-                + ", ".join(consistency["hvac_only_rooms"])
+                + ", ".join(markdown_text(name) for name in consistency["hvac_only_rooms"])
             )
         lines.extend(["", consistency["scope_note"]])
 
@@ -248,7 +250,7 @@ def markdown_dossier_report(result: dict) -> str:
             )
             confirmed = "—" if confirmed is None else confirmed
             lines.append(
-                f"| {item['test']} | {item['criterion_status']} | {observed} | "
+                f"| {markdown_text(item['test'])} | {item['criterion_status']} | {observed} | "
                 f"{confirmed} | {item['target_concentration_per_m3']} |"
             )
 
@@ -264,7 +266,7 @@ def markdown_dossier_report(result: dict) -> str:
         )
         for item in result["qualification_analyses"]:
             lines.append(
-                f"| {item['analysis']} | {item['overall_status']} | "
+                f"| {markdown_text(item['analysis'])} | {item['overall_status']} | "
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
             )
 
@@ -281,7 +283,7 @@ def markdown_dossier_report(result: dict) -> str:
         for item in result["uncertainty_rooms"]:
             ach = item["ach_1_h"]
             lines.append(
-                f"| {item['room']} | {item['requirement']['status']} | "
+                f"| {markdown_text(item['room'])} | {item['requirement']['status']} | "
                 f"{ach['lower']} to {ach['upper']} | "
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
             )
@@ -300,7 +302,7 @@ def markdown_dossier_report(result: dict) -> str:
             cooling = item["cooling_capacity_kw"]
             heating = item["heating_capacity_kw"]
             lines.append(
-                f"| {item['analysis']} | {item['overall_status']} | "
+                f"| {markdown_text(item['analysis'])} | {item['overall_status']} | "
                 f"{cooling['lower']} to {cooling['upper']} | "
                 f"{heating['lower']} to {heating['upper']} | "
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
@@ -320,7 +322,7 @@ def markdown_dossier_report(result: dict) -> str:
             humidity = item["psychrometric_properties"]["humidity_ratio_g_kg_da"]
             enthalpy = item["psychrometric_properties"]["enthalpy_kj_kg_da"]
             lines.append(
-                f"| {item['analysis']} | {item['corner_count']} | "
+                f"| {markdown_text(item['analysis'])} | {item['corner_count']} | "
                 f"{humidity['lower']} to {humidity['upper']} | "
                 f"{enthalpy['lower']} to {enthalpy['upper']} | "
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
@@ -341,7 +343,7 @@ def markdown_dossier_report(result: dict) -> str:
             airflow = "—" if point is None else point["airflow_m3_h"]
             pressure = "—" if point is None else point["system_pressure_pa"]
             lines.append(
-                f"| {item['study']} | {item['status']} | {airflow} | {pressure} |"
+                f"| {markdown_text(item['study'])} | {item['status']} | {airflow} | {pressure} |"
             )
 
     if result.get("fan_system_uncertainty_analyses"):
@@ -367,7 +369,7 @@ def markdown_dossier_report(result: dict) -> str:
                 else f"{envelope['system_pressure_pa']['lower']} to {envelope['system_pressure_pa']['upper']}"
             )
             lines.append(
-                f"| {item['analysis']} | {item['status']} | "
+                f"| {markdown_text(item['analysis'])} | {item['status']} | "
                 f"{item['solved_corner_count']}/{item['corner_count']} | "
                 f"{airflow} | {pressure} | "
                 f"{'yes' if item['traceability']['complete'] else 'no'} |"
@@ -390,7 +392,7 @@ def markdown_dossier_report(result: dict) -> str:
                 airflow = "—" if point is None else point["airflow_m3_h"]
                 pressure = "—" if point is None else point["system_pressure_pa"]
                 lines.append(
-                    f"| {item['study']} | {item['status']} | "
+                    f"| {markdown_text(item['study'])} | {item['status']} | "
                     f"{case['speed_ratio']} | {speed_rpm} | {case['status']} | "
                     f"{airflow} | {pressure} |"
                 )
@@ -410,7 +412,7 @@ def markdown_dossier_report(result: dict) -> str:
             airflow = "—" if point is None else point["airflow_m3_h"]
             pressure = "—" if point is None else point["system_pressure_pa"]
             lines.append(
-                f"| {item['study']} | {item['status']} | {item['critical_path']} | "
+                f"| {markdown_text(item['study'])} | {item['status']} | {markdown_text(item['critical_path'])} | "
                 f"{airflow} | {pressure} |"
             )
 
@@ -434,7 +436,7 @@ def markdown_dossier_report(result: dict) -> str:
                 else pressure_check["total_system_pressure_pa"]
             )
             lines.append(
-                f"| {item['study']} | {item['status']} | "
+                f"| {markdown_text(item['study'])} | {item['status']} | "
                 f"{item['equivalent_network_resistance_pa_per_m3_s_squared']} | "
                 f"{airflow} | {pressure} |"
             )
@@ -446,7 +448,7 @@ def markdown_dossier_report(result: dict) -> str:
             check = item["system_pressure_check"]
             airflow = "—" if point is None else point["airflow_m3_h"]
             pressure = "—" if check is None else check["total_system_pressure_pa"]
-            lines.append(f"| {item['study']} | {item['status']} | {item['equivalent_loop_resistance_pa_per_m3_s_squared']} | {airflow} | {pressure} |")
+            lines.append(f"| {markdown_text(item['study'])} | {item['status']} | {item['equivalent_loop_resistance_pa_per_m3_s_squared']} | {airflow} | {pressure} |")
 
     if result.get("fan_variable_friction_loop_studies"):
         lines.extend(
@@ -489,7 +491,7 @@ def markdown_dossier_report(result: dict) -> str:
                 ]
             )
             lines.append(
-                f"| {item['study']} | {item['status']} | {airflow} | "
+                f"| {markdown_text(item['study'])} | {item['status']} | {airflow} | "
                 f"{pressure} | {diagnostics.get('network_outer_iterations', '—')} | "
                 f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
                 f"{diagnostics.get('max_abs_mass_balance_residual_m3_h', '—')} | "
@@ -520,7 +522,7 @@ def markdown_dossier_report(result: dict) -> str:
                 )
             )
             lines.append(
-                f"| {item['analysis']} | {item['status']} | {item['corner_count']} | "
+                f"| {markdown_text(item['analysis'])} | {item['status']} | {item['corner_count']} | "
                 f"{item['solved_corner_count']} | {item['unresolved_corner_count']} | "
                 f"{airflow_envelope} | {item['traceability']['complete']} |"
             )
@@ -612,7 +614,7 @@ def markdown_dossier_report(result: dict) -> str:
                 "no_intersection_corner_count", 0
             )
             scenario_names = ", ".join(
-                scenario["name"]
+                markdown_text(scenario["name"])
                 for scenario in item.get("fan_curve_scenarios", [])
             ) or "—"
             solver_quality = item.get("solver_quality_summary", {})
@@ -1335,7 +1337,7 @@ def markdown_dossier_report(result: dict) -> str:
                     f"{residual_summary['reverse_strict_sign_change_corner_count']}"
                 )
             lines.append(
-                f"| {item['analysis']} | {item['status']} | "
+                f"| {markdown_text(item['analysis'])} | {item['status']} | "
                 f"{item['corner_count']} | {item['solved_corner_count']} | "
                 f"{item['unresolved_corner_count']} | "
                 f"{no_intersection_cases} | {scenario_names} | "
@@ -1367,7 +1369,7 @@ def markdown_dossier_report(result: dict) -> str:
             if solver_result_integrity:
                 lines.append(
                     "- Solver-result integrity linkage for "
-                    f"**{item['analysis']}**: "
+                    f"**{markdown_text(item['analysis'])}**: "
                     f"coverage={solver_result_integrity['evidence_result_count']}/"
                     f"{solver_result_integrity['expected_result_count']}; "
                     f"complete={solver_result_integrity['complete_coverage']}; "
@@ -1387,13 +1389,13 @@ def markdown_dossier_report(result: dict) -> str:
             integrity = item.get("result_integrity")
             if integrity:
                 lines.append(
-                    f"- Result SHA-256 for **{item['analysis']}**: "
+                    f"- Result SHA-256 for **{markdown_text(item['analysis'])}**: "
                     f"`{integrity['sha256']}`"
                 )
             if item["traceability"]["missing_provenance"]:
                 lines.append(
                     "- Missing uncertainty provenance for "
-                    f"**{item['analysis']}**: "
+                    f"**{markdown_text(item['analysis'])}**: "
                     + ", ".join(
                         item["traceability"]["missing_provenance"]
                     )
@@ -1428,7 +1430,7 @@ def markdown_dossier_report(result: dict) -> str:
                 )
                 rpm = "—" if case.get("speed_rpm") is None else case["speed_rpm"]
                 lines.append(
-                    f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
+                    f"| {markdown_text(study['study'])} | {case['speed_ratio']} | {rpm} | "
                     f"{case['status']} | {airflow} | {pressure} | "
                     f"{continuity} | {residual} |"
                 )
@@ -1481,7 +1483,7 @@ def markdown_dossier_report(result: dict) -> str:
                     "—" if case.get("speed_rpm") is None else case["speed_rpm"]
                 )
                 lines.append(
-                    f"| {study['study']} | {case['speed_ratio']} | {rpm} | "
+                    f"| {markdown_text(study['study'])} | {case['speed_ratio']} | {rpm} | "
                     f"{case['status']} | {airflow} | {pressure} | "
                     f"{diagnostics.get('network_outer_iterations', '—')} | "
                     f"{diagnostics.get('network_max_relative_resistance_closure_error', '—')} | "
@@ -1496,7 +1498,7 @@ def markdown_dossier_report(result: dict) -> str:
         lines.extend(["", "## Loop damper-resistance scenario studies", "", "| Study | Status | Cases | Baseline continuity residual m³/h | Baseline pressure-law residual Pa |", "|---|---|---:|---:|---:|"])
         for item in result["damper_studies"]:
             baseline = item["baseline_solution"]
-            lines.append(f"| {item['study']} | {item['status']} | {len(item['cases'])} | {baseline['max_abs_mass_balance_residual_m3_h']} | {baseline['max_abs_pressure_law_residual_pa']} |")
+            lines.append(f"| {markdown_text(item['study'])} | {item['status']} | {len(item['cases'])} | {baseline['max_abs_mass_balance_residual_m3_h']} | {baseline['max_abs_pressure_law_residual_pa']} |")
 
     fan_airflow_consistency = result.get("consistency_checks", {}).get(
         "hvac_fan_operating_airflow"
@@ -1539,7 +1541,7 @@ def markdown_dossier_report(result: dict) -> str:
                 else item["absolute_difference_m3_h"]
             )
             lines.append(
-                f"| {item['study_kind']} | {item['study']} | "
+                f"| {markdown_text(item['study_kind'])} | {markdown_text(item['study'])} | "
                 f"{item['hvac_governing_airflow_m3_h']} | {fan_airflow} | "
                 f"{absolute_difference} | {item['status']} |"
             )
@@ -1556,7 +1558,7 @@ def markdown_dossier_report(result: dict) -> str:
     )
     for source in result["source_files"]:
         lines.append(
-            f"| {source['kind']} | {source['path']} | `{source['sha256']}` |"
+            f"| {markdown_text(source['kind'])} | {markdown_text(source['path'])} | `{source['sha256']}` |"
         )
 
     lines.extend(

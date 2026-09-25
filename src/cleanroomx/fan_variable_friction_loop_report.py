@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_fan_variable_friction_loop_report(result: dict) -> str:
     diagnostics = result["solver_diagnostics"]
     lines = [
-        f"# CleanroomX Fan / Variable-Friction Loop Report — {result['study']}",
+        f"# CleanroomX Fan / Variable-Friction Loop Report — {markdown_text(result['study'])}",
         "",
-        f"- Fan curve: **{result['fan_curve']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
         f"- Status: **{result['status'].upper()}**",
-        f"- Fan discharge node: **{result['fan_discharge_node']}**",
-        f"- Fan suction node: **{result['fan_suction_node']}**",
+        f"- Fan discharge node: **{markdown_text(result['fan_discharge_node'])}**",
+        f"- Fan suction node: **{markdown_text(result['fan_suction_node'])}**",
         f"- Fixed pressure: **{result['fixed_pressure_pa']} Pa**",
         "- Fan-curve airflow range: "
         f"**{result['fan_curve_airflow_range_m3_h'][0]}–"
@@ -441,7 +443,7 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
         )
         for edge in network["edges"]:
             lines.append(
-                f"| {edge['name']} | {edge['resistance_basis']} | "
+                f"| {markdown_text(edge['name'])} | {edge['resistance_basis']} | "
                 f"{edge['airflow_m3_h']} | {edge['flow_direction']} | "
                 f"{edge['resistance_pa_per_m3_s_squared']} | "
                 f"{edge['dissipated_pressure_power_w']} |"
@@ -468,7 +470,7 @@ def markdown_fan_variable_friction_loop_report(result: dict) -> str:
                 else row["target_reynolds_number"]
             )
             lines.append(
-                f"| {row['name']} | {row['state']} | {row['airflow_m3_h']} | "
+                f"| {markdown_text(row['name'])} | {row['state']} | {row['airflow_m3_h']} | "
                 f"{row['used_resistance_pa_per_m3_s_squared']} | {target_r} | "
                 f"{row['relative_resistance_change']} | {reynolds} |"
             )

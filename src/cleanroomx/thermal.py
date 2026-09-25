@@ -10,7 +10,7 @@ from .psychrometrics import (
 )
 
 
-def analyze_thermal_design(
+def calculate_thermal_design(
     design: ThermalDesign,
     cleanroom_airflow_m3_h: float,
 ) -> dict:
@@ -85,27 +85,23 @@ def analyze_thermal_design(
         "room_air": air_state_result(design.room_air),
         "outdoor_air": outdoor_result,
         "loads": {
-            "internal_sensible_kw": round(internal_sensible_kw, 4),
-            "internal_latent_kw": round(internal_latent_kw, 4),
-            "internal_total_kw": round(internal_total_kw, 4),
-            "makeup_air_sensible_kw": round(makeup_sensible_kw, 4),
-            "makeup_air_latent_kw": round(makeup_latent_kw, 4),
-            "makeup_air_total_kw": round(makeup_total_kw, 4),
-            "net_room_plus_makeup_kw": round(net_load_kw, 4),
+            "internal_sensible_kw": internal_sensible_kw,
+            "internal_latent_kw": internal_latent_kw,
+            "internal_total_kw": internal_total_kw,
+            "makeup_air_sensible_kw": makeup_sensible_kw,
+            "makeup_air_latent_kw": makeup_latent_kw,
+            "makeup_air_total_kw": makeup_total_kw,
+            "net_room_plus_makeup_kw": net_load_kw,
         },
         "makeup_air_m3_h": design.makeup_air_m3_h,
         "supply_air_temp_c": design.supply_air_temp_c,
-        "thermal_airflow_for_internal_sensible_m3_h": (
-            round(thermal_airflow_m3_h, 3)
-            if thermal_airflow_m3_h is not None
-            else None
-        ),
+        "thermal_airflow_for_internal_sensible_m3_h": thermal_airflow_m3_h,
         "thermal_airflow_note": thermal_airflow_note,
-        "governing_supply_airflow_m3_h": round(governing_airflow, 3),
+        "governing_supply_airflow_m3_h": governing_airflow,
         "governing_airflow_basis": governing_basis,
         "capacity_margin_percent": design.capacity_margin_percent,
-        "preliminary_cooling_capacity_kw": round(cooling_kw, 4),
-        "preliminary_heating_capacity_kw": round(heating_kw, 4),
+        "preliminary_cooling_capacity_kw": cooling_kw,
+        "preliminary_heating_capacity_kw": heating_kw,
         "scope_note": (
             "Preliminary load estimate only. Envelope, people, lighting, equipment "
             "and latent gains are explicit user inputs; fan heat, duct heat, diversity, "
@@ -113,3 +109,49 @@ def analyze_thermal_design(
             "not modeled."
         ),
     }
+
+
+def _format_thermal_design_calculation(calculation: dict) -> dict:
+    loads = calculation["loads"]
+    thermal_airflow = calculation["thermal_airflow_for_internal_sensible_m3_h"]
+    return {
+        "room_air": calculation["room_air"],
+        "outdoor_air": calculation["outdoor_air"],
+        "loads": {
+            "internal_sensible_kw": round(loads["internal_sensible_kw"], 4),
+            "internal_latent_kw": round(loads["internal_latent_kw"], 4),
+            "internal_total_kw": round(loads["internal_total_kw"], 4),
+            "makeup_air_sensible_kw": round(loads["makeup_air_sensible_kw"], 4),
+            "makeup_air_latent_kw": round(loads["makeup_air_latent_kw"], 4),
+            "makeup_air_total_kw": round(loads["makeup_air_total_kw"], 4),
+            "net_room_plus_makeup_kw": round(loads["net_room_plus_makeup_kw"], 4),
+        },
+        "makeup_air_m3_h": calculation["makeup_air_m3_h"],
+        "supply_air_temp_c": calculation["supply_air_temp_c"],
+        "thermal_airflow_for_internal_sensible_m3_h": (
+            round(thermal_airflow, 3) if thermal_airflow is not None else None
+        ),
+        "thermal_airflow_note": calculation["thermal_airflow_note"],
+        "governing_supply_airflow_m3_h": round(
+            calculation["governing_supply_airflow_m3_h"], 3
+        ),
+        "governing_airflow_basis": calculation["governing_airflow_basis"],
+        "capacity_margin_percent": calculation["capacity_margin_percent"],
+        "preliminary_cooling_capacity_kw": round(
+            calculation["preliminary_cooling_capacity_kw"], 4
+        ),
+        "preliminary_heating_capacity_kw": round(
+            calculation["preliminary_heating_capacity_kw"], 4
+        ),
+        "scope_note": calculation["scope_note"],
+    }
+
+
+def analyze_thermal_design(
+    design: ThermalDesign,
+    cleanroom_airflow_m3_h: float,
+) -> dict:
+    """Return a transparent preliminary thermal/HVAC analysis for one room."""
+    return _format_thermal_design_calculation(
+        calculate_thermal_design(design, cleanroom_airflow_m3_h)
+    )

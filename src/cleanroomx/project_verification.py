@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from .models import ProjectSpec
-from .verification import Status, VerificationReport, verify_room
+from .verification import (
+    AggregateVerificationStatus,
+    Status,
+    VerificationReport,
+    aggregate_verification_status,
+    verify_room,
+)
 
 
 @dataclass(frozen=True)
@@ -24,7 +30,27 @@ class ProjectVerificationReport:
     pressure_cascade_findings: tuple[PressureCascadeFinding, ...]
 
     @property
+    def status(self) -> AggregateVerificationStatus:
+        statuses = [
+            finding.status
+            for report in self.room_reports
+            for finding in report.findings
+        ]
+        statuses.extend(
+            finding.status for finding in self.pressure_cascade_findings
+        )
+        return aggregate_verification_status(statuses)
+
+    @property
+    def complete(self) -> bool:
+        return all(report.complete for report in self.room_reports) and all(
+            finding.status != "not_checked"
+            for finding in self.pressure_cascade_findings
+        )
+
+    @property
     def passed(self) -> bool:
+        """Compatibility boolean: true when no configured check failed."""
         return all(report.passed for report in self.room_reports) and all(
             finding.status != "fail" for finding in self.pressure_cascade_findings
         )
@@ -32,6 +58,8 @@ class ProjectVerificationReport:
     def to_dict(self) -> dict:
         return {
             "project": self.project,
+            "status": self.status,
+            "complete": self.complete,
             "passed": self.passed,
             "rooms": [report.to_dict() for report in self.room_reports],
             "pressure_cascade": [asdict(finding) for finding in self.pressure_cascade_findings],

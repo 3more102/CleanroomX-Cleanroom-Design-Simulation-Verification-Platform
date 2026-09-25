@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def _fmt(value: object) -> str:
     return "—" if value is None else str(value)
@@ -42,7 +44,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
 ) -> str:
     lines = [
         "# CleanroomX Fan / Variable-Friction Loop Uncertainty Report — "
-        f"{result['analysis']}",
+        f"{markdown_text(result['analysis'])}",
         "",
         f"- Status: **{result['status'].upper()}**",
         f"- Fan curve: **{result['fan_curve']}**",
@@ -154,7 +156,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                 for point in scenario["points"]
             )
             lines.append(
-                f"- `{scenario['name']}`: {point_text}"
+                f"- `{markdown_text(scenario['name'])}`: {point_text}"
             )
 
     solver_result_integrity = result.get(
@@ -454,7 +456,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
         )
         for edge in edge_ranges:
             lines.append(
-                f"| {edge['edge']} | {edge['lower_airflow_m3_h']} | "
+                f"| {markdown_text(edge['edge'])} | {edge['lower_airflow_m3_h']} | "
                 f"{edge['lower_corner_index']} | "
                 f"{edge['upper_airflow_m3_h']} | "
                 f"{edge['upper_corner_index']} | "
@@ -1895,7 +1897,7 @@ def markdown_fan_variable_friction_loop_uncertainty_report(
                     for source in evidence["sources"]
                 )
                 lines.append(
-                    f"| {edge['edge']} | {bound} | {evidence['value']} | "
+                    f"| {markdown_text(edge['edge'])} | {bound} | {evidence['value']} | "
                     f"{source_text} |"
                 )
 

@@ -230,7 +230,6 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
-
 def validate_layout(value: Any) -> list[dict]:
     """Return advisory spatial-edit warnings without mutating persisted layout data."""
     layout = normalize_layout(value)
@@ -550,7 +549,9 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _update_validation_summary(self) -> None:
         count = len(self._validation_issues)
-        self._validation_var.set("Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)")
+        self._validation_var.set(
+            "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
+        )
 
     def report_validation(self) -> None:
         self._validation_issues = validate_layout(self.layout)
@@ -560,7 +561,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             self.redraw()
             return
         messages = [issue["message"] for issue in self._validation_issues[:3]]
-        suffix = "" if len(self._validation_issues) <= 3 else f" (+{len(self._validation_issues) - 3} more)"
+        suffix = (
+            ""
+            if len(self._validation_issues) <= 3
+            else f" (+{len(self._validation_issues) - 3} more)"
+        )
         self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
         self.redraw()
 
@@ -745,7 +750,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#1d4ed8" if selected else ("#b45309" if room["id"] in warning_ids else "#34495e")
+            outline = (
+                "#1d4ed8"
+                if selected
+                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+            )
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             canvas.create_rectangle(
                 x0, y0, x1, y1,
@@ -791,7 +800,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
             radius = 9 if selected else 7
-            device_outline = "#c0392b" if selected else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+            device_outline = (
+                "#c0392b"
+                if selected
+                else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+            )
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
                 fill="#ffffff", outline=device_outline,
@@ -870,7 +883,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#7dd3fc" if selected else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+            outline = (
+                "#7dd3fc"
+                if selected
+                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+            )
             tag = f"room:{room['id']}"
             canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
             canvas.create_polygon(
@@ -893,7 +910,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
-            device_outline = "#ffffff" if selected else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+            device_outline = (
+                "#ffffff"
+                if selected
+                else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+            )
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
                 fill="#fbbf24", outline=device_outline,

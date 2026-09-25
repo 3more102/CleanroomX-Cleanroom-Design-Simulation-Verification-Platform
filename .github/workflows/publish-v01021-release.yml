@@ -59,6 +59,7 @@ jobs:
           git show "${TARGET_SHA}:src/cleanroomx/demo/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.102.1"'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'Release: CleanroomX v0.102.1'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1551'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'PR CI run #1552'
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence'
 
       - name: Publish tag and GitHub Release
@@ -98,9 +99,12 @@ jobs:
           - post-#467 main CI #1550 / 36171324227: success
           - PR #472 exact tested head: 8a34c3d649aee54c377b4194a6d619559d219421
           - PR #472 CI #1551 / 36171758793: success
-          - final spatial code baseline before release identity: f595aaba6e7b8704beb62acc04f0eb4d036d8f09
+          - merged main commit after #472: f595aaba6e7b8704beb62acc04f0eb4d036d8f09
+          - PR #473 exact tested head: 332eb07ed1d4d27a028d7fe8886b3914da29c8d7
+          - PR #473 CI #1552 / 36171783101: success
+          - final functional spatial baseline before release-evidence closure: 1fc662441763fd6bd2070aac6d6449410f06fb2a
 
-          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; and strengthens the installed demo smoke.
+          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; computes true 3D fit-to-view zoom and pan from room floor/ceiling geometry; and strengthens the installed demo smoke.
 
           The successful current-main CI that triggers this publisher is the release gate for the exact tagged commit. Published v0.100.0, v0.101.0, and v0.102.0 remain unchanged.
 

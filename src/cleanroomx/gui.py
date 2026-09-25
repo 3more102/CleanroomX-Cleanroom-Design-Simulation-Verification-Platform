@@ -1856,17 +1856,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
 
+    validate_application_registry()
+
     diagnostic_session = None
     try:
         diagnostic_session = configure_local_diagnostics()
     except (OSError, ValueError) as exc:
         print(f"CleanroomX diagnostics unavailable: {exc}", file=sys.stderr)
 
-    try:
-        validate_application_registry()
-    except Exception:
-        log_exception("gui.registry_validation_failed", *sys.exc_info())
-        raise
     project_path = bundled_demo_project_path() if args.demo else args.project
 
     try:

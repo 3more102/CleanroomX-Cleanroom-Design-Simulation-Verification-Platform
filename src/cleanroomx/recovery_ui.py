@@ -7,6 +7,7 @@ from tkinter import messagebox, ttk
 
 from .autosave import (
     RecoveryCandidate,
+    RecoveryFormatError,
     RecoveryScan,
     discard_recovery_artifact,
     load_recovery_artifact,
@@ -78,7 +79,7 @@ class RecoveryInspectDialog(tk.Toplevel):
                 ensure_ascii=False,
                 allow_nan=False,
             )
-        except Exception as exc:
+        except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
             body = f"Recovery artifact could not be read.\n\n{exc}"
         text.insert("1.0", body)
         text.configure(state="disabled")
@@ -302,7 +303,7 @@ class RecoveryDialog(tk.Toplevel):
             return
         try:
             prepare_recovery_restore(candidate.path)
-        except Exception as exc:
+        except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
             messagebox.showerror(
                 "Recovery snapshot is invalid",
                 str(exc),

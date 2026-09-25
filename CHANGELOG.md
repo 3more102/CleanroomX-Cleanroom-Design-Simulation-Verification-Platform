@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased external-modification save guard — 2026-09-25
+
+- Adds content-fingerprint optimistic concurrency protection for explicit project saves so a normal **Save** cannot silently overwrite a project that another process, editor, sync client, or CleanroomX instance changed or deleted after it was opened.
+- Captures the SHA-256 fingerprint from the exact bytes parsed on project open and refreshes it from the exact bytes written after each successful explicit save.
+- Performs the conflict check immediately before the existing atomic replacement; a mismatch aborts the replacement, removes the temporary file, keeps the externally changed file intact, and leaves the current CleanroomX work dirty/recoverable.
+- Applies the same guard when **Save Project As** targets the currently open project path, while preserving ordinary user-authorized Save-As behavior for a different destination.
+- Centralizes stable project-file fingerprinting so crash recovery and explicit-save conflict detection use the same content-identity implementation.
+- Adds regression coverage for external content changes, deletion, mtime-only touches, exact parsed-byte identity, temporary-file cleanup, and desktop conflict handling without changing project schema, solver equations, numerical tolerances, or engineering acceptance semantics.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

@@ -56,6 +56,10 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+Guarded saves are also serialized across cooperating CleanroomX processes with a non-blocking operating-system advisory lock on a stable dot-prefixed sidecar file next to the project. If another CleanroomX process is already saving the same destination, the current save is refused immediately, the project remains unchanged, and the UI reports **Project save in progress**. The sidecar remains in place after release by design; the OS lock, not file existence, indicates ownership, and the lock is automatically released if the owning process exits.
+
+The advisory lock complements rather than replaces the SHA-256 revision guard. External programs that do not participate in the lock are still detected by the content checks before replacement, but no advisory-lock design can force an unrelated program to cooperate.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

@@ -34,6 +34,7 @@ def _workspace() -> SpatialDesignWorkspace:
     workspace.canvas_2d = _Canvas()
     workspace.canvas_3d = _Canvas(1200, 760)
     workspace.redraw = lambda: None
+    workspace._draw_3d = lambda: None
     workspace._persist = lambda message: None
     return workspace
 
@@ -197,3 +198,40 @@ def test_workspace_fit_views_updates_3d_camera_from_geometry():
     assert workspace.layout["view"]["zoom_3d"] < 1.0
     assert math.isfinite(workspace.layout["view"]["pan_3d_x"])
     assert math.isfinite(workspace.layout["view"]["pan_3d_y"])
+
+
+class _Event:
+    def __init__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+
+
+def test_reset_2d_restores_default_zoom_and_pan():
+    workspace = _workspace()
+    workspace.layout["view"].update(
+        {"zoom_2d": 3.5, "pan_x": 42.0, "pan_y": -19.0}
+    )
+
+    workspace.reset_2d()
+
+    assert workspace.layout["view"]["zoom_2d"] == 1.0
+    assert workspace.layout["view"]["pan_x"] == 0.0
+    assert workspace.layout["view"]["pan_y"] == 0.0
+
+
+def test_shift_drag_orbit_changes_camera_and_clamps_elevation():
+    workspace = _workspace()
+    start_azimuth = workspace.layout["view"]["azimuth_deg"]
+    start_elevation = workspace.layout["view"]["elevation_deg"]
+
+    assert workspace._on_orbit_3d_down(_Event(100, 100)) == "break"
+    assert workspace._on_orbit_3d_drag(_Event(160, 60)) == "break"
+
+    assert workspace.layout["view"]["azimuth_deg"] == pytest.approx(
+        (start_azimuth + 30.0) % 360
+    )
+    assert workspace.layout["view"]["elevation_deg"] > start_elevation
+
+    workspace._on_orbit_3d_down(_Event(0, 0))
+    workspace._on_orbit_3d_drag(_Event(0, 1000))
+    assert workspace.layout["view"]["elevation_deg"] == 5.0

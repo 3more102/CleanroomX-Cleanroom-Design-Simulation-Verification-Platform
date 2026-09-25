@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased atomic CLI output persistence — 2026-09-25
+
+- Routes all 23 file-output CLI workflows through the existing same-directory temporary-file, flush/fsync, and atomic-replace writer instead of truncating destinations in place.
+- Keeps an existing output file as the last-known-good artifact until replacement succeeds and cleans temporary files when replacement fails.
+- Preserves stdout behavior, output formats, solver behavior, project schema version 1, and command-line arguments.
+- Adds cross-CLI contract coverage plus failure-injection coverage for preserving an existing destination.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

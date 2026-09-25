@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased durable verified project persistence — 2026-09-25
+
+- Fsyncs the containing directory after atomic replacement on POSIX so completed project/export/recovery renames have an explicit metadata-durability boundary in addition to the existing temporary-file fsync.
+- Verifies every explicit project save against the exact validated UTF-8 serialization using byte count and SHA-256 before reporting success or advancing the desktop's saved revision.
+- Surfaces directory-fsync and post-replace verification failures instead of silently clearing dirty/recovery state.
+- Extends the existing external-change write guard without changing project schema, engineering calculations, solver tolerances, or workflow APIs.
+
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

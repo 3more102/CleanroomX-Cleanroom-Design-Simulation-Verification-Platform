@@ -124,12 +124,38 @@ def verify_engineering_report_payload(payload: dict[str, Any]) -> bool:
         return False
     if payload.get("schema_version") != ENGINEERING_REPORT_SCHEMA_VERSION:
         return False
+    if not isinstance(payload.get("application_version"), str):
+        return False
+    project = payload.get("project")
+    analysis = payload.get("analysis")
+    if not isinstance(project, dict) or not isinstance(analysis, dict):
+        return False
+    if not isinstance(project.get("name"), str) or not project["name"]:
+        return False
+    if not isinstance(project.get("description"), str):
+        return False
+    for key in ("id", "name", "kind", "status"):
+        if not isinstance(analysis.get(key), str) or not analysis[key]:
+            return False
+    input_sha256 = analysis.get("input_sha256")
+    if not isinstance(input_sha256, str) or len(input_sha256) != 64:
+        return False
+    if not isinstance(payload.get("input"), dict):
+        return False
+    if not isinstance(payload.get("result"), dict):
+        return False
+    if not isinstance(payload.get("diagnostics"), dict):
+        return False
+    if not isinstance(payload.get("backend_report_markdown"), str):
+        return False
     integrity = payload.get("integrity")
     if not isinstance(integrity, dict):
         return False
     if integrity.get("algorithm") != "sha256":
         return False
     if integrity.get("canonicalization") != ENGINEERING_REPORT_CANONICALIZATION:
+        return False
+    if integrity.get("scope") != "report payload excluding integrity":
         return False
     expected = integrity.get("sha256")
     if not isinstance(expected, str) or len(expected) != 64:
@@ -227,7 +253,12 @@ footer { color: #667085; font-size: 12px; padding: 4px 2px 24px; }
         "<header>\n"
         f"  <h1>{escape(analysis['name'])}</h1>\n"
         f"  <p class=\"subtitle\">{escape(project['name'])} · CleanroomX {escape(payload['application_version'])}</p>\n"
-        '  <div class="grid">\n'
+        + (
+            f'  <p>{escape(project["description"])}</p>\n'
+            if project["description"]
+            else ""
+        )
+        + '  <div class="grid">\n'
         f'    <div class="card"><span class="label">Status</span><span class="value">{escape(analysis["status"])}</span></div>\n'
         f'    <div class="card"><span class="label">Workflow</span><span class="value">{escape(analysis["kind"])}</span></div>\n'
         f'    <div class="card"><span class="label">Analysis ID</span><span class="value">{escape(analysis["id"])}</span></div>\n'

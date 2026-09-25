@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
+import stat
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    AnalysisDocument, AtomicWriteVerificationError, PROJECT_SCHEMA,
+    PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError, atomic_write_text,
+    load_project_document, project_from_dict, save_project_document,
 )
 
 
@@ -51,6 +55,57 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
         atomic_write_text(target, "payload\n")
 
     assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_persists_exact_utf8_bytes_and_syncs_parent(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.txt"
+    sync_calls = []
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_parent_directory",
+        lambda destination: sync_calls.append(Path(destination)),
+    )
+
+    atomic_write_text(target, "line 1\nΔP = 125 Pa\n")
+
+    assert target.read_bytes() == "line 1\nΔP = 125 Pa\n".encode("utf-8")
+    assert sync_calls == [target]
+
+
+@pytest.mark.skipif(
+    os.name != "posix" or not hasattr(os, "fchmod"),
+    reason="POSIX file-mode preservation requires fchmod",
+)
+def test_atomic_write_text_preserves_existing_file_permissions(tmp_path):
+    target = tmp_path / "project.cleanroomx.json"
+    target.write_text("old\n", encoding="utf-8")
+    target.chmod(0o640)
+
+    atomic_write_text(target, "new\n")
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+
+
+def test_atomic_write_text_detects_post_replace_corruption(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    original_replace = type(target).replace
+
+    def corrupt_after_replace(self, destination):
+        result = original_replace(self, destination)
+        Path(destination).write_bytes(b"corrupted-after-replace")
+        return result
+
+    monkeypatch.setattr(type(target), "replace", corrupt_after_replace)
+
+    with pytest.raises(AtomicWriteVerificationError) as exc_info:
+        atomic_write_text(target, "requested-payload\n")
+
+    assert exc_info.value.path == target
+    assert exc_info.value.expected_size == len("requested-payload\n".encode("utf-8"))
+    assert target.read_bytes() == b"corrupted-after-replace"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

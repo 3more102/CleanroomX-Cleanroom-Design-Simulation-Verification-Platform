@@ -19,6 +19,7 @@ from cleanroomx.spatial import (
     snap_room_translation,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
+    spatial_overlap_report_csv,
     spatial_layout_summary,
     spatial_layout_svg,
     sync_layout_to_analysis,
@@ -322,6 +323,99 @@ def test_spatial_layout_schedule_csv_handles_empty_layout():
 
     assert rows == []
     assert exported.startswith("record_type,id,name,device_type,room_id,room_name,")
+
+
+def test_spatial_overlap_report_csv_exports_deterministic_qa_metrics():
+    import csv
+    import io
+
+    layout = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "Process, ISO 7",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "b",
+                "name": "Gowning",
+                "x_m": 2,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "c",
+                "name": "Touching only",
+                "x_m": 6,
+                "y_m": 0,
+                "length_m": 2,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    exported = spatial_overlap_report_csv(layout)
+    rows = list(csv.DictReader(io.StringIO(exported)))
+
+    assert exported == spatial_overlap_report_csv(layout)
+    assert exported.endswith("\n")
+    assert len(rows) == 1
+    assert rows[0]["conflict_index"] == "1"
+    assert rows[0]["room_a_id"] == "a"
+    assert rows[0]["room_a_name"] == "Process, ISO 7"
+    assert rows[0]["room_b_id"] == "b"
+    assert rows[0]["room_b_name"] == "Gowning"
+    assert rows[0]["overlap_x_m"] == "2"
+    assert rows[0]["overlap_y_m"] == "0"
+    assert rows[0]["overlap_length_m"] == "2"
+    assert rows[0]["overlap_width_m"] == "4"
+    assert rows[0]["overlap_area_m2"] == "8"
+    assert rows[0]["room_a_area_m2"] == "16"
+    assert rows[0]["room_b_area_m2"] == "16"
+    assert rows[0]["room_a_overlap_pct"] == "50"
+    assert rows[0]["room_b_overlap_pct"] == "50"
+
+
+def test_spatial_overlap_report_csv_handles_clear_or_empty_layout():
+    import csv
+    import io
+
+    clear_layout = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "A",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+            },
+            {
+                "id": "b",
+                "name": "B",
+                "x_m": 2,
+                "y_m": 0,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    exported = spatial_overlap_report_csv(clear_layout)
+    rows = list(csv.DictReader(io.StringIO(exported)))
+
+    assert rows == []
+    assert exported.startswith("conflict_index,room_a_id,room_a_name,room_b_id,")
+    assert list(csv.DictReader(io.StringIO(spatial_overlap_report_csv({})))) == []
 
 
 def test_spatial_layout_svg_exports_valid_deterministic_vector_plan():

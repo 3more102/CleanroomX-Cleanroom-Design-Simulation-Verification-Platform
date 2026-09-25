@@ -384,6 +384,7 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
         if isinstance(room, dict) and str(room.get("name") or "").strip()
     }
     used_source_links: set[str] = set()
+    planned_updates: list[tuple[dict, dict]] = []
     for source in rooms:
         source_name = str(source.get("analysis_room_name") or source["name"]).strip()
         source_key = source_name.casefold()
@@ -400,6 +401,11 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
                     f"Linked analysis room {source_name!r} does not exist in the active analysis."
                 )
             continue
+        planned_updates.append((source, target))
+
+    # Preflight every mapping before mutating engineering input. A later invalid
+    # explicit link must never leave an earlier room partially synchronized.
+    for source, target in planned_updates:
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:
                 target[key] = source[key]

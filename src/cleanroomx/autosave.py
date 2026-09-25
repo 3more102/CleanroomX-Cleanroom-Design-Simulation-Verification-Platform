@@ -19,6 +19,8 @@ from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
 RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
+RECOVERY_INTEGRITY_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 
@@ -135,6 +137,33 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _recovery_integrity_digest(data: dict[str, Any]) -> str:
+    payload = {key: value for key, value in data.items() if key != "integrity"}
+    return sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def _validate_recovery_integrity(data: dict[str, Any]) -> None:
+    integrity = data.get("integrity")
+    if integrity is None:
+        # Schema-v1 recovery artifacts created before integrity checks remain readable.
+        return
+    if not isinstance(integrity, dict):
+        raise RecoveryFormatError("recovery integrity must be an object")
+    if integrity.get("algorithm") != RECOVERY_INTEGRITY_ALGORITHM:
+        raise RecoveryFormatError("unsupported recovery integrity algorithm")
+    if integrity.get("canonicalization") != RECOVERY_INTEGRITY_CANONICALIZATION:
+        raise RecoveryFormatError("unsupported recovery integrity canonicalization")
+    digest = integrity.get("sha256")
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdefABCDEF" for char in digest)
+    ):
+        raise RecoveryFormatError("recovery integrity sha256 must be 64 hexadecimal characters")
+    if digest.lower() != _recovery_integrity_digest(data):
+        raise RecoveryFormatError("recovery integrity checksum mismatch")
+
+
 def _normalized_source_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -223,6 +252,7 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     snapshot = data.get("snapshot")
     if not isinstance(snapshot, dict):
         raise RecoveryFormatError("snapshot must be an object")
+    _validate_recovery_integrity(data)
     return data
 
 
@@ -484,6 +514,11 @@ class AutosaveManager:
             "saved_at_utc": _utc_now_text(),
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
+        }
+        payload["integrity"] = {
+            "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+            "canonicalization": RECOVERY_INTEGRITY_CANONICALIZATION,
+            "sha256": _recovery_integrity_digest(payload),
         }
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)

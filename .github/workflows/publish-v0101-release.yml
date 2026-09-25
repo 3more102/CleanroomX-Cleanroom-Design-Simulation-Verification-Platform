@@ -32,6 +32,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Release tag ${TAG} already exists; the historical publisher is retired."
+            exit 0
+          fi
+
           current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
             echo "publish=false" >> "${GITHUB_OUTPUT}"

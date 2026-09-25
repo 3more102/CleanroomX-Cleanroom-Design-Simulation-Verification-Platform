@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tempfile
 from typing import Any, Callable
+import uuid
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -147,11 +148,124 @@ class ProjectDocument:
             },
         )
 
-    def analysis_by_id(self, analysis_id: str) -> AnalysisDocument:
+    def _assert_analysis_lifecycle(self) -> None:
+        ids: list[str] = []
         for item in self.analyses:
-            if item.id == analysis_id:
-                return item
+            if not isinstance(item, AnalysisDocument):
+                raise ProjectFormatError(
+                    "project analyses must contain AnalysisDocument objects"
+                )
+            analysis_id = _validated_string(item.id, "analysis.id")
+            if analysis_id != item.id:
+                raise ProjectFormatError(
+                    "in-memory analysis ids must not contain leading or trailing whitespace"
+                )
+            if item.kind not in ANALYSIS_SPECS:
+                raise ProjectFormatError(
+                    f"unsupported analysis kind in project: {item.kind}"
+                )
+            if not isinstance(item.input, dict):
+                raise ProjectFormatError(
+                    f"analysis {analysis_id!r} input must be an object"
+                )
+            ids.append(analysis_id)
+        if len(ids) != len(set(ids)):
+            raise ProjectFormatError("analysis ids must be unique")
+        if self.active_analysis_id is not None:
+            active = _validated_string(self.active_analysis_id, "active_analysis_id")
+            if active != self.active_analysis_id or active not in set(ids):
+                raise ProjectFormatError(
+                    "active_analysis_id must reference an analysis present in the project"
+                )
+
+    def analysis_by_id(self, analysis_id: str) -> AnalysisDocument:
+        matches = [item for item in self.analyses if item.id == analysis_id]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ProjectFormatError(
+                f"analysis id {analysis_id!r} is ambiguous because it is duplicated"
+            )
         raise KeyError(analysis_id)
+
+    def add_analysis(
+        self,
+        analysis: AnalysisDocument,
+        *,
+        make_active: bool = True,
+    ) -> AnalysisDocument:
+        self._assert_analysis_lifecycle()
+        if not isinstance(analysis, AnalysisDocument):
+            raise TypeError("analysis must be an AnalysisDocument")
+        analysis_id = _validated_string(analysis.id, "analysis.id")
+        if analysis_id != analysis.id:
+            raise ProjectFormatError(
+                "in-memory analysis ids must not contain leading or trailing whitespace"
+            )
+        _validated_string(analysis.name, "analysis.name")
+        if analysis.kind not in ANALYSIS_SPECS:
+            raise ProjectFormatError(
+                f"unsupported analysis kind in project: {analysis.kind}"
+            )
+        if not isinstance(analysis.input, dict):
+            raise ProjectFormatError(
+                f"analysis {analysis_id!r} input must be an object"
+            )
+        if any(item.id == analysis_id for item in self.analyses):
+            raise ProjectFormatError(f"analysis id {analysis_id!r} already exists")
+        self.analyses.append(analysis)
+        if make_active:
+            self.active_analysis_id = analysis_id
+        return analysis
+
+    def create_analysis(
+        self,
+        *,
+        kind: str,
+        name: str,
+        payload: dict | None = None,
+    ) -> AnalysisDocument:
+        self._assert_analysis_lifecycle()
+        normalized_kind = _validated_string(kind, "analysis.kind")
+        if normalized_kind not in ANALYSIS_SPECS:
+            raise ProjectFormatError(
+                f"unsupported analysis kind in project: {normalized_kind}"
+            )
+        normalized_name = _validated_string(name, "analysis.name")
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise ProjectFormatError("analysis input must be an object")
+        analysis_id = _allocate_analysis_id(
+            normalized_kind,
+            {item.id for item in self.analyses},
+        )
+        return self.add_analysis(
+            AnalysisDocument(
+                id=analysis_id,
+                name=normalized_name,
+                kind=normalized_kind,
+                input=payload,
+            ),
+            make_active=True,
+        )
+
+    def remove_analysis(self, analysis_id: str) -> AnalysisDocument:
+        self._assert_analysis_lifecycle()
+        target_id = _validated_string(analysis_id, "analysis.id")
+        matches = [
+            index for index, item in enumerate(self.analyses) if item.id == target_id
+        ]
+        if not matches:
+            raise KeyError(target_id)
+        if len(matches) != 1:
+            raise ProjectFormatError(
+                f"analysis id {target_id!r} is ambiguous because it is duplicated"
+            )
+        removed = self.analyses.pop(matches[0])
+        if self.active_analysis_id == target_id:
+            self.active_analysis_id = self.analyses[0].id if self.analyses else None
+        return removed
 
 
 def _reject_json_constant(value: str):
@@ -162,6 +276,14 @@ def _validated_string(value: Any, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ProjectFormatError(f"{field_name} must be a non-empty string")
     return value.strip()
+
+
+def _allocate_analysis_id(kind: str, existing_ids: set[str]) -> str:
+    for _attempt in range(32):
+        candidate = f"{kind}-{uuid.uuid4().hex}"
+        if candidate not in existing_ids:
+            return candidate
+    raise RuntimeError("unable to allocate a unique analysis id after 32 attempts")
 
 
 def _analysis_from_dict(data: dict) -> AnalysisDocument:

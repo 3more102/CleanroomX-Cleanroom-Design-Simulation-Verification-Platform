@@ -27,6 +27,14 @@
 - Hardens discard operations so only validated recovery artifacts inside the configured recovery directory can be deleted.
 - Adds focused restore/discard/source-preservation/startup-precedence regressions without changing project schema version, solver equations, tolerances, or engineering acceptance semantics.
 
+## Unreleased semantic recovery comparison — 2026-09-25
+
+- Adds a deterministic, read-only semantic comparison between each recovery artifact and the current source project before restoration.
+- Reports changed project metadata, recovery-only/source-only analyses, modified analyses, active-analysis selection changes, and raw editor-draft divergence.
+- Handles missing or invalid source files explicitly without guessing a merge result, mutating the source, or changing the recovery artifact.
+- Surfaces the comparison in **Inspect recovery** so operators can understand the delta before choosing whether to restore an unsaved copy.
+- Keeps recovery safety semantics unchanged: no automatic merge, source overwrite, solver change, tolerance change, or engineering acceptance change.
+
 ## Unreleased autosave and crash-recovery foundation — 2026-09-25
 
 - Adds a dedicated recovery-autosave service that writes only separate recovery artifacts; it never overwrites the user's explicitly saved `.cleanroomx.json` file.

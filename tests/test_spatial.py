@@ -318,7 +318,7 @@ def test_spatial_layout_dxf_exports_metric_cad_geometry_and_metadata():
         "rooms": [
             {
                 "id": "process",
-                "name": "Process\nISO 7",
+                "name": "Process\nISO 7 – ΔP",
                 "x_m": -1,
                 "y_m": 2,
                 "length_m": 6,
@@ -344,15 +344,17 @@ def test_spatial_layout_dxf_exports_metric_cad_geometry_and_metadata():
 
     assert dxf == spatial_layout_dxf(layout)
     assert dxf.startswith("0\nSECTION\n2\nHEADER\n")
-    assert "\n9\n$ACADVER\n1\nAC1015\n" in dxf
+    assert "\n9\n$ACADVER\n1\nAC1021\n" in dxf
     assert "\n9\n$INSUNITS\n70\n6\n" in dxf
     assert dxf.count("\n0\nLINE\n") == 4
     assert dxf.count("\n0\nCIRCLE\n") == 1
+    assert dxf.count("\n5\n") == 8
+    assert "\n100\nAcDbEntity\n8\nROOMS\n100\nAcDbLine\n" in dxf
     assert "CLEANROOMX_ROOM_ID=process" in dxf
     assert "CLEANROOMX_ROOM_HEIGHT_M=3" in dxf
     assert "CLEANROOMX_DEVICE_ID=sensor-1" in dxf
     assert "CLEANROOMX_DEVICE_Z_M=1.5" in dxf
-    assert "Process ISO 7" in dxf
+    assert "Process ISO 7 – ΔP" in dxf
     assert "6 x 5 m | 25 Pa" in dxf
     assert dxf.endswith("0\nEOF\n")
 

@@ -17,6 +17,10 @@ SPATIAL_LAYOUT_VERSION = 1
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
 
 
+class SpatialSynchronizationError(ValueError):
+    """Raised when spatial geometry cannot be mapped to engineering inputs safely."""
+
+
 def _finite_number(value: Any, default: float) -> float:
     try:
         number = float(value)
@@ -32,7 +36,53 @@ def _positive(value: Any, default: float) -> float:
 
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return slug or "room"
+
+
+def _allocate_unique_id(
+    preferred: Any,
+    *,
+    fallback: str,
+    used_ids: set[str],
+) -> str:
+    """Return a deterministic unique id without rewriting an already unique id."""
+    base = str(preferred).strip() if preferred is not None else ""
+    if not base:
+        base = fallback
+    candidate = base
+    suffix = 2
+    while candidate in used_ids:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
+
+
+def _unique_room_name_index(rooms: list[dict], *, source: str) -> dict[str, dict]:
+    """Build an exact-name index after rejecting ambiguous human room identities."""
+    index: dict[str, dict] = {}
+    seen_casefold: dict[str, str] = {}
+    for position, room in enumerate(rooms, start=1):
+        if not isinstance(room, dict):
+            raise SpatialSynchronizationError(
+                f"{source} room {position} must be an object before geometry synchronization"
+            )
+        raw_name = room.get("name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise SpatialSynchronizationError(
+                f"{source} room {position} must have a non-empty name before geometry synchronization"
+            )
+        name = raw_name.strip()
+        folded = name.casefold()
+        previous = seen_casefold.get(folded)
+        if previous is not None:
+            raise SpatialSynchronizationError(
+                f"{source} contains ambiguous room names {previous!r} and {name!r}; "
+                "make room names unique before synchronizing geometry"
+            )
+        seen_casefold[folded] = name
+        index[name] = room
+    return index
 
 
 def empty_layout() -> dict:
@@ -67,10 +117,11 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            room_id = _allocate_unique_id(
+                raw.get("id"),
+                fallback=_room_id(name),
+                used_ids=used_ids,
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,6 +137,7 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
         for raw in raw_devices:
@@ -94,13 +146,23 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_id = _allocate_unique_id(
+                raw.get("id"),
+                fallback=f"device-{device_type}",
+                used_ids=used_device_ids,
+            )
+            raw_room_id = raw.get("room_id")
+            room_id = (
+                str(raw_room_id).strip()
+                if raw_room_id is not None and str(raw_room_id).strip()
+                else None
+            )
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -140,6 +202,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -148,7 +211,11 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _room_id(name),
+            "id": _allocate_unique_id(
+                _room_id(name),
+                fallback="room",
+                used_ids=used_ids,
+            ),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,
@@ -190,46 +257,77 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
 
 
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+    """Synchronize room geometry only when room identity is unambiguous.
+
+    The operation validates the complete source/target mapping before mutating the
+    analysis so a failed synchronization cannot leave a partially updated input.
+    """
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
     rooms = normalize_layout(layout)["rooms"]
     if not rooms:
         return False
 
-    changed = False
-    if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
-        for key in ("name", "length_m", "width_m", "height_m"):
-            value = source[key]
-            if analysis.input.get(key) != value:
-                analysis.input[key] = value
-                changed = True
-        if "observed_pressure_pa" in analysis.input and "pressure_pa" in source:
-            if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
-                analysis.input["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-        return changed
+    kind = getattr(analysis, "kind", "")
+    if kind == "room_verification":
+        if len(rooms) == 1:
+            source = rooms[0]
+        else:
+            by_name = _unique_room_name_index(rooms, source="spatial layout")
+            raw_name = analysis.input.get("name")
+            analysis_name = raw_name.strip() if isinstance(raw_name, str) else ""
+            source = by_name.get(analysis_name)
+            if source is None:
+                raise SpatialSynchronizationError(
+                    "single-room verification cannot choose a room from a multi-room "
+                    "spatial layout; make the analysis room name match exactly"
+                )
 
-    if getattr(analysis, "kind", "") != "project_verification":
+        planned = [
+            (key, source[key])
+            for key in ("name", "length_m", "width_m", "height_m")
+            if analysis.input.get(key) != source[key]
+        ]
+        if (
+            "observed_pressure_pa" in analysis.input
+            and "pressure_pa" in source
+            and analysis.input.get("observed_pressure_pa") != source["pressure_pa"]
+        ):
+            planned.append(("observed_pressure_pa", source["pressure_pa"]))
+        for key, value in planned:
+            analysis.input[key] = value
+        return bool(planned)
+
+    if kind != "project_verification":
         return False
+
     raw_rooms = analysis.input.get("rooms")
     if not isinstance(raw_rooms, list):
-        return False
+        raise SpatialSynchronizationError(
+            "project-verification input must contain a rooms array before geometry synchronization"
+        )
 
-    by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
-    for source in rooms:
-        target = by_name.get(source["name"])
+    source_by_name = _unique_room_name_index(rooms, source="spatial layout")
+    target_by_name = _unique_room_name_index(raw_rooms, source="active analysis")
+
+    planned: list[tuple[dict, str, Any]] = []
+    for name, source in source_by_name.items():
+        target = target_by_name.get(name)
         if target is None:
             continue
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:
-                target[key] = source[key]
-                changed = True
-        if "observed_pressure_pa" in target and "pressure_pa" in source:
-            if target.get("observed_pressure_pa") != source["pressure_pa"]:
-                target["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-    return changed
+                planned.append((target, key, source[key]))
+        if (
+            "observed_pressure_pa" in target
+            and "pressure_pa" in source
+            and target.get("observed_pressure_pa") != source["pressure_pa"]
+        ):
+            planned.append((target, "observed_pressure_pa", source["pressure_pa"]))
+
+    for target, key, value in planned:
+        target[key] = value
+    return bool(planned)
 
 
 def validate_layout(value: Any) -> list[dict]:
@@ -717,7 +815,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         index = len(self.layout["rooms"]) + 1
         room = {
-            "id": f"room-{uuid.uuid4().hex[:8]}",
+            "id": _allocate_unique_id(
+                f"room-{uuid.uuid4().hex[:8]}",
+                fallback=f"room-{index}",
+                used_ids={str(item["id"]) for item in self.layout["rooms"]},
+            ),
             "name": f"Room {index}",
             "x_m": x + (1.0 if self.layout["rooms"] else 0.0),
             "y_m": 0.0,
@@ -750,7 +852,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             x = y = z = 0.0
             room_id = None
         device = {
-            "id": f"device-{uuid.uuid4().hex[:8]}",
+            "id": _allocate_unique_id(
+                f"device-{uuid.uuid4().hex[:8]}",
+                fallback=f"device-{device_type}",
+                used_ids={str(item["id"]) for item in self.layout["devices"]},
+            ),
             "type": device_type,
             "name": device_type.upper(),
             "room_id": room_id,

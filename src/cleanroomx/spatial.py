@@ -12,117 +12,16 @@ from tkinter import ttk
 from .spatial_history import SpatialEditHistory, SpatialHistoryState
 
 
-SPATIAL_METADATA_KEY = "spatial_layout"
-SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
-
-
-def _finite_number(value: Any, default: float) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    return number if math.isfinite(number) else default
-
-
-def _positive(value: Any, default: float) -> float:
-    number = _finite_number(value, default)
-    return number if number > 0 else default
-
-
-def _room_id(name: str) -> str:
-    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
-
-
-def empty_layout() -> dict:
-    return {
-        "version": SPATIAL_LAYOUT_VERSION,
-        "grid_m": 0.5,
-        "rooms": [],
-        "devices": [],
-        "view": {
-            "zoom_2d": 1.0,
-            "pan_x": 0.0,
-            "pan_y": 0.0,
-            "azimuth_deg": 35.0,
-            "elevation_deg": 28.0,
-            "zoom_3d": 1.0,
-            "pan_3d_x": 0.0,
-            "pan_3d_y": 0.0,
-        },
-    }
-
-
-def normalize_layout(value: Any) -> dict:
-    source = value if isinstance(value, dict) else {}
-    result = empty_layout()
-    result["grid_m"] = _positive(source.get("grid_m"), 0.5)
-
-    rooms: list[dict] = []
-    used_ids: set[str] = set()
-    raw_rooms = source.get("rooms", [])
-    if isinstance(raw_rooms, list):
-        for index, raw in enumerate(raw_rooms):
-            if not isinstance(raw, dict):
-                continue
-            name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
-            room = {
-                "id": room_id,
-                "name": name,
-                "x_m": _finite_number(raw.get("x_m"), 0.0),
-                "y_m": _finite_number(raw.get("y_m"), 0.0),
-                "length_m": _positive(raw.get("length_m"), 4.0),
-                "width_m": _positive(raw.get("width_m"), 4.0),
-                "height_m": _positive(raw.get("height_m"), 3.0),
-            }
-            if raw.get("pressure_pa") is not None:
-                room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
-            rooms.append(room)
-    result["rooms"] = rooms
-
-    devices: list[dict] = []
-    raw_devices = source.get("devices", [])
-    if isinstance(raw_devices, list):
-        for raw in raw_devices:
-            if not isinstance(raw, dict):
-                continue
-            device_type = str(raw.get("type") or "equipment").lower()
-            if device_type not in DEVICE_TYPES:
-                device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
-            devices.append(
-                {
-                    "id": device_id,
-                    "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
-                    "x_m": _finite_number(raw.get("x_m"), 0.0),
-                    "y_m": _finite_number(raw.get("y_m"), 0.0),
-                    "z_m": _finite_number(raw.get("z_m"), 0.0),
-                }
-            )
-    result["devices"] = devices
-
-    view = source.get("view", {})
-    if isinstance(view, dict):
-        result["view"].update(
-            {
-                "zoom_2d": max(0.2, min(8.0, _positive(view.get("zoom_2d"), 1.0))),
-                "pan_x": _finite_number(view.get("pan_x"), 0.0),
-                "pan_y": _finite_number(view.get("pan_y"), 0.0),
-                "azimuth_deg": _finite_number(view.get("azimuth_deg"), 35.0),
-                "elevation_deg": max(5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))),
-                "zoom_3d": max(0.2, min(8.0, _positive(view.get("zoom_3d"), 1.0))),
-                "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
-                "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),
-            }
-        )
-    return result
+from .spatial_model import (
+    DEVICE_TYPES,
+    SPATIAL_METADATA_KEY,
+    _finite_number,
+    _generated_unique_id,
+    _positive,
+    _room_id,
+    empty_layout,
+    normalize_layout,
+)
 
 
 def derive_layout_from_analysis(analysis: Any) -> dict:
@@ -140,6 +39,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
+    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -147,8 +47,9 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         length = _positive(raw.get("length_m"), 4.0)
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
+        room_id = _generated_unique_id(_room_id(name, index), used_ids, set())
         room = {
-            "id": _room_id(name),
+            "id": room_id,
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,

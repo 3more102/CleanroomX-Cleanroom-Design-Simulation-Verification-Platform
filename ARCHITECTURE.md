@@ -26,7 +26,7 @@ Recovery autosave is deliberately outside the project schema. The UI captures a 
 
 Startup restoration keeps save ownership equally explicit. A recovery is parsed through the ordinary project validator, then loaded into the application with no explicit save path and a forced dirty baseline. The original source path, when present, is held separately only for relative-reference context. Therefore Ctrl+S routes through Save As, and a newer or changed source file cannot be overwritten by recovery startup logic.
 
-Spatial metadata has its own identity invariant inside schema-version-1 project metadata: every normalized room and device has a unique non-empty id. Normalization preserves the first valid persisted id, reserves all explicit ids before generating repairs, and deterministically suffixes missing/colliding ids. A device that references a duplicated original room id remains attached to the first occurrence for backward compatibility, but the ambiguity is reported to the operator instead of being silently treated as clean data. Re-normalizing a canonical layout is idempotent.
+Spatial metadata has its own identity invariant inside schema-version-1 project metadata: every normalized room and device has a unique non-empty id. Normalization preserves the first valid persisted id, reserves all explicit ids before generating repairs, and deterministically suffixes missing/colliding ids. A device reference that matched multiple source-room identities before canonicalization is reported to the operator instead of being silently treated as clean data; this covers both duplicate explicit ids and legacy name-derived/generated-id collisions. Re-normalizing a canonical layout is idempotent.
 
 ## Engineering boundary
 

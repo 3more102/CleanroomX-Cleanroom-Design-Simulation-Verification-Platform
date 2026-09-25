@@ -1,0 +1,75 @@
+name: Publish CleanroomX v0.101.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-v0101-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish immutable v0.101.0 release
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.101.0
+      TARGET_SHA: 0f487a7e11ad81c8bcd54eb91b6420a1d46523ea
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify validated Release 2 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${TARGET_SHA}^{commit}"
+          test "$(git show "${TARGET_SHA}:pyproject.toml" | grep -E '^version = "0\.101\.0"$')" = 'version = "0.101.0"'
+          test "$(git show "${TARGET_SHA}:src/cleanroomx/__init__.py" | grep -E '^__version__ = "0\.101\.0"$')" = '__version__ = "0.101.0"'
+          git show "${TARGET_SHA}:CHANGELOG.md" | grep -F '## v0.101.0 Release 2 closure — 2026-09-25'
+
+      - name: Publish tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; nothing to do."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            remote_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${remote_sha}" = "${TARGET_SHA}"
+          else
+            git tag "${TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          CleanroomX v0.101.0 is the validated Release 2 closure.
+
+          Validated target:
+          - Commit: `0f487a7e11ad81c8bcd54eb91b6420a1d46523ea`
+          - Exact tested PR head: `993a2803e1af6a37af05ac0036948cc9f7fb3fce`
+          - Exact tested tree: `a6900bc9525721d964498b70c5da68950d7d6fba`
+          - Pull-request CI: run #1463 / `36162913321` — success
+          - Python 3.11 / 3.12 / 3.13 complete suite: 960 passed on each interpreter
+          - Focused application/desktop/input-contract gate: 291 passed on each interpreter
+          - Release 2 consolidation gate: 128 passed on each interpreter
+          - v0.91-v0.95 compatibility gates: passed
+          - Clean wheel build/install, packaged demo, project-run smoke, representative CLI smoke: passed
+          - Python 3.13 Release 2 performance evidence and installed Tk/Xvfb GUI smoke: passed
+
+          Release 2 includes the synchronized 2D/3D spatial workspace, durable project lifecycle and recovery, bounded undo/redo, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, deterministic project batch automation, strict engineering JSON ingestion, precision hardening, and final numerical-integrity gates.
+
+          No solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion is intentionally changed.
+          EOF
+
+          gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.101.0" --notes-file /tmp/release-notes.md

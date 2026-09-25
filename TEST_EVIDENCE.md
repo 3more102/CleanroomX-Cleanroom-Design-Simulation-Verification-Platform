@@ -6,7 +6,7 @@ Validation date: 2026-09-25
 
 ## v0.102.1 final spatial production baseline
 
-The final post-v0.102 spatial code is covered by two sequential, CI-green closures on current main:
+The final post-v0.102 spatial code is covered by three sequential, CI-green closures on current main:
 
 - PR **#467 — Close final CleanroomX spatial production gaps**
   - exact tested head: `4be4fb840480df7a5f1e0313a73830313150d9dd`
@@ -17,10 +17,14 @@ The final post-v0.102 spatial code is covered by two sequential, CI-green closur
   - exact tested head: `8a34c3d649aee54c377b4194a6d619559d219421`
   - PR CI **#1551** / id `36171758793`: **success**
   - merged main commit: `f595aaba6e7b8704beb62acc04f0eb4d036d8f09`
+- PR **#473 — Finish CleanroomX 3D fit-to-view**
+  - exact tested head: `332eb07ed1d4d27a028d7fe8886b3914da29c8d7`
+  - PR CI **#1552** / id `36171783101`: **success**
+  - merged main commit: `1fc662441763fd6bd2070aac6d6449410f06fb2a`
 
 Those successful CI jobs exercise the complete Python 3.11/3.12/3.13 suite, clean-wheel installation, representative CLI checks, Windows checkout launchers, and the Python 3.13 performance plus installed Tk/Xvfb GUI smoke defined by the repository CI workflow.
 
-The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; and strengthens the packaged-demo smoke. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
+The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; computes true 3D fit-to-view zoom/pan from room floor and ceiling geometry; and strengthens the packaged-demo smoke. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
 
 
 ## v0.102.0 final synchronized spatial baseline

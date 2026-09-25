@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -16,6 +17,10 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectWriteConflictError(RuntimeError):
+    """Raised when a guarded save would overwrite a changed destination."""
 
 
 @dataclass
@@ -190,13 +195,76 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _normalized_file_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def _fingerprint_from_bytes(path: Path, payload: bytes, stat: os.stat_result) -> dict[str, Any]:
+    return {
+        "path": str(_normalized_file_path(path)),
+        "exists": True,
+        "size": len(payload),
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256": sha256(payload).hexdigest(),
+    }
+
+
+def _missing_fingerprint(path: Path) -> dict[str, Any]:
+    return {
+        "path": str(_normalized_file_path(path)),
+        "exists": False,
+        "size": None,
+        "mtime_ns": None,
+        "sha256": None,
+    }
+
+
+def _read_stable_bytes(path: Path) -> tuple[bytes, os.stat_result]:
+    last_error: OSError | None = None
+    for _attempt in range(2):
+        try:
+            before = path.stat()
+            payload = path.read_bytes()
+            after = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        if (
+            before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+            and len(payload) == after.st_size
+        ):
+            return payload, after
+        last_error = OSError(f"file changed while reading: {path}")
+    assert last_error is not None
+    raise last_error
+
+
+def file_fingerprint(path: str | Path | None) -> dict[str, Any]:
+    """Return stable content identity for a local file without interpreting its format."""
+    if path is None:
+        return {
+            "path": None,
+            "exists": False,
+            "size": None,
+            "mtime_ns": None,
+            "sha256": None,
+        }
+    source = _normalized_file_path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        payload, stat = _read_stable_bytes(source)
+    except FileNotFoundError:
+        return _missing_fingerprint(source)
+    return _fingerprint_from_bytes(source, payload, stat)
+
+
+def _project_from_bytes(payload: bytes) -> ProjectDocument:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
@@ -204,8 +272,63 @@ def load_project_document(path: str | Path) -> ProjectDocument:
     return project_from_dict(data)
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def load_project_document_with_fingerprint(
+    path: str | Path,
+) -> tuple[ProjectDocument, dict[str, Any]]:
+    """Load one stable on-disk snapshot and return the fingerprint of those exact bytes."""
+    source = _normalized_file_path(path)
+    payload, stat = _read_stable_bytes(source)
+    return _project_from_bytes(payload), _fingerprint_from_bytes(source, payload, stat)
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _fingerprint = load_project_document_with_fingerprint(path)
+    return project
+
+
+def _fingerprint_content_matches(
+    expected: dict[str, Any],
+    current: dict[str, Any],
+) -> bool:
+    if bool(expected.get("exists")) != bool(current.get("exists")):
+        return False
+    if not expected.get("exists"):
+        return True
+    return (
+        expected.get("size") == current.get("size")
+        and expected.get("sha256") == current.get("sha256")
+    )
+
+
+def _assert_destination_unchanged(
+    destination: Path,
+    expected_fingerprint: dict[str, Any],
+) -> None:
+    normalized_destination = _normalized_file_path(destination)
+    expected_path = expected_fingerprint.get("path")
+    if expected_path is not None:
+        normalized_expected = os.path.normcase(
+            str(_normalized_file_path(expected_path))
+        )
+        if normalized_expected != os.path.normcase(str(normalized_destination)):
+            raise ValueError("expected fingerprint belongs to a different destination path")
+
+    current = file_fingerprint(normalized_destination)
+    if not _fingerprint_content_matches(expected_fingerprint, current):
+        raise ProjectWriteConflictError(
+            f"Refusing to overwrite {normalized_destination}: the file changed on disk "
+            "since it was opened or last saved. Use Save As to preserve this work, "
+            "or reopen the on-disk project before replacing it."
+        )
+
+
+def _atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    before_replace: Callable[[], None] | None = None,
+    validate_temp: Callable[[Path], None] | None = None,
+) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +343,10 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if validate_temp is not None:
+            validate_temp(temp_path)
+        if before_replace is not None:
+            before_replace()
         temp_path.replace(destination)
     except Exception:
         if temp_path is not None:
@@ -228,11 +355,63 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+def atomic_write_text(path: str | Path, text: str) -> Path:
+    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    return _atomic_write_text(path, text)
+
+
+def save_project_document_with_fingerprint(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: dict[str, Any] | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    """Save a validated project without silently overwriting a changed destination."""
     destination = Path(path)
     data = project.to_dict()
     project_from_dict(data)
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+    encoded = text.encode("utf-8")
+    intended_sha256 = sha256(encoded).hexdigest()
+
+    def validate_temp(temp_path: Path) -> None:
+        loaded = load_project_document(temp_path)
+        if loaded != project:
+            raise ProjectFormatError("temporary project verification did not round-trip")
+
+    def before_replace() -> None:
+        if expected_fingerprint is not None:
+            _assert_destination_unchanged(destination, expected_fingerprint)
+
+    saved = _atomic_write_text(
+        destination,
+        text,
+        before_replace=before_replace,
+        validate_temp=validate_temp,
+    )
+    saved_fingerprint = file_fingerprint(saved)
+    if (
+        saved_fingerprint.get("exists") is not True
+        or saved_fingerprint.get("size") != len(encoded)
+        or saved_fingerprint.get("sha256") != intended_sha256
+    ):
+        raise OSError(
+            f"project save verification failed after replacing {_normalized_file_path(saved)}"
+        )
+    return saved, saved_fingerprint
+
+
+def save_project_document(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: dict[str, Any] | None = None,
+) -> Path:
+    saved, _fingerprint = save_project_document_with_fingerprint(
+        path,
+        project,
+        expected_fingerprint=expected_fingerprint,
+    )
+    return saved

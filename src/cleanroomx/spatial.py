@@ -1366,7 +1366,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         actual_dy = target_y - old_y
         if self._translate_selected(actual_dx, actual_dy):
             self._drag_changed = True
-        self._drag_anchor = world
+            self._drag_anchor = world
+        elif not self._snap_to_grid.get():
+            self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
 

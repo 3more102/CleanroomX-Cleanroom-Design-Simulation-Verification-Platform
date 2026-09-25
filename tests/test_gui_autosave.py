@@ -166,3 +166,27 @@ def test_gui_rejects_negative_autosave_interval_before_tk_startup():
     with pytest.raises(SystemExit) as exc:
         gui_module.main(["--autosave-interval-seconds", "-1", "--check"])
     assert exc.value.code == 2
+
+
+def test_explicit_save_surfaces_recovery_cleanup_failure_in_status():
+    class Manager:
+        def notify_explicit_save(self, path):
+            self.path = path
+
+        def status(self):
+            return AutosaveStatus(
+                state="failed",
+                message="Project saved; recovery cleanup failed",
+            )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._recovery_checkpoint_after_id = None
+    app._autosave_manager = Manager()
+    app.autosave_status_var = Value("")
+
+    target = Path("/tmp/demo.cleanroomx.json")
+    app._notify_explicit_save(target)
+
+    assert app._autosave_manager.path == target
+    assert app.autosave_status_var.value == "Autosave: recovery cleanup failed"

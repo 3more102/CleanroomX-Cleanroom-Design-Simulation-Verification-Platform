@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
+import sys
 
+from .application import ExternalDependencyChangedError, run_analysis
 from .project import atomic_write_text
-from .consistency import analyze_project_consistency
-from .consistency_report import markdown_consistency_report
-from .hvac_io import load_hvac_project
-from .io import load_project
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,17 +50,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    result = analyze_project_consistency(
-        load_project(args.verification_project),
-        load_hvac_project(args.hvac_project),
-        room_airflow_abs_tolerance_m3_h=args.airflow_tolerance_m3_h,
-        require_same_room_set=args.require_same_room_set,
-    )
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_consistency_report(result)
-    )
+    payload = {
+        "verification_project": args.verification_project,
+        "hvac_project": args.hvac_project,
+        "room_airflow_abs_tolerance_m3_h": args.airflow_tolerance_m3_h,
+        "require_same_room_set": args.require_same_room_set,
+    }
+    try:
+        run = run_analysis("consistency", payload, base_dir=Path.cwd())
+    except ExternalDependencyChangedError as exc:
+        print(f"cleanroomx-consistency: {exc}", file=sys.stderr)
+        return 3
+
+    result = run.result
+    text = json.dumps(result, indent=2) if args.format == "json" else run.markdown
     if args.output:
         atomic_write_text(args.output, text)
     else:

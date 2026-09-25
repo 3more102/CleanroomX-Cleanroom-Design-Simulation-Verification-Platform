@@ -15,6 +15,14 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_sync import (
+    BASELINE_KEY,
+    baseline_from_engineering,
+    pressure_relationship_records,
+    spatial_sync_status,
+    sync_analysis_to_layout,
+)
+from .spatial_transform import Viewport2D, fit_viewport
 
 
 class SpatialSyncError(ValueError):
@@ -134,6 +142,17 @@ def normalize_layout(value: Any) -> dict:
                     text = str(raw.get(field)).strip()
                     if text:
                         room[field] = text
+            baseline = raw.get(BASELINE_KEY)
+            if isinstance(baseline, dict):
+                clean_baseline: dict[str, float] = {}
+                for field in ("length_m", "width_m", "height_m", "pressure_pa"):
+                    if field not in baseline:
+                        continue
+                    value = _finite_number(baseline.get(field), math.nan)
+                    if math.isfinite(value):
+                        clean_baseline[field] = value
+                if clean_baseline:
+                    room[BASELINE_KEY] = clean_baseline
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -254,6 +273,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         }
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+        room[BASELINE_KEY] = baseline_from_engineering(raw)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     return layout

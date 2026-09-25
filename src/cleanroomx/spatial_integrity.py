@@ -194,6 +194,14 @@ def validate_spatial_layout_document(value: Any) -> None:
             )
         if room.get("pressure_pa") is not None:
             _require_finite_number(room.get("pressure_pa"), f"{prefix}.pressure_pa")
+        if room.get("pressure_source") is not None:
+            pressure_source = _require_non_empty_string(
+                room.get("pressure_source"), f"{prefix}.pressure_source"
+            )
+            if pressure_source not in {"user", "engineering_input"}:
+                raise SpatialLayoutFormatError(
+                    f"{prefix}.pressure_source must be 'user' or 'engineering_input'"
+                )
         for field in ("classification", "analysis_room_name"):
             if room.get(field) is not None:
                 _require_non_empty_string(room.get(field), f"{prefix}.{field}")

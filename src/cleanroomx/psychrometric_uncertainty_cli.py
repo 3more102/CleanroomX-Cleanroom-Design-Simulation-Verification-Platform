@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
+from .project import atomic_write_text
 from .psychrometric_uncertainty import analyze_psychrometric_uncertainty
 from .psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from .psychrometric_uncertainty_report import (
@@ -40,7 +40,7 @@ def main() -> int:
     )
 
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0

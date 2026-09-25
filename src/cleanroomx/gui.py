@@ -23,6 +23,7 @@ from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
     analysis_catalog,
+    analysis_run_matches_input,
     application_info,
     rebase_analysis_file_references,
     run_analysis,
@@ -469,10 +470,39 @@ class CleanroomXApp:
         if run is None:
             self._clear_rendered_run()
             return False
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+        except KeyError:
+            self._invalidate_last_run_for(analysis_id)
+            return False
+        if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+            self._invalidate_last_run_for(analysis_id)
+            self.status_var.set(
+                f"{analysis.name} — cached result is out of date; run the analysis again."
+            )
+            return False
         self.last_run = run
         self.last_run_analysis_id = analysis_id
         self._render_run(run, select_results=False)
         return True
+
+    def _current_fresh_run(self) -> AnalysisRun | None:
+        run = self.last_run
+        analysis_id = self.last_run_analysis_id
+        if run is None or analysis_id is None:
+            return None
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+        except KeyError:
+            self._invalidate_last_run_for(analysis_id)
+            return None
+        if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+            self._invalidate_last_run_for(analysis_id)
+            self.status_var.set(
+                f"{analysis.name} — result is out of date; run the analysis again."
+            )
+            return None
+        return run
 
     def _on_input_modified(self, event=None) -> None:
         if not self.input_text.edit_modified():
@@ -511,6 +541,11 @@ class CleanroomXApp:
         if not isinstance(payload, dict):
             raise ValueError("analysis input must be a JSON object")
         analysis.input = payload
+        cached_run = getattr(self, "_runs_by_analysis", {}).get(analysis.id)
+        if cached_run is not None and not analysis_run_matches_input(
+            cached_run, analysis.kind, payload
+        ):
+            self._invalidate_last_run_for(analysis.id)
         self._sync_metadata()
         return analysis
 
@@ -1415,6 +1450,23 @@ class CleanroomXApp:
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
+                    try:
+                        analysis = self.project.analysis_by_id(analysis_id)
+                    except KeyError:
+                        self._invalidate_last_run_for(analysis_id)
+                        self.status_var.set(
+                            "Completed result discarded — the analysis no longer exists."
+                        )
+                        continue
+                    if not analysis_run_matches_input(
+                        payload, analysis.kind, analysis.input
+                    ):
+                        self._invalidate_last_run_for(analysis_id)
+                        self.status_var.set(
+                            f"Completed result discarded — {analysis.name} inputs changed; "
+                            "run the analysis again."
+                        )
+                        continue
                     self._runs_by_analysis[analysis_id] = payload
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
@@ -1522,8 +1574,13 @@ class CleanroomXApp:
             canvas.create_text(px + 8, py - 8, text=marker["name"], anchor="sw")
 
     def export_result_json(self) -> None:
-        if self.last_run is None:
-            messagebox.showinfo("No result", "Run an analysis first.")
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current result",
+                "Run the current analysis before exporting a result.",
+                parent=self.root,
+            )
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".json",
@@ -1533,14 +1590,19 @@ class CleanroomXApp:
             self._write_export_file(
                 path,
                 json.dumps(
-                    self.last_run.result, indent=2, ensure_ascii=False, allow_nan=False
+                    run.result, indent=2, ensure_ascii=False, allow_nan=False
                 ) + "\n",
                 label="Result",
             )
 
     def export_run_bundle_json(self) -> None:
-        if self.last_run is None:
-            messagebox.showinfo("No result", "Run an analysis first.")
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current result",
+                "Run the current analysis before exporting a run bundle.",
+                parent=self.root,
+            )
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".json",
@@ -1550,7 +1612,7 @@ class CleanroomXApp:
             self._write_export_file(
                 path,
                 json.dumps(
-                    self.last_run.to_dict(),
+                    run.to_dict(),
                     indent=2,
                     ensure_ascii=False,
                     allow_nan=False,
@@ -1559,15 +1621,20 @@ class CleanroomXApp:
             )
 
     def export_report_markdown(self) -> None:
-        if self.last_run is None:
-            messagebox.showinfo("No report", "Run an analysis first.")
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current report",
+                "Run the current analysis before exporting a report.",
+                parent=self.root,
+            )
             return
         path = filedialog.asksaveasfilename(
             parent=self.root, defaultextension=".md",
             filetypes=[("Markdown files", "*.md"), ("Text files", "*.txt")],
         )
         if path:
-            self._write_export_file(path, self.last_run.markdown, label="Report")
+            self._write_export_file(path, run.markdown, label="Report")
 
     def show_about(self) -> None:
         messagebox.showinfo(

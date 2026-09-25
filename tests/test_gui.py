@@ -68,6 +68,158 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.description == "Preserve editor state"
 
 
+def test_restore_run_discards_cached_result_when_analysis_input_changed():
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a", name="Room", kind="room_verification", input=changed
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._runs_by_analysis = {"a": run}
+    app.last_run = run
+    app.last_run_analysis_id = "a"
+    app.status_var = Status()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    assert app._restore_run_for("a") is False
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+    assert "out of date" in app.status_var.value.lower()
+
+
+def test_completed_run_is_discarded_if_analysis_input_changed_during_execution():
+    import queue
+
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a", name="Room", kind="room_verification", input=changed
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._queue = queue.Queue()
+    app._queue.put(("success", 3, "a", run))
+    app._run_generation = 3
+    app._abandon_requested = False
+    app._running = True
+    app._runs_by_analysis = {}
+    app.last_run = None
+    app.last_run_analysis_id = None
+    app.status_var = Status()
+    app.root = Root()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+    app._set_running = lambda running: setattr(app, "_running", running)
+    rendered = []
+    app._render_run = lambda value: rendered.append(value)
+
+    app._poll_worker()
+
+    assert app._running is False
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+    assert rendered == []
+    assert "discarded" in app.status_var.value.lower()
+    assert "inputs changed" in app.status_var.value.lower()
+
+
+def test_result_export_refuses_stale_cached_run(monkeypatch):
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run = run_analysis("room_verification", payload)
+    changed = dict(payload)
+    changed["_freshness_probe"] = True
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a", name="Room", kind="room_verification", input=changed
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._runs_by_analysis = {"a": run}
+    app.last_run = run
+    app.last_run_analysis_id = "a"
+    app.status_var = Status()
+    app.root = object()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    save_dialog_calls = []
+    info_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: save_dialog_calls.append(kwargs) or "",
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: info_calls.append((title, message)),
+    )
+
+    app.export_result_json()
+
+    assert save_dialog_calls == []
+    assert info_calls
+    assert info_calls[0][0] == "No current result"
+    assert app._runs_by_analysis == {}
+    assert app.last_run is None
+
+
 def test_abandon_waits_for_worker_exit_before_reenabling_ui():
     import queue
 
@@ -517,14 +669,24 @@ def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeyp
             self.value = value
 
     app.status_var = Status()
-    app.last_run = run_analysis(
-        "fan_operating_point",
-        json.loads(
-            (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
-                encoding="utf-8"
-            )
-        ),
+    payload = json.loads(
+        (ROOT / "examples" / "fan_operating_point_demo.json").read_text(
+            encoding="utf-8"
+        )
     )
+    run = run_analysis("fan_operating_point", payload)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="fan", name="Fan", kind="fan_operating_point", input=payload
+            )
+        ],
+        active_analysis_id="fan",
+    )
+    app._runs_by_analysis = {"fan": run}
+    app.last_run = run
+    app.last_run_analysis_id = "fan"
     output = tmp_path / "run-bundle.json"
     monkeypatch.setattr(
         gui_module.filedialog,
@@ -637,9 +799,30 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
 
 
 def test_per_analysis_run_cache_restores_without_forcing_result_tab():
-    run_a = object()
-    run_b = object()
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run_a = run_analysis("room_verification", payload)
+    run_b = run_analysis("room_verification", payload)
     app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="analysis-a",
+                name="A",
+                kind="room_verification",
+                input=dict(payload),
+            ),
+            AnalysisDocument(
+                id="analysis-b",
+                name="B",
+                kind="room_verification",
+                input=dict(payload),
+            ),
+        ],
+        active_analysis_id="analysis-a",
+    )
     app._runs_by_analysis = {"analysis-a": run_a, "analysis-b": run_b}
     app.last_run = None
     app.last_run_analysis_id = None

@@ -16,6 +16,7 @@ from cleanroomx.autosave import (
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.recovery_ui import (
     inspect_recovery,
+    recovery_integrity_label,
     recovery_relation_label,
     recovery_safety_message,
 )
@@ -91,7 +92,7 @@ def test_restore_failure_preserves_artifact_and_source(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(RecoveryFormatError, match="recovered project is invalid"):
+    with pytest.raises(RecoveryFormatError, match="integrity check failed"):
         restore_recovery_artifact(artifact)
 
     assert artifact.exists()
@@ -145,12 +146,14 @@ def test_recovery_inspection_exposes_identity_timestamp_source_and_draft(tmp_pat
     assert inspection.project_identity == candidate.project_identity
     assert inspection.saved_at_utc == candidate.saved_at_utc
     assert inspection.source_path == str(source.resolve())
+    assert inspection.integrity_status == "Verified SHA-256"
     assert inspection.analysis_count == 1
     assert inspection.analysis_names == ("Room [room_verification]",)
     assert inspection.editor_analysis_id == "room-1"
     assert inspection.editor_json_valid is False
     assert inspection.editor_text == "{broken"
     assert recovery_relation_label(candidate) == "Original unchanged"
+    assert recovery_integrity_label(candidate) == "Verified SHA-256"
     assert "separate unsaved copy" in recovery_safety_message(candidate)
 
 

@@ -1638,6 +1638,50 @@ class CleanroomXApp:
         if path:
             self._write_export_file(path, run.markdown, label="Report")
 
+    def export_report_html(self) -> None:
+        run = self._current_fresh_run()
+        if run is None:
+            messagebox.showinfo(
+                "No current report",
+                "Run the current analysis before exporting a portable report.",
+                parent=self.root,
+            )
+            return
+        analysis_id = self.last_run_analysis_id
+        if analysis_id is None:
+            return
+        try:
+            analysis = self.project.analysis_by_id(analysis_id)
+            document = engineering_report_html(
+                run,
+                project_name=self.project.name,
+                project_description=self.project.description,
+                analysis_id=analysis.id,
+                analysis_name=analysis.name,
+                analysis_kind=analysis.kind,
+                input_payload=analysis.input,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            self.status_var.set("HTML report export failed")
+            messagebox.showerror(
+                "HTML report export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            defaultextension=".html",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+        )
+        if path:
+            self._write_export_file(
+                path,
+                document,
+                label="HTML report",
+            )
+
     def show_about(self) -> None:
         messagebox.showinfo(
             "About CleanroomX",

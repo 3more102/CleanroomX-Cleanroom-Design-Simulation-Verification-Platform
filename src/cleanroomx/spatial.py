@@ -7,7 +7,7 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -697,6 +697,90 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicitly pull mapped engineering dimensions into spatial geometry.
+
+    X/Y placement is spatial-only and is never changed. Every mapping is
+    resolved before mutation so a bad mapping cannot partially update a layout.
+    """
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return False
+    if not isinstance(layout, dict):
+        return False
+    rooms = normalize_layout(layout)["rooms"]
+    if not rooms:
+        return False
+    raw_rooms = layout.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return False
+    by_id = {
+        str(room.get("id")): room
+        for room in raw_rooms
+        if isinstance(room, dict) and str(room.get("id") or "").strip()
+    }
+
+    kind = getattr(analysis, "kind", "")
+    mapped_pairs: list[tuple[dict, dict]] = []
+    if kind == "room_verification":
+        source = rooms[0]
+        raw_source = by_id.get(source["id"])
+        if raw_source is None:
+            return False
+        mapped_pairs = [(raw_source, analysis.input)]
+    elif kind == "project_verification":
+        engineering_rooms = analysis.input.get("rooms")
+        if not isinstance(engineering_rooms, list):
+            return False
+        _require_unique_sync_names(rooms, source="the spatial layout")
+        _require_unique_sync_names(engineering_rooms, source="the active analysis")
+        targets = {
+            str(room.get("name")).strip().casefold(): room
+            for room in engineering_rooms
+            if isinstance(room, dict) and str(room.get("name") or "").strip()
+        }
+        used_links: set[str] = set()
+        for source in rooms:
+            link = str(source.get("analysis_room_name") or source["name"]).strip()
+            key = link.casefold()
+            if key in used_links:
+                raise SpatialSyncError(
+                    "Cannot synchronize spatial geometry because multiple layout rooms "
+                    f"map to analysis room {link!r}."
+                )
+            used_links.add(key)
+            target = targets.get(key)
+            if target is None:
+                if source.get("analysis_room_name"):
+                    raise SpatialSyncError(
+                        f"Linked analysis room {link!r} does not exist in the active analysis."
+                    )
+                continue
+            raw_source = by_id.get(source["id"])
+            if raw_source is not None:
+                mapped_pairs.append((raw_source, target))
+    else:
+        return False
+
+    changed = False
+    for source, target in mapped_pairs:
+        for field in ("length_m", "width_m", "height_m"):
+            value = _geometry_number(target.get(field))
+            if not math.isfinite(value) or value <= 0:
+                raise SpatialSyncError(
+                    f"Engineering room {target.get('name')!r} has invalid {field}."
+                )
+            if source.get(field) != value:
+                source[field] = value
+                changed = True
+        observed = _finite_optional(target.get("observed_pressure_pa"))
+        if observed is not None and source.get("pressure_pa") != observed:
+            source["pressure_pa"] = observed
+            changed = True
+
+    _record_sync_baseline(layout, analysis, mapped_pairs)
+    return changed
+
+
 def _room_overlap_records(
     rooms: list[dict],
 ) -> list[tuple[int, int, list[float]]]:
@@ -802,11 +886,87 @@ def _spatial_validation_key(layout: dict) -> tuple:
 
 
 def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+    """Return deterministic diagnostics without hiding malformed raw edit state."""
+    issues: list[dict] = []
+    raw_rooms = value.get("rooms", []) if isinstance(value, dict) else []
+    raw_devices = value.get("devices", []) if isinstance(value, dict) else []
+
+    seen_room_ids: set[str] = set()
+    if isinstance(raw_rooms, list):
+        for index, raw in enumerate(raw_rooms):
+            if not isinstance(raw, dict):
+                issues.append(
+                    {
+                        "code": "malformed_room",
+                        "severity": "error",
+                        "item_ids": [],
+                        "message": f"Room entry {index + 1} is not an object.",
+                    }
+                )
+                continue
+            room_id = str(raw.get("id") or "")
+            if room_id and room_id in seen_room_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_room_id",
+                        "severity": "error",
+                        "item_ids": [room_id],
+                        "message": f"Duplicate room id '{room_id}' is not allowed.",
+                    }
+                )
+            if room_id:
+                seen_room_ids.add(room_id)
+            for field in ("length_m", "width_m", "height_m"):
+                number = _geometry_number(raw.get(field))
+                if not math.isfinite(number) or number <= 0:
+                    issues.append(
+                        {
+                            "code": "invalid_room_geometry",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "field": field,
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' has "
+                                f"invalid {field}; it must be finite and greater than zero."
+                            ),
+                        }
+                    )
+            if "floor_elevation_m" in raw:
+                elevation = _geometry_number(raw.get("floor_elevation_m"))
+                if not math.isfinite(elevation):
+                    issues.append(
+                        {
+                            "code": "invalid_room_elevation",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' "
+                                "has a non-finite floor elevation."
+                            ),
+                        }
+                    )
+
+    seen_device_ids: set[str] = set()
+    if isinstance(raw_devices, list):
+        for raw in raw_devices:
+            if not isinstance(raw, dict):
+                continue
+            device_id = str(raw.get("id") or "")
+            if device_id and device_id in seen_device_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_device_id",
+                        "severity": "error",
+                        "item_ids": [device_id],
+                        "message": f"Duplicate spatial object id '{device_id}' is not allowed.",
+                    }
+                )
+            if device_id:
+                seen_device_ids.add(device_id)
+
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
-    issues: list[dict] = []
 
     first_room_by_name: dict[str, dict] = {}
     for room in rooms:
@@ -961,36 +1121,191 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
-    normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+def _finite_optional(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _analysis_pressure_target(room: dict, index: int, analysis: Any) -> tuple[dict | None, str | None]:
+    payload = getattr(analysis, "input", None)
+    if not isinstance(payload, dict):
+        return None, None
+    kind = getattr(analysis, "kind", "")
+    if kind == "room_verification":
+        if index == 0:
+            return payload, str(payload.get("name") or room.get("analysis_room_name") or room["name"])
+        return None, None
+    if kind != "project_verification":
+        return None, None
+    raw_rooms = payload.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return None, None
+    target_name = str(room.get("analysis_room_name") or room["name"]).strip()
+    matches = [
+        target
+        for target in raw_rooms
+        if isinstance(target, dict)
+        and str(target.get("name") or "").strip().casefold() == target_name.casefold()
     ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
+    if len(matches) != 1:
+        return None, target_name or None
+    return matches[0], str(matches[0].get("name") or target_name)
+
+
+def _pressure_finding(result: dict | None, room_name: str) -> tuple[dict | None, dict | None]:
+    if not isinstance(result, dict):
+        return None, None
+    if result.get("room") == room_name and isinstance(result.get("findings"), list):
+        reports = [result]
+    else:
+        raw_reports = result.get("rooms")
+        reports = raw_reports if isinstance(raw_reports, list) else []
+    for report in reports:
+        if not isinstance(report, dict) or report.get("room") != room_name:
+            continue
+        findings = report.get("findings")
+        if not isinstance(findings, list):
+            continue
+        for finding in findings:
+            if isinstance(finding, dict) and finding.get("code") == "PRESSURE":
+                return finding, report
+    return None, None
+
+
+def pressure_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> dict:
+    """Project real configured/result pressure evidence onto the spatial model.
+
+    A completed solver result wins over configured observed pressure. If neither
+    exists, a spatial-only pressure is shown only as spatial input. This function
+    never calculates or fabricates pressure values.
+    """
+    normalized = normalize_layout(layout)
     sync = engineering_sync_status(normalized, analysis)
     mapping_by_room = {
         record["room_id"]: record["state"] for record in sync["rooms"]
     }
-    rooms = []
-    for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
-        rooms.append(
+
+    entries: list[dict] = []
+    target_to_room_id: dict[str, str] = {}
+    for index, room in enumerate(normalized["rooms"]):
+        target, target_name = _analysis_pressure_target(room, index, analysis)
+        pressure = None
+        target_pressure = None
+        ach = None
+        source = "unavailable"
+        status = "unavailable"
+
+        if target is not None and target_name is not None:
+            target_to_room_id[target_name] = room["id"]
+            finding, report = _pressure_finding(result, target_name)
+            actual = (
+                _finite_optional(finding.get("actual"))
+                if isinstance(finding, dict)
+                else None
+            )
+            if actual is not None:
+                pressure = actual
+                target_pressure = _finite_optional(finding.get("limit"))
+                ach = _finite_optional(report.get("ach")) if isinstance(report, dict) else None
+                source = "result"
+                status = str(finding.get("status") or "unavailable")
+            else:
+                configured = _finite_optional(target.get("observed_pressure_pa"))
+                if configured is not None:
+                    pressure = configured
+                    source = "configured"
+                    status = "configured"
+                target_pressure = _finite_optional(target.get("min_pressure_pa"))
+
+        if pressure is None:
+            spatial_value = _finite_optional(room.get("pressure_pa"))
+            if spatial_value is not None:
+                pressure = spatial_value
+                source = "spatial"
+                status = "unmapped" if target is None else "configured"
+
+        entries.append(
             {
                 "room_id": room["id"],
-                "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "availability": "available" if pressure is not None else "unavailable",
+                "pressure_pa": pressure,
+                "pressure_target_pa": target_pressure,
+                "source": source,
+                "status": status,
+                "ach": ach,
+                "fill": "#dfe7ef",
                 "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
             }
         )
+
+    pressures = [item["pressure_pa"] for item in entries if item["pressure_pa"] is not None]
+    minimum = min(pressures) if pressures else None
+    maximum = max(pressures) if pressures else None
+    for item in entries:
+        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+
+    payload = getattr(analysis, "input", None)
+    requirements = (
+        payload.get("pressure_cascade", [])
+        if isinstance(payload, dict) and getattr(analysis, "kind", "") == "project_verification"
+        else []
+    )
+    result_findings = (
+        result.get("pressure_cascade", [])
+        if isinstance(result, dict) and isinstance(result.get("pressure_cascade"), list)
+        else []
+    )
+    relationships: list[dict] = []
+    for requirement in requirements if isinstance(requirements, list) else []:
+        if not isinstance(requirement, dict):
+            continue
+        high = str(requirement.get("higher_pressure_room") or "")
+        low = str(requirement.get("lower_pressure_room") or "")
+        finding = next(
+            (
+                item
+                for item in result_findings
+                if isinstance(item, dict)
+                and item.get("higher_pressure_room") == high
+                and item.get("lower_pressure_room") == low
+            ),
+            None,
+        )
+        relationships.append(
+            {
+                "higher_room_id": target_to_room_id.get(high),
+                "lower_room_id": target_to_room_id.get(low),
+                "higher_pressure_room": high,
+                "lower_pressure_room": low,
+                "limit_pa": _finite_optional(requirement.get("min_delta_pa")),
+                "actual_delta_pa": (
+                    _finite_optional(finding.get("actual_delta_pa"))
+                    if isinstance(finding, dict)
+                    else None
+                ),
+                "status": (
+                    str(finding.get("status") or "unavailable")
+                    if isinstance(finding, dict)
+                    else "unavailable"
+                ),
+                "source": "result" if isinstance(finding, dict) else "configured_requirement",
+            }
+        )
+
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,
-        "rooms": rooms,
+        "rooms": entries,
+        "relationships": relationships,
     }
 
 
@@ -1012,6 +1327,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        result_getter: Callable[[], Any] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -1025,6 +1341,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
         self._status_setter = status_setter
+        self._result_getter = result_getter or (lambda: None)
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
         self._on_redo_requested = on_redo_requested
@@ -1042,6 +1359,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._pressure_evidence_var = tk.StringVar(value="Pressure evidence: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1087,8 +1405,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
-            command=self._on_sync_requested,
+            text="Push geometry → analysis",
+            command=self.request_push_to_analysis,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Pull geometry ← analysis",
+            command=self.pull_from_active_analysis,
         ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -1159,7 +1482,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._pressure_evidence_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
@@ -1179,7 +1505,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -1187,7 +1513,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -1224,6 +1550,108 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+    def request_push_to_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room/project verification analysis before synchronizing."
+            )
+            return
+        sync = engineering_sync_status(self.layout, analysis)
+        overwrite = [
+            item
+            for item in sync["rooms"]
+            if item["state"] in {"engineering_newer", "conflicting"}
+        ]
+        if overwrite:
+            labels = ", ".join(
+                item["analysis_room_name"] for item in overwrite[:4]
+            )
+            if len(overwrite) > 4:
+                labels += f" (+{len(overwrite) - 4} more)"
+            if not messagebox.askyesno(
+                "Engineering geometry differs",
+                (
+                    "Pushing spatial dimensions will overwrite differing engineering "
+                    f"room geometry for: {labels}.\n\nContinue with the explicit push?"
+                ),
+                parent=self,
+            ):
+                return
+        self._on_sync_requested()
+
+    def pull_from_active_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room/project verification analysis before synchronizing."
+            )
+            return
+        sync = engineering_sync_status(self.layout, analysis)
+        overwrite = [
+            item
+            for item in sync["rooms"]
+            if item["state"] in {"geometry_newer", "conflicting"}
+        ]
+        if overwrite:
+            labels = ", ".join(
+                item["analysis_room_name"] for item in overwrite[:4]
+            )
+            if len(overwrite) > 4:
+                labels += f" (+{len(overwrite) - 4} more)"
+            if not messagebox.askyesno(
+                "Spatial geometry differs",
+                (
+                    "Pulling engineering dimensions will overwrite differing spatial "
+                    f"room dimensions for: {labels}.\n\nContinue with the explicit pull?"
+                ),
+                parent=self,
+            ):
+                return
+
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        try:
+            changed = sync_analysis_to_layout(self.layout, analysis)
+        except SpatialSyncError as exc:
+            self._status_setter(str(exc))
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                str(exc),
+                parent=self,
+            )
+            return
+        if not changed:
+            self._status_setter("Spatial geometry already matches the active analysis.")
+            self.redraw()
+            return
+        self._load_property_panel()
+        self._persist(
+            "Pulled geometry from active analysis",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
+
+    def _result_payload(self) -> dict | None:
+        candidate = self._result_getter()
+        if isinstance(candidate, dict):
+            return candidate
+        result = getattr(candidate, "result", None)
+        return result if isinstance(result, dict) else None
+
+    def _overlay(self) -> dict:
+        return pressure_overlay_state(
+            self.layout,
+            self._analysis_getter(),
+            self._result_payload(),
+        )
 
     def refresh(self) -> None:
         project = self._project_getter()
@@ -1459,6 +1887,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._pressure_evidence_var.set("Pressure evidence: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
@@ -1477,6 +1906,29 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            evidence = next(
+                (
+                    record
+                    for record in self._overlay()["rooms"]
+                    if record["room_id"] == self.selected.item_id
+                ),
+                None,
+            )
+            if evidence is None or evidence.get("pressure_pa") is None:
+                self._pressure_evidence_var.set("Pressure evidence: unavailable")
+            else:
+                detail = (
+                    f"{evidence['pressure_pa']:g} Pa · {evidence['source']} · "
+                    f"{evidence['status']}"
+                )
+                if evidence.get("pressure_target_pa") is not None:
+                    detail += f" · target {evidence['pressure_target_pa']:g} Pa"
+                if evidence.get("ach") is not None:
+                    detail += f" · ACH {evidence['ach']:g}"
+                self._pressure_evidence_var.set("Pressure evidence: " + detail)
+        else:
+            self._pressure_evidence_var.set("Pressure evidence: n/a")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -1622,6 +2074,29 @@ class SpatialDesignWorkspace(ttk.Frame):
     def delete_selected(self) -> None:
         if self.selected is None:
             return
+        item = self._selected_object()
+        if item is None:
+            return
+        dependent = (
+            sum(
+                1
+                for device in self.layout["devices"]
+                if device.get("room_id") == self.selected.item_id
+            )
+            if self.selected.kind == "room"
+            else 0
+        )
+        suffix = (
+            f"\n\nThis also removes {dependent} assigned spatial object(s)."
+            if dependent
+            else ""
+        )
+        if not messagebox.askyesno(
+            "Delete spatial item",
+            f"Delete {str(item.get('name') or self.selected.item_id)!r}?{suffix}",
+            parent=self,
+        ):
+            return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         collection_name = "rooms" if self.selected.kind == "room" else "devices"
@@ -1688,62 +2163,53 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(self) -> list[tuple[dict, dict, dict]]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
-            if high is None or low is None:
-                continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            relationships.append((high, low, delta_value))
+        rooms = {room["id"]: room for room in self.layout["rooms"]}
+        relationships: list[tuple[dict, dict, dict]] = []
+        for evidence in self._overlay().get("relationships", []):
+            high = rooms.get(str(evidence.get("higher_room_id") or ""))
+            low = rooms.get(str(evidence.get("lower_room_id") or ""))
+            if high is not None and low is not None:
+                relationships.append((high, low, evidence))
         return relationships
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        colors = {
+            "pass": "#15803d",
+            "fail": "#b91c1c",
+            "not_checked": "#64748b",
+            "unavailable": "#7c3aed",
+        }
+        for high, low, evidence in self._pressure_relationships():
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            status = str(evidence.get("status") or "unavailable")
+            color = colors.get(status, "#7c3aed")
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                arrow="last", width=2, dash=(6, 3), fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                actual = evidence.get("actual_delta_pa")
+                limit = evidence.get("limit_pa")
+                if actual is not None and limit is not None:
+                    label = f"Δ {actual:g} Pa / ≥ {limit:g} Pa · {status}"
+                elif limit is not None:
+                    label = f"≥ {limit:g} Pa · unresolved"
+                else:
+                    label = "Pressure relationship · unresolved"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
 
@@ -1773,7 +2239,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = self._overlay()
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -1800,10 +2266,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
+                evidence = overlay_by_room[room["id"]]
+                pressure_value = evidence.get("pressure_pa")
                 pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
+                    f"\n{pressure_value:g} Pa ({evidence.get('source', 'unavailable')})"
+                    if self._show_pressure.get() and pressure_value is not None
+                    else ("\nPressure unavailable" if self._show_pressure.get() else "")
                 )
                 canvas.create_text(
                     (x0 + x1) / 2,
@@ -1949,7 +2417,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = self._overlay()
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -2011,7 +2479,22 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self._show_labels.get():
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=(
+                        room["name"]
+                        + (
+                            f"\n{overlay_by_room[room['id']]['pressure_pa']:g} Pa "
+                            f"({overlay_by_room[room['id']]['source']})"
+                            if (
+                                self._show_pressure.get()
+                                and overlay_by_room[room["id"]].get("pressure_pa") is not None
+                            )
+                            else (
+                                "\nPressure unavailable"
+                                if self._show_pressure.get()
+                                else ""
+                            )
+                        )
+                    ),
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )

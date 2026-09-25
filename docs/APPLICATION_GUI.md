@@ -106,6 +106,8 @@ For room-verification and multi-room project-verification analyses, **Sync dimen
 
 Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
 
+Spatial room and device identities are persistent model data. CleanroomX preserves valid existing IDs, deterministically repairs missing or duplicate IDs, enforces uniqueness for both rooms and devices, and normalizes device-to-room references before the workspace uses them. Reopening or repeatedly normalizing the same legacy/malformed spatial metadata therefore produces the same repaired identities rather than new random IDs. Analysis-derived layouts also allocate deterministic suffixes when room names collide.
+
 ## Results and plots
 
 All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.

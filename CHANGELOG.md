@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased external project save-conflict protection — 2026-09-25
+
+- Tracks the exact SHA-256 of a project file when it is opened or explicitly saved.
+- Guards normal Save at the persistence layer immediately before atomic replacement, refusing to overwrite a project that was externally changed, removed, or moved after the last known version.
+- Presents explicit **Overwrite / Save As / Cancel** choices instead of silently discarding another process's changes; an explicit overwrite is guarded again against a second concurrent edit.
+- Rejects projects that change while they are being opened, preventing an in-memory document from being paired with the wrong disk-version identity.
+- Keeps Save As behavior explicit and backward compatible; project schema version, solver equations, tolerances, and engineering acceptance logic are unchanged.
+- Adds persistence and desktop regressions for external modification, deletion, cancellation, explicit overwrite, and open-time races.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

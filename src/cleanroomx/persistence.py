@@ -84,6 +84,45 @@ def _fsync_directory(directory: Path) -> None:
         os.close(descriptor)
 
 
+def _ensure_directory_durable(directory: Path) -> None:
+    """Create missing directory components and durably record each new entry.
+
+    Existing directories are left untouched. On POSIX, every directory entry
+    created by this helper is followed by an fsync of its parent before the next
+    nested component is created. Unsupported directory-fsync filesystems retain
+    the existing best-effort behavior from _fsync_directory().
+    """
+    target = Path(directory)
+    missing: list[Path] = []
+    current = target
+
+    while True:
+        try:
+            metadata = current.stat()
+        except FileNotFoundError:
+            missing.append(current)
+            parent = current.parent
+            if parent == current:
+                raise
+            current = parent
+            continue
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise NotADirectoryError(
+                f"directory path component is not a directory: {current}"
+            )
+        break
+
+    for item in reversed(missing):
+        try:
+            item.mkdir()
+        except FileExistsError:
+            if not item.is_dir():
+                raise
+        # Also sync after a concurrent creator wins the mkdir race. The entry
+        # must be durable before we rely on it for deeper staged writes.
+        _fsync_directory(item.parent)
+
+
 def stable_file_sha256(
     path: str | Path,
     *,
@@ -200,7 +239,7 @@ def atomic_write_bytes(
         raise TypeError("payload must be bytes-like")
 
     destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory_durable(destination.parent)
     data = bytes(payload)
 
     existing_mode: int | None = None
@@ -305,7 +344,7 @@ def atomic_publish_staged_file(
     """
     destination = Path(path)
     staged = Path(staged_path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory_durable(destination.parent)
 
     destination_parent = destination.parent.resolve(strict=False)
     staged_parent = staged.parent.resolve(strict=False)
@@ -394,7 +433,7 @@ def atomic_write_generated(
         raise TypeError("generator must be callable")
 
     destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_directory_durable(destination.parent)
 
     descriptor, temp_name = tempfile.mkstemp(
         prefix=f".{destination.name}.",

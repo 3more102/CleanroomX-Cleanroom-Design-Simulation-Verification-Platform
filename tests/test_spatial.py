@@ -10,6 +10,7 @@ from cleanroomx.spatial import (
     find_room_for_point,
     normalize_layout,
     reassociate_device,
+    repair_device_assignments,
     spatial_issues,
     sync_layout_to_analysis,
 )
@@ -316,3 +317,49 @@ def test_spatial_issues_reports_overlaps_and_bad_device_placement_but_not_touchi
         issue.get("room_ids") == ["process", "touching"]
         for issue in issues
     )
+
+
+def test_repair_device_assignments_repairs_only_room_links():
+    layout = {
+        "rooms": [
+            {
+                "id": "a", "name": "A", "x_m": 0, "y_m": 0,
+                "length_m": 4, "width_m": 4, "height_m": 3,
+            },
+            {
+                "id": "b", "name": "B", "x_m": 5, "y_m": 0,
+                "length_m": 4, "width_m": 4, "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "inside", "type": "sensor", "name": "Inside",
+                "room_id": None, "x_m": 1, "y_m": 1, "z_m": 1,
+            },
+            {
+                "id": "wrong", "type": "ffu", "name": "Wrong",
+                "room_id": "a", "x_m": 6, "y_m": 2, "z_m": 3,
+            },
+            {
+                "id": "outside", "type": "equipment", "name": "Outside",
+                "room_id": "missing", "x_m": 20, "y_m": 20, "z_m": 0,
+            },
+            {
+                "id": "valid", "type": "sensor", "name": "Valid",
+                "room_id": "b", "x_m": 7, "y_m": 2, "z_m": 1,
+            },
+        ],
+    }
+    original_positions = [
+        (device["id"], device["x_m"], device["y_m"], device["z_m"])
+        for device in layout["devices"]
+    ]
+
+    changed = repair_device_assignments(layout)
+
+    assert changed == 3
+    assert [device["room_id"] for device in layout["devices"]] == ["a", "b", None, "b"]
+    assert [
+        (device["id"], device["x_m"], device["y_m"], device["z_m"])
+        for device in layout["devices"]
+    ] == original_positions

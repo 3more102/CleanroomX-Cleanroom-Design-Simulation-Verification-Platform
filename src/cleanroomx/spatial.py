@@ -691,7 +691,9 @@ def snap_room_translation(
         "y",
     )
     guides = [guide for guide in (guide_x, guide_y) if guide is not None]
-    return target_x + dx, target_y + dy, guides
+    snapped_x = round(target_x + dx, 12) if guide_x is not None else target_x
+    snapped_y = round(target_y + dy, 12) if guide_y is not None else target_y
+    return snapped_x, snapped_y, guides
 
 
 def room_clearance_dimensions(room: dict, rooms: list[dict]) -> list[dict]:

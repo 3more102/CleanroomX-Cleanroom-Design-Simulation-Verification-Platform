@@ -646,20 +646,23 @@ class CleanroomXApp:
         if manager is not None:
             manager.begin_project(path)
 
-    def _notify_explicit_save(self, path: str | Path) -> None:
+    def _notify_explicit_save(self, path: str | Path) -> AutosaveStatus | None:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
-        if manager is not None:
-            manager.notify_explicit_save(path)
+        status = None if manager is None else manager.notify_explicit_save(path)
         autosave_var = getattr(self, "autosave_status_var", None)
         if autosave_var is not None:
-            autosave_var.set("Autosave: clean")
+            autosave_var.set(
+                "Autosave: failed"
+                if status is not None and status.state == "failed"
+                else "Autosave: clean"
+            )
+        return status
 
-    def _discard_current_autosave(self) -> None:
+    def _discard_current_autosave(self) -> AutosaveStatus | None:
         self._cancel_recovery_checkpoint()
         manager = getattr(self, "_autosave_manager", None)
-        if manager is not None:
-            manager.discard_current_recoveries()
+        return None if manager is None else manager.discard_current_recoveries()
 
     def _discard_restored_recovery(self) -> None:
         artifact = getattr(self, "_restored_recovery_artifact", None)
@@ -716,8 +719,12 @@ class CleanroomXApp:
                 ):
                     self.autosave_status_var.set("Autosave: saving…")
             elif self._autosave_manager.status().state == "saved":
-                self._discard_current_autosave()
-                self.autosave_status_var.set("Autosave: clean")
+                cleanup_status = self._discard_current_autosave()
+                if cleanup_status is not None and cleanup_status.state == "failed":
+                    self.autosave_status_var.set("Autosave: failed")
+                    self.status_var.set(cleanup_status.message)
+                else:
+                    self.autosave_status_var.set("Autosave: clean")
         except (OSError, TypeError, ValueError) as exc:
             self.autosave_status_var.set("Autosave: failed")
             self.status_var.set(f"Autosave failed: {exc}")

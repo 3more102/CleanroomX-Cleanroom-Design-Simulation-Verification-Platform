@@ -735,10 +735,35 @@ def _room_overlap_records(
     return overlaps
 
 
-def _spatial_validation_key(layout: dict) -> tuple:
-    """Return the validation-relevant state, deliberately excluding camera/view data."""
+def _spatial_validation_key(layout: dict, analysis: Any = None) -> tuple:
+    """Return validation-relevant state, deliberately excluding camera/view data."""
+
     rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
     devices = layout.get("devices", []) if isinstance(layout, dict) else []
+    analysis_key: tuple = ()
+    if getattr(analysis, "kind", "") in {"room_verification", "project_verification"}:
+        analysis_key = tuple(
+            (
+                room.get("name"),
+                room.get("length_m"),
+                room.get("width_m"),
+                room.get("height_m"),
+                room.get("observed_pressure_pa"),
+                room.get("min_pressure_pa"),
+            )
+            for room in _analysis_room_payloads(analysis)
+        )
+        payload = getattr(analysis, "input", {})
+        cascades = payload.get("pressure_cascade", []) if isinstance(payload, dict) else []
+        analysis_key += tuple(
+            (
+                item.get("higher_pressure_room"),
+                item.get("lower_pressure_room"),
+                item.get("min_delta_pa"),
+            )
+            for item in cascades
+            if isinstance(item, dict)
+        )
     return (
         tuple(
             (
@@ -749,6 +774,11 @@ def _spatial_validation_key(layout: dict) -> tuple:
                 room.get("length_m"),
                 room.get("width_m"),
                 room.get("height_m"),
+                room.get("elevation_m"),
+                room.get("engineering_ref"),
+                room.get("pressure_pa"),
+                room.get("pressure_target_pa"),
+                repr(room.get("engineering_baseline")),
             )
             for room in rooms
             if isinstance(room, dict)
@@ -761,15 +791,18 @@ def _spatial_validation_key(layout: dict) -> tuple:
                 device.get("x_m"),
                 device.get("y_m"),
                 device.get("z_m"),
+                device.get("engineering_ref"),
             )
             for device in devices
             if isinstance(device, dict)
         ),
+        analysis_key,
     )
 
 
-def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+def validate_layout(value: Any, analysis: Any = None) -> list[dict]:
+    """Return deterministic advisory spatial warnings without mutating source data."""
+
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
@@ -843,8 +876,12 @@ def validate_layout(value: Any) -> list[dict]:
         y = device["y_m"]
         z = device["z_m"]
         inside_xy = (
-            room["x_m"] - SPATIAL_GEOMETRY_EPSILON_M <= x <= room["x_m"] + room["length_m"] + SPATIAL_GEOMETRY_EPSILON_M
-            and room["y_m"] - SPATIAL_GEOMETRY_EPSILON_M <= y <= room["y_m"] + room["width_m"] + SPATIAL_GEOMETRY_EPSILON_M
+            room["x_m"] - SPATIAL_GEOMETRY_EPSILON_M
+            <= x
+            <= room["x_m"] + room["length_m"] + SPATIAL_GEOMETRY_EPSILON_M
+            and room["y_m"] - SPATIAL_GEOMETRY_EPSILON_M
+            <= y
+            <= room["y_m"] + room["width_m"] + SPATIAL_GEOMETRY_EPSILON_M
         )
         if not inside_xy:
             issues.append(
@@ -857,7 +894,10 @@ def validate_layout(value: Any) -> list[dict]:
                     ),
                 }
             )
-        if z < -SPATIAL_GEOMETRY_EPSILON_M or z > room["height_m"] + SPATIAL_GEOMETRY_EPSILON_M:
+        if (
+            z < -SPATIAL_GEOMETRY_EPSILON_M
+            or z > room["height_m"] + SPATIAL_GEOMETRY_EPSILON_M
+        ):
             issues.append(
                 {
                     "code": "device_elevation_outside_room",
@@ -870,7 +910,54 @@ def validate_layout(value: Any) -> list[dict]:
                 }
             )
 
+    if getattr(analysis, "kind", "") in {"room_verification", "project_verification"}:
+        for record in spatial_sync_status(layout, analysis):
+            if record["state"] == "synchronized":
+                continue
+            issues.append(
+                {
+                    "code": f"engineering_mapping_{record['state']}",
+                    "severity": "warning",
+                    "item_ids": [record["room_id"]],
+                    "message": (
+                        f"Room mapping is {record['state'].replace('_', ' ')}: "
+                        f"{record['reason']}."
+                    ),
+                }
+            )
+
+        for relationship in pressure_relationships(layout, analysis):
+            if relationship["state"] == "pass":
+                continue
+            high_id = relationship.get("higher_room_id")
+            low_id = relationship.get("lower_room_id")
+            item_ids = [item_id for item_id in (high_id, low_id) if item_id]
+            if relationship["state"] == "fail":
+                message = (
+                    f"Pressure cascade {relationship['higher_pressure_room']} → "
+                    f"{relationship['lower_pressure_room']} is "
+                    f"{relationship['delta_pa']:g} Pa; "
+                    f"minimum is {relationship['min_delta_pa']:g} Pa."
+                )
+                code = "pressure_cascade_conflict"
+            else:
+                message = (
+                    f"Pressure cascade {relationship['higher_pressure_room']} → "
+                    f"{relationship['lower_pressure_room']} is unresolved because mapped "
+                    "observed pressure data is unavailable."
+                )
+                code = "pressure_cascade_unavailable"
+            issues.append(
+                {
+                    "code": code,
+                    "severity": "warning",
+                    "item_ids": item_ids,
+                    "message": message,
+                }
+            )
+
     return issues
+
 
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:

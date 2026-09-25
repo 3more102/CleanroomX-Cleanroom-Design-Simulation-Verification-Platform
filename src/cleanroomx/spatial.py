@@ -769,15 +769,31 @@ def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
     else:
         return False
 
-    changed = False
-    prior_baseline = copy.deepcopy(layout.get("engineering_sync"))
+    # Validate every value before mutating any spatial room. This makes a pull
+    # all-or-nothing even when a later mapped engineering room is malformed.
+    prepared: list[tuple[dict, dict, dict[str, float], float | None]] = []
     for source, target in mapped_pairs:
+        geometry: dict[str, float] = {}
         for field in ("length_m", "width_m", "height_m"):
             value = _geometry_number(target.get(field))
             if not math.isfinite(value) or value <= 0:
                 raise SpatialSyncError(
                     f"Engineering room {target.get('name')!r} has invalid {field}."
                 )
+            geometry[field] = value
+        pressure: float | None = None
+        if target.get("observed_pressure_pa") is not None:
+            pressure = _geometry_number(target.get("observed_pressure_pa"))
+            if not math.isfinite(pressure):
+                raise SpatialSyncError(
+                    f"Engineering room {target.get('name')!r} has invalid observed_pressure_pa."
+                )
+        prepared.append((source, target, geometry, pressure))
+
+    changed = False
+    prior_baseline = copy.deepcopy(layout.get("engineering_sync"))
+    for source, target, geometry, pressure in prepared:
+        for field, value in geometry.items():
             if not math.isclose(
                 _geometry_number(source.get(field)),
                 value,
@@ -786,15 +802,9 @@ def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
             ):
                 source[field] = value
                 changed = True
-        if target.get("observed_pressure_pa") is not None:
-            pressure = _geometry_number(target.get("observed_pressure_pa"))
-            if not math.isfinite(pressure):
-                raise SpatialSyncError(
-                    f"Engineering room {target.get('name')!r} has invalid observed_pressure_pa."
-                )
-            if source.get("pressure_pa") != pressure:
-                source["pressure_pa"] = pressure
-                changed = True
+        if pressure is not None and source.get("pressure_pa") != pressure:
+            source["pressure_pa"] = pressure
+            changed = True
 
     _record_sync_baseline(layout, analysis, mapped_pairs)
     return changed or layout.get("engineering_sync") != prior_baseline

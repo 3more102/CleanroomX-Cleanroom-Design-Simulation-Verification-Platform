@@ -3,7 +3,7 @@
 ## Unreleased project save-conflict protection — 2026-09-25
 
 - Adds exact-byte SHA-256 project revision tracking at load time and after successful explicit saves.
-- Makes ordinary **Save Project** an optimistic checked replacement: if the open file was changed or deleted by another process after load/last save, CleanroomX refuses to overwrite it.
+- Makes ordinary **Save Project** an optimistic checked replacement, and applies the same guard when **Save Project As** targets the currently open path: if the open file was changed or deleted by another process after load/last save, CleanroomX refuses to overwrite it.
 - Preserves the externally modified disk file and the operator's local in-memory edits on conflict, with an actionable desktop error directing the operator to **Save Project As** or reopen the disk version.
 - Keeps the existing schema version, deterministic serializer, atomic same-directory replacement, recovery-autosave separation, engineering solver equations, numerical tolerances, and acceptance semantics unchanged.
 - Adds persistence and desktop regressions for unchanged checked saves, exact revision identity, external modification, deletion, temporary-file cleanup, and user-visible conflict handling.

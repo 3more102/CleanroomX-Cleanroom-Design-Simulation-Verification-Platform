@@ -43,6 +43,8 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .run_history import append_run_history_record
+from .run_history_ui import RunHistoryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -190,6 +192,7 @@ class CleanroomXApp:
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
+        self._run_history_contexts: dict[int, dict | None] = {}
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
@@ -243,6 +246,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
+        file_menu.add_command(label="Run History...", command=self.show_run_history)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
         file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
@@ -1075,6 +1079,75 @@ class CleanroomXApp:
         self.status_var.set(f"Opened {project_path.name}")
         self._update_title()
 
+    def show_run_history(self) -> None:
+        if self.project_path is None:
+            messagebox.showinfo(
+                "Run history",
+                "Save the project before running analyses to create durable run history.",
+                parent=self.root,
+            )
+            return
+        RunHistoryCenter(self.root, self.project_path)
+
+    def _prepare_run_history_context(
+        self,
+        analysis: AnalysisDocument,
+        input_snapshot: dict,
+    ) -> dict | None:
+        if self.project_path is None:
+            return None
+        revision = getattr(self, "_project_file_revision", None)
+        if revision is None:
+            try:
+                revision = capture_project_file_revision(self.project_path)
+            except OSError as exc:
+                return {"archive_error": f"cannot fingerprint saved project: {exc}"}
+        if not revision.exists:
+            return {"archive_error": "saved project file is missing"}
+        try:
+            dirty = self._has_unsaved_changes()
+        except Exception:
+            dirty = True
+        return {
+            "project_path": Path(self.project_path),
+            "project_revision": revision,
+            "project_dirty": dirty,
+            "analysis_id": analysis.id,
+            "analysis_name": analysis.name,
+            "input_snapshot": copy.deepcopy(input_snapshot),
+        }
+
+    def _archive_run_history_async(
+        self,
+        generation: int,
+        analysis_id: str,
+        run: AnalysisRun,
+        context: dict | None,
+    ) -> None:
+        if context is None:
+            return
+        archive_error = context.get("archive_error")
+        if archive_error:
+            self._queue.put(("history_error", generation, analysis_id, archive_error))
+            return
+
+        def worker() -> None:
+            try:
+                path = append_run_history_record(
+                    context["project_path"],
+                    project_revision=context["project_revision"],
+                    project_dirty=context["project_dirty"],
+                    analysis_id=context["analysis_id"],
+                    analysis_name=context["analysis_name"],
+                    input_snapshot=context["input_snapshot"],
+                    run=run,
+                )
+                self._queue.put(("history_success", generation, analysis_id, str(path)))
+            except Exception as exc:
+                self._queue.put(("history_error", generation, analysis_id, str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _update_title(self) -> None:
         has_unsaved_changes = self._has_unsaved_changes()
         if has_unsaved_changes:
@@ -1406,6 +1479,11 @@ class CleanroomXApp:
         kind = analysis.kind
         payload = copy.deepcopy(analysis.input)
         base_dir = self._base_dir()
+        contexts = getattr(self, "_run_history_contexts", None)
+        if contexts is None:
+            self._run_history_contexts = {}
+            contexts = self._run_history_contexts
+        contexts[generation] = self._prepare_run_history_context(analysis, payload)
         self._abandon_requested = False
         self._set_running(True)
         self.status_var.set(f"Running {analysis.name}...")
@@ -1438,21 +1516,46 @@ class CleanroomXApp:
         try:
             while True:
                 kind, generation, analysis_id, payload = self._queue.get_nowait()
+                if kind in {"history_success", "history_error"}:
+                    if generation != self._run_generation:
+                        continue
+                    if kind == "history_error":
+                        self.status_var.set(
+                            f"Analysis completed, but run history archival failed: {payload}"
+                        )
+                        messagebox.showwarning(
+                            "Run history archival failed",
+                            (
+                                "The engineering result remains available in this session, "
+                                "but its durable run-history record could not be written.\n\n"
+                                f"{payload}"
+                            ),
+                            parent=self.root,
+                        )
+                    else:
+                        self.status_var.set(
+                            f"Analysis completed and archived — {Path(payload).name}"
+                        )
+                    continue
                 if generation != self._run_generation:
+                    getattr(self, "_run_history_contexts", {}).pop(generation, None)
                     continue
                 if self._abandon_requested:
+                    getattr(self, "_run_history_contexts", {}).pop(generation, None)
                     self._abandon_requested = False
                     self._set_running(False)
                     self.status_var.set("Run abandoned; backend worker finished. Ready.")
                     continue
                 self._set_running(False)
                 if kind == "error":
+                    getattr(self, "_run_history_contexts", {}).pop(generation, None)
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
                     try:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
+                        getattr(self, "_run_history_contexts", {}).pop(generation, None)
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(
                             "Completed result discarded — the analysis no longer exists."
@@ -1461,6 +1564,7 @@ class CleanroomXApp:
                     if not analysis_run_matches_input(
                         payload, analysis.kind, analysis.input
                     ):
+                        getattr(self, "_run_history_contexts", {}).pop(generation, None)
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "
@@ -1471,8 +1575,19 @@ class CleanroomXApp:
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
                     self._render_run(payload)
+                    history_context = getattr(
+                        self, "_run_history_contexts", {}
+                    ).pop(generation, None)
+                    self._archive_run_history_async(
+                        generation, analysis_id, payload, history_context
+                    )
+                    suffix = (
+                        " — run history requires a saved project"
+                        if history_context is None
+                        else ""
+                    )
                     self.status_var.set(
-                        f"Completed — {payload.title} — status: {payload.status}"
+                        f"Completed — {payload.title} — status: {payload.status}{suffix}"
                     )
         except queue.Empty:
             pass

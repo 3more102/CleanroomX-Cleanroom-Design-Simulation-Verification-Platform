@@ -454,7 +454,10 @@ class AutosaveManager:
                 snapshot_text=snapshot_text,
                 digest=digest,
             )
-            if self._future is not None and not self._future.done():
+            # Future.done() becomes true before completion callbacks are guaranteed
+            # to finish. The coordinator therefore owns every tracked Future until
+            # _on_write_done() explicitly releases it.
+            if self._future is not None:
                 self._pending_request = request
                 self._set_status_locked("saving", "Autosave queued")
                 return True
@@ -523,6 +526,13 @@ class AutosaveManager:
             failure = exc
 
         with self._lock:
+            # A completion callback must only finalize the Future/request pair that
+            # the coordinator still owns. This prevents an old callback from
+            # clearing or overwriting newer tracked state if callback delivery is
+            # delayed relative to Future.done().
+            if self._future is not future or self._active_request is not request:
+                return
+
             current_epoch = self._epochs.get(request.project_identity, 0)
             stale = request.epoch != current_epoch
             if stale and artifact is not None:
@@ -609,7 +619,11 @@ class AutosaveManager:
         deadline = time.monotonic() + timeout
         while True:
             with self._lock:
-                idle = self._future is None and self._pending_request is None
+                idle = (
+                    self._future is None
+                    and self._active_request is None
+                    and self._pending_request is None
+                )
                 failure = self._status if self._status.state == "failed" else None
             if idle:
                 if failure is not None:

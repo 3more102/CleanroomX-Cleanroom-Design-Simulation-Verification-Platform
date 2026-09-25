@@ -386,6 +386,16 @@ def _geometry_number(value: Any) -> float:
     return number if math.isfinite(number) else math.nan
 
 
+def _finite_optional(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _geometry_matches(left: dict, right: dict) -> bool:
     return all(
         math.isclose(
@@ -697,6 +707,102 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicitly pull mapped engineering dimensions into spatial geometry.
+
+    X/Y placement remains spatial-only. Every mapping is resolved before any
+    mutation so one bad mapping cannot partially update the layout.
+    """
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return False
+    if not isinstance(layout, dict):
+        return False
+    rooms = normalize_layout(layout)["rooms"]
+    raw_rooms = layout.get("rooms")
+    if not rooms or not isinstance(raw_rooms, list):
+        return False
+
+    raw_by_id = {
+        str(room.get("id")): room
+        for room in raw_rooms
+        if isinstance(room, dict) and str(room.get("id") or "").strip()
+    }
+    kind = getattr(analysis, "kind", "")
+    mapped_pairs: list[tuple[dict, dict]] = []
+
+    if kind == "room_verification":
+        source = raw_by_id.get(rooms[0]["id"])
+        if source is None:
+            return False
+        mapped_pairs.append((source, analysis.input))
+    elif kind == "project_verification":
+        engineering_rooms = analysis.input.get("rooms")
+        if not isinstance(engineering_rooms, list):
+            return False
+        _require_unique_sync_names(rooms, source="the spatial layout")
+        _require_unique_sync_names(engineering_rooms, source="the active analysis")
+        targets = {
+            str(room.get("name")).strip().casefold(): room
+            for room in engineering_rooms
+            if isinstance(room, dict) and str(room.get("name") or "").strip()
+        }
+        used_links: set[str] = set()
+        for normalized_room in rooms:
+            link = str(
+                normalized_room.get("analysis_room_name") or normalized_room["name"]
+            ).strip()
+            key = link.casefold()
+            if key in used_links:
+                raise SpatialSyncError(
+                    "Cannot synchronize spatial geometry because multiple layout rooms "
+                    f"map to analysis room {link!r}."
+                )
+            used_links.add(key)
+            target = targets.get(key)
+            if target is None:
+                if normalized_room.get("analysis_room_name"):
+                    raise SpatialSyncError(
+                        f"Linked analysis room {link!r} does not exist in the active analysis."
+                    )
+                continue
+            source = raw_by_id.get(normalized_room["id"])
+            if source is not None:
+                mapped_pairs.append((source, target))
+    else:
+        return False
+
+    # Validate all target geometry before mutating any spatial room.
+    target_values: list[tuple[dict, dict, dict[str, float]]] = []
+    for source, target in mapped_pairs:
+        values: dict[str, float] = {}
+        for field in ("length_m", "width_m", "height_m"):
+            value = _geometry_number(target.get(field))
+            if not math.isfinite(value) or value <= 0:
+                raise SpatialSyncError(
+                    f"Engineering room {target.get('name')!r} has invalid {field}."
+                )
+            values[field] = value
+        target_values.append((source, target, values))
+
+    changed = False
+    for source, target, values in target_values:
+        for field, value in values.items():
+            if source.get(field) != value:
+                source[field] = value
+                changed = True
+        observed = _finite_optional(target.get("observed_pressure_pa"))
+        if observed is not None and source.get("pressure_pa") != observed:
+            source["pressure_pa"] = observed
+            changed = True
+
+    _record_sync_baseline(
+        layout,
+        analysis,
+        [(source, target) for source, target, _values in target_values],
+    )
+    return changed
+
+
 def _room_overlap_records(
     rooms: list[dict],
 ) -> list[tuple[int, int, list[float]]]:
@@ -802,11 +908,87 @@ def _spatial_validation_key(layout: dict) -> tuple:
 
 
 def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+    """Return deterministic spatial diagnostics without hiding malformed edit state."""
+    issues: list[dict] = []
+    raw_rooms = value.get("rooms", []) if isinstance(value, dict) else []
+    raw_devices = value.get("devices", []) if isinstance(value, dict) else []
+
+    seen_room_ids: set[str] = set()
+    if isinstance(raw_rooms, list):
+        for index, raw in enumerate(raw_rooms):
+            if not isinstance(raw, dict):
+                issues.append(
+                    {
+                        "code": "malformed_room",
+                        "severity": "error",
+                        "item_ids": [],
+                        "message": f"Room entry {index + 1} is not an object.",
+                    }
+                )
+                continue
+            room_id = str(raw.get("id") or "")
+            if room_id and room_id in seen_room_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_room_id",
+                        "severity": "error",
+                        "item_ids": [room_id],
+                        "message": f"Duplicate room id '{room_id}' is not allowed.",
+                    }
+                )
+            if room_id:
+                seen_room_ids.add(room_id)
+            for field in ("length_m", "width_m", "height_m"):
+                number = _geometry_number(raw.get(field))
+                if not math.isfinite(number) or number <= 0:
+                    issues.append(
+                        {
+                            "code": "invalid_room_geometry",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "field": field,
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' "
+                                f"has invalid {field}; it must be finite and greater than zero."
+                            ),
+                        }
+                    )
+            if "floor_elevation_m" in raw:
+                elevation = _geometry_number(raw.get("floor_elevation_m"))
+                if not math.isfinite(elevation):
+                    issues.append(
+                        {
+                            "code": "invalid_room_elevation",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' "
+                                "has a non-finite floor elevation."
+                            ),
+                        }
+                    )
+
+    seen_device_ids: set[str] = set()
+    if isinstance(raw_devices, list):
+        for raw in raw_devices:
+            if not isinstance(raw, dict):
+                continue
+            device_id = str(raw.get("id") or "")
+            if device_id and device_id in seen_device_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_device_id",
+                        "severity": "error",
+                        "item_ids": [device_id],
+                        "message": f"Duplicate spatial object id '{device_id}' is not allowed.",
+                    }
+                )
+            if device_id:
+                seen_device_ids.add(device_id)
+
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
-    issues: list[dict] = []
 
     first_room_by_name: dict[str, dict] = {}
     for room in rooms:
@@ -961,32 +1143,145 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
-    normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+def _analysis_pressure_target(
+    room: dict,
+    index: int,
+    analysis: Any,
+) -> tuple[dict | None, str | None]:
+    payload = getattr(analysis, "input", None)
+    if not isinstance(payload, dict):
+        return None, None
+    kind = getattr(analysis, "kind", "")
+    if kind == "room_verification":
+        if index == 0:
+            name = str(
+                payload.get("name")
+                or room.get("analysis_room_name")
+                or room["name"]
+            )
+            return payload, name
+        return None, None
+    if kind != "project_verification":
+        return None, None
+
+    raw_rooms = payload.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return None, None
+    target_name = str(room.get("analysis_room_name") or room["name"]).strip()
+    matches = [
+        target
+        for target in raw_rooms
+        if isinstance(target, dict)
+        and str(target.get("name") or "").strip().casefold()
+        == target_name.casefold()
     ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
+    if len(matches) != 1:
+        return None, target_name or None
+    return matches[0], str(matches[0].get("name") or target_name)
+
+
+def _pressure_finding(
+    result: dict | None,
+    room_name: str,
+) -> tuple[dict | None, dict | None]:
+    if not isinstance(result, dict):
+        return None, None
+    if result.get("room") == room_name and isinstance(result.get("findings"), list):
+        reports = [result]
+    else:
+        raw_reports = result.get("rooms")
+        reports = raw_reports if isinstance(raw_reports, list) else []
+    for report in reports:
+        if not isinstance(report, dict) or report.get("room") != room_name:
+            continue
+        findings = report.get("findings")
+        if not isinstance(findings, list):
+            continue
+        for finding in findings:
+            if isinstance(finding, dict) and finding.get("code") == "PRESSURE":
+                return finding, report
+    return None, None
+
+
+def pressure_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> dict:
+    """Describe pressure rendering without inventing unavailable engineering data.
+
+    Fresh solver evidence takes precedence over configured engineering pressure;
+    configured pressure takes precedence over spatial-only pressure.
+    """
+    normalized = normalize_layout(layout)
     sync = engineering_sync_status(normalized, analysis)
     mapping_by_room = {
         record["room_id"]: record["state"] for record in sync["rooms"]
     }
-    rooms = []
-    for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
+
+    rooms: list[dict] = []
+    for index, room in enumerate(normalized["rooms"]):
+        target, target_name = _analysis_pressure_target(room, index, analysis)
+        pressure = None
+        target_pressure = None
+        ach = None
+        source = "unavailable"
+        status = "unavailable"
+
+        if target is not None and target_name is not None:
+            finding, report = _pressure_finding(result, target_name)
+            actual = (
+                _finite_optional(finding.get("actual"))
+                if isinstance(finding, dict)
+                else None
+            )
+            if actual is not None:
+                pressure = actual
+                target_pressure = _finite_optional(finding.get("limit"))
+                ach = (
+                    _finite_optional(report.get("ach"))
+                    if isinstance(report, dict)
+                    else None
+                )
+                source = "result"
+                status = str(finding.get("status") or "unavailable")
+            else:
+                configured = _finite_optional(target.get("observed_pressure_pa"))
+                if configured is not None:
+                    pressure = configured
+                    source = "configured"
+                    status = "configured"
+                target_pressure = _finite_optional(target.get("min_pressure_pa"))
+
+        if pressure is None:
+            spatial_value = _finite_optional(room.get("pressure_pa"))
+            if spatial_value is not None:
+                pressure = spatial_value
+                source = "spatial"
+                status = "spatial_input"
+
         rooms.append(
             {
                 "room_id": room["id"],
-                "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "availability": "available" if pressure is not None else "unavailable",
+                "pressure_pa": pressure,
+                "pressure_target_pa": target_pressure,
+                "source": source,
+                "status": status,
+                "ach": ach,
+                "fill": "#dfe7ef",
                 "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
             }
         )
+
+    pressures = [
+        item["pressure_pa"] for item in rooms if item["pressure_pa"] is not None
+    ]
+    minimum = min(pressures) if pressures else None
+    maximum = max(pressures) if pressures else None
+    for item in rooms:
+        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,

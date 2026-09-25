@@ -28,13 +28,13 @@ Open the self-contained demonstration project shipped inside the installed packa
 cleanroomx-gui --demo
 ```
 
-Check that the application layer, GUI imports, and every declared parser/runner/reporter binding are usable without opening a window:
+Check that the application layer, GUI imports, every declared parser/runner/reporter binding, and any installed analysis plugins are usable without opening a window:
 
 ```bash
 cleanroomx-gui --check
 ```
 
-The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate keys, catalog/mapping drift, invalid parser/runner contracts, and unresolved/non-callable targets. Normal GUI startup performs the same validation before creating the Tk root.
+The headless check validates the application registry as an executable contract before reporting readiness. It rejects duplicate keys, catalog/mapping drift, invalid parser/runner contracts, unresolved/non-callable targets, and incompatible plugin descriptors. A broken optional plugin is isolated from the core registry and reported under `plugin_discovery.failures`; `--check` exits non-zero while plugin discovery is degraded. Normal GUI startup keeps valid core/plugin workflows available and reports plugin-load failures in the status line.
 
 For CI or Linux automation with a virtual display:
 
@@ -91,6 +91,8 @@ Removing an analysis also clears any retained result owned by that analysis, pre
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
+
+Optional installed analysis plugins that satisfy the API-v1 contract are added to the same picker and use the same validation/run/result/report path. Plugin workflows must use provider-namespaced keys and are treated as trusted local Python code; see [PLUGINS.md](PLUGINS.md). Completed plugin runs record plugin name, version, and API version in application execution provenance, and cached-run matching fails closed if that identity no longer matches the active provider.
 
 Consistency and dossier workflows resolve relative file references against project path context. Imported JSON is rebased from its source directory, and **Save Project As** rebases relative references when the destination directory changes. Absolute-only dossier inputs can run before the project is saved; relative references still require an explicit base directory. The installed `--demo` project ships its referenced files beside the project file.
 

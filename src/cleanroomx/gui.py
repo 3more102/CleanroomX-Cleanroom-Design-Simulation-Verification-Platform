@@ -25,6 +25,7 @@ from .application import (
     analysis_catalog,
     analysis_run_matches_input,
     application_info,
+    load_analysis_plugins,
     rebase_analysis_file_references,
     run_analysis,
     validate_analysis_input,
@@ -1725,9 +1726,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.autosave_interval_seconds < 0:
         parser.error("--autosave-interval-seconds must be zero or greater")
     if args.check:
-        print(json.dumps(application_info(), indent=2, ensure_ascii=False))
-        return 0
+        info = application_info()
+        print(json.dumps(info, indent=2, ensure_ascii=False))
+        return 0 if info["plugin_discovery"]["status"] == "ok" else 2
 
+    plugin_report = load_analysis_plugins()
     validate_application_registry()
     project_path = bundled_demo_project_path() if args.demo else args.project
 
@@ -1736,6 +1739,12 @@ def main(argv: list[str] | None = None) -> int:
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
     )
+    if plugin_report["failure_count"]:
+        app.status_var.set(
+            "Ready — "
+            f"{plugin_report['failure_count']} analysis plugin(s) failed to load; "
+            "run cleanroomx-gui --check for details"
+        )
     recovered_at_startup = False
     if not args.smoke:
         recovered_at_startup = app.offer_startup_recovery()

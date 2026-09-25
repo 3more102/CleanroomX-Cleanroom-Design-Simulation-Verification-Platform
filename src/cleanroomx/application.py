@@ -2,15 +2,21 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
 from importlib import import_module
+from importlib import metadata as importlib_metadata
 import copy
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any, Callable
 
 from . import __version__
+from .plugin_api import AnalysisPlugin, PLUGIN_API_VERSION, PluginAnalysisSpec
+
+
+BindingTarget = tuple[str, str] | Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -18,10 +24,14 @@ class AnalysisSpec:
     key: str
     title: str
     category: str
-    parser: tuple[str, str] | None
-    runner: tuple[str, str] | None
-    reporter: tuple[str, str] | None
+    parser: BindingTarget | None
+    runner: BindingTarget | None
+    reporter: BindingTarget | None
     description: str
+    provider: str = "core"
+    plugin_name: str | None = None
+    plugin_version: str | None = None
+    plugin_api_version: int | None = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +69,7 @@ def _spec(key, title, category, parser, runner, reporter, description):
     return AnalysisSpec(key, title, category, parser, runner, reporter, description)
 
 
-_ANALYSES = (
+_CORE_ANALYSES = (
     _spec("room_verification", "Room verification", "Verification",
           ("io", "room_from_dict"), ("verification", "verify_room"), None,
           "ACH, differential-pressure, and particle-requirement verification."),
@@ -176,21 +186,243 @@ _ANALYSES = (
           "Aggregate existing CleanroomX analyses into an auditable engineering dossier."),
 )
 
+_PLUGIN_ENTRY_POINT_GROUP = "cleanroomx.analysis_plugins"
+_PLUGIN_KEY_PATTERN = re.compile(r"^plugin\.[a-z0-9][a-z0-9_.-]*$")
+_PLUGIN_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
+_ANALYSES = _CORE_ANALYSES
 ANALYSIS_SPECS = {item.key: item for item in _ANALYSES}
+_PLUGINS_DISCOVERED = False
+_PLUGIN_DISCOVERY_REPORT = {
+    "status": "not_checked",
+    "entry_point_group": _PLUGIN_ENTRY_POINT_GROUP,
+    "api_version": PLUGIN_API_VERSION,
+    "discovered_count": 0,
+    "loaded_plugin_count": 0,
+    "loaded_analysis_count": 0,
+    "failure_count": 0,
+    "plugins": [],
+    "failures": [],
+}
 
 
 def analysis_catalog() -> list[dict]:
+    load_analysis_plugins()
     return [
-        {"key": spec.key, "title": spec.title, "category": spec.category,
-         "description": spec.description}
+        {
+            "key": spec.key,
+            "title": spec.title,
+            "category": spec.category,
+            "description": spec.description,
+            "provider": spec.provider,
+            "plugin_name": spec.plugin_name,
+            "plugin_version": spec.plugin_version,
+        }
         for spec in _ANALYSES
     ]
 
 
-def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
+def _load_callable(target: BindingTarget) -> Callable[..., Any]:
+    if callable(target):
+        return target
     module_name, function_name = target
     module = import_module(f".{module_name}", __package__)
     return getattr(module, function_name)
+
+
+def _binding_label(target: BindingTarget) -> str:
+    if callable(target):
+        module_name = getattr(target, "__module__", type(target).__module__)
+        function_name = getattr(
+            target, "__qualname__", getattr(target, "__name__", type(target).__qualname__)
+        )
+        return f"{module_name}.{function_name}"
+    return f"{target[0]}.{target[1]}"
+
+
+def _plugin_text(value: Any, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value.strip()
+
+
+def _plugin_analysis_specs(
+    plugin: AnalysisPlugin,
+    *,
+    reserved_keys: set[str],
+) -> tuple[AnalysisSpec, ...]:
+    if not isinstance(plugin, AnalysisPlugin):
+        raise TypeError("entry point must return cleanroomx.plugin_api.AnalysisPlugin")
+    if type(plugin.api_version) is not int or plugin.api_version != PLUGIN_API_VERSION:
+        raise ValueError(
+            f"plugin API version {plugin.api_version!r} is incompatible; "
+            f"CleanroomX requires {PLUGIN_API_VERSION}"
+        )
+    name = _plugin_text(plugin.name, "plugin.name")
+    if not _PLUGIN_NAME_PATTERN.fullmatch(name):
+        raise ValueError(
+            "plugin.name must use lowercase letters, digits, '.', '_' or '-'"
+        )
+    version = _plugin_text(plugin.version, "plugin.version")
+    if not isinstance(plugin.analyses, tuple) or not plugin.analyses:
+        raise ValueError("plugin.analyses must be a non-empty tuple")
+
+    expected_prefix = f"plugin.{name}."
+    seen: set[str] = set()
+    converted: list[AnalysisSpec] = []
+    for raw in plugin.analyses:
+        if not isinstance(raw, PluginAnalysisSpec):
+            raise TypeError(
+                "every plugin analysis must be cleanroomx.plugin_api.PluginAnalysisSpec"
+            )
+        key = _plugin_text(raw.key, "plugin analysis key")
+        if not _PLUGIN_KEY_PATTERN.fullmatch(key) or not key.startswith(expected_prefix):
+            raise ValueError(
+                f"plugin analysis key {key!r} must be namespaced under "
+                f"{expected_prefix!r}"
+            )
+        if key in seen:
+            raise ValueError(f"duplicate analysis key inside plugin: {key}")
+        if key in reserved_keys:
+            raise ValueError(f"analysis key collides with an existing workflow: {key}")
+        seen.add(key)
+
+        title = _plugin_text(raw.title, f"{key}.title")
+        category = _plugin_text(raw.category, f"{key}.category")
+        description = _plugin_text(raw.description, f"{key}.description")
+        if not callable(raw.parser):
+            raise TypeError(f"{key}.parser must be callable")
+        if not callable(raw.runner):
+            raise TypeError(f"{key}.runner must be callable")
+        if raw.reporter is not None and not callable(raw.reporter):
+            raise TypeError(f"{key}.reporter must be callable when provided")
+
+        converted.append(
+            AnalysisSpec(
+                key=key,
+                title=title,
+                category=category,
+                parser=raw.parser,
+                runner=raw.runner,
+                reporter=raw.reporter,
+                description=description,
+                provider="plugin",
+                plugin_name=name,
+                plugin_version=version,
+                plugin_api_version=plugin.api_version,
+            )
+        )
+    return tuple(converted)
+
+
+def _available_plugin_entry_points() -> tuple[Any, ...]:
+    discovered = importlib_metadata.entry_points()
+    if hasattr(discovered, "select"):
+        selected = discovered.select(group=_PLUGIN_ENTRY_POINT_GROUP)
+    else:  # pragma: no cover - compatibility with older importlib metadata APIs
+        selected = discovered.get(_PLUGIN_ENTRY_POINT_GROUP, ())
+    return tuple(
+        sorted(
+            selected,
+            key=lambda item: (
+                str(getattr(item, "name", "")),
+                str(getattr(item, "value", "")),
+            ),
+        )
+    )
+
+
+def load_analysis_plugins(
+    *,
+    force: bool = False,
+    entry_points_override: tuple[Any, ...] | list[Any] | None = None,
+) -> dict:
+    """Discover and validate trusted analysis plugins without weakening the core registry.
+
+    Invalid plugins are isolated and reported. A plugin is registered only after its
+    complete descriptor validates, so partial registration cannot occur.
+    """
+    global _ANALYSES, _PLUGINS_DISCOVERED, _PLUGIN_DISCOVERY_REPORT
+
+    if _PLUGINS_DISCOVERED and not force and entry_points_override is None:
+        return copy.deepcopy(_PLUGIN_DISCOVERY_REPORT)
+
+    entry_points = (
+        tuple(entry_points_override)
+        if entry_points_override is not None
+        else _available_plugin_entry_points()
+    )
+    entry_points = tuple(
+        sorted(
+            entry_points,
+            key=lambda item: (
+                str(getattr(item, "name", "")),
+                str(getattr(item, "value", "")),
+            ),
+        )
+    )
+
+    active = list(_CORE_ANALYSES)
+    active_by_key = {item.key: item for item in active}
+    plugins: list[dict] = []
+    failures: list[dict] = []
+
+    for entry_point in entry_points:
+        entry_name = str(getattr(entry_point, "name", "<unnamed>"))
+        entry_value = str(getattr(entry_point, "value", "<unknown>"))
+        try:
+            loaded = entry_point.load()
+            descriptor = loaded() if callable(loaded) and not isinstance(loaded, AnalysisPlugin) else loaded
+            converted = _plugin_analysis_specs(
+                descriptor,
+                reserved_keys=set(active_by_key),
+            )
+        except Exception as exc:
+            failures.append(
+                {
+                    "entry_point": entry_name,
+                    "value": entry_value,
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            )
+            continue
+
+        active.extend(converted)
+        active_by_key.update({item.key: item for item in converted})
+        plugins.append(
+            {
+                "entry_point": entry_name,
+                "name": descriptor.name,
+                "version": descriptor.version,
+                "api_version": descriptor.api_version,
+                "analysis_keys": [item.key for item in converted],
+            }
+        )
+
+    _ANALYSES = tuple(active)
+    ANALYSIS_SPECS.clear()
+    ANALYSIS_SPECS.update(active_by_key)
+    _PLUGINS_DISCOVERED = True
+    _PLUGIN_DISCOVERY_REPORT = {
+        "status": "ok" if not failures else "degraded",
+        "entry_point_group": _PLUGIN_ENTRY_POINT_GROUP,
+        "api_version": PLUGIN_API_VERSION,
+        "discovered_count": len(entry_points),
+        "loaded_plugin_count": len(plugins),
+        "loaded_analysis_count": sum(len(item["analysis_keys"]) for item in plugins),
+        "failure_count": len(failures),
+        "plugins": plugins,
+        "failures": failures,
+    }
+    return copy.deepcopy(_PLUGIN_DISCOVERY_REPORT)
+
+
+def get_analysis_spec(kind: str) -> AnalysisSpec | None:
+    spec = ANALYSIS_SPECS.get(kind)
+    if spec is not None:
+        return spec
+    load_analysis_plugins()
+    return ANALYSIS_SPECS.get(kind)
 
 
 _CUSTOM_APPLICATION_ADAPTERS = frozenset({"consistency", "dossier"})
@@ -213,6 +445,36 @@ def validate_application_registry() -> dict:
     callable_target_count = 0
     fallback_reporter_count = 0
     for spec in _ANALYSES:
+        if spec.provider == "core":
+            if any(
+                value is not None
+                for value in (
+                    spec.plugin_name,
+                    spec.plugin_version,
+                    spec.plugin_api_version,
+                )
+            ):
+                raise RuntimeError(
+                    f"{spec.key} core workflow cannot carry plugin identity"
+                )
+        elif spec.provider == "plugin":
+            if (
+                spec.plugin_name is None
+                or spec.plugin_version is None
+                or spec.plugin_api_version != PLUGIN_API_VERSION
+            ):
+                raise RuntimeError(
+                    f"{spec.key} plugin workflow has incomplete plugin identity"
+                )
+            if not spec.key.startswith(f"plugin.{spec.plugin_name}."):
+                raise RuntimeError(
+                    f"{spec.key} plugin workflow is outside its provider namespace"
+                )
+        else:
+            raise RuntimeError(
+                f"{spec.key} has unsupported analysis provider {spec.provider!r}"
+            )
+
         if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
             if spec.parser is not None or spec.runner is not None:
                 raise RuntimeError(
@@ -233,24 +495,30 @@ def validate_application_registry() -> dict:
         ):
             if target is None:
                 continue
-            module_name, function_name = target
+            binding_label = _binding_label(target)
             try:
                 resolved = _load_callable(target)
             except Exception as exc:
                 raise RuntimeError(
                     f"{spec.key} {role} binding cannot be resolved: "
-                    f"{module_name}.{function_name}"
+                    f"{binding_label}"
                 ) from exc
             if not callable(resolved):
                 raise RuntimeError(
                     f"{spec.key} {role} binding is not callable: "
-                    f"{module_name}.{function_name}"
+                    f"{binding_label}"
                 )
             callable_target_count += 1
 
+    plugin_specs = [spec for spec in _ANALYSES if spec.provider == "plugin"]
     return {
         "status": "ok",
         "analysis_count": len(_ANALYSES),
+        "core_analysis_count": len(_ANALYSES) - len(plugin_specs),
+        "plugin_analysis_count": len(plugin_specs),
+        "plugin_provider_count": len(
+            {spec.plugin_name for spec in plugin_specs if spec.plugin_name is not None}
+        ),
         "callable_target_count": callable_target_count,
         "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
         "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),
@@ -542,6 +810,23 @@ def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bo
         return False
     if provenance.get("analysis_kind") != kind:
         return False
+    spec = get_analysis_spec(kind)
+    if spec is None:
+        return False
+    recorded_provider = provenance.get("analysis_provider", "core")
+    if recorded_provider != spec.provider:
+        return False
+    if spec.provider == "plugin":
+        identity = provenance.get("plugin_identity")
+        if not isinstance(identity, dict):
+            return False
+        if identity != {
+            "name": spec.plugin_name,
+            "version": spec.plugin_version,
+            "api_version": spec.plugin_api_version,
+        }:
+            return False
+
     recorded_sha256 = provenance.get("input_sha256")
     if not isinstance(recorded_sha256, str) or len(recorded_sha256) != 64:
         return False
@@ -640,7 +925,7 @@ def _capture_external_dependencies(
 
 
 def _application_execution_provenance(
-    kind: str,
+    spec: AnalysisSpec,
     input_sha256: str,
     dependencies_before: list[dict],
     dependencies_after: list[dict],
@@ -678,7 +963,17 @@ def _application_execution_provenance(
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
-        "analysis_kind": kind,
+        "analysis_kind": spec.key,
+        "analysis_provider": spec.provider,
+        "plugin_identity": (
+            None
+            if spec.provider == "core"
+            else {
+                "name": spec.plugin_name,
+                "version": spec.plugin_version,
+                "api_version": spec.plugin_api_version,
+            }
+        ),
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
         "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
@@ -762,8 +1057,9 @@ def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
             )
 
 def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
-    if kind not in ANALYSIS_SPECS:
-        raise ValueError(f"unsupported analysis kind: {kind}")
+    spec = get_analysis_spec(kind)
+    if spec is None:
+        raise ValueError(f"unsupported or unavailable analysis kind: {kind}")
     if not isinstance(payload, dict):
         raise ValueError("analysis input must be a JSON object")
     base = Path(base_dir) if base_dir is not None else None
@@ -773,7 +1069,6 @@ def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
     if kind == "dossier":
         _validate_dossier(payload, base)
         return
-    spec = ANALYSIS_SPECS[kind]
     assert spec.parser is not None
     _load_callable(spec.parser)(payload)
 
@@ -818,7 +1113,8 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     validate_analysis_input(kind, payload, base_dir=base_dir)
     input_sha256 = _canonical_input_sha256(payload)
-    spec = ANALYSIS_SPECS[kind]
+    spec = get_analysis_spec(kind)
+    assert spec is not None
     base = Path(base_dir) if base_dir is not None else None
     dependencies_before = _capture_external_dependencies(kind, payload, base)
 
@@ -839,7 +1135,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
     dependencies_after = _capture_external_dependencies(kind, payload, base)
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(
-        kind,
+        spec,
         input_sha256,
         dependencies_before,
         dependencies_after,
@@ -875,12 +1171,15 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
 
 
 def application_info() -> dict:
+    plugin_discovery = load_analysis_plugins()
     registry_validation = validate_application_registry()
     return {
         "name": "CleanroomX",
         "version": __version__,
         "analysis_count": len(_ANALYSES),
         "bindings_valid": registry_validation["status"] == "ok",
+        "plugin_api_version": PLUGIN_API_VERSION,
+        "plugin_discovery": plugin_discovery,
         "registry_validation": registry_validation,
         "analyses": analysis_catalog(),
     }

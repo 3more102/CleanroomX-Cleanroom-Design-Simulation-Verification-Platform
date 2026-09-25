@@ -9,7 +9,7 @@ import tempfile
 from typing import Any, Callable
 
 from . import __version__
-from .application import ANALYSIS_SPECS
+from .application import get_analysis_spec
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -101,8 +101,12 @@ def _analysis_from_dict(data: dict) -> AnalysisDocument:
     analysis_id = _validated_string(data.get("id"), "analysis.id")
     name = _validated_string(data.get("name", analysis_id), "analysis.name")
     kind = _validated_string(data.get("kind"), "analysis.kind")
-    if kind not in ANALYSIS_SPECS:
-        raise ProjectFormatError(f"unsupported analysis kind in project: {kind}")
+    if get_analysis_spec(kind) is None:
+        raise ProjectFormatError(
+            f"unsupported or unavailable analysis kind in project: {kind}. "
+            "If this project uses an analysis plugin, install a compatible plugin "
+            "and reopen the project."
+        )
     payload = data.get("input", {})
     if not isinstance(payload, dict):
         raise ProjectFormatError(f"analysis {analysis_id!r} input must be an object")

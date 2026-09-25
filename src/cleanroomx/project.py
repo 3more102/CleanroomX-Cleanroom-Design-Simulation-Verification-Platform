@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,22 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectSaveConflictError(RuntimeError):
+    """Raised when an opened project changed on disk before an overwrite."""
+
+
+@dataclass(frozen=True)
+class ProjectFileFingerprint:
+    sha256: str
+    size_bytes: int
+
+
+@dataclass(frozen=True)
+class SavedProjectDocument:
+    path: Path
+    fingerprint: ProjectFileFingerprint
 
 
 @dataclass
@@ -190,37 +207,116 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
+def _fingerprint_bytes(payload: bytes) -> ProjectFileFingerprint:
+    return ProjectFileFingerprint(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        size_bytes=len(payload),
+    )
+
+
+def project_file_fingerprint(path: str | Path) -> ProjectFileFingerprint | None:
+    """Return the exact content identity for a file, or None when it is absent."""
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        payload = source.read_bytes()
+    except FileNotFoundError:
+        return None
+    return _fingerprint_bytes(payload)
+
+
+def load_project_document_with_fingerprint(
+    path: str | Path,
+) -> tuple[ProjectDocument, ProjectFileFingerprint]:
+    """Load and fingerprint the exact bytes that were parsed."""
+    source = Path(path)
+    payload = source.read_bytes()
+    fingerprint = _fingerprint_bytes(payload)
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    return project_from_dict(data), fingerprint
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _ = load_project_document_with_fingerprint(path)
+    return project
+
+
+_ANY_FILE_STATE = object()
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Durably commit a rename on POSIX filesystems that support directory fsync."""
+    if os.name != "posix":
+        return
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    descriptor = os.open(directory, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _format_conflict(
+    destination: Path,
+    expected: ProjectFileFingerprint | None,
+    actual: ProjectFileFingerprint | None,
+) -> str:
+    if actual is None:
+        detail = "the file was deleted after it was opened"
+    elif expected is None:
+        detail = "the destination now exists"
+    else:
+        detail = "the file contents changed after it was opened"
+    return (
+        f"refusing to overwrite {destination}: {detail}. "
+        "Reload the project or use Save Project As to preserve both versions."
+    )
+
+
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    expected_fingerprint: ProjectFileFingerprint | None | object = _ANY_FILE_STATE,
+) -> Path:
+    """Atomically replace UTF-8 text, optionally guarding the observed file version."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = text.encode("utf-8")
 
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
 
+        if expected_fingerprint is not _ANY_FILE_STATE:
+            actual = project_file_fingerprint(destination)
+            if actual != expected_fingerprint:
+                raise ProjectSaveConflictError(
+                    _format_conflict(destination, expected_fingerprint, actual)
+                )
+
         temp_path.replace(destination)
+        _fsync_directory(destination.parent)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -228,11 +324,31 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    destination = Path(path)
+def _serialize_project_document(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)
-    text = json.dumps(
+    return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+
+
+def save_project_document_with_fingerprint(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_fingerprint: ProjectFileFingerprint | None | object = _ANY_FILE_STATE,
+) -> SavedProjectDocument:
+    """Persist a project and return the exact identity of the bytes written."""
+    destination = Path(path)
+    text = _serialize_project_document(project)
+    fingerprint = _fingerprint_bytes(text.encode("utf-8"))
+    atomic_write_text(
+        destination,
+        text,
+        expected_fingerprint=expected_fingerprint,
+    )
+    return SavedProjectDocument(path=destination, fingerprint=fingerprint)
+
+
+def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+    return save_project_document_with_fingerprint(path, project).path

@@ -58,7 +58,7 @@ For a genuinely different Save As destination, CleanroomX captures the destinati
 
 ## Project-level undo and redo
 
-The desktop **Edit** menu provides **Undo Project Change** and **Redo Project Change** for document-level transactions. The history is bounded to 100 entries and covers analysis creation, rename, removal, imported-input replacement, project-name/description edits grouped by field focus, and explicit **Sync dimensions to active analysis** operations. Undo/redo restores a validated project snapshot together with the exact raw JSON editor draft and active editor identity.
+The desktop **Edit** menu provides **Undo Project Change** and **Redo Project Change** for document-level transactions. The history is bounded to 100 entries and a 64 MiB soft snapshot budget; when a single latest edit exceeds the byte budget it is retained so the just-completed operation is still reversible. The history covers analysis creation, rename, removal, imported-input replacement, project-name/description edits grouped by field focus, and explicit **Sync dimensions to active analysis** operations. Undo/redo restores a validated project snapshot together with the exact raw JSON editor draft and active editor identity.
 
 History is scoped to the current document. **New Project**, opening another project, restoring a recovery artifact, and a successful **Save Project As** clear project history so states from one document/path context cannot be replayed into another. A normal in-place save keeps history; undoing afterward simply makes the document dirty again and does not modify the on-disk file until the next explicit save.
 

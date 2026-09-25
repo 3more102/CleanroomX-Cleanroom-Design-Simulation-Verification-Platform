@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
@@ -13,6 +14,42 @@ from .persistence import AtomicWriteDurabilityError, atomic_write_text
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
+
+_PROJECT_TOP_LEVEL_FIELDS = frozenset({
+    "schema",
+    "schema_version",
+    "application_version",
+    "project",
+    "analyses",
+    "active_analysis_id",
+})
+_PROJECT_BLOCK_FIELDS = frozenset({"name", "description", "metadata"})
+_ANALYSIS_FIELDS = frozenset({"id", "name", "kind", "input"})
+
+
+def _copy_extra_fields(extra_fields: Any) -> dict[str, Any]:
+    """Validate and detach an opaque additive-field mapping."""
+    if not isinstance(extra_fields, dict):
+        raise ProjectFormatError("additive project fields must be an object")
+    if any(not isinstance(key, str) for key in extra_fields):
+        raise ProjectFormatError("additive project field names must be strings")
+    return copy.deepcopy(extra_fields)
+
+
+def _extra_fields(data: dict, known_fields: frozenset[str]) -> dict[str, Any]:
+    """Return a detached copy of additive fields this build does not interpret."""
+    return _copy_extra_fields({
+        key: value
+        for key, value in data.items()
+        if key not in known_fields
+    })
+
+
+def _merge_extra_fields(extra_fields: dict[str, Any], known: dict[str, Any]) -> dict:
+    """Serialize opaque extensions losslessly while keeping known fields authoritative."""
+    merged = _copy_extra_fields(extra_fields)
+    merged.update(known)
+    return merged
 
 
 class ProjectFormatError(ValueError):
@@ -67,9 +104,22 @@ class AnalysisDocument:
     name: str
     kind: str
     input: dict = field(default_factory=dict)
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.input = copy.deepcopy(self.input)
+        self.extra_fields = _copy_extra_fields(self.extra_fields)
 
     def to_dict(self) -> dict:
-        return {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input}
+        return _merge_extra_fields(
+            self.extra_fields,
+            {
+                "id": self.id,
+                "name": self.name,
+                "kind": self.kind,
+                "input": copy.deepcopy(self.input),
+            },
+        )
 
 
 @dataclass
@@ -79,20 +129,35 @@ class ProjectDocument:
     analyses: list[AnalysisDocument] = field(default_factory=list)
     active_analysis_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    project_extra_fields: dict[str, Any] = field(default_factory=dict)
+    top_level_extra_fields: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.analyses = list(self.analyses)
+        self.metadata = copy.deepcopy(self.metadata)
+        self.project_extra_fields = _copy_extra_fields(self.project_extra_fields)
+        self.top_level_extra_fields = _copy_extra_fields(self.top_level_extra_fields)
 
     def to_dict(self) -> dict:
-        return {
-            "schema": PROJECT_SCHEMA,
-            "schema_version": PROJECT_SCHEMA_VERSION,
-            "application_version": __version__,
-            "project": {
+        project_block = _merge_extra_fields(
+            self.project_extra_fields,
+            {
                 "name": self.name,
                 "description": self.description,
-                "metadata": self.metadata,
+                "metadata": copy.deepcopy(self.metadata),
             },
-            "analyses": [item.to_dict() for item in self.analyses],
-            "active_analysis_id": self.active_analysis_id,
-        }
+        )
+        return _merge_extra_fields(
+            self.top_level_extra_fields,
+            {
+                "schema": PROJECT_SCHEMA,
+                "schema_version": PROJECT_SCHEMA_VERSION,
+                "application_version": __version__,
+                "project": project_block,
+                "analyses": [item.to_dict() for item in self.analyses],
+                "active_analysis_id": self.active_analysis_id,
+            },
+        )
 
     def analysis_by_id(self, analysis_id: str) -> AnalysisDocument:
         for item in self.analyses:
@@ -122,7 +187,13 @@ def _analysis_from_dict(data: dict) -> AnalysisDocument:
     payload = data.get("input", {})
     if not isinstance(payload, dict):
         raise ProjectFormatError(f"analysis {analysis_id!r} input must be an object")
-    return AnalysisDocument(id=analysis_id, name=name, kind=kind, input=payload)
+    return AnalysisDocument(
+        id=analysis_id,
+        name=name,
+        kind=kind,
+        input=payload,
+        extra_fields=_extra_fields(data, _ANALYSIS_FIELDS),
+    )
 
 
 def _migrate_legacy(data: dict) -> dict:
@@ -131,42 +202,70 @@ def _migrate_legacy(data: dict) -> dict:
         if not isinstance(analysis, dict):
             raise ProjectFormatError("legacy v0 analysis must be an object")
         analysis_id = analysis.get("id", "analysis-1")
-        return {
-            "schema": PROJECT_SCHEMA,
-            "schema_version": PROJECT_SCHEMA_VERSION,
-            "application_version": data.get("application_version", "legacy"),
-            "project": {
-                "name": data.get("name", "Migrated CleanroomX Project"),
-                "description": data.get("description", ""),
-                "metadata": data.get("metadata", {}),
+        top_level_extra_fields = _extra_fields(
+            data,
+            frozenset({
+                "schema",
+                "schema_version",
+                "application_version",
+                "name",
+                "description",
+                "metadata",
+                "analysis",
+            }),
+        )
+        analysis_extra_fields = _extra_fields(analysis, _ANALYSIS_FIELDS)
+        return _merge_extra_fields(
+            top_level_extra_fields,
+            {
+                "schema": PROJECT_SCHEMA,
+                "schema_version": PROJECT_SCHEMA_VERSION,
+                "application_version": data.get("application_version", "legacy"),
+                "project": {
+                    "name": data.get("name", "Migrated CleanroomX Project"),
+                    "description": data.get("description", ""),
+                    "metadata": data.get("metadata", {}),
+                },
+                "analyses": [
+                    _merge_extra_fields(
+                        analysis_extra_fields,
+                        {
+                            "id": analysis_id,
+                            "name": analysis.get("name", analysis.get("kind", "Analysis")),
+                            "kind": analysis.get("kind"),
+                            "input": analysis.get("input", {}),
+                        },
+                    )
+                ],
+                "active_analysis_id": analysis_id,
             },
-            "analyses": [{
-                "id": analysis_id,
-                "name": analysis.get("name", analysis.get("kind", "Analysis")),
-                "kind": analysis.get("kind"),
-                "input": analysis.get("input", {}),
-            }],
-            "active_analysis_id": analysis_id,
-        }
+        )
 
     if "schema" not in data and "analysis_type" in data and "input" in data:
-        return {
-            "schema": PROJECT_SCHEMA,
-            "schema_version": PROJECT_SCHEMA_VERSION,
-            "application_version": "legacy",
-            "project": {
-                "name": data.get("name", "Migrated CleanroomX Project"),
-                "description": data.get("description", ""),
-                "metadata": {},
+        top_level_extra_fields = _extra_fields(
+            data,
+            frozenset({"name", "description", "analysis_name", "analysis_type", "input"}),
+        )
+        return _merge_extra_fields(
+            top_level_extra_fields,
+            {
+                "schema": PROJECT_SCHEMA,
+                "schema_version": PROJECT_SCHEMA_VERSION,
+                "application_version": "legacy",
+                "project": {
+                    "name": data.get("name", "Migrated CleanroomX Project"),
+                    "description": data.get("description", ""),
+                    "metadata": {},
+                },
+                "analyses": [{
+                    "id": "analysis-1",
+                    "name": data.get("analysis_name", data["analysis_type"]),
+                    "kind": data["analysis_type"],
+                    "input": data["input"],
+                }],
+                "active_analysis_id": "analysis-1",
             },
-            "analyses": [{
-                "id": "analysis-1",
-                "name": data.get("analysis_name", data["analysis_type"]),
-                "kind": data["analysis_type"],
-                "input": data["input"],
-            }],
-            "active_analysis_id": "analysis-1",
-        }
+        )
     return data
 
 
@@ -226,6 +325,8 @@ def project_from_dict(data: dict) -> ProjectDocument:
         analyses=analyses,
         active_analysis_id=active,
         metadata=metadata,
+        project_extra_fields=_extra_fields(project_data, _PROJECT_BLOCK_FIELDS),
+        top_level_extra_fields=_extra_fields(data, _PROJECT_TOP_LEVEL_FIELDS),
     )
 
 

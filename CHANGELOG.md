@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial audit provenance — 2026-09-25
+
+- Adds deterministic SHA-256 identity for engineering spatial content while excluding camera/view/grid presentation state.
+- Adds a strict JSON spatial audit bundle with room/device schedules, floor-area and volume totals, supplied-pressure range, device-assignment counts, and advisory validation findings.
+- Exposes **Export Spatial Audit JSON...** in the desktop File menu using the existing atomic export path and user-visible failure handling.
+- Adds regression coverage for order/view-independent fingerprints, geometry-sensitive identity changes, audit metrics, validation capture, and desktop export.
+- Does not change solver equations, engineering acceptance criteria, analysis synchronization semantics, or project schema compatibility.
+
 ## Unreleased spatial workspace safety pass — 2026-09-25
 
 - Adds deterministic validation for overlapping rooms, duplicate room names, orphan/unassigned devices, devices outside their assigned room footprint, and device elevations outside room height.

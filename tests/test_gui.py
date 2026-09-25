@@ -12,6 +12,7 @@ from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_d
 from cleanroomx.run_history import (
     RUN_HISTORY_METADATA_KEY,
     append_run_history_record,
+    build_run_history_evidence,
     run_history_records,
 )
 
@@ -196,8 +197,9 @@ def test_accepted_completed_run_is_recorded_in_persisted_audit_history():
         analyses=[analysis],
         active_analysis_id="a",
     )
+    evidence = build_run_history_evidence(payload, run)
     app._queue = queue.Queue()
-    app._queue.put(("success", 4, "a", run))
+    app._queue.put(("success", 4, "a", (run, evidence, None)))
     app._run_generation = 4
     app._abandon_requested = False
     app._running = True
@@ -274,8 +276,9 @@ def test_corrupt_run_history_does_not_hide_fresh_completed_result(monkeypatch):
         active_analysis_id="a",
         metadata=metadata,
     )
+    evidence = build_run_history_evidence(payload, current_run)
     app._queue = queue.Queue()
-    app._queue.put(("success", 5, "a", current_run))
+    app._queue.put(("success", 5, "a", (current_run, evidence, None)))
     app._run_generation = 5
     app._abandon_requested = False
     app._running = True

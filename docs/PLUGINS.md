@@ -6,7 +6,7 @@ CleanroomX can discover optional trusted engineering workflows without modifying
 
 Analysis plugins are installed Python packages and execute with the same local process permissions as CleanroomX. Install plugins only from sources you trust. Discovery validates software contracts and prevents a malformed descriptor from partially changing the application registry; it is not a security sandbox.
 
-A plugin failure during discovery is isolated from the core workflow catalog. `cleanroomx-gui --check` reports the failure and exits non-zero, while valid core workflows remain registered. Interactive startup reports the degraded plugin state in the status line.
+A plugin failure during discovery is isolated from the core workflow catalog. Discovery and registry replacement are serialized, and even entry-point metadata enumeration failure falls back to the validated core registry with a degraded diagnostic report. `cleanroomx-gui --check` reports the failure and exits non-zero, while valid core workflows remain registered. Interactive startup reports the degraded plugin state in the status line.
 
 ## Entry point
 

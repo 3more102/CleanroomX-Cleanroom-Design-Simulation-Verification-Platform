@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+import threading
+import time
 
 import pytest
 
@@ -324,3 +326,68 @@ def test_plugin_reporter_must_return_text():
 
     with pytest.raises(TypeError, match="reporter must return a string"):
         run_analysis("plugin.acme.engineering.double", {"value": 1})
+
+
+def test_plugin_metadata_enumeration_failure_falls_back_to_core(monkeypatch):
+    def fail_discovery():
+        raise RuntimeError("metadata unavailable")
+
+    monkeypatch.setattr(
+        application_module,
+        "_available_plugin_entry_points",
+        fail_discovery,
+    )
+    application_module._PLUGINS_DISCOVERED = False
+
+    report = load_analysis_plugins(force=True)
+
+    assert report["status"] == "degraded"
+    assert report["failure_count"] == 1
+    assert report["failures"][0]["entry_point"] == "<discovery>"
+    assert "room_verification" in application_module.ANALYSIS_SPECS
+    assert all(spec.provider == "core" for spec in application_module._ANALYSES)
+    assert validate_application_registry()["status"] == "ok"
+
+
+def test_concurrent_plugin_discovery_loads_entry_point_once(monkeypatch):
+    descriptor = _plugin()
+
+    class CountingEntryPoint(FakeEntryPoint):
+        def __init__(self):
+            super().__init__("counted", descriptor)
+            self.load_count = 0
+            self._count_lock = threading.Lock()
+
+        def load(self):
+            with self._count_lock:
+                self.load_count += 1
+            time.sleep(0.02)
+            return super().load()
+
+    entry_point = CountingEntryPoint()
+    monkeypatch.setattr(
+        application_module,
+        "_available_plugin_entry_points",
+        lambda: (entry_point,),
+    )
+    application_module._PLUGINS_DISCOVERED = False
+    reports = []
+    errors = []
+
+    def discover():
+        try:
+            reports.append(load_analysis_plugins())
+        except Exception as exc:  # pragma: no cover - diagnostic guard
+            errors.append(exc)
+
+    threads = [threading.Thread(target=discover) for _ in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert len(reports) == 6
+    assert entry_point.load_count == 1
+    assert all(report["status"] == "ok" for report in reports)
+    assert all(report["loaded_plugin_count"] == 1 for report in reports)

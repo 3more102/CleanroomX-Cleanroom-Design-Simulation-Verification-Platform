@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import threading
 from typing import Any, Callable
 
 from . import __version__
@@ -192,6 +193,7 @@ _PLUGIN_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
 _ANALYSES = _CORE_ANALYSES
 ANALYSIS_SPECS = {item.key: item for item in _ANALYSES}
 _PLUGINS_DISCOVERED = False
+_PLUGIN_DISCOVERY_LOCK = threading.RLock()
 _PLUGIN_DISCOVERY_REPORT = {
     "status": "not_checked",
     "entry_point_group": _PLUGIN_ENTRY_POINT_GROUP,
@@ -331,35 +333,55 @@ def _available_plugin_entry_points() -> tuple[Any, ...]:
     )
 
 
-def load_analysis_plugins(
+def _load_analysis_plugins_locked(
     *,
     force: bool = False,
     entry_points_override: tuple[Any, ...] | list[Any] | None = None,
 ) -> dict:
-    """Discover and validate trusted analysis plugins without weakening the core registry.
-
-    Invalid plugins are isolated and reported. A plugin is registered only after its
-    complete descriptor validates, so partial registration cannot occur.
-    """
     global _ANALYSES, _PLUGINS_DISCOVERED, _PLUGIN_DISCOVERY_REPORT
 
     if _PLUGINS_DISCOVERED and not force and entry_points_override is None:
         return copy.deepcopy(_PLUGIN_DISCOVERY_REPORT)
 
-    entry_points = (
-        tuple(entry_points_override)
-        if entry_points_override is not None
-        else _available_plugin_entry_points()
-    )
-    entry_points = tuple(
-        sorted(
-            entry_points,
-            key=lambda item: (
-                str(getattr(item, "name", "")),
-                str(getattr(item, "value", "")),
-            ),
+    try:
+        entry_points = (
+            tuple(entry_points_override)
+            if entry_points_override is not None
+            else _available_plugin_entry_points()
         )
-    )
+        entry_points = tuple(
+            sorted(
+                entry_points,
+                key=lambda item: (
+                    str(getattr(item, "name", "")),
+                    str(getattr(item, "value", "")),
+                ),
+            )
+        )
+    except Exception as exc:
+        _ANALYSES = _CORE_ANALYSES
+        ANALYSIS_SPECS.clear()
+        ANALYSIS_SPECS.update({item.key: item for item in _CORE_ANALYSES})
+        _PLUGINS_DISCOVERED = True
+        _PLUGIN_DISCOVERY_REPORT = {
+            "status": "degraded",
+            "entry_point_group": _PLUGIN_ENTRY_POINT_GROUP,
+            "api_version": PLUGIN_API_VERSION,
+            "discovered_count": 0,
+            "loaded_plugin_count": 0,
+            "loaded_analysis_count": 0,
+            "failure_count": 1,
+            "plugins": [],
+            "failures": [
+                {
+                    "entry_point": "<discovery>",
+                    "value": _PLUGIN_ENTRY_POINT_GROUP,
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
+            ],
+        }
+        return copy.deepcopy(_PLUGIN_DISCOVERY_REPORT)
 
     active = list(_CORE_ANALYSES)
     active_by_key = {item.key: item for item in active}
@@ -415,6 +437,23 @@ def load_analysis_plugins(
         "failures": failures,
     }
     return copy.deepcopy(_PLUGIN_DISCOVERY_REPORT)
+
+
+def load_analysis_plugins(
+    *,
+    force: bool = False,
+    entry_points_override: tuple[Any, ...] | list[Any] | None = None,
+) -> dict:
+    """Discover trusted analysis plugins exactly once per registry generation.
+
+    Discovery and registry replacement are serialized. Invalid plugins are isolated
+    and reported, and each descriptor is committed only after complete validation.
+    """
+    with _PLUGIN_DISCOVERY_LOCK:
+        return _load_analysis_plugins_locked(
+            force=force,
+            entry_points_override=entry_points_override,
+        )
 
 
 def get_analysis_spec(kind: str) -> AnalysisSpec | None:

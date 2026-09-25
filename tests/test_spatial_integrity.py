@@ -13,6 +13,7 @@ from cleanroomx.project import (
     project_from_dict,
     save_project_document,
 )
+from cleanroomx.spatial import ensure_project_layout
 from cleanroomx.spatial_schema import (
     SPATIAL_LAYOUT_VERSION,
     SpatialLayoutFormatError,
@@ -105,6 +106,26 @@ def test_persisted_spatial_layout_accepts_valid_referentially_complete_v1():
         (
             lambda layout: layout["devices"][0].update({"type": "unknown-device"}),
             "type must be one of",
+        ),
+        (
+            lambda layout: layout["rooms"][0].update({"id": " room-a "}),
+            "leading or trailing whitespace",
+        ),
+        (
+            lambda layout: layout.pop("grid_m"),
+            "grid_m must be a finite number",
+        ),
+        (
+            lambda layout: layout.pop("view"),
+            "view must be an object",
+        ),
+        (
+            lambda layout: layout["view"].update({"zoom_2d": 9.0}),
+            "zoom_2d must be between",
+        ),
+        (
+            lambda layout: layout["view"].update({"elevation_deg": 90.0}),
+            "elevation_deg must be between",
         ),
         (
             lambda layout: layout.pop("version"),
@@ -202,6 +223,21 @@ def test_lenient_normalization_is_deterministic_and_deduplicates_ids():
     assert first == second
     assert [room["id"] for room in first["rooms"]] == ["duplicate", "room-2"]
     assert [device["id"] for device in first["devices"]] == ["same", "device-2"]
+
+
+def test_workspace_refresh_keeps_valid_persisted_layout_unmodified():
+    layout = _valid_layout()
+    layout["vendor_extension"] = {"revision": "A"}
+    layout["rooms"][0]["asset_tag"] = "ROOM-001"
+    project = ProjectDocument(
+        name="Stable refresh",
+        metadata={"spatial_layout": copy.deepcopy(layout)},
+    )
+
+    refreshed = ensure_project_layout(project)
+
+    assert refreshed == layout
+    assert project.metadata["spatial_layout"] == layout
 
 
 def test_normalization_preserves_extension_metadata():

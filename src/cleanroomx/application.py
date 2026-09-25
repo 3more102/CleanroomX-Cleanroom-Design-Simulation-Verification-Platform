@@ -22,6 +22,90 @@ from .plugins import (
 BindingTarget = tuple[str, str] | Callable[..., Any]
 
 
+class _FrozenDict(dict):
+    """JSON-object snapshot that rejects mutation after run completion."""
+
+    @staticmethod
+    def _immutable(*_args, **_kwargs):
+        raise TypeError("analysis run snapshots are immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    clear = _immutable
+    pop = _immutable
+    popitem = _immutable
+    setdefault = _immutable
+    update = _immutable
+    __ior__ = _immutable
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+class _FrozenList(list):
+    """JSON-array snapshot that rejects mutation after run completion."""
+
+    @staticmethod
+    def _immutable(*_args, **_kwargs):
+        raise TypeError("analysis run snapshots are immutable")
+
+    __setitem__ = _immutable
+    __delitem__ = _immutable
+    append = _immutable
+    clear = _immutable
+    extend = _immutable
+    insert = _immutable
+    pop = _immutable
+    remove = _immutable
+    reverse = _immutable
+    sort = _immutable
+    __iadd__ = _immutable
+    __imul__ = _immutable
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+def _freeze_json_snapshot(
+    value: Any,
+    memo: dict[int, Any] | None = None,
+) -> Any:
+    """Recursively copy JSON-compatible data into immutable container subclasses."""
+    if memo is None:
+        memo = {}
+    if isinstance(value, (dict, list, tuple)):
+        identity = id(value)
+        if identity in memo:
+            return memo[identity]
+    if isinstance(value, dict):
+        frozen = _FrozenDict(
+            (key, _freeze_json_snapshot(item, memo))
+            for key, item in value.items()
+        )
+        memo[id(value)] = frozen
+        return frozen
+    if isinstance(value, list):
+        frozen = _FrozenList(_freeze_json_snapshot(item, memo) for item in value)
+        memo[id(value)] = frozen
+        return frozen
+    if isinstance(value, tuple):
+        frozen = tuple(_freeze_json_snapshot(item, memo) for item in value)
+        memo[id(value)] = frozen
+        return frozen
+    return copy.deepcopy(value)
+
+
+def _thaw_json_snapshot(value: Any) -> Any:
+    """Return a detached ordinary-container copy suitable for public serialization."""
+    if isinstance(value, dict):
+        return {key: _thaw_json_snapshot(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_thaw_json_snapshot(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_thaw_json_snapshot(item) for item in value)
+    return copy.deepcopy(value)
+
+
 @dataclass(frozen=True)
 class AnalysisSpec:
     key: str
@@ -46,8 +130,26 @@ class AnalysisRun:
     diagnostics: dict
     plot: dict | None
 
+    def __post_init__(self) -> None:
+        memo: dict[int, Any] = {}
+        object.__setattr__(self, "result", _freeze_json_snapshot(self.result, memo))
+        object.__setattr__(self, "diagnostics", _freeze_json_snapshot(self.diagnostics, memo))
+        object.__setattr__(
+            self,
+            "plot",
+            None if self.plot is None else _freeze_json_snapshot(self.plot, memo),
+        )
+
     def to_dict(self) -> dict:
-        return asdict(self)
+        return {
+            "kind": self.kind,
+            "title": self.title,
+            "status": self.status,
+            "result": _thaw_json_snapshot(self.result),
+            "markdown": self.markdown,
+            "diagnostics": _thaw_json_snapshot(self.diagnostics),
+            "plot": None if self.plot is None else _thaw_json_snapshot(self.plot),
+        }
 
 
 class ExternalDependencySnapshotError(RuntimeError):

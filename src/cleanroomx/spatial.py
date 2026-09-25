@@ -1099,6 +1099,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_anchor: tuple[float, float] | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
+        self._orbit_anchor: tuple[int, int] | None = None
+        self._orbit_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
         self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
@@ -1149,6 +1151,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Reset 2D", command=self.reset_2d).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
@@ -1276,6 +1279,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
+        self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
@@ -1743,8 +1748,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+
+        floor_z = self.layout["floor"]["elevation_m"]
+        z_values = [floor_z]
+        for room in self.layout["rooms"]:
+            z0 = room.get("floor_elevation_m", floor_z)
+            z_values.extend((z0, z0 + room["height_m"]))
+        model_span = max(width_m, height_m, max(z_values) - min(z_values), 1.0)
+        c3w = max(200, self.canvas_3d.winfo_width())
+        c3h = max(200, self.canvas_3d.winfo_height())
+        self.layout["view"]["zoom_3d"] = max(
+            0.2,
+            min(5.0, 0.62 * min(c3w, c3h) / (34.0 * model_span)),
+        )
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
         self._persist("Fit spatial views")
+
+    def reset_2d(self) -> None:
+        self.layout["view"]["zoom_2d"] = 1.0
+        self.layout["view"]["pan_x"] = 0.0
+        self.layout["view"]["pan_y"] = 0.0
+        self._persist("Reset 2D view")
 
     def redraw(self) -> None:
         self._refresh_validation()
@@ -2344,6 +2369,29 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
         self._draw_3d()
+
+    def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        self._orbit_anchor = (event.x, event.y)
+        self._orbit_origin = (
+            self.layout["view"]["azimuth_deg"],
+            self.layout["view"]["elevation_deg"],
+        )
+        return "break"
+
+    def _on_orbit_3d_drag(self, event: tk.Event) -> str:
+        if self._orbit_anchor is None or self._orbit_origin is None:
+            return "break"
+        dx = event.x - self._orbit_anchor[0]
+        dy = event.y - self._orbit_anchor[1]
+        self.layout["view"]["azimuth_deg"] = (
+            self._orbit_origin[0] + dx * 0.5
+        ) % 360
+        self.layout["view"]["elevation_deg"] = max(
+            5.0,
+            min(75.0, self._orbit_origin[1] - dy * 0.35),
+        )
+        self._draw_3d()
+        return "break"
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

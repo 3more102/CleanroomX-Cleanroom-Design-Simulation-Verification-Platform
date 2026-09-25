@@ -1015,8 +1015,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
+        self._show_pressure = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._mapping_var = tk.StringVar(value="Engineering mapping: —")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -1055,13 +1058,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+            side="left", padx=(6, 2)
         )
+        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(
+            side="left", padx=2
+        )
+        ttk.Checkbutton(
+            toolbar, text="Pressure", variable=self._show_pressure, command=self.redraw
+        ).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
         ttk.Label(toolbar, textvariable=self._validation_var).pack(side="left", padx=(8, 2))
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Engineering → geometry",
+            command=self.sync_from_analysis,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Geometry → engineering",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
 
@@ -1103,19 +1117,31 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._mapping_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
+            ("engineering_ref", "Engineering ref"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
-            ("pressure_pa", "Pressure (Pa)"),
+            ("elevation_m", "Floor elevation (m)"),
+            ("pressure_pa", "Observed/configured P (Pa)"),
+            ("pressure_target_pa", "Pressure target (Pa)"),
+            ("temperature_target_c", "Temperature target (°C)"),
+            ("humidity_target_rh_pct", "Humidity target (%RH)"),
+            ("classification", "Classification"),
+            ("room_id", "Assigned room ID"),
+            ("z_m", "Object Z above floor (m)"),
+            ("notes", "Notes"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -1123,7 +1149,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )

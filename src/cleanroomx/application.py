@@ -533,6 +533,25 @@ def _canonical_input_sha256(payload: dict) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bool:
+    """Return whether a completed run belongs to exactly this analysis input."""
+    if run.kind != kind or not isinstance(run.diagnostics, dict):
+        return False
+    provenance = run.diagnostics.get("application_execution_provenance")
+    if not isinstance(provenance, dict):
+        return False
+    if provenance.get("analysis_kind") != kind:
+        return False
+    recorded_sha256 = provenance.get("input_sha256")
+    if not isinstance(recorded_sha256, str) or len(recorded_sha256) != 64:
+        return False
+    try:
+        current_sha256 = _canonical_input_sha256(payload)
+    except (TypeError, ValueError):
+        return False
+    return recorded_sha256 == current_sha256
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:

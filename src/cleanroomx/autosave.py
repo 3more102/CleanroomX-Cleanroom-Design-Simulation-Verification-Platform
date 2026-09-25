@@ -19,7 +19,10 @@ from .project import ProjectDocument, project_from_dict
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
-RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_SCHEMA_VERSION = 2
+RECOVERY_LEGACY_SCHEMA_VERSIONS = frozenset({1})
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
+RECOVERY_INTEGRITY_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 
@@ -46,6 +49,7 @@ class RecoveryCandidate:
     source_path: Path | None
     source_relation: str
     source_is_newer: bool
+    integrity_status: str = "legacy_unverified"
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,7 @@ class RecoveredProjectState:
     saved_at_utc: str
     project_identity: str
     artifact_path: Path
+    integrity_status: str = "legacy_unverified"
 
 
 @dataclass(frozen=True)
@@ -134,6 +139,57 @@ def _canonical_json(value: Any) -> str:
         allow_nan=False,
         separators=(",", ":"),
     )
+
+
+def _recovery_integrity_sha256(data: dict[str, Any]) -> str:
+    covered = {key: value for key, value in data.items() if key != "integrity"}
+    canonical = _canonical_json(covered).encode("utf-8")
+    return sha256(canonical).hexdigest()
+
+
+def _recovery_integrity_block(data: dict[str, Any]) -> dict[str, str]:
+    return {
+        "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+        "canonicalization": RECOVERY_INTEGRITY_CANONICALIZATION,
+        "sha256": _recovery_integrity_sha256(data),
+    }
+
+
+def recovery_integrity_status(data: dict[str, Any]) -> str:
+    """Validate embedded recovery integrity and report its verification status."""
+    version = data.get("schema_version")
+    if version in RECOVERY_LEGACY_SCHEMA_VERSIONS:
+        return "legacy_unverified"
+
+    integrity = data.get("integrity")
+    if integrity is None:
+        raise RecoveryFormatError(
+            "recovery artifact is missing required integrity evidence"
+        )
+    if not isinstance(integrity, dict):
+        raise RecoveryFormatError("recovery integrity must be an object")
+    if integrity.get("algorithm") != RECOVERY_INTEGRITY_ALGORITHM:
+        raise RecoveryFormatError(
+            f"unsupported recovery integrity algorithm: {integrity.get('algorithm')!r}"
+        )
+    if integrity.get("canonicalization") != RECOVERY_INTEGRITY_CANONICALIZATION:
+        raise RecoveryFormatError(
+            "unsupported recovery integrity canonicalization: "
+            f"{integrity.get('canonicalization')!r}"
+        )
+    expected = integrity.get("sha256")
+    if (
+        not isinstance(expected, str)
+        or len(expected) != 64
+        or any(ch not in "0123456789abcdef" for ch in expected.lower())
+    ):
+        raise RecoveryFormatError("recovery integrity SHA-256 is malformed")
+    actual = _recovery_integrity_sha256(data)
+    if actual != expected.lower():
+        raise RecoveryFormatError(
+            "recovery artifact integrity check failed; content does not match SHA-256 evidence"
+        )
+    return "verified"
 
 
 def _normalized_source_path(path: str | Path) -> Path:
@@ -219,10 +275,12 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     if data.get("schema") != RECOVERY_SCHEMA:
         raise RecoveryFormatError(f"recovery schema must be {RECOVERY_SCHEMA!r}")
     version = data.get("schema_version")
-    if version != RECOVERY_SCHEMA_VERSION:
+    supported_versions = RECOVERY_LEGACY_SCHEMA_VERSIONS | {RECOVERY_SCHEMA_VERSION}
+    if not isinstance(version, int) or isinstance(version, bool) or version not in supported_versions:
+        supported = ", ".join(str(item) for item in sorted(supported_versions))
         raise RecoveryFormatError(
             f"unsupported recovery schema version {version!r}; "
-            f"expected {RECOVERY_SCHEMA_VERSION}"
+            f"supported versions are {supported}"
         )
     identity = data.get("project_identity")
     if not isinstance(identity, str) or not identity:
@@ -237,6 +295,7 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     snapshot = data.get("snapshot")
     if not isinstance(snapshot, dict):
         raise RecoveryFormatError("snapshot must be an object")
+    recovery_integrity_status(data)
     return data
 
 
@@ -279,6 +338,7 @@ def restore_recovery_artifact(path: str | Path) -> RecoveredProjectState:
         saved_at_utc=recovery["saved_at_utc"],
         project_identity=recovery["project_identity"],
         artifact_path=artifact_path,
+        integrity_status=recovery_integrity_status(recovery),
     )
 
 
@@ -362,6 +422,7 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
                     source_path=source_path,
                     source_relation=relation,
                     source_is_newer=is_newer,
+                    integrity_status=recovery_integrity_status(recovery),
                 )
             )
         except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
@@ -502,6 +563,7 @@ class AutosaveManager:
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
         }
+        payload["integrity"] = _recovery_integrity_block(payload)
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(
@@ -516,7 +578,23 @@ class AutosaveManager:
             ensure_ascii=False,
             allow_nan=False,
         ) + "\n"
-        atomic_write_text(destination, text)
+        try:
+            atomic_write_text(destination, text)
+            persisted = load_recovery_artifact(destination)
+            if (
+                persisted.get("recovery_id") != recovery_id
+                or persisted.get("project_identity") != request.project_identity
+                or recovery_integrity_status(persisted) != "verified"
+            ):
+                raise RecoveryFormatError(
+                    "persisted recovery artifact identity or integrity does not match the write request"
+                )
+        except (OSError, RecoveryFormatError):
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
         return destination
 
     def _rotate_history(self, identity: str) -> None:

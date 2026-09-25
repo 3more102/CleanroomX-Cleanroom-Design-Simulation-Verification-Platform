@@ -4,6 +4,10 @@
 
 CleanroomX v0.102.1 (Release 2 + final synchronized spatial production closure) is a Python 3.11+ engineering screening, simulation, verification, uncertainty/provenance, HVAC, fan/network, qualification, and reporting platform. The desktop application is an operator shell over the same backend modules used by the command-line tools. Release 2 consolidates durable project lifecycle, verified persistence/recovery/history, bounded undo-redo, plugin execution, immutable analysis evidence, dependency freshness, portable bundles/reports, deterministic project batch automation, strict engineering JSON ingestion, and final precision/numerical-integrity hardening without duplicating or changing validated solver equations in the GUI.
 
+## Unreleased next-level design foundation
+
+The current Phase 1 line combines the existing room-pressure/leakage-network foundation with two additional pure engineering services: a provenance-preserving design-requirements engine and a preliminary cleanroom air-system designer. All three remain behind the existing application parser/runner/reporter boundary, so desktop projects, run provenance, project persistence, and deterministic batch execution reuse the same service layer rather than embedding engineering equations in GUI callbacks. See `docs/DESIGN_FOUNDATION.md` and `docs/PRESSURE_NETWORK.md`.
+
 ## Layers
 
 1. **Engineering backends** — calculation, solver, uncertainty, qualification, HVAC, fan/network, room-pressure/leakage-network, dossier, consistency, and report modules under `src/cleanroomx/`. The room-pressure network uses explicit mechanical airflows, fixed-pressure boundaries, user-parameterized power-law/orifice paths, damped-Newton continuity solving, target checks, and residual/convergence evidence without placing equations in the GUI. Duct-path, fixed-demand branch-flow, room thermal/air-balance, and supply-fan composition retains full-precision calculation state until the presentation boundary; rounded report fields are not reused for engineering decisions.

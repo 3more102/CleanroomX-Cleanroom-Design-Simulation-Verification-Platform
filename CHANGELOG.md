@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — design requirements and air-system design
+
+- Adds a data-driven `design_requirements` workflow that preserves explicit room/profile provenance and derives floor area, volume, ACH-based airflow targets, and explicitly entered sensible-load totals without inventing standards requirements.
+- Adds an `air_system_design` workflow that compares explicit ACH, sensible-load, and minimum-outdoor-air drivers, identifies the governing preliminary supply airflow, proposes return/makeup balance, and estimates capacity-based FFU/terminal counts from user-supplied equipment data.
+- Registers both workflows through the same application parser/runner/reporter boundary already used by the room-pressure network and established CleanroomX analyses.
+- Adds real example inputs, focused fail-closed/numerical tests, full application-catalog end-to-end coverage, Markdown reports, and `docs/DESIGN_FOUNDATION.md`.
+- Preserves the v0.102.1 release identity, project schema version, existing spatial model, existing solver equations/tolerances, and prior engineering acceptance semantics.
+
 ## Unreleased next-level Phase 1 — room pressure network
 
 - Adds a first-class steady-state multizone room pressure/leakage network with explicit fixed-pressure boundaries and mechanical supply/return/exhaust inputs.

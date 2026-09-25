@@ -50,11 +50,11 @@ Project saves are validated before writing and use an atomic temporary-file repl
 
 ### External-change write protection
 
-When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
+When a saved project is opened, CleanroomX reads one stable byte snapshot, parses that snapshot, and derives its normalized-path/size/mtime/SHA-256 revision from the same bytes. This prevents the document model from being paired with a revision captured from a different read. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
 
 If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
 
-For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
+After atomic replacement, CleanroomX captures the resulting file revision and verifies its size and SHA-256 against the exact UTF-8 bytes it intended to write before marking the save successful. A mismatch is treated as a write conflict, so the in-memory project is not marked clean when another writer or storage anomaly changes the file during commit. For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit. Recovery source fingerprints use the same stable revision-capture implementation as explicit project persistence.
 
 ## Recovery autosave
 

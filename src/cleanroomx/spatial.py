@@ -1621,6 +1621,112 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
 
+    def _result_payload(self) -> dict | None:
+        candidate = self._result_getter()
+        if isinstance(candidate, dict):
+            return candidate
+        result = getattr(candidate, "result", None)
+        return result if isinstance(result, dict) else None
+
+    def _overlay(self) -> dict:
+        return pressure_overlay_state(
+            self.layout,
+            self._analysis_getter(),
+            self._result_payload(),
+        )
+
+    def request_push_to_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room/project verification analysis before synchronizing."
+            )
+            return
+        sync = engineering_sync_status(self.layout, analysis)
+        overwrite = [
+            item
+            for item in sync["rooms"]
+            if item["state"] in {"engineering_newer", "conflicting"}
+        ]
+        if overwrite:
+            labels = ", ".join(
+                str(item.get("analysis_room_name") or item["room_id"])
+                for item in overwrite[:4]
+            )
+            if len(overwrite) > 4:
+                labels += f" (+{len(overwrite) - 4} more)"
+            if not messagebox.askyesno(
+                "Engineering geometry differs",
+                (
+                    "Pushing spatial dimensions will overwrite differing engineering "
+                    f"room geometry for: {labels}.\n\nContinue with the explicit push?"
+                ),
+                parent=self,
+            ):
+                return
+        self._on_sync_requested()
+
+    def pull_from_active_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room/project verification analysis before synchronizing."
+            )
+            return
+        sync = engineering_sync_status(self.layout, analysis)
+        overwrite = [
+            item
+            for item in sync["rooms"]
+            if item["state"] in {"geometry_newer", "conflicting"}
+        ]
+        if overwrite:
+            labels = ", ".join(
+                str(item.get("analysis_room_name") or item["room_id"])
+                for item in overwrite[:4]
+            )
+            if len(overwrite) > 4:
+                labels += f" (+{len(overwrite) - 4} more)"
+            if not messagebox.askyesno(
+                "Spatial geometry differs",
+                (
+                    "Pulling engineering dimensions will overwrite differing spatial "
+                    f"room dimensions for: {labels}.\n\nContinue with the explicit pull?"
+                ),
+                parent=self,
+            ):
+                return
+
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        try:
+            changed = sync_analysis_to_layout(self.layout, analysis)
+        except SpatialSyncError as exc:
+            self._status_setter(str(exc))
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                str(exc),
+                parent=self,
+            )
+            return
+        if changed:
+            self._load_property_panel()
+            self._persist(
+                "Pulled geometry from active analysis",
+                history_before=history_before,
+                selection_before=selection_before,
+            )
+        else:
+            self._status_setter(
+                "Spatial geometry already matches the active analysis."
+            )
+            self.redraw()
+
     def refresh(self) -> None:
         project = self._project_getter()
         analysis = self._analysis_getter()
@@ -1855,6 +1961,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._pressure_evidence_var.set("Pressure evidence: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
@@ -1873,6 +1980,29 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            evidence = next(
+                (
+                    record
+                    for record in self._overlay()["rooms"]
+                    if record["room_id"] == self.selected.item_id
+                ),
+                None,
+            )
+            if evidence is None or evidence.get("pressure_pa") is None:
+                self._pressure_evidence_var.set("Pressure evidence: unavailable")
+            else:
+                detail = (
+                    f"{evidence['pressure_pa']:g} Pa · {evidence['source']} · "
+                    f"{evidence['status']}"
+                )
+                if evidence.get("pressure_target_pa") is not None:
+                    detail += f" · target {evidence['pressure_target_pa']:g} Pa"
+                if evidence.get("ach") is not None:
+                    detail += f" · ACH {evidence['ach']:g}"
+                self._pressure_evidence_var.set("Pressure evidence: " + detail)
+        else:
+            self._pressure_evidence_var.set("Pressure evidence: n/a")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -2018,6 +2148,29 @@ class SpatialDesignWorkspace(ttk.Frame):
     def delete_selected(self) -> None:
         if self.selected is None:
             return
+        item = self._selected_object()
+        if item is None:
+            return
+        dependent = (
+            sum(
+                1
+                for device in self.layout["devices"]
+                if device.get("room_id") == self.selected.item_id
+            )
+            if self.selected.kind == "room"
+            else 0
+        )
+        suffix = (
+            f"\n\nThis also removes {dependent} assigned spatial object(s)."
+            if dependent
+            else ""
+        )
+        if not messagebox.askyesno(
+            "Delete spatial item",
+            f"Delete {str(item.get('name') or self.selected.item_id)!r}?{suffix}",
+            parent=self,
+        ):
+            return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         collection_name = "rooms" if self.selected.kind == "room" else "devices"
@@ -2089,55 +2242,27 @@ class SpatialDesignWorkspace(ttk.Frame):
     ) -> list[tuple[dict, dict, float | None, float | None, str]]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
+        rooms = {room["id"]: room for room in self.layout["rooms"]}
         relationships: list[
             tuple[dict, dict, float | None, float | None, str]
         ] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
+        for record in pressure_cascade_state(
+            self.layout,
+            self._analysis_getter(),
+            self._result_payload(),
+        ):
+            high = rooms.get(record["higher_room_id"])
+            low = rooms.get(record["lower_room_id"])
             if high is None or low is None:
                 continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            observed_delta = None
-            if high.get("pressure_pa") is not None and low.get("pressure_pa") is not None:
-                observed_delta = (
-                    _finite_number(high.get("pressure_pa"), 0.0)
-                    - _finite_number(low.get("pressure_pa"), 0.0)
-                )
-            if observed_delta is None:
-                state = "unavailable"
-            elif delta_value is None:
-                state = "available"
-            elif observed_delta + SPATIAL_GEOMETRY_EPSILON_M >= delta_value:
-                state = "pass"
-            else:
-                state = "fail"
             relationships.append(
-                (high, low, delta_value, observed_delta, state)
+                (
+                    high,
+                    low,
+                    record.get("limit_pa"),
+                    record.get("actual_delta_pa"),
+                    str(record.get("status") or "unavailable"),
+                )
             )
         return relationships
 
@@ -2146,6 +2271,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "pass": "#15803d",
             "fail": "#b91c1c",
             "available": "#7c3aed",
+            "not_checked": "#64748b",
             "unavailable": "#64748b",
         }
         for high, low, min_delta, observed_delta, state in self._pressure_relationships():
@@ -2155,7 +2281,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
-            color = colors[state]
+            color = colors.get(state, "#64748b")
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
                 arrow="last", width=2, dash=(6, 3), fill=color,
@@ -2204,7 +2330,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = self._overlay()
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -2215,13 +2341,22 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["y_m"] + room["width_m"],
             )
             selected = self.selected == _Hit("room", room["id"])
+            evidence = overlay_by_room[room["id"]]
+            result_failed = (
+                evidence.get("source") == "result"
+                and evidence.get("status") == "fail"
+            )
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else (
+                    "#b91c1c"
+                    if result_failed
+                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                )
             )
             fill = (
-                overlay_by_room[room["id"]]["fill"]
+                evidence["fill"]
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
@@ -2231,10 +2366,15 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
+                pressure_value = evidence.get("pressure_pa")
                 pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
+                    (
+                        f"\n{pressure_value:g} Pa "
+                        f"({evidence.get('source', 'unavailable')} · "
+                        f"{evidence.get('status', 'unavailable')})"
+                    )
+                    if self._show_pressure.get() and pressure_value is not None
+                    else ("\nPressure unavailable" if self._show_pressure.get() else "")
                 )
                 canvas.create_text(
                     (x0 + x1) / 2,
@@ -2380,7 +2520,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = self._overlay()
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -2411,16 +2551,25 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x1, y1, z1),
                 self._project_3d(x0, y1, z1),
             ]
+            evidence = overlay_by_room[room["id"]]
             fill = (
-                overlay_by_room[room["id"]]["fill"]
+                evidence["fill"]
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
             selected = self.selected == _Hit("room", room["id"])
+            result_failed = (
+                evidence.get("source") == "result"
+                and evidence.get("status") == "fail"
+            )
             outline = (
                 "#7dd3fc"
                 if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                else (
+                    "#ef4444"
+                    if result_failed
+                    else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+                )
             )
             tag = f"room:{room['id']}"
             canvas.create_polygon(
@@ -2442,7 +2591,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self._show_labels.get():
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=(
+                        room["name"]
+                        + (
+                            (
+                                f"\n{evidence['pressure_pa']:g} Pa "
+                                f"({evidence.get('source', 'unavailable')} · "
+                                f"{evidence.get('status', 'unavailable')})"
+                            )
+                            if self._show_pressure.get()
+                            and evidence.get("pressure_pa") is not None
+                            else (
+                                "\nPressure unavailable"
+                                if self._show_pressure.get()
+                                else ""
+                            )
+                        )
+                    ),
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )

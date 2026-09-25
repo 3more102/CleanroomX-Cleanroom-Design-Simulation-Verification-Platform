@@ -4,6 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+from hmac import compare_digest
 import json
 import os
 from pathlib import Path
@@ -18,7 +19,12 @@ from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
-RECOVERY_SCHEMA_VERSION = 1
+LEGACY_RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_SCHEMA_VERSION = 2
+SUPPORTED_RECOVERY_SCHEMA_VERSIONS = frozenset(
+    {LEGACY_RECOVERY_SCHEMA_VERSION, RECOVERY_SCHEMA_VERSION}
+)
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 
@@ -45,6 +51,7 @@ class RecoveryCandidate:
     source_path: Path | None
     source_relation: str
     source_is_newer: bool
+    integrity_status: str
 
 
 @dataclass(frozen=True)
@@ -135,6 +142,38 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _recovery_payload_digest(data: dict[str, Any]) -> str:
+    projection = {key: value for key, value in data.items() if key != "integrity"}
+    return sha256(_canonical_json(projection).encode("utf-8")).hexdigest()
+
+
+def _recovery_integrity_status(data: dict[str, Any]) -> str:
+    version = data.get("schema_version")
+    if version == LEGACY_RECOVERY_SCHEMA_VERSION:
+        return "legacy_unverified"
+
+    integrity = data.get("integrity")
+    if not isinstance(integrity, dict):
+        raise RecoveryFormatError("recovery integrity metadata is required")
+    algorithm = integrity.get("algorithm")
+    if algorithm != RECOVERY_INTEGRITY_ALGORITHM:
+        raise RecoveryFormatError(
+            f"unsupported recovery integrity algorithm {algorithm!r}; "
+            f"expected {RECOVERY_INTEGRITY_ALGORITHM!r}"
+        )
+    recorded = integrity.get("payload_sha256")
+    if (
+        not isinstance(recorded, str)
+        or len(recorded) != 64
+        or any(char not in "0123456789abcdef" for char in recorded)
+    ):
+        raise RecoveryFormatError("recovery integrity SHA-256 must be 64 lowercase hex characters")
+    expected = _recovery_payload_digest(data)
+    if not compare_digest(recorded, expected):
+        raise RecoveryFormatError("recovery artifact integrity check failed")
+    return "verified"
+
+
 def _normalized_source_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -205,10 +244,10 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     if data.get("schema") != RECOVERY_SCHEMA:
         raise RecoveryFormatError(f"recovery schema must be {RECOVERY_SCHEMA!r}")
     version = data.get("schema_version")
-    if version != RECOVERY_SCHEMA_VERSION:
+    if version not in SUPPORTED_RECOVERY_SCHEMA_VERSIONS:
+        supported = ", ".join(str(item) for item in sorted(SUPPORTED_RECOVERY_SCHEMA_VERSIONS))
         raise RecoveryFormatError(
-            f"unsupported recovery schema version {version!r}; "
-            f"expected {RECOVERY_SCHEMA_VERSION}"
+            f"unsupported recovery schema version {version!r}; supported versions: {supported}"
         )
     identity = data.get("project_identity")
     if not isinstance(identity, str) or not identity:
@@ -223,6 +262,7 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     snapshot = data.get("snapshot")
     if not isinstance(snapshot, dict):
         raise RecoveryFormatError("snapshot must be an object")
+    _recovery_integrity_status(data)
     return data
 
 
@@ -348,6 +388,7 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
                     source_path=source_path,
                     source_relation=relation,
                     source_is_newer=is_newer,
+                    integrity_status=_recovery_integrity_status(recovery),
                 )
             )
         except (OSError, RecoveryFormatError, TypeError, ValueError) as exc:
@@ -484,6 +525,10 @@ class AutosaveManager:
             "saved_at_utc": _utc_now_text(),
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
+        }
+        payload["integrity"] = {
+            "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+            "payload_sha256": _recovery_payload_digest(payload),
         }
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)

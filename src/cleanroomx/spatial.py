@@ -304,6 +304,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._device_type_box: ttk.Combobox | None = None
         self._device_room_box: ttk.Combobox | None = None
         self._room_label_to_id: dict[str, str | None] = {}
+        self._model_tree: ttk.Treeview | None = None
+        self._tree_selection_guard = False
         self._orbit_anchor: tuple[int, int] | None = None
         self._orbit_origin: tuple[float, float] | None = None
 
@@ -331,6 +333,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ).pack(side="left", padx=2)
         ttk.Separator(objectbar, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(objectbar, text="Center Selected", command=self.center_selected).pack(side="left", padx=2)
+        ttk.Button(objectbar, text="Duplicate", command=self.duplicate_selected).pack(side="left", padx=2)
         ttk.Button(objectbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
 
         displaybar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -352,7 +355,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         ttk.Label(
             displaybar,
-            text="Wheel zoom · right/middle drag pan · Shift+left drag 3D orbit · F center",
+            text="Wheel zoom · drag pan · Shift+drag 3D orbit · arrows nudge · F center",
         ).pack(side="left", padx=(8, 2))
         ttk.Button(
             displaybar,
@@ -401,7 +404,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Label(viewbar, text="m").pack(side="left", padx=(3, 8))
         ttk.Label(
             viewbar,
-            text="Delete removes selection · Esc clears selection",
+            text="Arrows nudge · Shift+arrows ×5 · Ctrl+D duplicate · Del remove · Esc clear",
         ).pack(side="right")
 
         body = ttk.Panedwindow(self, orient="horizontal")
@@ -504,8 +507,40 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
+
+        browser_row = button_row + 1
+        ttk.Separator(inspector, orient="horizontal").grid(
+            row=browser_row, column=0, columnspan=4, sticky="ew", pady=(10, 6)
+        )
+        ttk.Label(inspector, text="Model Browser", font=("TkDefaultFont", 10, "bold")).grid(
+            row=browser_row + 1, column=0, columnspan=4, sticky="w", pady=(0, 4)
+        )
+        self._model_tree = ttk.Treeview(
+            inspector,
+            columns=("kind", "details"),
+            show="tree headings",
+            height=6,
+            selectmode="browse",
+        )
+        self._model_tree.heading("#0", text="Object")
+        self._model_tree.heading("kind", text="Kind")
+        self._model_tree.heading("details", text="Geometry / placement")
+        self._model_tree.column("#0", width=180, minwidth=120, stretch=True)
+        self._model_tree.column("kind", width=90, minwidth=70, stretch=False)
+        self._model_tree.column("details", width=190, minwidth=120, stretch=True)
+        self._model_tree.grid(
+            row=browser_row + 2,
+            column=0,
+            columnspan=4,
+            sticky="nsew",
+            pady=(0, 2),
+        )
+        self._model_tree.bind("<<TreeviewSelect>>", self._on_tree_selected)
+        self._model_tree.bind("<Double-1>", lambda event: self.center_selected())
+
         inspector.columnconfigure(1, weight=1)
         inspector.columnconfigure(3, weight=1)
+        inspector.rowconfigure(browser_row + 2, weight=1)
 
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
@@ -531,12 +566,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B3-Motion>", self._on_pan_3d_drag)
 
-        self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
-        self.canvas_3d.bind("<Delete>", lambda event: self.delete_selected())
-        self.canvas_2d.bind("<Key-f>", lambda event: self.center_selected())
-        self.canvas_2d.bind("<Key-F>", lambda event: self.center_selected())
-        self.canvas_3d.bind("<Key-f>", lambda event: self.center_selected())
-        self.canvas_3d.bind("<Key-F>", lambda event: self.center_selected())
+        for canvas in (self.canvas_2d, self.canvas_3d):
+            canvas.bind("<Delete>", lambda event: self.delete_selected())
+            canvas.bind("<Key-f>", lambda event: self.center_selected())
+            canvas.bind("<Key-F>", lambda event: self.center_selected())
+            canvas.bind("<Home>", lambda event: self.fit_views())
+            canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
+            canvas.bind("<Control-D>", lambda event: self.duplicate_selected())
+            canvas.bind("<Left>", lambda event: self.nudge_selected(-1, 0))
+            canvas.bind("<Right>", lambda event: self.nudge_selected(1, 0))
+            canvas.bind("<Up>", lambda event: self.nudge_selected(0, -1))
+            canvas.bind("<Down>", lambda event: self.nudge_selected(0, 1))
+            canvas.bind("<Shift-Left>", lambda event: self.nudge_selected(-5, 0))
+            canvas.bind("<Shift-Right>", lambda event: self.nudge_selected(5, 0))
+            canvas.bind("<Shift-Up>", lambda event: self.nudge_selected(0, -5))
+            canvas.bind("<Shift-Down>", lambda event: self.nudge_selected(0, 5))
         self.bind_all("<Escape>", lambda event: self.clear_selection())
         self._update_view_mode_buttons()
 
@@ -607,6 +651,86 @@ class SpatialDesignWorkspace(ttk.Frame):
             f"{device_count} device{'s' if device_count != 1 else ''} · "
             f"{total_area:.1f} m² · {total_volume:.1f} m³"
         )
+        self._update_model_tree()
+
+    def _update_model_tree(self) -> None:
+        tree = self._model_tree
+        if tree is None:
+            return
+        self._tree_selection_guard = True
+        try:
+            children = tree.get_children()
+            if children:
+                tree.delete(*children)
+            rooms_parent = tree.insert(
+                "", "end", iid="group:rooms", text=f"Rooms ({len(self.layout['rooms'])})", open=True
+            )
+            for room in self.layout["rooms"]:
+                pressure = room.get("pressure_pa")
+                details = (
+                    f"{room['length_m']:.2f}×{room['width_m']:.2f}×{room['height_m']:.2f} m"
+                )
+                if pressure is not None:
+                    details += f" · {pressure:g} Pa"
+                tree.insert(
+                    rooms_parent,
+                    "end",
+                    iid=f"room:{room['id']}",
+                    text=room["name"],
+                    values=("Room", details),
+                )
+            devices_parent = tree.insert(
+                "", "end", iid="group:devices", text=f"Devices ({len(self.layout['devices'])})", open=True
+            )
+            room_names = {room["id"]: room["name"] for room in self.layout["rooms"]}
+            for device in self.layout["devices"]:
+                room_name = room_names.get(device.get("room_id"), "Unassigned")
+                details = f"{room_name} · z {device.get('z_m', 0.0):.2f} m"
+                tree.insert(
+                    devices_parent,
+                    "end",
+                    iid=f"device:{device['id']}",
+                    text=device["name"],
+                    values=(device.get("type", "device").title(), details),
+                )
+            self._sync_tree_selection()
+        finally:
+            self._tree_selection_guard = False
+
+    def _sync_tree_selection(self) -> None:
+        tree = self._model_tree
+        if tree is None:
+            return
+        current = tree.selection()
+        if self.selected is None:
+            if current:
+                tree.selection_remove(*current)
+            return
+        iid = f"{self.selected.kind}:{self.selected.item_id}"
+        if not tree.exists(iid):
+            return
+        self._tree_selection_guard = True
+        try:
+            tree.selection_set(iid)
+            tree.see(iid)
+        finally:
+            self._tree_selection_guard = False
+
+    def _on_tree_selected(self, event=None) -> None:
+        if self._tree_selection_guard or self._model_tree is None:
+            return
+        selection = self._model_tree.selection()
+        if not selection:
+            return
+        iid = selection[0]
+        if iid.startswith("room:"):
+            self.selected = _Hit("room", iid.split(":", 1)[1])
+        elif iid.startswith("device:"):
+            self.selected = _Hit("device", iid.split(":", 1)[1])
+        else:
+            return
+        self._load_property_panel()
+        self.redraw()
 
     def clear_selection(self) -> None:
         self.selected = None
@@ -637,6 +761,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._device_type_box.configure(state="disabled")
             if self._device_room_box is not None:
                 self._device_room_box.configure(state="disabled", values=())
+            self._sync_tree_selection()
             return
 
         is_room = bool(self.selected and self.selected.kind == "room")
@@ -684,6 +809,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._device_type_box.configure(state="readonly")
             if self._device_room_box is not None:
                 self._device_room_box.configure(state="readonly", values=labels)
+        self._sync_tree_selection()
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -765,6 +891,72 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.selected = _Hit("device", device["id"])
         self._load_property_panel()
         self._persist(f"Added {device_type}")
+
+    def duplicate_selected(self) -> None:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            return
+        grid = max(0.05, self.layout["grid_m"])
+        clone = copy.deepcopy(item)
+        clone["name"] = f"{item.get('name', self.selected.kind.title())} Copy"
+        clone["x_m"] = item.get("x_m", 0.0) + grid
+        clone["y_m"] = item.get("y_m", 0.0) + grid
+
+        if self.selected.kind == "room":
+            source_room_id = item["id"]
+            clone["id"] = f"room-{uuid.uuid4().hex[:8]}"
+            self.layout["rooms"].append(clone)
+            copied_devices = 0
+            for device in list(self.layout["devices"]):
+                if device.get("room_id") != source_room_id:
+                    continue
+                device_clone = copy.deepcopy(device)
+                device_clone["id"] = f"device-{uuid.uuid4().hex[:8]}"
+                device_clone["name"] = f"{device.get('name', 'Device')} Copy"
+                device_clone["room_id"] = clone["id"]
+                device_clone["x_m"] = device.get("x_m", 0.0) + grid
+                device_clone["y_m"] = device.get("y_m", 0.0) + grid
+                self.layout["devices"].append(device_clone)
+                copied_devices += 1
+            self.selected = _Hit("room", clone["id"])
+            suffix = (
+                f" with {copied_devices} assigned device{'s' if copied_devices != 1 else ''}"
+                if copied_devices
+                else ""
+            )
+            message = f"Duplicated room{suffix}"
+        else:
+            clone["id"] = f"device-{uuid.uuid4().hex[:8]}"
+            self.layout["devices"].append(clone)
+            self.selected = _Hit("device", clone["id"])
+            message = "Duplicated device"
+
+        self._load_property_panel()
+        self._persist(message)
+
+    def _translate_room_devices(self, room_id: str, dx: float, dy: float) -> None:
+        if abs(dx) < 1e-12 and abs(dy) < 1e-12:
+            return
+        for device in self.layout["devices"]:
+            if device.get("room_id") == room_id:
+                device["x_m"] = device.get("x_m", 0.0) + dx
+                device["y_m"] = device.get("y_m", 0.0) + dy
+
+    def nudge_selected(self, x_steps: int, y_steps: int) -> None:
+        item = self._selected_object()
+        if item is None or self.selected is None:
+            return
+        grid = max(0.05, self.layout["grid_m"])
+        dx = x_steps * grid
+        dy = y_steps * grid
+        item["x_m"] = item.get("x_m", 0.0) + dx
+        item["y_m"] = item.get("y_m", 0.0) + dy
+        if self.selected.kind == "room":
+            self._translate_room_devices(self.selected.item_id, dx, dy)
+        self._load_property_panel()
+        self._persist(
+            f"Nudged {self.selected.kind} by {dx:+g} m, {dy:+g} m"
+        )
 
     def delete_selected(self) -> None:
         if self.selected is None:
@@ -1309,8 +1501,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        old_x = item["x_m"]
+        old_y = item["y_m"]
+        item["x_m"] = round((old_x + dx) / grid) * grid
+        item["y_m"] = round((old_y + dy) / grid) * grid
+        if self.selected and self.selected.kind == "room":
+            self._translate_room_devices(
+                self.selected.item_id,
+                item["x_m"] - old_x,
+                item["y_m"] - old_y,
+            )
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()

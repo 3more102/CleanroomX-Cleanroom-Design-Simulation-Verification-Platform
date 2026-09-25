@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 
+import cleanroomx.spatial as spatial_module
+
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
@@ -441,3 +443,51 @@ def test_spatial_edit_history_enforces_bounded_undo_depth():
     assert restored2 is not None and restored2["grid_m"] == 2.0
     assert restored1 is not None and restored1["grid_m"] == 1.0
     assert history.undo(restored1) is None
+
+
+def test_room_translation_keeps_assigned_devices_attached():
+    workspace = object.__new__(spatial_module.SpatialDesignWorkspace)
+    workspace.layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "x_m": 1,
+                    "y_m": 2,
+                    "length_m": 5,
+                    "width_m": 4,
+                    "height_m": 3,
+                }
+            ],
+            "devices": [
+                {
+                    "id": "ffu-1",
+                    "type": "ffu",
+                    "name": "FFU-1",
+                    "room_id": "process",
+                    "x_m": 2,
+                    "y_m": 3,
+                    "z_m": 3,
+                },
+                {
+                    "id": "free-1",
+                    "type": "sensor",
+                    "name": "Free",
+                    "room_id": None,
+                    "x_m": 20,
+                    "y_m": 20,
+                    "z_m": 1,
+                },
+            ],
+        }
+    )
+    workspace.selected = spatial_module._Hit("room", "process")
+
+    assert workspace._translate_selected(1.5, -0.5) is True
+
+    room = workspace.layout["rooms"][0]
+    attached, free = workspace.layout["devices"]
+    assert (room["x_m"], room["y_m"]) == (2.5, 1.5)
+    assert (attached["x_m"], attached["y_m"]) == (3.5, 2.5)
+    assert (free["x_m"], free["y_m"]) == (20, 20)

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased spatial workspace safety pass — 2026-09-25
+
+- Adds deterministic validation for overlapping rooms, duplicate room names, orphan/unassigned devices, devices outside their assigned room footprint, and device elevations outside room height.
+- Surfaces validation state directly in the synchronized 2D/3D workspace with a **Validate** action, warning outlines, and explicit overlap markers.
+- Keeps validation advisory: it does not change solver equations, engineering acceptance logic, or persisted analysis inputs unless the existing explicit synchronization action is used.
+- Adds regression coverage for both warning detection and clean spatial layouts.
+
 ## Unreleased performance optimization — 2026-09-24
 
 - Reuses an already canonicalized network-state projection when computing its SHA-256 fingerprint, removing duplicate sorting/normalization work from supplied-point checks, bisection trace capture/replay, and selected-state replay without changing canonical bytes or audit semantics.

@@ -230,6 +230,117 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def validate_layout(value: Any) -> list[dict]:
+    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    devices = layout["devices"]
+    issues: list[dict] = []
+
+    first_room_by_name: dict[str, dict] = {}
+    for room in rooms:
+        normalized_name = str(room["name"]).strip().casefold()
+        first = first_room_by_name.get(normalized_name)
+        if first is None:
+            first_room_by_name[normalized_name] = room
+        else:
+            issues.append(
+                {
+                    "code": "duplicate_room_name",
+                    "severity": "warning",
+                    "item_ids": [first["id"], room["id"]],
+                    "message": (
+                        f"Duplicate room name '{room['name']}' can make analysis synchronization ambiguous."
+                    ),
+                }
+            )
+
+    for left_index, left in enumerate(rooms):
+        left_x1 = left["x_m"] + left["length_m"]
+        left_y1 = left["y_m"] + left["width_m"]
+        for right in rooms[left_index + 1 :]:
+            right_x1 = right["x_m"] + right["length_m"]
+            right_y1 = right["y_m"] + right["width_m"]
+            x0 = max(left["x_m"], right["x_m"])
+            y0 = max(left["y_m"], right["y_m"])
+            x1 = min(left_x1, right_x1)
+            y1 = min(left_y1, right_y1)
+            if x1 > x0 + 1e-9 and y1 > y0 + 1e-9:
+                issues.append(
+                    {
+                        "code": "room_overlap",
+                        "severity": "warning",
+                        "item_ids": [left["id"], right["id"]],
+                        "bounds_m": [x0, y0, x1, y1],
+                        "message": (
+                            f"Rooms '{left['name']}' and '{right['name']}' overlap "
+                            f"by {(x1 - x0) * (y1 - y0):g} m²."
+                        ),
+                    }
+                )
+
+    room_by_id = {room["id"]: room for room in rooms}
+    for device in devices:
+        room_id = device.get("room_id")
+        if not room_id:
+            if rooms:
+                issues.append(
+                    {
+                        "code": "device_unassigned",
+                        "severity": "warning",
+                        "item_ids": [device["id"]],
+                        "message": f"Device '{device['name']}' is not assigned to a room.",
+                    }
+                )
+            continue
+
+        room = room_by_id.get(str(room_id))
+        if room is None:
+            issues.append(
+                {
+                    "code": "orphan_device_room",
+                    "severity": "warning",
+                    "item_ids": [device["id"]],
+                    "message": (
+                        f"Device '{device['name']}' references missing room id '{room_id}'."
+                    ),
+                }
+            )
+            continue
+
+        x = device["x_m"]
+        y = device["y_m"]
+        z = device["z_m"]
+        inside_xy = (
+            room["x_m"] - 1e-9 <= x <= room["x_m"] + room["length_m"] + 1e-9
+            and room["y_m"] - 1e-9 <= y <= room["y_m"] + room["width_m"] + 1e-9
+        )
+        if not inside_xy:
+            issues.append(
+                {
+                    "code": "device_outside_room",
+                    "severity": "warning",
+                    "item_ids": [device["id"], room["id"]],
+                    "message": (
+                        f"Device '{device['name']}' lies outside assigned room '{room['name']}'."
+                    ),
+                }
+            )
+        if z < -1e-9 or z > room["height_m"] + 1e-9:
+            issues.append(
+                {
+                    "code": "device_elevation_outside_room",
+                    "severity": "warning",
+                    "item_ids": [device["id"], room["id"]],
+                    "message": (
+                        f"Device '{device['name']}' elevation {z:g} m is outside "
+                        f"room '{room['name']}' height 0–{room['height_m']:g} m."
+                    ),
+                }
+            )
+
+    return issues
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -279,6 +390,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._validation_var = tk.StringVar(value="Spatial checks: PASS")
+        self._validation_issues: list[dict] = []
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -309,6 +422,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=6
         )
+        ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
+        ttk.Label(toolbar, textvariable=self._validation_var).pack(side="left", padx=(8, 2))
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -424,6 +539,35 @@ class SpatialDesignWorkspace(ttk.Frame):
             return None
         collection = self.layout["rooms"] if self.selected.kind == "room" else self.layout["devices"]
         return next((item for item in collection if item["id"] == self.selected.item_id), None)
+
+    def _warning_item_ids(self) -> set[str]:
+        return {
+            str(item_id)
+            for issue in self._validation_issues
+            for item_id in issue.get("item_ids", [])
+        }
+
+    def _update_validation_summary(self) -> None:
+        count = len(self._validation_issues)
+        self._validation_var.set(
+            "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
+        )
+
+    def report_validation(self) -> None:
+        self._validation_issues = validate_layout(self.layout)
+        self._update_validation_summary()
+        if not self._validation_issues:
+            self._status_setter("Spatial checks: PASS")
+            self.redraw()
+            return
+        messages = [issue["message"] for issue in self._validation_issues[:3]]
+        suffix = (
+            ""
+            if len(self._validation_issues) <= 3
+            else f" (+{len(self._validation_issues) - 3} more)"
+        )
+        self._status_setter("Spatial checks: " + " | ".join(messages) + suffix)
+        self.redraw()
 
     def _load_property_panel(self) -> None:
         item = self._selected_object()
@@ -566,6 +710,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
+        self._validation_issues = validate_layout(self.layout)
+        self._update_validation_summary()
         self._draw_2d()
         self._draw_3d()
 
@@ -598,12 +744,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+        warning_ids = self._warning_item_ids()
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#1d4ed8" if selected else "#34495e"
+            outline = (
+                "#1d4ed8"
+                if selected
+                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+            )
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             canvas.create_rectangle(
                 x0, y0, x1, y1,
@@ -619,6 +770,23 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
 
+        for issue in self._validation_issues:
+            if issue.get("code") != "room_overlap":
+                continue
+            bounds = issue.get("bounds_m")
+            if not isinstance(bounds, list) or len(bounds) != 4:
+                continue
+            x0, y0 = self._world_to_canvas(bounds[0], bounds[1])
+            x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
+            canvas.create_rectangle(
+                x0, y0, x1, y1,
+                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+            )
+            canvas.create_text(
+                (x0 + x1) / 2, (y0 + y1) / 2,
+                text="OVERLAP", fill="#991b1b", tags=("validation",)
+            )
+
         symbols = {
             "door": "D",
             "supply": "S",
@@ -632,9 +800,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
             radius = 9 if selected else 7
+            device_outline = (
+                "#c0392b"
+                if selected
+                else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+            )
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
+                fill="#ffffff", outline=device_outline,
                 width=3 if selected else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
@@ -682,6 +855,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+        warning_ids = self._warning_item_ids()
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -709,7 +883,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#7dd3fc" if selected else "#c8d5e3"
+            outline = (
+                "#7dd3fc"
+                if selected
+                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
+            )
             tag = f"room:{room['id']}"
             canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
             canvas.create_polygon(
@@ -732,9 +910,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
+            device_outline = (
+                "#ffffff"
+                if selected
+                else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
+            )
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
+                fill="#fbbf24", outline=device_outline,
                 width=2, tags=(tag, "device3d"),
             )
 

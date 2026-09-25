@@ -80,6 +80,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 2. Add an analysis from the application catalog, or select an existing analysis.
 3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
 4. Use **Validate** to run the real backend parser/validation path.
+   Use **Analysis → Validate Project** to preflight every analysis plus persisted spatial integrity in one deterministic pass; the complete machine-readable report is shown in **Diagnostics**.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
@@ -113,6 +114,9 @@ All backend outputs are normalized to strict JSON with non-finite values rejecte
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 
 ## Validation and automated smoke
+
+`cleanroomx-project-validate PROJECT [--format json|markdown] [--output PATH]` exposes the same project-wide preflight without opening the GUI. Invalid analyses, malformed spatial identifiers/numerics/references, or invalid project structure produce a failing report and exit code 2. Advisory spatial findings such as overlaps produce `warning` without a failing exit code. Reports include a canonical SHA-256 of the complete in-memory project document for traceability. Validation does not execute solvers and does not mutate project or spatial data.
+
 
 Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 

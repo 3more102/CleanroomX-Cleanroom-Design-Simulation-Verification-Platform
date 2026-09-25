@@ -24,7 +24,23 @@ The tested PR tree and merged `main` tree are byte-for-byte identical.
 
 The merged final tree includes the strict engineering JSON boundary merged through #430, deterministic project-level batch execution, the remaining project-batch Markdown presentation hardening, and synchronized v0.101.0 package/runtime/demo/test/CI release identity.
 
-## Matrix evidence
+## Final Windows checkout / 2D+3D launcher closure
+
+PR **#434 — Add PATH-independent Windows launcher for CleanroomX 2D/3D** completed the repository-checkout usability gap after the Release 2 code consolidation.
+
+- Exact PR head: `9f5d0f654c2016096fb1fb2cbdb5d4395e91d645`
+- Merged `main` commit: `1acbaa1b67f624ae495590f78d5bccfc038fbd82`
+- Pull-request CI run **#1472** / id `36164491604`: **success**
+- Python 3.11 complete suite: **961 passed**
+- Python 3.12 complete suite: **961 passed**
+- Python 3.13 complete suite: **961 passed**
+- Windows `windows-latest` PowerShell launcher smoke: **success**
+- Windows `windows-latest` CMD launcher smoke: **success**
+- Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+
+The launcher executes the repository `src` tree directly, prefers `.venv\\Scripts\\python.exe`, and defaults to `--demo`, avoiding stale installed-package/PATH ambiguity while exposing the synchronized Design 2D + 3D workspace. No solver equation, tolerance, engineering acceptance rule, project schema, spatial model, or analysis behavior changed in PR #434.
+
+## Release 2 consolidation matrix evidence
 
 The complete test suite passed on every supported interpreter in final-tree run #1463:
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial persistence integrity — 2026-09-25
+
+- Adds a strict GUI-independent persistence contract for versioned spatial layout metadata, including stable unique room/device IDs, finite geometry, positive room dimensions, canonical device types, and device-to-room referential integrity.
+- Project load and save now fail closed on malformed spatial metadata instead of silently repairing engineering geometry, dropping objects, or accepting dangling references.
+- Makes lenient workspace normalization deterministic for duplicate/missing IDs and preserves unknown extension fields; derived layouts with duplicate room names now receive stable unique IDs.
+- Keeps geometric design findings such as overlaps and out-of-room device placement advisory, preserving incomplete-design workflows and project schema version 1.
+- Adds round-trip, corruption, no-overwrite-on-validation-failure, deterministic-normalization, duplicate-name, extension-field, and invalid-reference regression coverage.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

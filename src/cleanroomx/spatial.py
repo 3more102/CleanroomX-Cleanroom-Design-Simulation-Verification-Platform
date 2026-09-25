@@ -1382,19 +1382,20 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _scale_2d(self) -> float:
         return 55.0 * self.layout["view"]["zoom_2d"]
 
-    def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            self.canvas_2d.winfo_width() / 2 + self.layout["view"]["pan_x"] + x * scale,
-            self.canvas_2d.winfo_height() / 2 + self.layout["view"]["pan_y"] + y * scale,
+    def _transform_2d(self) -> SpatialTransform2D:
+        return SpatialTransform2D(
+            width_px=max(1.0, float(self.canvas_2d.winfo_width())),
+            height_px=max(1.0, float(self.canvas_2d.winfo_height())),
+            pixels_per_m=self._scale_2d(),
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
         )
 
+    def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
+        return self._transform_2d().model_to_screen(x, y)
+
     def _canvas_to_world(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            (x - self.canvas_2d.winfo_width() / 2 - self.layout["view"]["pan_x"]) / scale,
-            (y - self.canvas_2d.winfo_height() / 2 - self.layout["view"]["pan_y"]) / scale,
-        )
+        return self._transform_2d().screen_to_model(x, y)
 
     def fit_views(self) -> None:
         min_x, min_y, max_x, max_y = self._bounds()
@@ -1408,8 +1409,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+
+        floor_z = self.layout["floor"]["elevation_m"]
+        z_values = [floor_z]
+        for room in self.layout["rooms"]:
+            z0 = room.get("floor_elevation_m", floor_z)
+            z_values.extend((z0, z0 + room["height_m"]))
+        model_span = max(width_m, height_m, max(z_values) - min(z_values), 1.0)
+        c3w = max(200, self.canvas_3d.winfo_width())
+        c3h = max(200, self.canvas_3d.winfo_height())
+        self.layout["view"]["zoom_3d"] = max(
+            0.2,
+            min(5.0, 0.62 * min(c3w, c3h) / (34.0 * model_span)),
+        )
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
         self._persist("Fit spatial views")
+
+    def reset_2d(self) -> None:
+        self.layout["view"]["zoom_2d"] = 1.0
+        self.layout["view"]["pan_x"] = 0.0
+        self.layout["view"]["pan_y"] = 0.0
+        self._persist("Reset 2D view")
 
     def redraw(self) -> None:
         self._refresh_validation()
@@ -1417,62 +1438,47 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(self) -> list[dict[str, Any]]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
-            if high is None or low is None:
-                continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            relationships.append((high, low, delta_value))
-        return relationships
+        return pressure_relationships(self.layout, self._analysis_getter())
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for relationship in self._pressure_relationships():
+            high = room_by_id.get(relationship.get("higher_room_id"))
+            low = room_by_id.get(relationship.get("lower_room_id"))
+            if high is None or low is None:
+                continue
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            status = relationship["status"]
+            color = "#15803d" if status == "pass" else ("#dc2626" if status == "warning" else "#64748b")
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                arrow="last",
+                width=2,
+                dash=(6, 3) if status == "unavailable" else (),
+                fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                delta = relationship.get("delta_pa")
+                minimum = relationship.get("min_delta_pa")
+                label = (
+                    "pressure unavailable"
+                    if delta is None or minimum is None
+                    else f"Δ {delta:g} Pa / ≥ {minimum:g} Pa"
+                )
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
 

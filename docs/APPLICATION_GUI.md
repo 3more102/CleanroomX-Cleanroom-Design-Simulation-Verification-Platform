@@ -58,7 +58,7 @@ For a genuinely different Save As destination, CleanroomX captures the destinati
 
 ## Project edit history
 
-Committed project-document edits now have a bounded 100-entry **Undo Project Edit / Redo Project Edit** history from the **Edit** menu. Ctrl+Z and Ctrl+Y route to this project history when the focused widget does not own a more specific undo binding; the JSON editor retains its native text undo and the spatial canvases retain their dedicated geometry undo/redo.
+Committed project-document edits now have a bounded **Undo Project Edit / Redo Project Edit** history from the **Edit** menu. The history keeps up to 100 edits and applies a 64 MiB serialized-snapshot budget, pruning the oldest entries first while always retaining the newest reversible edit. Ctrl+Z and Ctrl+Y route to this project history when the focused widget does not own a more specific undo binding; the JSON editor retains its native text undo and the spatial canvases retain their dedicated geometry undo/redo.
 
 History covers committed analysis-input edits, project metadata commits, analysis creation, rename and removal, imported analysis JSON, and explicit spatial-to-analysis synchronization. Every stored state is round-tripped through the ordinary `cleanroomx.project` validator before it can enter history, so undo/redo cannot bypass schema, unique-id, analysis-kind, active-reference, strict-JSON, or non-finite-value checks. Restoring a history state clears cached analysis results so results computed from a newer input cannot be silently shown against restored inputs.
 

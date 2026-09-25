@@ -496,3 +496,35 @@ def test_stable_file_backed_run_records_revision_timestamps(tmp_path):
     for dependency in provenance["external_dependencies"]:
         assert dependency["mtime_ns_before"] == dependency["mtime_ns_after"]
         assert dependency["mtime_ns_before"] > 0
+
+
+def test_dossier_analysis_uses_same_external_dependency_guard(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    payload = {
+        "name": "Revision-stability regression",
+        "verification_project": "facility_project.json",
+    }
+    original = application_module._run_dossier
+
+    def run_then_change_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        dependency = base_dir / "facility_project.json"
+        dependency.write_text(
+            dependency.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_dossier",
+        run_then_change_dependency,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        run_analysis("dossier", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == [
+        "verification_project"
+    ]
+    assert raised.value.changes[0]["status"] == "changed_during_run"

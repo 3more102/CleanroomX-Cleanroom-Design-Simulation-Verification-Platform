@@ -697,6 +697,90 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicitly pull mapped engineering dimensions into spatial geometry.
+
+    X/Y placement is spatial-only and is never changed. Every mapping is
+    resolved before mutation so a bad mapping cannot partially update a layout.
+    """
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return False
+    if not isinstance(layout, dict):
+        return False
+    rooms = normalize_layout(layout)["rooms"]
+    if not rooms:
+        return False
+    raw_rooms = layout.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return False
+    by_id = {
+        str(room.get("id")): room
+        for room in raw_rooms
+        if isinstance(room, dict) and str(room.get("id") or "").strip()
+    }
+
+    kind = getattr(analysis, "kind", "")
+    mapped_pairs: list[tuple[dict, dict]] = []
+    if kind == "room_verification":
+        source = rooms[0]
+        raw_source = by_id.get(source["id"])
+        if raw_source is None:
+            return False
+        mapped_pairs = [(raw_source, analysis.input)]
+    elif kind == "project_verification":
+        engineering_rooms = analysis.input.get("rooms")
+        if not isinstance(engineering_rooms, list):
+            return False
+        _require_unique_sync_names(rooms, source="the spatial layout")
+        _require_unique_sync_names(engineering_rooms, source="the active analysis")
+        targets = {
+            str(room.get("name")).strip().casefold(): room
+            for room in engineering_rooms
+            if isinstance(room, dict) and str(room.get("name") or "").strip()
+        }
+        used_links: set[str] = set()
+        for source in rooms:
+            link = str(source.get("analysis_room_name") or source["name"]).strip()
+            key = link.casefold()
+            if key in used_links:
+                raise SpatialSyncError(
+                    "Cannot synchronize spatial geometry because multiple layout rooms "
+                    f"map to analysis room {link!r}."
+                )
+            used_links.add(key)
+            target = targets.get(key)
+            if target is None:
+                if source.get("analysis_room_name"):
+                    raise SpatialSyncError(
+                        f"Linked analysis room {link!r} does not exist in the active analysis."
+                    )
+                continue
+            raw_source = by_id.get(source["id"])
+            if raw_source is not None:
+                mapped_pairs.append((raw_source, target))
+    else:
+        return False
+
+    changed = False
+    for source, target in mapped_pairs:
+        for field in ("length_m", "width_m", "height_m"):
+            value = _geometry_number(target.get(field))
+            if not math.isfinite(value) or value <= 0:
+                raise SpatialSyncError(
+                    f"Engineering room {target.get('name')!r} has invalid {field}."
+                )
+            if source.get(field) != value:
+                source[field] = value
+                changed = True
+        observed = _finite_optional(target.get("observed_pressure_pa"))
+        if observed is not None and source.get("pressure_pa") != observed:
+            source["pressure_pa"] = observed
+            changed = True
+
+    _record_sync_baseline(layout, analysis, mapped_pairs)
+    return changed
+
+
 def _room_overlap_records(
     rooms: list[dict],
 ) -> list[tuple[int, int, list[float]]]:
@@ -802,11 +886,87 @@ def _spatial_validation_key(layout: dict) -> tuple:
 
 
 def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+    """Return deterministic diagnostics without hiding malformed raw edit state."""
+    issues: list[dict] = []
+    raw_rooms = value.get("rooms", []) if isinstance(value, dict) else []
+    raw_devices = value.get("devices", []) if isinstance(value, dict) else []
+
+    seen_room_ids: set[str] = set()
+    if isinstance(raw_rooms, list):
+        for index, raw in enumerate(raw_rooms):
+            if not isinstance(raw, dict):
+                issues.append(
+                    {
+                        "code": "malformed_room",
+                        "severity": "error",
+                        "item_ids": [],
+                        "message": f"Room entry {index + 1} is not an object.",
+                    }
+                )
+                continue
+            room_id = str(raw.get("id") or "")
+            if room_id and room_id in seen_room_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_room_id",
+                        "severity": "error",
+                        "item_ids": [room_id],
+                        "message": f"Duplicate room id '{room_id}' is not allowed.",
+                    }
+                )
+            if room_id:
+                seen_room_ids.add(room_id)
+            for field in ("length_m", "width_m", "height_m"):
+                number = _geometry_number(raw.get(field))
+                if not math.isfinite(number) or number <= 0:
+                    issues.append(
+                        {
+                            "code": "invalid_room_geometry",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "field": field,
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' has "
+                                f"invalid {field}; it must be finite and greater than zero."
+                            ),
+                        }
+                    )
+            if "floor_elevation_m" in raw:
+                elevation = _geometry_number(raw.get("floor_elevation_m"))
+                if not math.isfinite(elevation):
+                    issues.append(
+                        {
+                            "code": "invalid_room_elevation",
+                            "severity": "error",
+                            "item_ids": [room_id] if room_id else [],
+                            "message": (
+                                f"Room '{raw.get('name') or room_id or index + 1}' "
+                                "has a non-finite floor elevation."
+                            ),
+                        }
+                    )
+
+    seen_device_ids: set[str] = set()
+    if isinstance(raw_devices, list):
+        for raw in raw_devices:
+            if not isinstance(raw, dict):
+                continue
+            device_id = str(raw.get("id") or "")
+            if device_id and device_id in seen_device_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_device_id",
+                        "severity": "error",
+                        "item_ids": [device_id],
+                        "message": f"Duplicate spatial object id '{device_id}' is not allowed.",
+                    }
+                )
+            if device_id:
+                seen_device_ids.add(device_id)
+
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
-    issues: list[dict] = []
 
     first_room_by_name: dict[str, dict] = {}
     for room in rooms:
@@ -1245,8 +1405,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
-            command=self._on_sync_requested,
+            text="Push geometry → analysis",
+            command=self.request_push_to_analysis,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Pull geometry ← analysis",
+            command=self.pull_from_active_analysis,
         ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -1385,6 +1550,94 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
             canvas.bind("<Up>", lambda event: self._nudge_selected(0, -1))
             canvas.bind("<Down>", lambda event: self._nudge_selected(0, 1))
+
+    def request_push_to_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room/project verification analysis before synchronizing."
+            )
+            return
+        sync = engineering_sync_status(self.layout, analysis)
+        overwrite = [
+            item
+            for item in sync["rooms"]
+            if item["state"] in {"engineering_newer", "conflicting"}
+        ]
+        if overwrite:
+            labels = ", ".join(
+                item["analysis_room_name"] for item in overwrite[:4]
+            )
+            if len(overwrite) > 4:
+                labels += f" (+{len(overwrite) - 4} more)"
+            if not messagebox.askyesno(
+                "Engineering geometry differs",
+                (
+                    "Pushing spatial dimensions will overwrite differing engineering "
+                    f"room geometry for: {labels}.\n\nContinue with the explicit push?"
+                ),
+                parent=self,
+            ):
+                return
+        self._on_sync_requested()
+
+    def pull_from_active_analysis(self) -> None:
+        analysis = self._analysis_getter()
+        if analysis is None or getattr(analysis, "kind", "") not in {
+            "room_verification",
+            "project_verification",
+        }:
+            self._status_setter(
+                "Select a room/project verification analysis before synchronizing."
+            )
+            return
+        sync = engineering_sync_status(self.layout, analysis)
+        overwrite = [
+            item
+            for item in sync["rooms"]
+            if item["state"] in {"geometry_newer", "conflicting"}
+        ]
+        if overwrite:
+            labels = ", ".join(
+                item["analysis_room_name"] for item in overwrite[:4]
+            )
+            if len(overwrite) > 4:
+                labels += f" (+{len(overwrite) - 4} more)"
+            if not messagebox.askyesno(
+                "Spatial geometry differs",
+                (
+                    "Pulling engineering dimensions will overwrite differing spatial "
+                    f"room dimensions for: {labels}.\n\nContinue with the explicit pull?"
+                ),
+                parent=self,
+            ):
+                return
+
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        try:
+            changed = sync_analysis_to_layout(self.layout, analysis)
+        except SpatialSyncError as exc:
+            self._status_setter(str(exc))
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                str(exc),
+                parent=self,
+            )
+            return
+        if not changed:
+            self._status_setter("Spatial geometry already matches the active analysis.")
+            self.redraw()
+            return
+        self._load_property_panel()
+        self._persist(
+            "Pulled geometry from active analysis",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def _result_payload(self) -> dict | None:
         candidate = self._result_getter()

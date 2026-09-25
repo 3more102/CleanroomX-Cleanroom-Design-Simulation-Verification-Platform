@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__
+from .autosave import DEFAULT_AUTOSAVE_INTERVAL_SECONDS, AutosaveManager
 from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
@@ -154,7 +155,13 @@ class AnalysisPicker(tk.Toplevel):
 
 
 class CleanroomXApp:
-    def __init__(self, root: tk.Tk):
+    def __init__(
+        self,
+        root: tk.Tk,
+        *,
+        autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
+        autosave_manager: AutosaveManager | None = None,
+    ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
         self.root.geometry("1440x900")
@@ -168,6 +175,15 @@ class CleanroomXApp:
         self._editor_analysis_id: str | None = None
         self._selection_guard = False
         self._baseline_state: str | None = None
+        self._autosave_interval_seconds = max(0.0, float(autosave_interval_seconds))
+        self._autosave_interval_ms = (
+            max(1000, int(self._autosave_interval_seconds * 1000))
+            if self._autosave_interval_seconds > 0
+            else 0
+        )
+        self._autosave_manager = autosave_manager or AutosaveManager()
+        self._autosave_manager.begin_project(None)
+        self._autosave_status_sequence = -1
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -177,6 +193,13 @@ class CleanroomXApp:
         self.name_var = tk.StringVar(value=self.project.name)
         self.description_var = tk.StringVar(value=self.project.description)
         self.status_var = tk.StringVar(value="Ready")
+        self.autosave_status_var = tk.StringVar(
+            value=(
+                "Autosave: ready"
+                if self._autosave_interval_ms
+                else "Autosave: disabled"
+            )
+        )
         self.wrap_outputs_var = tk.BooleanVar(value=False)
 
         self._build_menu()
@@ -188,6 +211,9 @@ class CleanroomXApp:
         self._update_title()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(100, self._poll_worker)
+        if self._autosave_interval_ms:
+            self.root.after(self._autosave_interval_ms, self._autosave_tick)
+            self.root.after(500, self._poll_autosave_status)
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -356,14 +382,24 @@ class CleanroomXApp:
         self.plot_canvas.pack(fill="both", expand=True)
         self.plot_canvas.bind("<Configure>", lambda event: self._draw_plot())
 
+        status_bar = ttk.Frame(self.root)
+        status_bar.pack(fill="x", side="bottom")
         status = ttk.Label(
-            self.root,
+            status_bar,
             textvariable=self.status_var,
             anchor="w",
             relief="sunken",
             padding=(6, 3),
         )
-        status.pack(fill="x", side="bottom")
+        status.pack(fill="x", side="left", expand=True)
+        autosave_status = ttk.Label(
+            status_bar,
+            textvariable=self.autosave_status_var,
+            anchor="e",
+            relief="sunken",
+            padding=(8, 3),
+        )
+        autosave_status.pack(side="right")
 
     def _add_text_tab(self, title: str) -> tk.Text:
         frame = ttk.Frame(self.notebook)
@@ -509,6 +545,95 @@ class CleanroomXApp:
         self._baseline_state = self._project_state_signature()
         self._update_title()
 
+    def _build_recovery_snapshot(self) -> dict:
+        project_data = copy.deepcopy(self.project.to_dict())
+        name_text = self.name_var.get()
+        description_text = self.description_var.get()
+        editor_text = ""
+        editor_json_valid = True
+
+        if name_text.strip():
+            project_data["project"]["name"] = name_text.strip()
+        project_data["project"]["description"] = description_text
+
+        if self._editor_analysis_id is not None:
+            editor_text = self.input_text.get("1.0", "end-1c")
+            try:
+                payload = _strict_json_loads(editor_text)
+                if not isinstance(payload, dict):
+                    editor_json_valid = False
+                else:
+                    for analysis in project_data["analyses"]:
+                        if analysis["id"] == self._editor_analysis_id:
+                            analysis["input"] = payload
+                            break
+            except (json.JSONDecodeError, ValueError):
+                editor_json_valid = False
+
+        return {
+            "project": project_data,
+            "ui_state": {
+                "name_text": name_text,
+                "description_text": description_text,
+                "editor_analysis_id": self._editor_analysis_id,
+                "editor_text": editor_text,
+                "editor_json_valid": editor_json_valid,
+            },
+        }
+
+    def _begin_autosave_project(self, path: str | Path | None) -> None:
+        manager = getattr(self, "_autosave_manager", None)
+        if manager is not None:
+            manager.begin_project(path)
+
+    def _notify_explicit_save(self, path: str | Path) -> None:
+        manager = getattr(self, "_autosave_manager", None)
+        if manager is not None:
+            manager.notify_explicit_save(path)
+        autosave_var = getattr(self, "autosave_status_var", None)
+        if autosave_var is not None:
+            autosave_var.set("Autosave: clean")
+
+    def _discard_current_autosave(self) -> None:
+        manager = getattr(self, "_autosave_manager", None)
+        if manager is not None:
+            manager.discard_current_recoveries()
+
+    def _autosave_tick(self) -> None:
+        if not self._autosave_interval_ms:
+            return
+        try:
+            if self._has_unsaved_changes():
+                snapshot = self._build_recovery_snapshot()
+                if self._autosave_manager.request_autosave(
+                    snapshot,
+                    source_path=self.project_path,
+                ):
+                    self.autosave_status_var.set("Autosave: saving…")
+            elif self._autosave_manager.status().state == "saved":
+                self._discard_current_autosave()
+                self.autosave_status_var.set("Autosave: clean")
+        except (OSError, TypeError, ValueError) as exc:
+            self.autosave_status_var.set("Autosave: failed")
+            self.status_var.set(f"Autosave failed: {exc}")
+        finally:
+            self.root.after(self._autosave_interval_ms, self._autosave_tick)
+
+    def _poll_autosave_status(self) -> None:
+        status = self._autosave_manager.status()
+        if status.sequence != self._autosave_status_sequence:
+            self._autosave_status_sequence = status.sequence
+            if status.state == "saving":
+                self.autosave_status_var.set("Autosave: saving…")
+            elif status.state == "saved":
+                self.autosave_status_var.set("Autosave: recovery saved")
+            elif status.state == "failed":
+                self.autosave_status_var.set("Autosave: failed")
+                self.status_var.set(status.message)
+            elif status.state == "idle":
+                self.autosave_status_var.set("Autosave: ready")
+        self.root.after(500, self._poll_autosave_status)
+
     def _confirm_project_replacement(self) -> bool:
         if not self._has_unsaved_changes():
             return True
@@ -522,6 +647,7 @@ class CleanroomXApp:
         if choice:
             self.save_project()
             return not self._has_unsaved_changes()
+        self._discard_current_autosave()
         return True
 
     def _refresh_analysis_list(self, select_id: str | None = None) -> None:
@@ -688,8 +814,10 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
         self._clear_run_cache()
@@ -722,8 +850,10 @@ class CleanroomXApp:
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
         project = load_project_document(project_path)
+        self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._begin_autosave_project(project_path)
         self.name_var.set(project.name)
         self.description_var.set(project.description)
         self._clear_run_cache()
@@ -758,6 +888,7 @@ class CleanroomXApp:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
         self._capture_saved_state()
+        self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
 
     def save_project_as(self) -> None:
@@ -810,6 +941,7 @@ class CleanroomXApp:
             except KeyError:
                 self._refresh_analysis_list()
         self._capture_saved_state()
+        self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
 
@@ -1212,6 +1344,10 @@ class CleanroomXApp:
             return
         if not self._confirm_project_replacement():
             return
+        self._discard_current_autosave()
+        manager = getattr(self, "_autosave_manager", None)
+        if manager is not None:
+            manager.shutdown(wait=False)
         self.root.destroy()
 
 
@@ -1244,6 +1380,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Open the real Tk GUI, optionally load a project, run its active analysis, then exit",
     )
+    parser.add_argument(
+        "--autosave-interval-seconds",
+        type=float,
+        default=DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
+        help=(
+            "Recovery autosave interval in seconds; use 0 to disable "
+            f"(default: {DEFAULT_AUTOSAVE_INTERVAL_SECONDS:g})"
+        ),
+    )
     return parser
 
 
@@ -1252,6 +1397,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.demo and args.project:
         parser.error("project path and --demo cannot be used together")
+    if args.autosave_interval_seconds < 0:
+        parser.error("--autosave-interval-seconds must be zero or greater")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
@@ -1260,7 +1407,10 @@ def main(argv: list[str] | None = None) -> int:
     project_path = bundled_demo_project_path() if args.demo else args.project
 
     root = tk.Tk()
-    app = CleanroomXApp(root)
+    app = CleanroomXApp(
+        root,
+        autosave_interval_seconds=args.autosave_interval_seconds,
+    )
     if project_path:
         try:
             app.load_project_path(project_path)

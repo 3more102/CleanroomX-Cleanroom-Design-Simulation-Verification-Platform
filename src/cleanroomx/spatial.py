@@ -521,6 +521,37 @@ def spatial_layout_schedule_csv(value: Any) -> str:
     return stream.getvalue()
 
 
+def snap_point_to_room_wall(
+    room: dict,
+    x_m: float,
+    y_m: float,
+) -> tuple[float, float, str]:
+    """Return the nearest point on a room boundary and its deterministic wall code."""
+    x0 = _finite_number(room.get("x_m"), 0.0)
+    y0 = _finite_number(room.get("y_m"), 0.0)
+    x1 = x0 + _positive(room.get("length_m"), 4.0)
+    y1 = y0 + _positive(room.get("width_m"), 4.0)
+    x = _finite_number(x_m, x0)
+    y = _finite_number(y_m, y0)
+
+    clamped_x = max(x0, min(x1, x))
+    clamped_y = max(y0, min(y1, y))
+    candidates = (
+        ("n", clamped_x, y0),
+        ("e", x1, clamped_y),
+        ("s", clamped_x, y1),
+        ("w", x0, clamped_y),
+    )
+    wall, snapped_x, snapped_y = min(
+        candidates,
+        key=lambda candidate: (
+            (candidate[1] - x) ** 2 + (candidate[2] - y) ** 2,
+            ("n", "e", "s", "w").index(candidate[0]),
+        ),
+    )
+    return snapped_x, snapped_y, wall
+
+
 def resize_room(
     room: dict,
     handle: str,
@@ -1032,6 +1063,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         }
         self.layout["devices"].append(device)
         self.selected = _Hit("device", device["id"])
+        self._reassign_selected_device_room()
         self._load_property_panel()
         self._persist(f"Added {device_type}", history_before=before)
 
@@ -1253,19 +1285,83 @@ class SpatialDesignWorkspace(ttk.Frame):
             "equipment": "Q",
             "sensor": "●",
         }
+        rooms_by_id = {room["id"]: room for room in self.layout["rooms"]}
         for device in self.layout["devices"]:
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
+            tag = f"device:{device['id']}"
+            room = rooms_by_id.get(device.get("room_id"))
+            if device["type"] == "door" and room is not None:
+                snapped_x, snapped_y, wall = snap_point_to_room_wall(
+                    room,
+                    device["x_m"],
+                    device["y_m"],
+                )
+                if (
+                    math.isclose(snapped_x, device["x_m"], abs_tol=1e-9)
+                    and math.isclose(snapped_y, device["y_m"], abs_tol=1e-9)
+                ):
+                    half = 10 if selected else 8
+                    outline = "#c0392b" if selected else "#2c3e50"
+                    if wall in {"n", "s"}:
+                        canvas.create_line(
+                            x - half,
+                            y,
+                            x + half,
+                            y,
+                            fill="#ffffff",
+                            width=7 if selected else 6,
+                            tags=(tag, "device", "door"),
+                        )
+                        canvas.create_line(
+                            x - half,
+                            y,
+                            x + half,
+                            y,
+                            fill=outline,
+                            width=3,
+                            tags=(tag, "device", "door"),
+                        )
+                        label_x, label_y = x, y - 11
+                    else:
+                        canvas.create_line(
+                            x,
+                            y - half,
+                            x,
+                            y + half,
+                            fill="#ffffff",
+                            width=7 if selected else 6,
+                            tags=(tag, "device", "door"),
+                        )
+                        canvas.create_line(
+                            x,
+                            y - half,
+                            x,
+                            y + half,
+                            fill=outline,
+                            width=3,
+                            tags=(tag, "device", "door"),
+                        )
+                        label_x, label_y = x + 11, y
+                    canvas.create_text(
+                        label_x,
+                        label_y,
+                        text="D",
+                        fill=outline,
+                        tags=(tag, "device", "door"),
+                    )
+                    continue
+
             radius = 9 if selected else 7
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
                 fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
                 width=3 if selected else 2,
-                tags=(f"device:{device['id']}", "device"),
+                tags=(tag, "device"),
             )
             canvas.create_text(
                 x, y, text=symbols.get(device["type"], "?"),
-                tags=(f"device:{device['id']}", "device"),
+                tags=(tag, "device"),
             )
 
         if not self.layout["rooms"] and not self.layout["devices"]:
@@ -1476,9 +1572,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             return
         room = self._room_at(device["x_m"], device["y_m"])
         device["room_id"] = None if room is None else room["id"]
-        if room is not None and device["type"] in {
-            "ffu", "supply", "return", "exhaust", "sensor"
-        }:
+        if room is None:
+            return
+        if device["type"] == "door":
+            device["x_m"], device["y_m"], _ = snap_point_to_room_wall(
+                room,
+                device["x_m"],
+                device["y_m"],
+            )
+            device["z_m"] = 0.0
+        elif device["type"] in {"ffu", "supply", "return", "exhaust", "sensor"}:
             device["z_m"] = room["height_m"]
 
     def _on_left_up(self, event: tk.Event) -> None:

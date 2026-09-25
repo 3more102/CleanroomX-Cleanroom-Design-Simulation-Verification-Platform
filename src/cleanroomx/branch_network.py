@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 
-from .duct import DuctSection, analyze_duct_section
+from .duct import (
+    DuctSection,
+    _format_duct_section_calculation,
+    calculate_duct_section,
+)
 
 
 @dataclass(frozen=True)
@@ -148,8 +152,23 @@ class BranchFlowNetwork:
             raise ValueError("; ".join(details))
 
 
-def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
-    """Propagate fixed terminal demands upstream through a directed supply tree."""
+_BRANCH_FLOW_SCOPE_NOTE = (
+    "Branch airflows are solved by mass continuity from explicit fixed terminal "
+    "demands in a directed tree. Pressure losses then use the existing "
+    "Darcy-Weisbach/local-K section model, including optional Reynolds/roughness-"
+    "based friction at each solved branch flow. This is not a nonlinear pressure-"
+    "balancing solver: loops, parallel feeds, pressure-driven terminal flows, "
+    "damper positions, fan curves, and control interactions are not inferred."
+)
+
+
+def calculate_branch_flow_network(network: BranchFlowNetwork) -> dict:
+    """Return the full-precision fixed-demand tree calculation.
+
+    The returned values are intended for downstream engineering composition.
+    :func:`analyze_branch_flow_network` applies presentation rounding only after
+    continuity, path pressure accumulation, and critical-path selection finish.
+    """
     branches_by_upstream: dict[str, list[BranchDuct]] = {}
     incoming_branch: dict[str, BranchDuct] = {}
     for branch in network.branches:
@@ -169,7 +188,9 @@ def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
         if not children:
             flow = demand_by_node[node]
         else:
-            flow = sum(required_flow(branch.downstream_node) for branch in children)
+            flow = math.fsum(
+                required_flow(branch.downstream_node) for branch in children
+            )
         subtree_flow[node] = flow
         return flow
 
@@ -178,7 +199,7 @@ def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
     branch_results_by_name: dict[str, dict] = {}
     for branch in network.branches:
         airflow = required_flow(branch.downstream_node)
-        section = analyze_duct_section(branch.section_at_flow(airflow))
+        section = calculate_duct_section(branch.section_at_flow(airflow))
         branch_results_by_name[branch.name] = {
             **section,
             "upstream_node": branch.upstream_node,
@@ -194,16 +215,16 @@ def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
             branch_path.append(branch.name)
             node = branch.upstream_node
         branch_path.reverse()
-        pressure_drop = sum(
+        pressure_drop = math.fsum(
             branch_results_by_name[name]["total_pressure_drop_pa"]
             for name in branch_path
         )
         terminal_results.append(
             {
                 "node": terminal.node,
-                "airflow_m3_h": round(terminal.airflow_m3_h, 3),
+                "airflow_m3_h": terminal.airflow_m3_h,
                 "branch_path": branch_path,
-                "total_pressure_drop_pa": round(pressure_drop, 4),
+                "total_pressure_drop_pa": pressure_drop,
             }
         )
 
@@ -218,12 +239,8 @@ def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
 
     continuity: list[dict] = []
     for node in sorted(all_nodes):
-        incoming_flow = (
-            source_airflow
-            if node == network.source_node
-            else required_flow(node)
-        )
-        outgoing_flow = sum(
+        incoming_flow = source_airflow if node == network.source_node else required_flow(node)
+        outgoing_flow = math.fsum(
             required_flow(branch.downstream_node)
             for branch in branches_by_upstream.get(node, ())
         )
@@ -232,36 +249,80 @@ def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
         continuity.append(
             {
                 "node": node,
-                "incoming_airflow_m3_h": round(incoming_flow, 3),
-                "outgoing_airflow_m3_h": round(outgoing_flow, 3),
-                "terminal_demand_m3_h": round(terminal_flow, 3),
-                "continuity_residual_m3_h": round(residual, 9),
+                "incoming_airflow_m3_h": incoming_flow,
+                "outgoing_airflow_m3_h": outgoing_flow,
+                "terminal_demand_m3_h": terminal_flow,
+                "continuity_residual_m3_h": residual,
             }
         )
 
     return {
         "source_node": network.source_node,
-        "source_airflow_m3_h": round(source_airflow, 3),
+        "source_airflow_m3_h": source_airflow,
         "branch_count": len(network.branches),
         "terminal_count": len(network.terminal_demands),
-        "branches": [
-            branch_results_by_name[branch.name] for branch in network.branches
-        ],
+        "branches": [branch_results_by_name[branch.name] for branch in network.branches],
         "terminals": terminal_results,
         "critical_terminal": critical["node"],
         "critical_path": critical["branch_path"],
         "critical_path_pressure_drop_pa": critical["total_pressure_drop_pa"],
         "continuity": continuity,
-        "max_abs_continuity_residual_m3_h": round(
-            max(abs(item["continuity_residual_m3_h"]) for item in continuity),
-            9,
+        "max_abs_continuity_residual_m3_h": max(
+            abs(item["continuity_residual_m3_h"]) for item in continuity
         ),
-        "scope_note": (
-            "Branch airflows are solved by mass continuity from explicit fixed terminal "
-            "demands in a directed tree. Pressure losses then use the existing "
-            "Darcy-Weisbach/local-K section model, including optional Reynolds/roughness-"
-            "based friction at each solved branch flow. This is not a nonlinear pressure-"
-            "balancing solver: loops, parallel feeds, pressure-driven terminal flows, "
-            "damper positions, fan curves, and control interactions are not inferred."
-        ),
+        "scope_note": _BRANCH_FLOW_SCOPE_NOTE,
     }
+
+
+def _format_branch_flow_network_calculation(calculation: dict) -> dict:
+    branch_results: list[dict] = []
+    for branch in calculation["branches"]:
+        branch_results.append(
+            {
+                **_format_duct_section_calculation(branch),
+                "upstream_node": branch["upstream_node"],
+                "downstream_node": branch["downstream_node"],
+            }
+        )
+
+    return {
+        "source_node": calculation["source_node"],
+        "source_airflow_m3_h": round(calculation["source_airflow_m3_h"], 3),
+        "branch_count": calculation["branch_count"],
+        "terminal_count": calculation["terminal_count"],
+        "branches": branch_results,
+        "terminals": [
+            {
+                "node": terminal["node"],
+                "airflow_m3_h": round(terminal["airflow_m3_h"], 3),
+                "branch_path": list(terminal["branch_path"]),
+                "total_pressure_drop_pa": round(terminal["total_pressure_drop_pa"], 4),
+            }
+            for terminal in calculation["terminals"]
+        ],
+        "critical_terminal": calculation["critical_terminal"],
+        "critical_path": list(calculation["critical_path"]),
+        "critical_path_pressure_drop_pa": round(
+            calculation["critical_path_pressure_drop_pa"], 4
+        ),
+        "continuity": [
+            {
+                "node": item["node"],
+                "incoming_airflow_m3_h": round(item["incoming_airflow_m3_h"], 3),
+                "outgoing_airflow_m3_h": round(item["outgoing_airflow_m3_h"], 3),
+                "terminal_demand_m3_h": round(item["terminal_demand_m3_h"], 3),
+                "continuity_residual_m3_h": round(item["continuity_residual_m3_h"], 9),
+            }
+            for item in calculation["continuity"]
+        ],
+        "max_abs_continuity_residual_m3_h": round(
+            calculation["max_abs_continuity_residual_m3_h"], 9
+        ),
+        "scope_note": calculation["scope_note"],
+    }
+
+
+def analyze_branch_flow_network(network: BranchFlowNetwork) -> dict:
+    return _format_branch_flow_network_calculation(
+        calculate_branch_flow_network(network)
+    )

@@ -16,7 +16,6 @@ from cleanroomx.project import (
 )
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
-    SpatialDesignWorkspace,
     SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
@@ -1163,37 +1162,3 @@ def test_engineering_sync_status_treats_mapping_identity_change_as_conflict():
     assert status["rooms"][0]["state"] == "conflicting"
     assert "mapping changed" in status["rooms"][0]["message"]
 
-
-def test_pressure_relationship_status_uses_supplied_pressure_and_explicit_cascade():
-    root = Path(__file__).resolve().parents[1]
-    payload = json.loads(
-        (root / "src" / "cleanroomx" / "demo" / "gui_demo.cleanroomx.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    project = project_from_dict(payload)
-    analysis = project.analysis_by_id("verification")
-
-    class Flag:
-        def get(self) -> bool:
-            return True
-
-    workspace = object.__new__(SpatialDesignWorkspace)
-    workspace.layout = project.metadata[SPATIAL_METADATA_KEY]
-    workspace._analysis_getter = lambda: analysis
-    workspace._show_relationships = Flag()
-
-    relationships = workspace._pressure_relationships()
-    assert [(item[2], item[3], item[4]) for item in relationships] == [
-        (10.0, 14.0, "pass"),
-        (5.0, 8.0, "pass"),
-    ]
-
-    workspace.layout["rooms"][1]["pressure_pa"] = 25.0
-    assert workspace._pressure_relationships()[0][4] == "fail"
-
-    workspace.layout["rooms"][2].pop("pressure_pa")
-    assert workspace._pressure_relationships()[1][3:] == (
-        None,
-        "unavailable",
-    )

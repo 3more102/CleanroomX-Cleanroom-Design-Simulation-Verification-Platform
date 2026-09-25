@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 import sys
 
-from .project import ProjectFormatError, atomic_write_text, load_project_document
+from .project import (
+    ProjectFormatError,
+    atomic_write_text,
+    load_project_document_with_revision,
+)
 from .project_validation import (
     markdown_project_validation_report,
     validate_project,
@@ -35,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     project_path = Path(args.project)
     try:
-        project = load_project_document(project_path)
+        project, _revision = load_project_document_with_revision(project_path)
         report = validate_project(project, base_dir=project_path.parent)
     except (OSError, ProjectFormatError, TypeError, ValueError) as exc:
         print(f"cleanroomx-project-validate: {exc}", file=sys.stderr)

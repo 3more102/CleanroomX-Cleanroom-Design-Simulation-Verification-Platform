@@ -447,6 +447,51 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     assert captured["parent"] is app.root
 
 
+def test_export_spatial_audit_json_writes_current_design(tmp_path, monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Workspace:
+        layout = {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 5,
+                    "width_m": 4,
+                    "height_m": 3,
+                    "pressure_pa": 25,
+                }
+            ],
+            "devices": [],
+        }
+
+    app.status_var = Status()
+    app.spatial_workspace = Workspace()
+    output = tmp_path / "spatial-audit.json"
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(output),
+    )
+
+    app.export_spatial_audit_json()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["schema"] == "cleanroomx.spatial_audit"
+    assert payload["summary"]["room_count"] == 1
+    assert payload["summary"]["total_floor_area_m2"] == 20.0
+    assert payload["summary"]["validation_status"] == "pass"
+    assert len(payload["design_sha256"]) == 64
+    assert "Exported spatial audit" in app.status_var.value
+
+
 def test_remove_analysis_invalidates_matching_result(monkeypatch):
     analysis = AnalysisDocument(
         id="a", name="A", kind="room_verification", input={"value": 1}

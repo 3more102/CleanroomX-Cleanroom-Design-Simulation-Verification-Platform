@@ -127,16 +127,17 @@ def normalize_layout(value: Any, *, issues: list[dict] | None = None) -> dict:
     for index, raw in enumerate(room_entries):
         name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
         raw_id = _identifier_text(raw.get("id"))
+        generated_base = _room_id(name)
         room_id, repair = _stable_identifier(
             raw_id,
             prefix="room",
             index=index,
             reserved=reserved_room_ids,
             used=used_room_ids,
-            generated_base=_room_id(name),
+            generated_base=generated_base,
         )
-        if raw_id:
-            room_reference_targets.setdefault(raw_id, []).append(room_id)
+        reference_key = raw_id or generated_base
+        room_reference_targets.setdefault(reference_key, []).append(room_id)
         if issues is not None and repair is not None:
             if repair == "duplicate":
                 issues.append(
@@ -232,8 +233,8 @@ def normalize_layout(value: Any, *, issues: list[dict] | None = None) -> dict:
                     "item_ids": [device_id, *referenced_rooms],
                     "message": (
                         f"Device '{str(raw.get('name') or device_type.upper())}' references "
-                        f"duplicated room id '{raw_room_id}'. It remains assigned to the first "
-                        "room with that original id; review the assignment."
+                        f"room identity '{raw_room_id}', which matched multiple source rooms "
+                        "before canonicalization. Review the assignment."
                     ),
                 }
             )

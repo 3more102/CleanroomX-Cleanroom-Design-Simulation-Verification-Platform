@@ -12,6 +12,7 @@ from cleanroomx.spatial import (
     normalize_layout,
     resize_room,
     room_clearance_dimensions,
+    room_overlap_conflicts,
     snap_room_translation,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
@@ -245,6 +246,8 @@ def test_spatial_layout_summary_reports_operator_metrics_and_unassigned_devices(
     assert summary["device_counts"]["ffu"] == 1
     assert summary["device_counts"]["sensor"] == 1
     assert summary["unassigned_device_count"] == 1
+    assert summary["room_overlap_count"] == 0
+    assert summary["room_overlap_area_m2"] == 0
     assert summary["extents_m"] == {"width": 11, "height": 5}
 
 
@@ -540,6 +543,96 @@ def test_resize_room_rejects_unknown_handle_without_mutation():
     assert resize_room(room, "center", 8.0, 8.0) is False
     assert room == before
 
+
+
+def test_room_overlap_conflicts_reports_exact_intersection_geometry():
+    rooms = [
+        {
+            "id": "process",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 5.0,
+            "width_m": 4.0,
+        },
+        {
+            "id": "ante",
+            "x_m": 3.5,
+            "y_m": 1.0,
+            "length_m": 3.0,
+            "width_m": 2.0,
+        },
+    ]
+
+    conflicts = room_overlap_conflicts(rooms)
+
+    assert conflicts == [
+        {
+            "room_a_id": "process",
+            "room_b_id": "ante",
+            "x_m": 3.5,
+            "y_m": 1.0,
+            "length_m": 1.5,
+            "width_m": 2.0,
+            "area_m2": 3.0,
+        }
+    ]
+
+
+def test_room_overlap_conflicts_ignores_edge_and_corner_touching():
+    rooms = [
+        {"id": "base", "x_m": 0.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "edge", "x_m": 4.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "corner", "x_m": 4.0, "y_m": 4.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    assert room_overlap_conflicts(rooms) == []
+
+
+def test_room_overlap_conflicts_returns_each_pair_once_in_stable_order():
+    rooms = [
+        {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "b", "x_m": 2.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "c", "x_m": 1.0, "y_m": 2.0, "length_m": 2.0, "width_m": 4.0},
+    ]
+
+    conflicts = room_overlap_conflicts(rooms)
+
+    assert [(item["room_a_id"], item["room_b_id"]) for item in conflicts] == [
+        ("a", "b"),
+        ("a", "c"),
+        ("b", "c"),
+    ]
+    assert [item["area_m2"] for item in conflicts] == [8.0, 4.0, 4.0]
+
+
+def test_spatial_layout_summary_counts_room_overlap_conflicts():
+    summary = spatial_layout_summary(
+        {
+            "rooms": [
+                {
+                    "id": "a",
+                    "name": "A",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                },
+                {
+                    "id": "b",
+                    "name": "B",
+                    "x_m": 3.0,
+                    "y_m": 2.0,
+                    "length_m": 3.0,
+                    "width_m": 3.0,
+                    "height_m": 3.0,
+                },
+            ]
+        }
+    )
+
+    assert summary["room_overlap_count"] == 1
+    assert summary["room_overlap_area_m2"] == 2.0
 
 
 def test_room_clearance_dimensions_reports_nearest_neighbor_on_each_side():

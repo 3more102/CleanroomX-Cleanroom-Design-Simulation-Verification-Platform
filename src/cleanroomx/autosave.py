@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .project import atomic_write_text
+from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
@@ -57,6 +57,16 @@ class RecoveryScanIssue:
 class RecoveryScan:
     candidates: tuple[RecoveryCandidate, ...]
     issues: tuple[RecoveryScanIssue, ...]
+
+
+@dataclass(frozen=True)
+class RecoveredProjectState:
+    project: ProjectDocument
+    ui_state: dict[str, Any]
+    source_path: Path | None
+    saved_at_utc: str
+    project_identity: str
+    artifact_path: Path
 
 
 @dataclass(frozen=True)
@@ -228,6 +238,57 @@ def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
             f"invalid recovery JSON at line {exc.lineno}, column {exc.colno}"
         ) from exc
     return _validate_recovery_payload(data)
+
+
+def restore_recovery_artifact(path: str | Path) -> RecoveredProjectState:
+    artifact_path = Path(path)
+    recovery = load_recovery_artifact(artifact_path)
+    snapshot = recovery["snapshot"]
+    project_data = snapshot.get("project")
+    if not isinstance(project_data, dict):
+        raise RecoveryFormatError("snapshot.project must be an object")
+    try:
+        project = project_from_dict(project_data)
+    except (TypeError, ValueError) as exc:
+        raise RecoveryFormatError(f"recovered project is invalid: {exc}") from exc
+
+    ui_state = snapshot.get("ui_state", {})
+    if not isinstance(ui_state, dict):
+        raise RecoveryFormatError("snapshot.ui_state must be an object")
+
+    source_path_text = recovery["source"].get("path")
+    source_path = Path(source_path_text) if source_path_text is not None else None
+    return RecoveredProjectState(
+        project=project,
+        ui_state=dict(ui_state),
+        source_path=source_path,
+        saved_at_utc=recovery["saved_at_utc"],
+        project_identity=recovery["project_identity"],
+        artifact_path=artifact_path,
+    )
+
+
+def discard_recovery_artifact(
+    path: str | Path,
+    *,
+    recovery_dir: str | Path | None = None,
+) -> None:
+    artifact_path = Path(path)
+    directory = (
+        Path(recovery_dir) if recovery_dir is not None else default_recovery_dir()
+    )
+    try:
+        resolved_artifact = artifact_path.resolve(strict=True)
+        resolved_directory = directory.resolve(strict=True)
+        resolved_artifact.relative_to(resolved_directory)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RecoveryFormatError(
+            "recovery artifact must be an existing file inside the recovery directory"
+        ) from exc
+    if not resolved_artifact.name.endswith(".recovery.json"):
+        raise RecoveryFormatError("refusing to discard a non-recovery file")
+    load_recovery_artifact(resolved_artifact)
+    resolved_artifact.unlink()
 
 
 def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:

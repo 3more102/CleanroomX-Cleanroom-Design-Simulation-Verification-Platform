@@ -10,6 +10,11 @@ from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .persistence_integrity import (
+    PersistenceIntegrityError,
+    attach_persistence_integrity,
+    verify_persistence_integrity,
+)
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -17,6 +22,33 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectIntegrityError(ProjectFormatError):
+    """Raised when a self-verifying project file fails its integrity check."""
+
+
+class ProjectSaveVerificationError(RuntimeError):
+    """Raised when bytes on disk do not match the project bytes just committed."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        expected_sha256: str,
+        current_sha256: str | None,
+        *,
+        detail: str | None = None,
+    ):
+        self.path = Path(path)
+        self.expected_sha256 = expected_sha256
+        self.current_sha256 = current_sha256
+        message = (
+            f"project save verification failed for {self.path}: "
+            "bytes on disk do not match the committed project"
+        )
+        if detail:
+            message += f" ({detail})"
+        super().__init__(message)
 
 
 class ProjectWriteConflictError(RuntimeError):
@@ -176,6 +208,11 @@ def project_from_dict(data: dict) -> ProjectDocument:
     if version < PROJECT_SCHEMA_VERSION:
         raise ProjectFormatError(f"unsupported legacy project schema version {version}")
 
+    try:
+        verify_persistence_integrity(data)
+    except PersistenceIntegrityError as exc:
+        raise ProjectIntegrityError(f"project integrity check failed: {exc}") from exc
+
     project_data = data.get("project")
     if not isinstance(project_data, dict):
         raise ProjectFormatError("project metadata block must be an object")
@@ -303,7 +340,7 @@ def load_project_document_with_revision(
 
 
 def _project_document_text(project: ProjectDocument) -> str:
-    data = project.to_dict()
+    data = attach_persistence_integrity(project.to_dict())
     project_from_dict(data)
     return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
@@ -345,9 +382,38 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return _atomic_write_text(path, text)
 
 
+def _verify_project_write(
+    path: str | Path,
+    text: str,
+) -> ProjectFileRevision:
+    """Verify that the exact serialized project committed to disk is readable."""
+    destination = _normalized_project_path(path)
+    expected_sha256 = sha256(text.encode("utf-8")).hexdigest()
+    revision = capture_project_file_revision(destination)
+    if not revision.exists or revision.sha256 != expected_sha256:
+        raise ProjectSaveVerificationError(
+            destination,
+            expected_sha256,
+            revision.sha256,
+        )
+    try:
+        load_project_document(destination)
+    except (OSError, ProjectFormatError) as exc:
+        raise ProjectSaveVerificationError(
+            destination,
+            expected_sha256,
+            revision.sha256,
+            detail=str(exc),
+        ) from exc
+    return revision
+
+
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    """Save a project atomically without an external-revision precondition."""
-    return atomic_write_text(path, _project_document_text(project))
+    """Save a project atomically and verify the committed bytes before returning."""
+    text = _project_document_text(project)
+    saved_path = atomic_write_text(path, text)
+    _verify_project_write(saved_path, text)
+    return saved_path
 
 
 def save_project_document_guarded(
@@ -371,4 +437,4 @@ def save_project_document_guarded(
         text,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    return saved_path, _verify_project_write(saved_path, text)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def _fmt(value: float) -> str:
     return f"{value:.6g}"
@@ -7,8 +9,8 @@ def _fmt(value: float) -> str:
 
 def _interval_text(item: dict) -> str:
     return (
-        f"{_fmt(item['nominal'])} {item['unit']} "
-        f"({_fmt(item['lower'])} to {_fmt(item['upper'])} {item['unit']})"
+        f"{_fmt(item['nominal'])} {markdown_text(item['unit'])} "
+        f"({_fmt(item['lower'])} to {_fmt(item['upper'])} {markdown_text(item['unit'])})"
     )
 
 
@@ -18,7 +20,7 @@ def markdown_psychrometric_uncertainty_report(result: dict) -> str:
     traceability = result["traceability"]
 
     lines = [
-        f"# CleanroomX Psychrometric Uncertainty Report — {result['analysis']}",
+        f"# CleanroomX Psychrometric Uncertainty Report — {markdown_text(result['analysis'])}",
         "",
         f"- Method: **{result['method']}**",
         f"- Unique evaluated corners: **{result['corner_count']}**",
@@ -50,7 +52,7 @@ def markdown_psychrometric_uncertainty_report(result: dict) -> str:
         item = properties[key]
         lines.append(
             f"| {label} | {_fmt(item['nominal'])} | {_fmt(item['lower'])} | "
-            f"{_fmt(item['upper'])} | {item['unit']} |"
+            f"{_fmt(item['upper'])} | {markdown_text(item['unit'])} |"
         )
 
     lines.extend(
@@ -74,10 +76,10 @@ def markdown_psychrometric_uncertainty_report(result: dict) -> str:
         source = provenance.get("source_name") or "missing"
         reference = provenance.get("reference") or "—"
         lines.append(
-            f"| {item['name']} | {_fmt(item['value'])} {item['unit']} | "
-            f"{_fmt(item['uncertainty_abs'])} {item['unit']} | "
-            f"{_fmt(item['lower'])} to {_fmt(item['upper'])} {item['unit']} | "
-            f"{source} | {reference} |"
+            f"| {markdown_text(item['name'])} | {_fmt(item['value'])} {markdown_text(item['unit'])} | "
+            f"{_fmt(item['uncertainty_abs'])} {markdown_text(item['unit'])} | "
+            f"{_fmt(item['lower'])} to {_fmt(item['upper'])} {markdown_text(item['unit'])} | "
+            f"{markdown_text(source)} | {markdown_text(reference)} |"
         )
 
     if traceability["missing_provenance"]:

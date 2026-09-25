@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_fan_duct_network_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Fan/Duct-Network Report — {result['study']}",
+        f"# CleanroomX Fan/Duct-Network Report — {markdown_text(result['study'])}",
         "",
-        f"- Fan curve: **{result['fan_curve']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
         f"- Status: **{result['status'].upper()}**",
         "- Reference system airflow: "
         f"**{result['reference_system_airflow_m3_h']} m³/h**",
         f"- Fixed pressure component: **{result['fixed_pressure_pa']} Pa**",
-        f"- Critical path: **{result['critical_path']}**",
+        f"- Critical path: **{markdown_text(result['critical_path'])}**",
         "- Critical-path quadratic resistance: "
         f"**{result['critical_path_quadratic_resistance_pa_per_m3_s_squared']} "
         "Pa/(m³/s)²**",
@@ -51,7 +53,7 @@ def markdown_fan_duct_network_report(result: dict) -> str:
     for path in result["paths"]:
         operating_drop = path.get("operating_pressure_drop_pa", "n/a")
         lines.append(
-            f"| {path['name']} | "
+            f"| {markdown_text(path['name'])} | "
             f"{path['quadratic_resistance_pa_per_m3_s_squared']} | "
             f"{path['reference_pressure_drop_pa']} | "
             f"{operating_drop} |"
@@ -61,7 +63,7 @@ def markdown_fan_duct_network_report(result: dict) -> str:
         lines.extend(
             [
                 "",
-                f"### {path['name']} sections",
+                f"### {markdown_text(path['name'])} sections",
                 "",
                 "| Section | Reference flow (m³/h) | Flow ratio | "
                 "R contribution (Pa/(m³/s)²) | Reference drop (Pa) | "
@@ -71,7 +73,7 @@ def markdown_fan_duct_network_report(result: dict) -> str:
         )
         for section in path["sections"]:
             lines.append(
-                f"| {section['name']} | "
+                f"| {markdown_text(section['name'])} | "
                 f"{section['reference_airflow_m3_h']} | "
                 f"{section['flow_ratio_to_system']} | "
                 f"{section['quadratic_resistance_pa_per_m3_s_squared']} | "

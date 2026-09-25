@@ -245,3 +245,22 @@ jobs:
               in dossier_report
           )
           PY
+
+  windows-launcher-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install checkout
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+      - name: Smoke PowerShell checkout launcher
+        shell: pwsh
+        run: .\start-cleanroomx.ps1 --check
+      - name: Smoke CMD checkout launcher
+        shell: cmd
+        run: start-cleanroomx.cmd --check

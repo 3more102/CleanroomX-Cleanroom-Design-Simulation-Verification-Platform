@@ -11,6 +11,14 @@ import tempfile
 from typing import Any, Callable
 
 from . import __version__
+from .plugins import (
+    PLUGIN_API_VERSION,
+    PluginOrigin,
+    discover_analysis_plugins,
+)
+
+
+BindingTarget = tuple[str, str] | Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -18,10 +26,13 @@ class AnalysisSpec:
     key: str
     title: str
     category: str
-    parser: tuple[str, str] | None
-    runner: tuple[str, str] | None
-    reporter: tuple[str, str] | None
+    parser: BindingTarget | None
+    runner: BindingTarget | None
+    reporter: BindingTarget | None
     description: str
+    source: str = "builtin"
+    plugin_api_version: int | None = None
+    plugin_origin: PluginOrigin | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +64,26 @@ class ExternalDependencyChangedError(RuntimeError):
             "analysis execution; the result was discarded. Stabilize the referenced "
             f"file(s) and run again: {detail}"
         )
+
+
+class AnalysisInputMutationError(RuntimeError):
+    """Raised when application execution mutates its isolated submitted-input snapshot."""
+
+    def __init__(self, kind: str, phase: str) -> None:
+        self.kind = kind
+        self.phase = phase
+        super().__init__(
+            f"{kind} mutated its submitted analysis input during {phase}; "
+            "the result was discarded to preserve deterministic execution provenance"
+        )
+
+
+@dataclass(frozen=True)
+class _PreparedAnalysisInput:
+    payload: dict
+    parsed: Any | None
+    base_dir: Path | None
+    input_sha256: str
 
 
 def _spec(key, title, category, parser, runner, reporter, description):
@@ -176,18 +207,56 @@ _ANALYSES = (
           "Aggregate existing CleanroomX analyses into an auditable engineering dossier."),
 )
 
+_BUILTIN_ANALYSES = _ANALYSES
+_PLUGIN_DISCOVERY = discover_analysis_plugins(
+    spec.key for spec in _BUILTIN_ANALYSES
+)
+_PLUGIN_ANALYSES = tuple(
+    AnalysisSpec(
+        key=item.plugin.key,
+        title=item.plugin.title,
+        category=item.plugin.category,
+        parser=item.plugin.parser,
+        runner=item.plugin.runner,
+        reporter=item.plugin.reporter,
+        description=item.plugin.description,
+        source="plugin",
+        plugin_api_version=item.plugin.api_version,
+        plugin_origin=item.origin,
+    )
+    for item in _PLUGIN_DISCOVERY.plugins
+)
+_ANALYSES = _BUILTIN_ANALYSES + _PLUGIN_ANALYSES
 ANALYSIS_SPECS = {item.key: item for item in _ANALYSES}
 
 
 def analysis_catalog() -> list[dict]:
-    return [
-        {"key": spec.key, "title": spec.title, "category": spec.category,
-         "description": spec.description}
-        for spec in _ANALYSES
-    ]
+    catalog: list[dict] = []
+    for spec in _ANALYSES:
+        item = {
+            "key": spec.key,
+            "title": spec.title,
+            "category": spec.category,
+            "description": spec.description,
+            "source": spec.source,
+        }
+        if spec.plugin_origin is not None:
+            item["plugin"] = {
+                "api_version": spec.plugin_api_version,
+                **spec.plugin_origin.to_dict(),
+            }
+        catalog.append(item)
+    return catalog
 
 
-def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
+def plugin_discovery_issues() -> tuple[dict, ...]:
+    """Return deterministic plugin discovery problems for diagnostics/UI."""
+    return tuple(issue.to_dict() for issue in _PLUGIN_DISCOVERY.issues)
+
+
+def _load_callable(target: BindingTarget) -> Callable[..., Any]:
+    if callable(target):
+        return target
     module_name, function_name = target
     module = import_module(f".{module_name}", __package__)
     return getattr(module, function_name)
@@ -213,7 +282,26 @@ def validate_application_registry() -> dict:
     callable_target_count = 0
     fallback_reporter_count = 0
     for spec in _ANALYSES:
+        if spec.source not in {"builtin", "plugin"}:
+            raise RuntimeError(
+                f"{spec.key} has unsupported implementation source {spec.source!r}"
+            )
+        if spec.source == "plugin":
+            if spec.plugin_api_version != PLUGIN_API_VERSION:
+                raise RuntimeError(
+                    f"{spec.key} plugin API version does not match "
+                    f"{PLUGIN_API_VERSION}"
+                )
+            if spec.plugin_origin is None:
+                raise RuntimeError(f"{spec.key} plugin origin metadata is missing")
+        elif spec.plugin_origin is not None or spec.plugin_api_version is not None:
+            raise RuntimeError(f"{spec.key} built-in analysis has plugin metadata")
+
         if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
+            if spec.source != "builtin":
+                raise RuntimeError(
+                    f"{spec.key} custom adapter cannot be replaced by a plugin"
+                )
             if spec.parser is not None or spec.runner is not None:
                 raise RuntimeError(
                     f"{spec.key} must use its registered custom application adapter"
@@ -233,24 +321,32 @@ def validate_application_registry() -> dict:
         ):
             if target is None:
                 continue
-            module_name, function_name = target
+            if callable(target):
+                target_label = getattr(target, "__qualname__", repr(target))
+            else:
+                module_name, function_name = target
+                target_label = f"{module_name}.{function_name}"
             try:
                 resolved = _load_callable(target)
             except Exception as exc:
                 raise RuntimeError(
-                    f"{spec.key} {role} binding cannot be resolved: "
-                    f"{module_name}.{function_name}"
+                    f"{spec.key} {role} binding cannot be resolved: {target_label}"
                 ) from exc
             if not callable(resolved):
                 raise RuntimeError(
-                    f"{spec.key} {role} binding is not callable: "
-                    f"{module_name}.{function_name}"
+                    f"{spec.key} {role} binding is not callable: {target_label}"
                 )
             callable_target_count += 1
 
+    issues = plugin_discovery_issues()
     return {
         "status": "ok",
         "analysis_count": len(_ANALYSES),
+        "builtin_analysis_count": len(_BUILTIN_ANALYSES),
+        "plugin_api_version": PLUGIN_API_VERSION,
+        "plugin_analysis_count": len(_PLUGIN_ANALYSES),
+        "plugin_issue_count": len(issues),
+        "plugin_issues": list(issues),
         "callable_target_count": callable_target_count,
         "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
         "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),
@@ -520,6 +616,7 @@ def rebase_analysis_file_references(
 
 
 _APPLICATION_INPUT_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+_APPLICATION_INPUT_EXECUTION_POLICY = "isolated-copy-single-parse-sha256-guard-v1"
 
 
 def _canonical_input_sha256(payload: dict) -> str:
@@ -531,6 +628,21 @@ def _canonical_input_sha256(payload: dict) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _assert_input_snapshot_unchanged(
+    kind: str,
+    payload: dict,
+    input_sha256: str,
+    *,
+    phase: str,
+) -> None:
+    try:
+        current_sha256 = _canonical_input_sha256(payload)
+    except (TypeError, ValueError) as exc:
+        raise AnalysisInputMutationError(kind, phase) from exc
+    if current_sha256 != input_sha256:
+        raise AnalysisInputMutationError(kind, phase)
 
 
 def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bool:
@@ -674,12 +786,26 @@ def _application_execution_provenance(
             }
         )
 
+    spec = ANALYSIS_SPECS[kind]
+    implementation = {
+        "source": spec.source,
+        "cleanroomx_version": __version__,
+    }
+    if spec.plugin_origin is not None:
+        implementation = {
+            "source": "plugin",
+            "plugin_api_version": spec.plugin_api_version,
+            **spec.plugin_origin.to_dict(),
+        }
+
     return {
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
+        "implementation": implementation,
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
+        "input_execution_policy": _APPLICATION_INPUT_EXECUTION_POLICY,
         "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
         "external_dependencies_stable": all(
@@ -761,21 +887,53 @@ def _validate_dossier(payload: dict, base_dir: Path | None) -> None:
                 "hvac_fan_operating_airflow consistency requires hvac_project"
             )
 
-def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
+def _prepare_analysis_input(
+    kind: str,
+    payload: dict,
+    *,
+    base_dir=None,
+) -> _PreparedAnalysisInput:
+    """Isolate, validate, and parse one exact submitted input revision."""
     if kind not in ANALYSIS_SPECS:
         raise ValueError(f"unsupported analysis kind: {kind}")
     if not isinstance(payload, dict):
         raise ValueError("analysis input must be a JSON object")
+
+    snapshot = copy.deepcopy(payload)
+    try:
+        input_sha256 = _canonical_input_sha256(snapshot)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "analysis input must contain only strict JSON values"
+        ) from exc
     base = Path(base_dir) if base_dir is not None else None
+    parsed: Any | None = None
+
     if kind == "consistency":
-        _validate_consistency(payload, base)
-        return
-    if kind == "dossier":
-        _validate_dossier(payload, base)
-        return
-    spec = ANALYSIS_SPECS[kind]
-    assert spec.parser is not None
-    _load_callable(spec.parser)(payload)
+        _validate_consistency(snapshot, base)
+    elif kind == "dossier":
+        _validate_dossier(snapshot, base)
+    else:
+        spec = ANALYSIS_SPECS[kind]
+        assert spec.parser is not None
+        parsed = _load_callable(spec.parser)(snapshot)
+
+    _assert_input_snapshot_unchanged(
+        kind,
+        snapshot,
+        input_sha256,
+        phase="input validation/parsing",
+    )
+    return _PreparedAnalysisInput(
+        payload=snapshot,
+        parsed=parsed,
+        base_dir=base,
+        input_sha256=input_sha256,
+    )
+
+
+def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
+    _prepare_analysis_input(kind, payload, base_dir=base_dir)
 
 
 def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
@@ -816,31 +974,45 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
-    validate_analysis_input(kind, payload, base_dir=base_dir)
-    input_sha256 = _canonical_input_sha256(payload)
+    prepared = _prepare_analysis_input(kind, payload, base_dir=base_dir)
     spec = ANALYSIS_SPECS[kind]
-    base = Path(base_dir) if base_dir is not None else None
-    dependencies_before = _capture_external_dependencies(kind, payload, base)
+    dependencies_before = _capture_external_dependencies(
+        kind,
+        prepared.payload,
+        prepared.base_dir,
+    )
 
     if kind == "consistency":
-        result = _run_consistency(payload, base)
+        result = _run_consistency(prepared.payload, prepared.base_dir)
     elif kind == "dossier":
-        result = _run_dossier(payload, base)
+        result = _run_dossier(prepared.payload, prepared.base_dir)
     else:
-        assert spec.parser is not None and spec.runner is not None
-        result = _load_callable(spec.runner)(_load_callable(spec.parser)(payload))
+        assert spec.runner is not None
+        result = _load_callable(spec.runner)(prepared.parsed)
 
+    _assert_input_snapshot_unchanged(
+        kind,
+        prepared.payload,
+        prepared.input_sha256,
+        phase="backend execution",
+    )
     normalized = _normalize_result(result)
     markdown = (
         _fallback_markdown(spec.title, normalized)
         if spec.reporter is None
-        else _load_callable(spec.reporter)(normalized)
+        else _load_callable(spec.reporter)(copy.deepcopy(normalized))
     )
-    dependencies_after = _capture_external_dependencies(kind, payload, base)
+    if not isinstance(markdown, str):
+        raise TypeError("analysis reporter must return Markdown text as a string")
+    dependencies_after = _capture_external_dependencies(
+        kind,
+        prepared.payload,
+        prepared.base_dir,
+    )
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(
         kind,
-        input_sha256,
+        prepared.input_sha256,
         dependencies_before,
         dependencies_after,
     )
@@ -863,6 +1035,13 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
             ]
         )
     diagnostics["application_execution_provenance"] = provenance
+    plot = build_plot_model(prepared.payload, normalized)
+    _assert_input_snapshot_unchanged(
+        kind,
+        prepared.payload,
+        prepared.input_sha256,
+        phase="result presentation",
+    )
     return AnalysisRun(
         kind=kind,
         title=spec.title,
@@ -870,7 +1049,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         result=normalized,
         markdown=markdown,
         diagnostics=diagnostics,
-        plot=build_plot_model(payload, normalized),
+        plot=plot,
     )
 
 

@@ -1736,62 +1736,54 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(self) -> list[tuple[dict, dict, dict]]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        relationships: list[tuple[dict, dict, dict]] = []
+        for item in self._overlay()["relationships"]:
+            high = room_by_id.get(str(item.get("higher_room_id") or ""))
+            low = room_by_id.get(str(item.get("lower_room_id") or ""))
             if high is None or low is None:
                 continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            relationships.append((high, low, delta_value))
+            relationships.append((high, low, item))
         return relationships
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        colors = {
+            "pass": "#15803d",
+            "fail": "#b91c1c",
+            "not_checked": "#64748b",
+            "unavailable": "#7c3aed",
+        }
+        for high, low, evidence in self._pressure_relationships():
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            status = str(evidence.get("status") or "unavailable")
+            color = colors.get(status, "#7c3aed")
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                arrow="last", width=2, dash=(6, 3), fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                actual = evidence.get("actual_delta_pa")
+                limit = evidence.get("limit_pa")
+                if actual is not None and limit is not None:
+                    label = f"Δ {actual:g} Pa / ≥ {limit:g} Pa · {status}"
+                elif limit is not None:
+                    label = f"≥ {limit:g} Pa · unresolved"
+                else:
+                    label = "pressure relationship · unresolved"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
 
@@ -1821,10 +1813,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
+        overlay = self._overlay()
+        pressure_by_id = {
+            item["room_id"]: item
+            for item in overlay["rooms"]
+            if item.get("room_id")
+        }
         pressures = [
-            room.get("pressure_pa")
-            for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
+            item["pressure_pa"]
+            for item in overlay["rooms"]
+            if item.get("pressure_pa") is not None
         ]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
@@ -1837,26 +1835,39 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["y_m"] + room["width_m"],
             )
             selected = self.selected == _Hit("room", room["id"])
+            hovered = self._hover == _Hit("room", room["id"])
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else (
+                    "#0891b2"
+                    if hovered
+                    else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                )
             )
+            pressure = pressure_by_id.get(room["id"], {})
+            pressure_value = pressure.get("pressure_pa")
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                _pressure_fill(pressure_value, pmin, pmax)
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                fill=fill,
+                outline=outline,
+                width=3 if selected or hovered else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
                 pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
+                    f"\n{pressure_value:g} Pa ({pressure.get('source', 'unavailable')})"
+                    if self._show_pressure.get() and pressure_value is not None
+                    else (
+                        "\nPressure unavailable"
+                        if self._show_pressure.get()
+                        else ""
+                    )
                 )
                 canvas.create_text(
                     (x0 + x1) / 2,
@@ -1905,18 +1916,25 @@ class SpatialDesignWorkspace(ttk.Frame):
                 "ffu": "F",
                 "equipment": "Q",
                 "sensor": "●",
+                "window": "W",
+                "opening": "O",
                 "transfer": "T",
             }
             for device in self.layout["devices"]:
                 x, y = self._world_to_canvas(device["x_m"], device["y_m"])
                 selected = self.selected == _Hit("device", device["id"])
+                hovered = self._hover == _Hit("device", device["id"])
                 device_outline = (
                     "#c0392b"
                     if selected
-                    else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                    else (
+                        "#0891b2"
+                        if hovered
+                        else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
+                    )
                 )
                 tag = f"device:{device['id']}"
-                if device["type"] in {"door", "transfer"}:
+                if device["type"] in {"door", "window", "opening", "transfer"}:
                     half = device.get("width_m", 0.9) / 2.0
                     side = device.get("wall_side", "south")
                     if side in {"north", "south"}:
@@ -1928,7 +1946,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(
                         *p0, *p1,
                         fill=device_outline,
-                        width=7 if selected else 5,
+                        width=7 if selected or hovered else 5,
                         tags=(tag, "device"),
                     )
                     if self._show_labels.get():
@@ -1938,11 +1956,11 @@ class SpatialDesignWorkspace(ttk.Frame):
                             tags=(tag, "device"),
                         )
                 else:
-                    radius = 9 if selected else 7
+                    radius = 9 if selected or hovered else 7
                     canvas.create_oval(
                         x - radius, y - radius, x + radius, y + radius,
                         fill="#ffffff", outline=device_outline,
-                        width=3 if selected else 2,
+                        width=3 if selected or hovered else 2,
                         tags=(tag, "device"),
                     )
                     canvas.create_text(
@@ -2002,10 +2020,16 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
+        overlay = self._overlay()
+        pressure_by_id = {
+            item["room_id"]: item
+            for item in overlay["rooms"]
+            if item.get("room_id")
+        }
         pressures = [
-            room.get("pressure_pa")
-            for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
+            item["pressure_pa"]
+            for item in overlay["rooms"]
+            if item.get("pressure_pa") is not None
         ]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
@@ -2038,8 +2062,10 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x1, y1, z1),
                 self._project_3d(x0, y1, z1),
             ]
+            pressure = pressure_by_id.get(room["id"], {})
+            pressure_value = pressure.get("pressure_pa")
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                _pressure_fill(pressure_value, pmin, pmax)
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
@@ -2069,7 +2095,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             if self._show_labels.get():
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=(
+                        room["name"]
+                        + (
+                            f"\n{pressure_value:g} Pa ({pressure.get('source', 'unavailable')})"
+                            if self._show_pressure.get() and pressure_value is not None
+                            else (
+                                "\nPressure unavailable"
+                                if self._show_pressure.get()
+                                else ""
+                            )
+                        )
+                    ),
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )
@@ -2090,7 +2127,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     if selected
                     else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
                 )
-                if device["type"] in {"door", "transfer"}:
+                if device["type"] in {"door", "window", "opening", "transfer"}:
                     bottom = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,
@@ -2245,6 +2282,15 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        current = self.canvas_2d.find_withtag("current")
+        hit = (
+            self._parse_hit(self.canvas_2d.gettags(current[0]))
+            if current
+            else None
+        )
+        if hit != self._hover:
+            self._hover = hit
+            self.redraw()
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

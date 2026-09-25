@@ -36,7 +36,12 @@ def _require_list(value: Any, path: str) -> list:
 def _require_string(value: Any, path: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise SpatialLayoutFormatError(f"{path} must be a non-empty string")
-    return value.strip()
+    stripped = value.strip()
+    if value != stripped:
+        raise SpatialLayoutFormatError(
+            f"{path} must not have leading or trailing whitespace"
+        )
+    return stripped
 
 
 def _require_number(value: Any, path: str, *, positive: bool = False) -> float:
@@ -115,7 +120,7 @@ def validate_spatial_layout_document(value: Any) -> None:
             )
         device_ids.add(device_id)
 
-        device_type = _require_string(device.get("type"), f"{path}.type").lower()
+        device_type = _require_string(device.get("type"), f"{path}.type")
         if device_type not in DEVICE_TYPES:
             raise SpatialLayoutFormatError(
                 f"{path}.type must be one of {', '.join(DEVICE_TYPES)}"

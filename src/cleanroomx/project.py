@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -186,6 +187,10 @@ def project_from_dict(data: dict) -> ProjectDocument:
     metadata = project_data.get("metadata", {})
     if not isinstance(metadata, dict):
         raise ProjectFormatError("project.metadata must be an object")
+    try:
+        validate_project_spatial_metadata(metadata)
+    except SpatialLayoutFormatError as exc:
+        raise ProjectFormatError(f"invalid project spatial metadata: {exc}") from exc
 
     raw_analyses = data.get("analyses", [])
     if not isinstance(raw_analyses, list):

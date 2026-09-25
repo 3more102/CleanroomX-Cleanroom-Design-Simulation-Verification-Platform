@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.102.1 final spatial UX closure — 2026-09-25
+
+- Resolves pressure overlays from the active mapped engineering room's current `observed_pressure_pa`, with persisted spatial pressure used only as an explicit fallback when engineering pressure is unavailable.
+- Evaluates explicit pressure-cascade relationships with the same exact `actual_delta >= min_delta_pa` rule used by project verification, displaying pass/fail/unavailable without inferring missing data.
+- Completes viewport navigation with true 3D fit-to-model, explicit 2D reset, and Shift-drag orbit while retaining rotate/tilt buttons, pan, zoom, selection, and camera reset.
+- Adds focused regressions for pressure-source precedence, exact cascade threshold behavior, 3D fit, 2D reset, and drag-orbit behavior; solver equations, numerical tolerances, engineering acceptance criteria, and project schema remain unchanged.
+
+
 ## v0.102.0 synchronized spatial closure — 2026-09-25
 
 - Publishes the completed Design 2D + 3D workspace from one canonical persisted spatial model while preserving the immutable `v0.101.0` tag.

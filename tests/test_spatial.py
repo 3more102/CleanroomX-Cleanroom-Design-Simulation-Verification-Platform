@@ -5,6 +5,7 @@ import math
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    SpatialDesignWorkspace,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -393,7 +394,7 @@ def test_normalize_layout_repairs_identity_deterministically_and_idempotently():
     assert codes.count("duplicate_room_id_repaired") == 1
     assert codes.count("duplicate_device_id_repaired") == 1
     assert codes.count("missing_device_id_repaired") == 1
-    assert codes.count("ambiguous_device_room_reference") == 2
+    assert codes.count("ambiguous_device_room_reference") == 3
 
 
 def test_normalize_layout_preserves_explicit_ids_reserved_for_later_entries():
@@ -513,3 +514,36 @@ def test_normalize_layout_preserves_legacy_name_derived_room_reference():
     assert "orphan_device_room" not in [
         issue["code"] for issue in validate_layout(normalized)
     ]
+
+
+def test_workspace_validation_retains_first_load_identity_warning():
+    class Value:
+        def __init__(self):
+            self.value = None
+
+        def set(self, value):
+            self.value = value
+
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = normalize_layout({})
+    workspace._normalization_issues = [
+        {
+            "code": "ambiguous_device_room_reference",
+            "severity": "warning",
+            "item_ids": ["sensor", "room", "room-2"],
+            "message": "Review the repaired room assignment.",
+        }
+    ]
+    workspace._validation_issues = []
+    workspace._validation_var = Value()
+    statuses: list[str] = []
+    workspace._status_setter = statuses.append
+    workspace.redraw = lambda: None
+
+    workspace.report_validation()
+
+    assert [issue["code"] for issue in workspace._validation_issues] == [
+        "ambiguous_device_room_reference"
+    ]
+    assert workspace._validation_var.value == "Spatial checks: 1 warning(s)"
+    assert statuses[-1] == "Spatial checks: Review the repaired room assignment."

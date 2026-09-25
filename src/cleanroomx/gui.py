@@ -515,8 +515,9 @@ class CleanroomXApp:
     def _base_dir(self) -> Path | None:
         if self.project_path is not None:
             return self.project_path.parent
-        if self._recovery_source_path is not None:
-            return self._recovery_source_path.parent
+        recovery_source = getattr(self, "_recovery_source_path", None)
+        if recovery_source is not None:
+            return recovery_source.parent
         return None
 
     def _project_state_signature(self) -> str:
@@ -632,7 +633,7 @@ class CleanroomXApp:
     def _autosave_source_path(self) -> Path | None:
         if self.project_path is not None:
             return self.project_path
-        return self._recovery_source_path
+        return getattr(self, "_recovery_source_path", None)
 
     def _autosave_tick(self) -> None:
         if not self._autosave_interval_ms:
@@ -996,7 +997,7 @@ class CleanroomXApp:
             return
         if self.project_path is not None:
             suffix = f" — {self.project_path.name}"
-        elif self._restored_recovery_artifact is not None:
+        elif getattr(self, "_restored_recovery_artifact", None) is not None:
             suffix = " — Recovered copy"
         else:
             suffix = ""

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import errno
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,30 @@ class ProjectWriteConflictError(RuntimeError):
         self.current = current
         super().__init__(
             f"project file changed on disk since it was opened or last saved: {self.path}"
+        )
+
+
+class AtomicWriteVerificationError(OSError):
+    """Raised when a replaced file does not match the bytes submitted for commit."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        expected_sha256: str,
+        actual_size: int,
+        actual_sha256: str,
+    ):
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.actual_size = actual_size
+        self.actual_sha256 = actual_sha256
+        super().__init__(
+            "atomic write verification failed for "
+            f"{self.path}: expected {expected_size} bytes/{expected_sha256}, "
+            f"found {actual_size} bytes/{actual_sha256}"
         )
 
 
@@ -235,6 +260,93 @@ def _normalized_project_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
+def _stable_file_sha256(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+    change_label: str = "file",
+) -> tuple[os.stat_result, str]:
+    """Hash one stable path revision, rejecting replacement or mutation during the read."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
+    source = Path(path)
+    last_error: OSError | None = None
+    for _attempt in range(attempts):
+        try:
+            before = source.stat()
+            digest = sha256()
+            with source.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            after = source.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+
+        if (
+            before.st_dev == after.st_dev
+            and before.st_ino == after.st_ino
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+        ):
+            return after, digest.hexdigest()
+        last_error = OSError(f"{change_label} changed while fingerprinting: {source}")
+
+    assert last_error is not None
+    raise last_error
+
+
+def _fsync_directory(directory: Path) -> bool:
+    """Durably commit directory-entry changes where the platform/filesystem supports it."""
+    if os.name == "nt":
+        return False
+
+    unsupported = {errno.EBADF, errno.EINVAL}
+    for name in ("ENOTSUP", "EOPNOTSUPP"):
+        value = getattr(errno, name, None)
+        if value is not None:
+            unsupported.add(value)
+
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(directory, flags)
+    except OSError as exc:
+        if exc.errno in unsupported:
+            return False
+        raise
+    try:
+        try:
+            os.fsync(descriptor)
+        except OSError as exc:
+            if exc.errno in unsupported:
+                return False
+            raise
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def _verify_atomic_write(
+    destination: Path,
+    *,
+    expected_size: int,
+    expected_sha256: str,
+) -> None:
+    stat, actual_sha256 = _stable_file_sha256(
+        destination,
+        change_label="written file",
+    )
+    if stat.st_size != expected_size or actual_sha256 != expected_sha256:
+        raise AtomicWriteVerificationError(
+            destination,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_size=stat.st_size,
+            actual_sha256=actual_sha256,
+        )
+
+
 def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     """Capture a stable content revision for optimistic project-save protection."""
     source = _normalized_project_path(path)
@@ -246,30 +358,18 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     if not source.is_file():
         raise OSError(f"project path is not a regular file: {source}")
 
-    last_error: OSError | None = None
-    for _attempt in range(3):
-        before = source.stat()
-        digest = sha256()
-        try:
-            with source.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            last_error = exc
-            continue
-        after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return ProjectFileRevision(
-                path=normalized,
-                exists=True,
-                size=after.st_size,
-                mtime_ns=after.st_mtime_ns,
-                sha256=digest.hexdigest(),
-            )
-        last_error = OSError(f"project file changed while fingerprinting: {source}")
-
-    assert last_error is not None
-    raise last_error
+    stat, digest = _stable_file_sha256(
+        source,
+        attempts=3,
+        change_label="project file",
+    )
+    return ProjectFileRevision(
+        path=normalized,
+        exists=True,
+        size=stat.st_size,
+        mtime_ns=stat.st_mtime_ns,
+        sha256=digest,
+    )
 
 
 def project_file_revision_matches(
@@ -318,21 +418,31 @@ def _atomic_write_text(
 ) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = text.encode("utf-8")
+    expected_sha256 = sha256(encoded).hexdigest()
 
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
+            mode="wb", prefix=f".{destination.name}.",
             suffix=".tmp", dir=destination.parent, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        temp_path = None
+
+        _fsync_directory(destination.parent)
+        _verify_atomic_write(
+            destination,
+            expected_size=len(encoded),
+            expected_sha256=expected_sha256,
+        )
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -341,7 +451,7 @@ def _atomic_write_text(
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    """Atomically commit UTF-8 text with fsync and post-replace content verification."""
     return _atomic_write_text(path, text)
 
 

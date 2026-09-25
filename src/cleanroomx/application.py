@@ -11,6 +11,14 @@ import tempfile
 from typing import Any, Callable
 
 from . import __version__
+from .plugins import (
+    PLUGIN_API_VERSION,
+    PluginOrigin,
+    discover_analysis_plugins,
+)
+
+
+BindingTarget = tuple[str, str] | Callable[..., Any]
 
 
 @dataclass(frozen=True)
@@ -18,10 +26,13 @@ class AnalysisSpec:
     key: str
     title: str
     category: str
-    parser: tuple[str, str] | None
-    runner: tuple[str, str] | None
-    reporter: tuple[str, str] | None
+    parser: BindingTarget | None
+    runner: BindingTarget | None
+    reporter: BindingTarget | None
     description: str
+    source: str = "builtin"
+    plugin_api_version: int | None = None
+    plugin_origin: PluginOrigin | None = None
 
 
 @dataclass(frozen=True)
@@ -176,18 +187,56 @@ _ANALYSES = (
           "Aggregate existing CleanroomX analyses into an auditable engineering dossier."),
 )
 
+_BUILTIN_ANALYSES = _ANALYSES
+_PLUGIN_DISCOVERY = discover_analysis_plugins(
+    spec.key for spec in _BUILTIN_ANALYSES
+)
+_PLUGIN_ANALYSES = tuple(
+    AnalysisSpec(
+        key=item.plugin.key,
+        title=item.plugin.title,
+        category=item.plugin.category,
+        parser=item.plugin.parser,
+        runner=item.plugin.runner,
+        reporter=item.plugin.reporter,
+        description=item.plugin.description,
+        source="plugin",
+        plugin_api_version=item.plugin.api_version,
+        plugin_origin=item.origin,
+    )
+    for item in _PLUGIN_DISCOVERY.plugins
+)
+_ANALYSES = _BUILTIN_ANALYSES + _PLUGIN_ANALYSES
 ANALYSIS_SPECS = {item.key: item for item in _ANALYSES}
 
 
 def analysis_catalog() -> list[dict]:
-    return [
-        {"key": spec.key, "title": spec.title, "category": spec.category,
-         "description": spec.description}
-        for spec in _ANALYSES
-    ]
+    catalog: list[dict] = []
+    for spec in _ANALYSES:
+        item = {
+            "key": spec.key,
+            "title": spec.title,
+            "category": spec.category,
+            "description": spec.description,
+            "source": spec.source,
+        }
+        if spec.plugin_origin is not None:
+            item["plugin"] = {
+                "api_version": spec.plugin_api_version,
+                **spec.plugin_origin.to_dict(),
+            }
+        catalog.append(item)
+    return catalog
 
 
-def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
+def plugin_discovery_issues() -> tuple[dict, ...]:
+    """Return deterministic plugin discovery problems for diagnostics/UI."""
+    return tuple(issue.to_dict() for issue in _PLUGIN_DISCOVERY.issues)
+
+
+def _load_callable(target: BindingTarget) -> Callable[..., Any]:
+    if callable(target):
+        return target
     module_name, function_name = target
     module = import_module(f".{module_name}", __package__)
     return getattr(module, function_name)
@@ -213,7 +262,26 @@ def validate_application_registry() -> dict:
     callable_target_count = 0
     fallback_reporter_count = 0
     for spec in _ANALYSES:
+        if spec.source not in {"builtin", "plugin"}:
+            raise RuntimeError(
+                f"{spec.key} has unsupported implementation source {spec.source!r}"
+            )
+        if spec.source == "plugin":
+            if spec.plugin_api_version != PLUGIN_API_VERSION:
+                raise RuntimeError(
+                    f"{spec.key} plugin API version does not match "
+                    f"{PLUGIN_API_VERSION}"
+                )
+            if spec.plugin_origin is None:
+                raise RuntimeError(f"{spec.key} plugin origin metadata is missing")
+        elif spec.plugin_origin is not None or spec.plugin_api_version is not None:
+            raise RuntimeError(f"{spec.key} built-in analysis has plugin metadata")
+
         if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
+            if spec.source != "builtin":
+                raise RuntimeError(
+                    f"{spec.key} custom adapter cannot be replaced by a plugin"
+                )
             if spec.parser is not None or spec.runner is not None:
                 raise RuntimeError(
                     f"{spec.key} must use its registered custom application adapter"
@@ -233,24 +301,32 @@ def validate_application_registry() -> dict:
         ):
             if target is None:
                 continue
-            module_name, function_name = target
+            if callable(target):
+                target_label = getattr(target, "__qualname__", repr(target))
+            else:
+                module_name, function_name = target
+                target_label = f"{module_name}.{function_name}"
             try:
                 resolved = _load_callable(target)
             except Exception as exc:
                 raise RuntimeError(
-                    f"{spec.key} {role} binding cannot be resolved: "
-                    f"{module_name}.{function_name}"
+                    f"{spec.key} {role} binding cannot be resolved: {target_label}"
                 ) from exc
             if not callable(resolved):
                 raise RuntimeError(
-                    f"{spec.key} {role} binding is not callable: "
-                    f"{module_name}.{function_name}"
+                    f"{spec.key} {role} binding is not callable: {target_label}"
                 )
             callable_target_count += 1
 
+    issues = plugin_discovery_issues()
     return {
         "status": "ok",
         "analysis_count": len(_ANALYSES),
+        "builtin_analysis_count": len(_BUILTIN_ANALYSES),
+        "plugin_api_version": PLUGIN_API_VERSION,
+        "plugin_analysis_count": len(_PLUGIN_ANALYSES),
+        "plugin_issue_count": len(issues),
+        "plugin_issues": list(issues),
         "callable_target_count": callable_target_count,
         "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
         "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),
@@ -674,11 +750,24 @@ def _application_execution_provenance(
             }
         )
 
+    spec = ANALYSIS_SPECS[kind]
+    implementation = {
+        "source": spec.source,
+        "cleanroomx_version": __version__,
+    }
+    if spec.plugin_origin is not None:
+        implementation = {
+            "source": "plugin",
+            "plugin_api_version": spec.plugin_api_version,
+            **spec.plugin_origin.to_dict(),
+        }
+
     return {
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
+        "implementation": implementation,
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
         "input_sha256": input_sha256,
         "external_dependency_count": len(dependencies),
@@ -775,7 +864,7 @@ def validate_analysis_input(kind: str, payload: dict, *, base_dir=None) -> None:
         return
     spec = ANALYSIS_SPECS[kind]
     assert spec.parser is not None
-    _load_callable(spec.parser)(payload)
+    _load_callable(spec.parser)(copy.deepcopy(payload))
 
 
 def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
@@ -828,14 +917,17 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         result = _run_dossier(payload, base)
     else:
         assert spec.parser is not None and spec.runner is not None
-        result = _load_callable(spec.runner)(_load_callable(spec.parser)(payload))
+        parsed = _load_callable(spec.parser)(copy.deepcopy(payload))
+        result = _load_callable(spec.runner)(parsed)
 
     normalized = _normalize_result(result)
     markdown = (
         _fallback_markdown(spec.title, normalized)
         if spec.reporter is None
-        else _load_callable(spec.reporter)(normalized)
+        else _load_callable(spec.reporter)(copy.deepcopy(normalized))
     )
+    if not isinstance(markdown, str):
+        raise TypeError("analysis reporter must return Markdown text as a string")
     dependencies_after = _capture_external_dependencies(kind, payload, base)
     diagnostics = diagnostic_summary(normalized)
     provenance = _application_execution_provenance(

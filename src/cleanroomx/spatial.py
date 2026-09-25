@@ -3,18 +3,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 import copy
 import math
-import uuid
 from typing import Any, Callable
 
 import tkinter as tk
 from tkinter import ttk
 
 from .spatial_history import SpatialEditHistory, SpatialHistoryState
-
-
-SPATIAL_METADATA_KEY = "spatial_layout"
-SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+from .spatial_schema import (
+    DEVICE_TYPES,
+    SPATIAL_LAYOUT_VERSION,
+    SPATIAL_METADATA_KEY,
+    allocate_unique_identifier,
+    migrate_spatial_layout,
+    preferred_device_id,
+    preferred_room_id,
+)
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -31,8 +34,7 @@ def _positive(value: Any, default: float) -> float:
 
 
 def _room_id(name: str) -> str:
-    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return preferred_room_id(name)
 
 
 def empty_layout() -> dict:
@@ -55,33 +57,35 @@ def empty_layout() -> dict:
 
 
 def normalize_layout(value: Any) -> dict:
-    source = value if isinstance(value, dict) else {}
-    result = empty_layout()
+    source = migrate_spatial_layout(value, strict=False)
+    defaults = empty_layout()
+    result = copy.deepcopy(source)
+    result["version"] = SPATIAL_LAYOUT_VERSION
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
 
     rooms: list[dict] = []
-    used_ids: set[str] = set()
     raw_rooms = source.get("rooms", [])
     if isinstance(raw_rooms, list):
         for index, raw in enumerate(raw_rooms):
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
-            room = {
-                "id": room_id,
-                "name": name,
-                "x_m": _finite_number(raw.get("x_m"), 0.0),
-                "y_m": _finite_number(raw.get("y_m"), 0.0),
-                "length_m": _positive(raw.get("length_m"), 4.0),
-                "width_m": _positive(raw.get("width_m"), 4.0),
-                "height_m": _positive(raw.get("height_m"), 3.0),
-            }
+            room = copy.deepcopy(raw)
+            room.update(
+                {
+                    "id": str(raw["id"]),
+                    "name": name,
+                    "x_m": _finite_number(raw.get("x_m"), 0.0),
+                    "y_m": _finite_number(raw.get("y_m"), 0.0),
+                    "length_m": _positive(raw.get("length_m"), 4.0),
+                    "width_m": _positive(raw.get("width_m"), 4.0),
+                    "height_m": _positive(raw.get("height_m"), 3.0),
+                }
+            )
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+            else:
+                room.pop("pressure_pa", None)
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -94,10 +98,10 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
-            devices.append(
+            device = copy.deepcopy(raw)
+            device.update(
                 {
-                    "id": device_id,
+                    "id": str(raw["id"]),
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
                     "room_id": raw.get("room_id"),
@@ -106,24 +110,46 @@ def normalize_layout(value: Any) -> dict:
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
                 }
             )
+            devices.append(device)
     result["devices"] = devices
 
-    view = source.get("view", {})
-    if isinstance(view, dict):
-        result["view"].update(
-            {
-                "zoom_2d": max(0.2, min(8.0, _positive(view.get("zoom_2d"), 1.0))),
-                "pan_x": _finite_number(view.get("pan_x"), 0.0),
-                "pan_y": _finite_number(view.get("pan_y"), 0.0),
-                "azimuth_deg": _finite_number(view.get("azimuth_deg"), 35.0),
-                "elevation_deg": max(5.0, min(75.0, _finite_number(view.get("elevation_deg"), 28.0))),
-                "zoom_3d": max(0.2, min(8.0, _positive(view.get("zoom_3d"), 1.0))),
-                "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
-                "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),
-            }
-        )
+    raw_view = source.get("view", {})
+    view = copy.deepcopy(raw_view) if isinstance(raw_view, dict) else {}
+    view_defaults = defaults["view"]
+    view.update(
+        {
+            "zoom_2d": max(
+                0.2,
+                min(8.0, _positive(view.get("zoom_2d"), view_defaults["zoom_2d"])),
+            ),
+            "pan_x": _finite_number(view.get("pan_x"), view_defaults["pan_x"]),
+            "pan_y": _finite_number(view.get("pan_y"), view_defaults["pan_y"]),
+            "azimuth_deg": _finite_number(
+                view.get("azimuth_deg"), view_defaults["azimuth_deg"]
+            ),
+            "elevation_deg": max(
+                5.0,
+                min(
+                    75.0,
+                    _finite_number(
+                        view.get("elevation_deg"), view_defaults["elevation_deg"]
+                    ),
+                ),
+            ),
+            "zoom_3d": max(
+                0.2,
+                min(8.0, _positive(view.get("zoom_3d"), view_defaults["zoom_3d"])),
+            ),
+            "pan_3d_x": _finite_number(
+                view.get("pan_3d_x"), view_defaults["pan_3d_x"]
+            ),
+            "pan_3d_y": _finite_number(
+                view.get("pan_3d_y"), view_defaults["pan_3d_y"]
+            ),
+        }
+    )
+    result["view"] = view
     return result
-
 
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
@@ -160,7 +186,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
-    return layout
+    return normalize_layout(layout)
 
 
 def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
@@ -716,9 +742,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             default=0.0,
         )
         index = len(self.layout["rooms"]) + 1
+        room_name = f"Room {index}"
+        room_id = allocate_unique_identifier(
+            preferred_room_id(room_name),
+            {str(item["id"]) for item in self.layout["rooms"]},
+        )
         room = {
-            "id": f"room-{uuid.uuid4().hex[:8]}",
-            "name": f"Room {index}",
+            "id": room_id,
+            "name": room_name,
             "x_m": x + (1.0 if self.layout["rooms"] else 0.0),
             "y_m": 0.0,
             "length_m": 4.0,
@@ -749,8 +780,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         else:
             x = y = z = 0.0
             room_id = None
+        device_id = allocate_unique_identifier(
+            preferred_device_id(device_type, device_type.upper()),
+            {str(item["id"]) for item in self.layout["devices"]},
+        )
         device = {
-            "id": f"device-{uuid.uuid4().hex[:8]}",
+            "id": device_id,
             "type": device_type,
             "name": device_type.upper(),
             "room_id": room_id,

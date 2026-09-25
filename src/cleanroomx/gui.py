@@ -2660,11 +2660,26 @@ def main(argv: list[str] | None = None) -> int:
             messagebox.showerror("Open failed", str(exc), parent=root)
 
     if args.smoke:
-        if project_path and app.project.analyses:
-            run = app.smoke_run_active()
-            json.dumps(run.to_dict(), allow_nan=False)
-        root.update_idletasks()
-        root.update()
+        try:
+            if project_path and app.project.analyses:
+                run = app.smoke_run_active()
+                json.dumps(run.to_dict(), allow_nan=False)
+            root.update_idletasks()
+            root.update()
+            if args.demo:
+                layout = app.spatial_workspace.layout
+                if len(layout.get("rooms", [])) < 3:
+                    raise RuntimeError("packaged demo spatial layout did not load")
+                if not app.spatial_workspace.canvas_2d.find_withtag("room"):
+                    raise RuntimeError("2D layout did not render demo rooms")
+                if not app.spatial_workspace.canvas_3d.find_withtag("room3d"):
+                    raise RuntimeError("3D viewer did not render demo rooms")
+                if not app.spatial_workspace.canvas_2d.find_withtag("pressure_relationship"):
+                    raise RuntimeError("pressure-cascade relationships did not render")
+        except Exception as exc:
+            root.destroy()
+            print(f"CleanroomX GUI smoke: FAIL — {exc}")
+            return 2
         root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0

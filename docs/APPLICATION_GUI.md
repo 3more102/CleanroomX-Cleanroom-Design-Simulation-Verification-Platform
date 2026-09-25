@@ -56,6 +56,18 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+## Saved project versions
+
+Before an existing valid project is explicitly overwritten, CleanroomX preserves the exact previous UTF-8 project bytes in a separate saved-version store. The default history limit is 10 validated generations per normalized project path. Set `CLEANROOMX_SAVED_REVISIONS_DIR` only when an installation needs a controlled alternate state location.
+
+Saved-version archival participates in the same optimistic revision contract as external-change write protection. The bytes being archived must still match the expected project revision captured on open or the previous successful save. If they do not, CleanroomX reports the normal project-write conflict and does not create a misleading archive. After archival, the guarded save still performs its existing checks before serialization/replacement, so an external write that races after archival remains protected.
+
+Each artifact records exact prior project text, normalized original path, UTC archive time, CleanroomX version, byte size, and SHA-256. Listing and restore verify artifact schema, timestamp, byte size, checksum, strict JSON, and embedded project validity. Corrupt or unreadable artifacts are reported and preserved; bounded rotation deletes only validated old generations.
+
+If the pre-image cannot be validated or archived, the explicit overwrite is aborted. A brand-new destination has no pre-image to archive. **File > Saved Versions...** lists versions for the current saved project. **Restore as Unsaved Copy** never rewrites the current file: it opens the selected generation with the original path retained only for relative-reference context, and the first save must use a different destination. The historical artifact remains available after restore.
+
+Saved-version history complements recovery autosave: autosave protects dirty work that was never explicitly committed, while saved versions protect prior valid on-disk states from later explicit overwrites.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

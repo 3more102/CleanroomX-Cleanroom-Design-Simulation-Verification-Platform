@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.101.0 Release 2 closure — 2026-09-25
+
+- Assigns a new package/release identity to the completed Release 2 tree instead of moving or rewriting the already-published `v0.100.0` tag.
+- Carries forward the CI-green Release 2 consolidation: durable project persistence/recovery/history, bounded undo-redo, plugin API v1, immutable analysis evidence and run history, dependency freshness, verified portable bundles/reports, precision-safe composition, explicit verification completeness, Markdown boundary hardening, and foundational finite-number validation.
+- Synchronizes package/runtime/demo/test/CI version metadata at `0.101.0`; the closure commit itself changes no solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantics, project schema version, or engineering acceptance criterion.
+- Requires the normal Python 3.11/3.12/3.13 full CI matrix, installed-wheel checks, GUI/CLI smoke coverage, and Release 2 gates before tagging.
+
 ## Unreleased verification outcome integrity — 2026-09-25
 
 - Adds explicit aggregate `status` and `complete` fields to room and multi-room verification reports so `not_checked` evidence is no longer surfaced by the application as an ordinary pass.

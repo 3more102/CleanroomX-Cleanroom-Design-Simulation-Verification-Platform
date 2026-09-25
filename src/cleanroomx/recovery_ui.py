@@ -21,9 +21,18 @@ _RELATION_LABELS = {
     "source_newer": "Original is newer",
 }
 
+_INTEGRITY_LABELS = {
+    "verified": "Verified SHA-256",
+    "legacy_unverified": "Legacy / unverified",
+}
+
 
 def recovery_relation_label(candidate: RecoveryCandidate) -> str:
     return _RELATION_LABELS.get(candidate.source_relation, candidate.source_relation)
+
+
+def recovery_integrity_label(candidate: RecoveryCandidate) -> str:
+    return _INTEGRITY_LABELS.get(candidate.integrity_status, candidate.integrity_status)
 
 
 def recovery_safety_message(candidate: RecoveryCandidate) -> str:
@@ -60,6 +69,7 @@ class RecoveryInspection:
     saved_at_utc: str
     source_path: str
     source_status: str
+    integrity_status: str
     application_version: str
     analysis_count: int
     analysis_names: tuple[str, ...]
@@ -110,6 +120,7 @@ def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
         saved_at_utc=candidate.saved_at_utc,
         source_path=source_path,
         source_status=recovery_relation_label(candidate),
+        integrity_status=recovery_integrity_label(candidate),
         application_version=str(payload.get("application_version", "unknown")),
         analysis_count=len(analyses),
         analysis_names=tuple(names),
@@ -149,6 +160,7 @@ class RecoveryInspectDialog(tk.Toplevel):
             ("Project identity", inspection.project_identity),
             ("Recovered at", inspection.saved_at_utc),
             ("Source status", inspection.source_status),
+            ("Recovery integrity", inspection.integrity_status),
             ("Original project", inspection.source_path),
             ("CleanroomX version", inspection.application_version),
             ("Analyses", str(inspection.analysis_count)),
@@ -234,18 +246,20 @@ class RecoveryCenter(tk.Toplevel):
         frame.pack(fill="both", expand=True, padx=12, pady=8)
         self.tree = ttk.Treeview(
             frame,
-            columns=("time", "state", "source"),
+            columns=("time", "state", "integrity", "source"),
             show="tree headings",
             selectmode="browse",
         )
         self.tree.heading("#0", text="Project")
         self.tree.heading("time", text="Recovery timestamp (UTC)")
         self.tree.heading("state", text="Original project")
+        self.tree.heading("integrity", text="Integrity")
         self.tree.heading("source", text="Source path")
         self.tree.column("#0", width=210, stretch=False)
         self.tree.column("time", width=205, stretch=False)
         self.tree.column("state", width=150, stretch=False)
-        self.tree.column("source", width=360, stretch=True)
+        self.tree.column("integrity", width=135, stretch=False)
+        self.tree.column("source", width=300, stretch=True)
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -260,6 +274,7 @@ class RecoveryCenter(tk.Toplevel):
                 values=(
                     candidate.saved_at_utc,
                     recovery_relation_label(candidate),
+                    recovery_integrity_label(candidate),
                     str(candidate.source_path) if candidate.source_path else "Not yet saved",
                 ),
             )

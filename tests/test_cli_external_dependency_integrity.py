@@ -23,6 +23,8 @@ def test_consistency_cli_uses_revision_bound_execution(monkeypatch, tmp_path, ca
     verification = _copy_example(tmp_path, "facility_project.json")
     hvac = _copy_example(tmp_path, "consistency_hvac_demo.json")
     output = tmp_path / "consistency.json"
+    previous_output = b'{"status": "previous"}\n'
+    output.write_bytes(previous_output)
 
     original_run = application_module._run_consistency
 
@@ -54,7 +56,7 @@ def test_consistency_cli_uses_revision_bound_execution(monkeypatch, tmp_path, ca
     assert captured.out == ""
     assert "result was discarded" in captured.err
     assert str(verification) in captured.err
-    assert not output.exists()
+    assert output.read_bytes() == previous_output
 
 
 def test_dossier_cli_uses_revision_bound_execution(monkeypatch, tmp_path, capsys):
@@ -70,6 +72,8 @@ def test_dossier_cli_uses_revision_bound_execution(monkeypatch, tmp_path, capsys
         encoding="utf-8",
     )
     output = tmp_path / "dossier-output.json"
+    previous_output = b'{"dossier": "previous"}\n'
+    output.write_bytes(previous_output)
 
     original_run = application_module._run_dossier
 
@@ -100,7 +104,7 @@ def test_dossier_cli_uses_revision_bound_execution(monkeypatch, tmp_path, capsys
     assert captured.out == ""
     assert "result was discarded" in captured.err
     assert verification.name in captured.err
-    assert not output.exists()
+    assert output.read_bytes() == previous_output
 
 
 def test_consistency_cli_preserves_json_result_contract(monkeypatch, tmp_path, capsys):

@@ -509,14 +509,22 @@ class AutosaveManager:
             allow_nan=False,
         ) + "\n"
         atomic_write_text(destination, text)
-        expected_sha256 = sha256(text.encode("utf-8")).hexdigest()
-        actual_sha256 = sha256(destination.read_bytes()).hexdigest()
-        if actual_sha256 != expected_sha256:
-            raise RecoveryFormatError(
-                "recovery write verification failed: bytes on disk do not match "
-                "the committed recovery artifact"
-            )
-        load_recovery_artifact(destination)
+        try:
+            expected_sha256 = sha256(text.encode("utf-8")).hexdigest()
+            actual_sha256 = sha256(destination.read_bytes()).hexdigest()
+            if actual_sha256 != expected_sha256:
+                raise RecoveryFormatError(
+                    "recovery write verification failed: bytes on disk do not match "
+                    "the committed recovery artifact"
+                )
+            load_recovery_artifact(destination)
+        except (OSError, RecoveryFormatError):
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass  # Best-effort cleanup; scanner will report any surviving bad artifact.
+            raise
+
         self._rotate_history(request.project_identity)
         return destination
 

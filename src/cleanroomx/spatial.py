@@ -12,7 +12,6 @@ from tkinter import messagebox, simpledialog, ttk
 from .spatial_engineering import (
     create_engineering_ref,
     engineering_sync_report,
-    establish_sync_baselines,
     pressure_overlay,
     refresh_sync_baselines,
     synchronize_analysis_to_layout as _synchronize_analysis_to_layout,
@@ -345,9 +344,11 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
 
     raw = metadata.get(SPATIAL_METADATA_KEY)
     if isinstance(raw, dict):
+        # Preserve synchronization provenance exactly as persisted. Merely opening a
+        # layout whose geometry happens to match an analysis must not manufacture a
+        # "last synchronized" baseline; without explicit provenance, later divergence
+        # is correctly reported as conflicting rather than guessing which side is newer.
         normalized = normalize_layout(raw)
-        if analysis is not None:
-            establish_sync_baselines(normalized, analysis)
         metadata[SPATIAL_METADATA_KEY] = normalized
         return normalized
 
@@ -432,7 +433,10 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
         for room in raw_rooms
         if isinstance(room, dict) and str(room.get("name") or "").strip()
     }
+    # Resolve every mapping before mutating engineering data. A bad link discovered
+    # late in the layout must never leave an earlier engineering room partially updated.
     used_source_links: set[str] = set()
+    mapped_pairs: list[tuple[dict, dict]] = []
     for source in rooms:
         source_name = str(source.get("analysis_room_name") or source["name"]).strip()
         source_key = source_name.casefold()
@@ -449,6 +453,9 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
                     f"Linked analysis room {source_name!r} does not exist in the active analysis."
                 )
             continue
+        mapped_pairs.append((source, target))
+
+    for source, target in mapped_pairs:
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:
                 target[key] = source[key]

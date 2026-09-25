@@ -1,11 +1,13 @@
 name: Publish CleanroomX v0.101.0
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - .github/workflows/publish-v0101-release.yml
 
 permissions:
   contents: write
@@ -13,15 +15,17 @@ permissions:
 jobs:
   publish:
     name: Publish immutable v0.101.0 release
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     env:
       TAG: v0.101.0
-      TARGET_SHA: ${{ github.sha }}
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Check out repository history
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Verify validated release baseline
         shell: bash
@@ -41,9 +45,7 @@ jobs:
           set -euo pipefail
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
-            test "${existing_sha}" = "${TARGET_SHA}"
-            echo "Release ${TAG} already exists at the validated commit; nothing to do."
+            echo "Release ${TAG} already exists; immutable release is unchanged."
             exit 0
           fi
 

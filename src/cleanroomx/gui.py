@@ -36,6 +36,7 @@ from .project import (
     atomic_write_text,
     load_project_document_with_fingerprint,
     new_project,
+    save_project_document,
     save_project_document_with_fingerprint,
 )
 from .recovery_ui import RecoveryCenter

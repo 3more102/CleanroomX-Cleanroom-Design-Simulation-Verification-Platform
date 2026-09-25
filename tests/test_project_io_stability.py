@@ -45,6 +45,39 @@ def test_stable_project_load_binds_parsed_bytes_to_reported_revision(
     assert revision == project_module.capture_project_file_revision(path)
 
 
+
+def test_stable_project_load_retries_transient_malformed_read(tmp_path, monkeypatch):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Stable"),
+    )
+
+    path_type = type(path)
+    original_read_bytes = path_type.read_bytes
+    injected_reads = {"count": 0}
+
+    def one_torn_read(self):
+        if self.resolve(strict=False) == path.resolve(strict=False) and not injected_reads["count"]:
+            injected_reads["count"] += 1
+            return b'{"schema":"cleanroomx.project"'
+        return original_read_bytes(self)
+
+    monkeypatch.setattr(path_type, "read_bytes", one_torn_read)
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert injected_reads["count"] == 1
+    assert project.name == "Stable"
+    assert revision == project_module.capture_project_file_revision(path)
+
+
+def test_stable_project_load_rejects_stably_malformed_project(tmp_path):
+    path = tmp_path / "malformed.cleanroomx.json"
+    path.write_bytes(b'{"schema":"cleanroomx.project"')
+
+    with pytest.raises(project_module.ProjectFormatError, match="invalid JSON"):
+        load_project_document_with_revision(path)
+
 def test_atomic_write_uses_deterministic_utf8_bytes_and_fsyncs_directory(
     tmp_path, monkeypatch
 ):

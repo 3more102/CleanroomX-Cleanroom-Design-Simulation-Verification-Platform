@@ -108,7 +108,9 @@ Existing projects remain schema-version-1 compatible because the spatial documen
 
 ## Results and plots
 
-All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256 and byte-size evidence for external dependencies. Diagnostics exposes the evidence and **Export Run Bundle JSON** preserves it with result, report, diagnostics, and plot data.
+All backend outputs are normalized to strict JSON with non-finite values rejected. Successful runs record canonical application-input SHA-256 provenance; consistency/dossier runs also capture before/after SHA-256, byte-size, and nanosecond modification-time evidence for external dependencies. Diagnostics exposes this evidence and **Export Run Bundle JSON** preserves the completed run data.
+
+For `consistency` and `dossier`, those external dependencies are guarded as engineering run inputs rather than treated as advisory provenance only. CleanroomX fingerprints each referenced file from a stable read before execution and again after result/report generation. If a referenced file changes, disappears, or remains unstable while being fingerprinted, the run fails with an actionable error and the result is discarded. Stabilize the source files and run again. This prevents the desktop from presenting a result assembled while its external engineering inputs were changing; it does not lock files against other programs.
 
 When a supplied fan curve and operating point are available, the application builds a lightweight plot model and renders it with Tk canvas primitives. Fan/system plots reuse backend-computed system-pressure samples, label the two series, and do not reimplement system-curve equations in the GUI.
 

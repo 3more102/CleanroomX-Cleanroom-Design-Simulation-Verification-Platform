@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.application as application_module
 from cleanroomx.application import (
     ANALYSIS_SPECS,
+    ExternalDependencyChangedError,
     analysis_catalog,
     application_info,
     rebase_analysis_file_references,
@@ -357,3 +359,214 @@ def test_every_catalog_workflow_runs_end_to_end_through_application_service(
 def test_application_end_to_end_matrix_covers_entire_catalog():
     covered = {kind for kind, _ in _APPLICATION_EXAMPLES} | {"consistency"}
     assert covered == set(ANALYSIS_SPECS)
+
+
+def _copy_example(tmp_path: Path, name: str) -> None:
+    (tmp_path / name).write_bytes((ROOT / "examples" / name).read_bytes())
+
+
+def test_file_backed_analysis_discards_result_when_dependency_changes_during_run(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+        "room_airflow_abs_tolerance_m3_h": 0.0,
+        "require_same_room_set": True,
+    }
+    original = application_module._run_consistency
+
+    def run_then_change_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        dependency = base_dir / "consistency_hvac_demo.json"
+        dependency.write_text(
+            dependency.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_change_dependency,
+    )
+
+    with pytest.raises(
+        ExternalDependencyChangedError,
+        match="result was discarded",
+    ) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == ["hvac_project"]
+    assert raised.value.changes[0]["status"] == "changed_during_run"
+    assert (
+        raised.value.changes[0]["sha256_before"]
+        != raised.value.changes[0]["sha256_after"]
+    )
+
+
+def test_file_backed_analysis_discards_result_when_dependency_disappears(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    original = application_module._run_consistency
+
+    def run_then_remove_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        (base_dir / "facility_project.json").unlink()
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_remove_dependency,
+    )
+
+    with pytest.raises(
+        ExternalDependencyChangedError,
+        match="verification_project",
+    ) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert raised.value.changes == (
+        {
+            "field": "verification_project",
+            "declared_path": "facility_project.json",
+            "status": "unavailable_or_unstable",
+        },
+    )
+
+
+def test_file_backed_dependency_change_reporting_is_deterministic(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    original = application_module._run_consistency
+
+    def run_then_change_both_dependencies(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        for name in ("facility_project.json", "consistency_hvac_demo.json"):
+            dependency = base_dir / name
+            dependency.write_text(
+                dependency.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_change_both_dependencies,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == [
+        "verification_project",
+        "hvac_project",
+    ]
+
+
+def test_stable_file_backed_run_records_revision_timestamps(tmp_path):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    assert provenance["external_dependencies_stable"] is True
+    assert provenance["external_dependency_count"] == 2
+    for dependency in provenance["external_dependencies"]:
+        assert dependency["mtime_ns_before"] == dependency["mtime_ns_after"]
+        assert dependency["mtime_ns_before"] > 0
+
+
+def test_dossier_analysis_uses_same_external_dependency_guard(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    payload = {
+        "name": "Revision-stability regression",
+        "verification_project": "facility_project.json",
+    }
+    original = application_module._run_dossier
+
+    def run_then_change_dependency(run_payload, base_dir):
+        result = original(run_payload, base_dir)
+        dependency = base_dir / "facility_project.json"
+        dependency.write_text(
+            dependency.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_dossier",
+        run_then_change_dependency,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        run_analysis("dossier", payload, base_dir=tmp_path)
+
+    assert [item["field"] for item in raised.value.changes] == [
+        "verification_project"
+    ]
+    assert raised.value.changes[0]["status"] == "changed_during_run"
+
+
+def test_external_dependency_fingerprint_retries_a_torn_read(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_sha256_file = application_module._sha256_file
+    calls = {"count": 0}
+
+    def mutate_after_first_hash(path):
+        digest = original_sha256_file(path)
+        if path == target and calls["count"] == 0:
+            calls["count"] += 1
+            path.write_text(
+                path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        return digest
+
+    monkeypatch.setattr(
+        application_module,
+        "_sha256_file",
+        mutate_after_first_hash,
+    )
+
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    verification = next(
+        item
+        for item in provenance["external_dependencies"]
+        if item["field"] == "verification_project"
+    )
+    expected = hashlib.sha256(target.read_bytes()).hexdigest()
+    assert calls["count"] == 1
+    assert verification["sha256_before"] == expected
+    assert verification["sha256_after"] == expected
+    assert verification["stable_during_run"] is True

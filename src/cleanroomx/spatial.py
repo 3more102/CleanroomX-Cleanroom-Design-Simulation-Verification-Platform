@@ -10,11 +10,11 @@ import tkinter as tk
 from tkinter import ttk
 
 from .spatial_history import SpatialEditHistory, SpatialHistoryState
-
-
-SPATIAL_METADATA_KEY = "spatial_layout"
-SPATIAL_LAYOUT_VERSION = 1
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+from .spatial_integrity import (
+    DEVICE_TYPES,
+    SPATIAL_LAYOUT_VERSION,
+    SPATIAL_METADATA_KEY,
+)
 
 
 class SpatialSyncError(ValueError):

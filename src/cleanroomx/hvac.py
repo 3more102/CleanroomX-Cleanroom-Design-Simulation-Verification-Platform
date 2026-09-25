@@ -16,13 +16,13 @@ from .thermal import _format_thermal_design_calculation, calculate_thermal_desig
 
 def analyze_hvac_project(project: HVACProject) -> dict:
     room_results: list[dict] = []
-    total_cleanroom_airflow = 0.0
-    total_governing_airflow = 0.0
-    total_return_airflow = 0.0
-    total_exhaust_airflow = 0.0
-    total_net_surplus = 0.0
-    total_cooling_kw = 0.0
-    total_heating_kw = 0.0
+    cleanroom_airflows: list[float] = []
+    governing_airflows: list[float] = []
+    return_airflows: list[float] = []
+    exhaust_airflows: list[float] = []
+    net_surpluses: list[float] = []
+    cooling_capacities_kw: list[float] = []
+    heating_capacities_kw: list[float] = []
     all_air_balances_pass = True
 
     for room in project.rooms:
@@ -70,13 +70,25 @@ def analyze_hvac_project(project: HVACProject) -> dict:
                 "thermal": thermal,
             }
         )
-        total_cleanroom_airflow += room.cleanroom_airflow_m3_h
-        total_governing_airflow += governing_airflow
-        total_return_airflow += room.air_balance.return_airflow_m3_h
-        total_exhaust_airflow += room.air_balance.exhaust_airflow_m3_h
-        total_net_surplus += air_balance_calculation["net_surplus_m3_h"]
-        total_cooling_kw += thermal_calculation["preliminary_cooling_capacity_kw"]
-        total_heating_kw += thermal_calculation["preliminary_heating_capacity_kw"]
+        cleanroom_airflows.append(room.cleanroom_airflow_m3_h)
+        governing_airflows.append(governing_airflow)
+        return_airflows.append(room.air_balance.return_airflow_m3_h)
+        exhaust_airflows.append(room.air_balance.exhaust_airflow_m3_h)
+        net_surpluses.append(air_balance_calculation["net_surplus_m3_h"])
+        cooling_capacities_kw.append(
+            thermal_calculation["preliminary_cooling_capacity_kw"]
+        )
+        heating_capacities_kw.append(
+            thermal_calculation["preliminary_heating_capacity_kw"]
+        )
+
+    total_cleanroom_airflow = math.fsum(cleanroom_airflows)
+    total_governing_airflow = math.fsum(governing_airflows)
+    total_return_airflow = math.fsum(return_airflows)
+    total_exhaust_airflow = math.fsum(exhaust_airflows)
+    total_net_surplus = math.fsum(net_surpluses)
+    total_cooling_kw = math.fsum(cooling_capacities_kw)
+    total_heating_kw = math.fsum(heating_capacities_kw)
 
     duct_calculation = (
         calculate_duct_network(project.duct_network)

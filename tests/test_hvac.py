@@ -3,7 +3,7 @@ import json
 from cleanroomx.airflow import analyze_air_balance
 from cleanroomx.fan import analyze_supply_fan
 from cleanroomx.hvac import analyze_hvac_project
-from cleanroomx.hvac_io import load_hvac_project
+from cleanroomx.hvac_io import hvac_project_from_dict, load_hvac_project
 from cleanroomx.hvac_models import AirBalanceDesign, FanSystem
 
 
@@ -113,7 +113,6 @@ def test_fan_power_uses_total_entered_static_pressure() -> None:
 
 
 def test_hvac_filter_count_uses_unrounded_governing_airflow() -> None:
-    from cleanroomx.hvac_io import hvac_project_from_dict
 
     project = hvac_project_from_dict(
         {
@@ -148,7 +147,6 @@ def test_hvac_filter_count_uses_unrounded_governing_airflow() -> None:
 
 
 def test_hvac_air_balance_status_uses_unrounded_governing_airflow() -> None:
-    from cleanroomx.hvac_io import hvac_project_from_dict
 
     project = hvac_project_from_dict(
         {
@@ -181,7 +179,6 @@ def test_hvac_air_balance_status_uses_unrounded_governing_airflow() -> None:
 
 
 def test_hvac_total_surplus_aggregates_before_presentation_rounding() -> None:
-    from cleanroomx.hvac_io import hvac_project_from_dict
 
     rooms = [
         {

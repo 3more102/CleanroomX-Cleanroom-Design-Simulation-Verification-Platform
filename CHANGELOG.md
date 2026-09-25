@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased recovery artifact integrity — 2026-09-25
+
+- Adds a canonical SHA-256 digest to every newly written recovery envelope and verifies it before scan, inspect, restore, or discard operations.
+- Detects valid-JSON changes to recovery project data, raw editor draft state, source fingerprint context, timestamps, identities, and other covered envelope fields; mismatched artifacts are reported and preserved instead of being restored.
+- Keeps schema-version compatibility with existing recovery files: artifacts that predate the digest remain readable and are explicitly labeled **Legacy / no digest** in Recovery Center.
+- Surfaces integrity evidence in both the Recovery Center list and detailed inspection view.
+- Treats the digest as deterministic corruption/tamper evidence only, not as a digital signature, authentication mechanism, or proof of artifact authorship.
+- Adds focused regressions for generated digests, valid-JSON tampering detection, scan isolation, legacy compatibility, and recovery inspection evidence without changing solver equations or engineering acceptance semantics.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

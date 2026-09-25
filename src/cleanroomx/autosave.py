@@ -4,6 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+from hmac import compare_digest
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
 RECOVERY_SCHEMA_VERSION = 1
+RECOVERY_INTEGRITY_ALGORITHM = "sha256"
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
 
@@ -42,6 +44,7 @@ class RecoveryCandidate:
     project_identity: str
     saved_at_utc: str
     project_name: str
+    integrity_status: str
     source_path: Path | None
     source_relation: str
     source_is_newer: bool
@@ -135,6 +138,16 @@ def _canonical_json(value: Any) -> str:
     )
 
 
+def _recovery_payload_sha256(payload: dict[str, Any]) -> str:
+    unsigned = {key: value for key, value in payload.items() if key != "integrity"}
+    return sha256(_canonical_json(unsigned).encode("utf-8")).hexdigest()
+
+
+def recovery_integrity_status(payload: dict[str, Any]) -> str:
+    """Return the integrity evidence level for an already validated artifact."""
+    return "verified" if payload.get("integrity") is not None else "legacy_unverified"
+
+
 def _normalized_source_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
@@ -223,6 +236,31 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
     snapshot = data.get("snapshot")
     if not isinstance(snapshot, dict):
         raise RecoveryFormatError("snapshot must be an object")
+
+    integrity = data.get("integrity")
+    if integrity is not None:
+        if not isinstance(integrity, dict):
+            raise RecoveryFormatError("integrity must be an object when present")
+        algorithm = integrity.get("algorithm")
+        if algorithm != RECOVERY_INTEGRITY_ALGORITHM:
+            raise RecoveryFormatError(
+                "unsupported recovery integrity algorithm "
+                f"{algorithm!r}; expected {RECOVERY_INTEGRITY_ALGORITHM!r}"
+            )
+        recorded_digest = integrity.get("payload_sha256")
+        if (
+            not isinstance(recorded_digest, str)
+            or len(recorded_digest) != 64
+            or any(char not in "0123456789abcdef" for char in recorded_digest)
+        ):
+            raise RecoveryFormatError(
+                "integrity.payload_sha256 must be a lowercase SHA-256 hex digest"
+            )
+        computed_digest = _recovery_payload_sha256(data)
+        if not compare_digest(recorded_digest, computed_digest):
+            raise RecoveryFormatError(
+                "recovery payload integrity check failed; artifact contents changed"
+            )
     return data
 
 
@@ -345,6 +383,7 @@ def scan_recovery_artifacts(recovery_dir: str | Path | None = None) -> RecoveryS
                     project_identity=recovery["project_identity"],
                     saved_at_utc=recovery["saved_at_utc"],
                     project_name=project_name,
+                    integrity_status=recovery_integrity_status(recovery),
                     source_path=source_path,
                     source_relation=relation,
                     source_is_newer=is_newer,
@@ -484,6 +523,10 @@ class AutosaveManager:
             "saved_at_utc": _utc_now_text(),
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
+        }
+        payload["integrity"] = {
+            "algorithm": RECOVERY_INTEGRITY_ALGORITHM,
+            "payload_sha256": _recovery_payload_sha256(payload),
         }
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)

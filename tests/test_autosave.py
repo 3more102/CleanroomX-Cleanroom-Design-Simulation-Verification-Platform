@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
+    RecoveryFormatError,
     load_recovery_artifact,
     scan_recovery_artifacts,
 )
@@ -67,6 +69,8 @@ def test_autosave_writes_separate_artifact_and_preserves_source(tmp_path):
         assert artifact["schema"] == RECOVERY_SCHEMA
         assert artifact["source"]["path"] == str(source.resolve())
         assert artifact["source"]["sha256"]
+        assert artifact["integrity"]["algorithm"] == "sha256"
+        assert len(artifact["integrity"]["payload_sha256"]) == 64
         assert artifact["snapshot"]["project"]["project"]["name"] == "Autosave Demo"
     finally:
         manager.shutdown(wait=True)
@@ -205,3 +209,66 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
         assert not (tmp_path / "recovery").exists()
     finally:
         manager.shutdown(wait=True)
+
+
+
+def test_recovery_integrity_detects_valid_json_payload_tampering(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["snapshot"]["ui_state"]["marker"] = 999
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="integrity check failed"):
+        load_recovery_artifact(artifact_path)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.candidates == ()
+    assert len(scan.issues) == 1
+    assert scan.issues[0].path == artifact_path
+    assert "integrity check failed" in scan.issues[0].error
+
+
+def test_legacy_recovery_without_integrity_digest_remains_readable(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = load_recovery_artifact(artifact_path)
+    payload.pop("integrity")
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    legacy = load_recovery_artifact(artifact_path)
+    assert "integrity" not in legacy
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    assert scan.candidates[0].integrity_status == "legacy_unverified"

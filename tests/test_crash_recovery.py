@@ -16,6 +16,7 @@ from cleanroomx.autosave import (
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.recovery_ui import (
     inspect_recovery,
+    recovery_integrity_label,
     recovery_relation_label,
     recovery_safety_message,
 )
@@ -145,6 +146,9 @@ def test_recovery_inspection_exposes_identity_timestamp_source_and_draft(tmp_pat
     assert inspection.project_identity == candidate.project_identity
     assert inspection.saved_at_utc == candidate.saved_at_utc
     assert inspection.source_path == str(source.resolve())
+    assert inspection.integrity_status == "Verified SHA-256"
+    assert candidate.integrity_status == "verified"
+    assert recovery_integrity_label(candidate) == "Verified SHA-256"
     assert inspection.analysis_count == 1
     assert inspection.analysis_names == ("Room [room_verification]",)
     assert inspection.editor_analysis_id == "room-1"

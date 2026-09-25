@@ -41,10 +41,20 @@ The final v0.102.1 tree is composed from CI-green spatial closures plus a CI-gre
   - Windows PowerShell/CMD launcher smoke: **success**
   - Python 3.11/3.12/3.13 matrix: **success**
   - deterministic regression forces the Future.done()-before-completion-callback interleaving and verifies queued autosaves cannot be reported idle early
+- PR **#487 — Finalize deterministic spatial drag semantics on current main**
+  - exact tested head: `3823a4e34d0cf855a374e1a9773dc6d059d644e5`
+  - PR CI **#1585** / id `36185323572`: **success**
+  - merged main commit: `89eaf6b1548ca0748dd72431eecc101bddec9af9`
+  - focused spatial gate: **63 passed**
+  - Release 2 consolidation gate: **132 passed**
+  - complete suite: **1008 passed** on Python 3.11, 3.12, and 3.13
+  - Windows PowerShell/CMD launcher smoke: **success**
+  - Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+  - drag translation is computed from immutable gesture-start pointer/item origins, and no-op drag release does not dirty the project, record history, or schedule autosave
 
 Those successful CI jobs exercise the repository CI workflow, including the complete Python 3.11/3.12/3.13 suite, clean-wheel installation, representative CLI checks, Windows checkout launchers, and the Python 3.13 performance plus installed Tk/Xvfb GUI smoke. The immutable v0.102.1 publisher additionally refuses to tag any successful CI SHA that is no longer the current `main` commit.
 
-The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D **Fit** derive zoom and both pan axes from real room floor/ceiling geometry; adds an explicit geometry-preserving 2D viewport reset and Shift+left-drag 3D orbit with bounded elevation; strengthens the packaged-demo smoke; and closes the autosave completion-callback ownership race so `wait_for_idle()` cannot return before active callback state is finalized. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
+The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D **Fit** derive zoom and both pan axes from real room floor/ceiling geometry; adds an explicit geometry-preserving 2D viewport reset and Shift+left-drag 3D orbit with bounded elevation; strengthens the packaged-demo smoke; closes the autosave completion-callback ownership race so `wait_for_idle()` cannot return before active callback state is finalized; and makes snapped 2D drag results independent of Tk motion-event sampling while suppressing no-op persistence/history/autosave churn. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
 
 
 ## v0.102.0 final synchronized spatial baseline

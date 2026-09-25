@@ -12,6 +12,7 @@ from cleanroomx.spatial import (
     normalize_layout,
     resize_room,
     room_clearance_dimensions,
+    room_overlap_regions,
     snap_room_translation,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
@@ -617,6 +618,57 @@ def test_room_clearance_dimensions_reports_touching_room_as_zero_gap():
     assert dimensions[0]["side"] == "right"
     assert dimensions[0]["gap_m"] == 0.0
     assert dimensions[0]["reference_room_id"] == "ante"
+
+
+def test_room_overlap_regions_reports_exact_positive_area_intersection():
+    room = {
+        "id": "process",
+        "name": "Process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 4.0,
+        "width_m": 4.0,
+    }
+    neighbor = {
+        "id": "ante",
+        "name": "Ante",
+        "x_m": 3.0,
+        "y_m": 1.0,
+        "length_m": 3.0,
+        "width_m": 3.0,
+    }
+
+    regions = room_overlap_regions(room, [room, neighbor])
+
+    assert regions == [
+        {
+            "reference_room_id": "ante",
+            "reference_room_name": "Ante",
+            "x_m": 3.0,
+            "y_m": 1.0,
+            "length_m": 1.0,
+            "width_m": 3.0,
+            "area_m2": 3.0,
+        }
+    ]
+
+
+def test_room_overlap_regions_ignores_edge_corner_and_diagonal_contact():
+    room = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 4.0,
+        "width_m": 4.0,
+    }
+    rooms = [
+        room,
+        {"id": "edge", "x_m": 4.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "corner", "x_m": 4.0, "y_m": 4.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "diagonal", "x_m": 6.0, "y_m": 6.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    assert room_overlap_regions(room, rooms) == []
 
 
 def test_snap_room_translation_aligns_nearby_edges_and_reports_guide():

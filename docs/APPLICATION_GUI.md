@@ -104,7 +104,9 @@ The 3D view is generated from the same canonical spatial model as the 2D layout.
 
 For room-verification and multi-room project-verification analyses, **Sync dimensions to active analysis** explicitly copies room dimensions (and an existing observed-pressure field when present) from the spatial model into the analysis JSON. Other engineering fields such as airflow, ACH requirements, particle requirements, and pressure-cascade criteria are preserved. Results for a synchronized analysis are invalidated and must be validated/run again.
 
-Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
+Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. Persisted spatial layout version 1 data is validated as project data: room/device ids must be stable and unique, device room references must resolve, geometry must be finite with positive room dimensions, and persisted view bounds must be valid. An invalid spatial block is rejected with a field-level error instead of being silently repaired on load or save.
+
+If no spatial metadata exists, CleanroomX can seed the workspace from real room geometry found in a verification analysis. That seed is read-only/transient until the operator performs an explicit spatial edit; opening, switching analyses, or refreshing the workspace does not silently add metadata or dirty/clean the project behind the operator's back. Once an explicit spatial edit is made, the workspace persists the deterministic normalized layout. Projects with no verification geometry remain empty until the operator adds rooms.
 
 ## Results and plots
 

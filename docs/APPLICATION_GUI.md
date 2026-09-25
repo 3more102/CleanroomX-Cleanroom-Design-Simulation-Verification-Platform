@@ -88,6 +88,16 @@ The **Abandon** action suppresses the pending result but does not force-terminat
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
+### Persisted analysis run history
+
+Every fresh desktop run that is accepted after the existing analysis-id and input-freshness checks is appended to a bounded project audit ledger. Abandoned runs, deleted-analysis results, stale results, and failed computations are not recorded as successful completed runs. Recording a run makes the project dirty so normal save/recovery protection applies.
+
+Use **Analysis → Run History…** to inspect retained records. Each record stores the analysis identity and status, exact input snapshot, application execution provenance, and SHA-256 identities for the normalized result, diagnostics, Markdown report, and optional plot. File-backed consistency/dossier records therefore retain the dependency revision evidence captured by the execution layer. The history keeps the most recent 50 records by default; when older records are pruned, an anchor digest preserves the chain relationship to the retained prefix.
+
+The ledger is validated before display and before every append. If existing history is malformed or its record chain/digests no longer match, CleanroomX leaves it untouched and warns the operator instead of overwriting evidence. The completed result remains available in the current session so it can be exported manually. The digest chain detects accidental corruption; it is not a signature or proof of authorship because anyone able to rewrite the project can also recompute unkeyed hashes.
+
+Run history is stored under the existing `project.metadata` object, so the top-level `cleanroomx.project` schema remains version 1. Full result bodies are deliberately not duplicated into every project history entry; use **Export Run Bundle JSON** when the complete result/report/plot payload must be retained independently.
+
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.
@@ -118,7 +128,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, persisted run-history round trips/tamper detection/pruning/dependency provenance, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

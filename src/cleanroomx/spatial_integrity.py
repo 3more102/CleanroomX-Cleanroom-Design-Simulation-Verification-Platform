@@ -116,8 +116,38 @@ def validate_spatial_layout_document(value: Any) -> None:
         _require_positive_number(room.get("length_m"), f"{prefix}.length_m")
         _require_positive_number(room.get("width_m"), f"{prefix}.width_m")
         _require_positive_number(room.get("height_m"), f"{prefix}.height_m")
+        if room.get("elevation_m") is not None:
+            _require_finite_number(room.get("elevation_m"), f"{prefix}.elevation_m")
         if room.get("pressure_pa") is not None:
             _require_finite_number(room.get("pressure_pa"), f"{prefix}.pressure_pa")
+        if room.get("notes") is not None and not isinstance(room.get("notes"), str):
+            raise SpatialLayoutFormatError(f"{prefix}.notes must be a string")
+        if room.get("metadata") is not None and not isinstance(room.get("metadata"), dict):
+            raise SpatialLayoutFormatError(f"{prefix}.metadata must be an object")
+
+        engineering_ref = room.get("engineering_ref")
+        if engineering_ref is not None:
+            if not isinstance(engineering_ref, dict):
+                raise SpatialLayoutFormatError(f"{prefix}.engineering_ref must be an object")
+            _require_non_empty_string(
+                engineering_ref.get("analysis_id"),
+                f"{prefix}.engineering_ref.analysis_id",
+            )
+            _require_non_empty_string(
+                engineering_ref.get("room_name"),
+                f"{prefix}.engineering_ref.room_name",
+            )
+            synced_geometry = engineering_ref.get("synced_geometry")
+            if synced_geometry is not None:
+                if not isinstance(synced_geometry, dict):
+                    raise SpatialLayoutFormatError(
+                        f"{prefix}.engineering_ref.synced_geometry must be an object"
+                    )
+                for field in ("length_m", "width_m", "height_m"):
+                    _require_positive_number(
+                        synced_geometry.get(field),
+                        f"{prefix}.engineering_ref.synced_geometry.{field}",
+                    )
 
     devices = value.get("devices", [])
     if not isinstance(devices, list):

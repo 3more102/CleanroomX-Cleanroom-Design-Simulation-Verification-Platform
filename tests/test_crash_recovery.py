@@ -81,6 +81,52 @@ def test_restore_recovery_returns_valid_project_and_raw_ui_state(tmp_path):
     assert source.exists()
 
 
+def test_recovery_round_trip_preserves_additive_project_fields(tmp_path):
+    project = ProjectDocument(
+        name="Recovery Extensions",
+        analyses=[
+            AnalysisDocument(
+                id="room-1",
+                name="Room",
+                kind="room_verification",
+                input={"value": 1},
+                extra_fields={"vendor_analysis": {"revision": 3}},
+            )
+        ],
+        active_analysis_id="room-1",
+        project_extra_fields={"vendor_project": {"facility_code": "FAB-01"}},
+        top_level_extra_fields={"vendor_top": {"revision": 7}},
+    )
+    source = save_project_document(tmp_path / "source.cleanroomx.json", project)
+    manager = AutosaveManager(
+        tmp_path / "recovery",
+        session_id="extension-recovery-session",
+    )
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(project),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    recovered = restore_recovery_artifact(artifact)
+
+    assert recovered.project.top_level_extra_fields == {
+        "vendor_top": {"revision": 7}
+    }
+    assert recovered.project.project_extra_fields == {
+        "vendor_project": {"facility_code": "FAB-01"}
+    }
+    assert recovered.project.analysis_by_id("room-1").extra_fields == {
+        "vendor_analysis": {"revision": 3}
+    }
+
+
 def test_restore_failure_preserves_artifact_and_source(tmp_path):
     source, artifact = _write_recovery(tmp_path)
     source_before = source.read_bytes()

@@ -821,6 +821,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        on_pull_sync_requested: Callable[[], None] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -833,6 +834,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._analysis_getter = analysis_getter
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
+        self._on_pull_sync_requested = on_pull_sync_requested
         self._status_setter = status_setter
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
@@ -851,6 +853,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._mapping_var = tk.StringVar(value="Engineering mapping: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._metrics_var = tk.StringVar(value="0 rooms")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
@@ -872,6 +875,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
         for device_type, label in (
             ("door", "+ Door"),
+            ("window", "+ Window"),
             ("ffu", "+ FFU"),
             ("supply", "+ Supply"),
             ("return", "+ Return"),
@@ -892,12 +896,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Reset 2D", command=self.reset_2d).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Push → Analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
+        if self._on_pull_sync_requested is not None:
+            ttk.Button(
+                toolbar,
+                text="Pull ← Analysis",
+                command=self._on_pull_sync_requested,
+            ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
         viewbar.pack(fill="x")
@@ -964,27 +975,36 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._mapping_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
+            ("analysis_room_name", "Analysis room"),
+            ("analysis_id", "Analysis ID"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
             ("z_m", "Z (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
-            ("pressure_pa", "Pressure (Pa)"),
             ("floor_elevation_m", "Floor elev. (m)"),
+            ("pressure_pa", "Observed/configured P (Pa)"),
+            ("pressure_target_pa", "Pressure target (Pa)"),
+            ("temperature_target_c", "Temp target (°C)"),
+            ("humidity_target_percent", "RH target (%)"),
             ("classification", "Classification"),
-            ("analysis_room_name", "Analysis room"),
+            ("airflow_ref", "Airflow / ACH ref"),
+            ("notes", "Notes"),
             ("room_id", "Room ID"),
             ("orientation_deg", "Orientation (deg)"),
             ("wall_side", "Wall side"),
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -992,7 +1012,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -1243,11 +1263,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._mapping_var.set("Engineering mapping: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
         prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
+        if self.selected and self.selected.kind == "room":
+            status = engineering_sync_status(
+                self.layout, self._analysis_getter()
+            ).get(item["id"])
+            if status is None:
+                self._mapping_var.set("Engineering mapping: unavailable")
+            else:
+                self._mapping_var.set(
+                    f"Engineering mapping: {status['state']} — {status['message']}"
+                )
+        else:
+            self._mapping_var.set("Engineering mapping: spatial object")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -1280,7 +1313,26 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
-            for key in ("classification", "analysis_room_name"):
+            for key in (
+                "pressure_target_pa",
+                "temperature_target_c",
+                "humidity_target_percent",
+            ):
+                text = self._property_vars[key].get().strip()
+                if text:
+                    value = _finite_number(text, item.get(key, 0.0))
+                    if key == "humidity_target_percent":
+                        value = max(0.0, min(100.0, value))
+                    item[key] = value
+                else:
+                    item.pop(key, None)
+            for key in (
+                "classification",
+                "analysis_room_name",
+                "analysis_id",
+                "airflow_ref",
+                "notes",
+            ):
                 text = self._property_vars[key].get().strip()
                 if text:
                     item[key] = text
@@ -1357,14 +1409,27 @@ class SpatialDesignWorkspace(ttk.Frame):
             y = room["y_m"] + room["width_m"] / 2.0
             z = room["height_m"] if device_type in {"ffu", "supply", "return", "exhaust", "sensor"} else 0.0
             room_id = room["id"]
-            if device_type in {"door", "transfer"}:
+            if device_type in {"door", "window", "transfer"}:
                 y = room["y_m"]
-                z = 0.0 if device_type == "door" else min(1.0, room["height_m"] / 2.0)
+                if device_type == "door":
+                    z = 0.0
+                elif device_type == "window":
+                    z = min(1.0, room["height_m"] / 3.0)
+                else:
+                    z = min(1.0, room["height_m"] / 2.0)
         else:
             x = y = z = 0.0
             room_id = None
-        default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
-        default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+        default_width = (
+            0.9
+            if device_type == "door"
+            else (1.2 if device_type == "window" else (0.6 if device_type == "transfer" else 0.4))
+        )
+        default_height = (
+            2.1
+            if device_type == "door"
+            else (1.0 if device_type == "window" else (0.4 if device_type == "transfer" else 0.2))
+        )
         device = {
             "id": f"device-{uuid.uuid4().hex[:8]}",
             "type": device_type,
@@ -1377,7 +1442,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "height_m": default_height,
             "orientation_deg": 0.0,
         }
-        if device_type in {"door", "transfer"}:
+        if device_type in {"door", "window", "transfer"}:
             device["wall_side"] = "south"
         if device_type == "door":
             device["swing"] = "left"
@@ -1393,6 +1458,26 @@ class SpatialDesignWorkspace(ttk.Frame):
     def delete_selected(self) -> None:
         if self.selected is None:
             return
+        selected_item = self._selected_object()
+        if selected_item is None:
+            return
+        if self.selected.kind == "room":
+            dependent_count = sum(
+                1
+                for device in self.layout["devices"]
+                if device.get("room_id") == self.selected.item_id
+            )
+            detail = (
+                f"\n\n{dependent_count} assigned spatial object(s) will also be removed."
+                if dependent_count
+                else ""
+            )
+            if not messagebox.askyesno(
+                "Delete room",
+                f"Delete room '{selected_item.get('name', self.selected.item_id)}'?{detail}",
+                parent=self.winfo_toplevel(),
+            ):
+                return
         history_before = self._history_layout()
         selection_before = self._selection_state()
         collection_name = "rooms" if self.selected.kind == "room" else "devices"

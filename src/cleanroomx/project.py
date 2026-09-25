@@ -386,25 +386,30 @@ def _verify_project_write(
     path: str | Path,
     text: str,
 ) -> ProjectFileRevision:
-    """Verify that the exact serialized project committed to disk is readable."""
+    """Verify that the exact serialized project committed to disk is stable and readable."""
     destination = _normalized_project_path(path)
     expected_sha256 = sha256(text.encode("utf-8")).hexdigest()
-    revision = capture_project_file_revision(destination)
+    try:
+        _, revision = load_project_document_with_revision(destination)
+    except (OSError, ProjectFormatError) as exc:
+        current_sha256: str | None = None
+        try:
+            current_sha256 = capture_project_file_revision(destination).sha256
+        except OSError:
+            pass
+        raise ProjectSaveVerificationError(
+            destination,
+            expected_sha256,
+            current_sha256,
+            detail=str(exc),
+        ) from exc
+
     if not revision.exists or revision.sha256 != expected_sha256:
         raise ProjectSaveVerificationError(
             destination,
             expected_sha256,
             revision.sha256,
         )
-    try:
-        load_project_document(destination)
-    except (OSError, ProjectFormatError) as exc:
-        raise ProjectSaveVerificationError(
-            destination,
-            expected_sha256,
-            revision.sha256,
-            detail=str(exc),
-        ) from exc
     return revision
 
 

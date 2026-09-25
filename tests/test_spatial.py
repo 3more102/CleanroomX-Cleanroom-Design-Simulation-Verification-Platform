@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     resize_room,
+    snap_room_translation,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
@@ -537,3 +538,78 @@ def test_resize_room_rejects_unknown_handle_without_mutation():
 
     assert resize_room(room, "center", 8.0, 8.0) is False
     assert room == before
+
+
+
+def test_snap_room_translation_aligns_nearby_edges_and_reports_guide():
+    moving = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 4.0,
+        "width_m": 4.0,
+    }
+    neighbor = {
+        "id": "ante",
+        "x_m": 9.0,
+        "y_m": 0.0,
+        "length_m": 3.0,
+        "width_m": 4.0,
+    }
+
+    x, y, guides = snap_room_translation(
+        moving,
+        [moving, neighbor],
+        4.88,
+        0.0,
+        tolerance_m=0.15,
+    )
+
+    assert x == 5.0
+    assert y == 0.0
+    assert guides == [
+        {
+            "axis": "x",
+            "value_m": 9.0,
+            "reference_room_id": "ante",
+            "moving_anchor": "right",
+            "reference_anchor": "left",
+        },
+        {
+            "axis": "y",
+            "value_m": 0.0,
+            "reference_room_id": "ante",
+            "moving_anchor": "top",
+            "reference_anchor": "top",
+        },
+    ]
+
+
+def test_snap_room_translation_respects_tolerance_and_does_not_mutate_room():
+    moving = {
+        "id": "process",
+        "x_m": 1.0,
+        "y_m": 2.0,
+        "length_m": 4.0,
+        "width_m": 3.0,
+    }
+    neighbor = {
+        "id": "ante",
+        "x_m": 10.0,
+        "y_m": 8.0,
+        "length_m": 3.0,
+        "width_m": 2.0,
+    }
+    before = dict(moving)
+
+    x, y, guides = snap_room_translation(
+        moving,
+        [moving, neighbor],
+        4.0,
+        3.0,
+        tolerance_m=0.1,
+    )
+
+    assert (x, y) == (4.0, 3.0)
+    assert guides == []
+    assert moving == before

@@ -18,7 +18,9 @@ from .spatial_integrity import (
 from .spatial_domain import (
     SpatialTransform2D,
     engineering_fields_for_room,
+    engineering_mapping_issues,
     engineering_sync_states,
+    mapped_pressure_values,
     mark_layout_synchronized,
     pressure_relationships,
 )
@@ -310,8 +312,15 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     _require_unique_sync_names(rooms, source="the spatial layout")
     _require_unique_sync_names(raw_rooms, source="the active analysis")
     by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
+    analysis_id = str(getattr(analysis, "id", "") or "")
     for source in rooms:
-        target = by_name.get(source["name"])
+        target_name = source["name"]
+        ref = source.get("engineering_ref")
+        if isinstance(ref, dict) and str(ref.get("analysis_id") or "") == analysis_id:
+            mapped_name = str(ref.get("room_name") or "").strip()
+            if mapped_name:
+                target_name = mapped_name
+        target = by_name.get(target_name)
         if target is None:
             continue
         for key in ("length_m", "width_m", "height_m"):
@@ -855,9 +864,21 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
-        validation_key = _spatial_validation_key(self.layout)
+        mapping_records = engineering_sync_states(self.layout, self._analysis_getter())
+        mapping_key = tuple(
+            (
+                record["room_id"],
+                record["state"],
+                tuple(record.get("differences", {})),
+            )
+            for record in mapping_records
+        )
+        validation_key = (_spatial_validation_key(self.layout), mapping_key)
         if force or validation_key != self._last_validation_key:
-            self._validation_issues = validate_layout(self.layout)
+            self._validation_issues = (
+                validate_layout(self.layout)
+                + engineering_mapping_issues(self.layout, self._analysis_getter())
+            )
             self._last_validation_key = validation_key
             self._update_validation_summary()
 
@@ -1168,7 +1189,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
+        pressure_by_id = mapped_pressure_values(self.layout, self._analysis_getter())
+        pressures = [value for value in pressure_by_id.values() if value is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
@@ -1195,13 +1217,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                     )
                 )
             )
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            display_pressure = pressure_by_id.get(room["id"])
+            fill = _pressure_fill(display_pressure, pmin, pmax)
             canvas.create_rectangle(
                 x0, y0, x1, y1,
                 fill=fill, outline=outline, width=3 if selected else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
-            pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
+            pressure_text = "" if display_pressure is None else f"\n{display_pressure:g} Pa"
             canvas.create_text(
                 (x0 + x1) / 2,
                 (y0 + y1) / 2,
@@ -1330,7 +1353,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         min_x, min_y, max_x, max_y = self._bounds()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
-        pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
+        pressure_by_id = mapped_pressure_values(self.layout, self._analysis_getter())
+        pressures = [value for value in pressure_by_id.values() if value is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
@@ -1360,7 +1384,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x1, y1, top_z),
                 self._project_3d(x0, y1, top_z),
             ]
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            display_pressure = pressure_by_id.get(room["id"])
+            fill = _pressure_fill(display_pressure, pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
             outline = (
                 "#7dd3fc"
@@ -1378,7 +1403,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#53687c", outline=outline, tags=(tag, "room3d")
             )
             pressure_text = (
-                "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
+                "" if display_pressure is None else f"\n{display_pressure:g} Pa"
             )
             canvas.create_text(
                 *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, top_z + 0.2),

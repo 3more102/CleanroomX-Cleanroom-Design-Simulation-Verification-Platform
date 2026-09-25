@@ -46,7 +46,7 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use a verified same-directory atomic replacement. CleanroomX flushes and fsyncs the temporary file, atomically replaces the destination, synchronizes the parent-directory rename on supported POSIX platforms, and re-reads the authoritative destination through a stable file identity to verify its byte size and SHA-256 before reporting success. Windows retains temporary-file fsync, atomic replacement, and post-replace verification; Python does not expose the same portable directory-fsync operation there. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ### External-change write protection
 
@@ -60,7 +60,7 @@ For a genuinely different Save As destination, CleanroomX captures the destinati
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
 
-Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned `cleanroomx.autosave` recovery envelope in the per-user recovery directory using the same atomic-write primitive as project persistence. Writes run on a single background worker, identical snapshots are suppressed, newer pending edits are coalesced, and history is bounded per project identity.
+Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned `cleanroomx.autosave` recovery envelope in the per-user recovery directory using the same verified atomic-write primitive as project persistence. New artifacts use recovery schema version 2 with a required SHA-256 integrity record over canonical envelope content; legacy version-1 artifacts remain readable. A well-formed but checksum-mismatched v2 artifact is reported as corrupt and is not restored or silently deleted. Writes run on a single background worker, identical snapshots are suppressed, newer pending edits are coalesced, and history is bounded per project identity.
 
 Each artifact contains the recoverable project snapshot, the active raw editor draft, application version, recovery timestamp, project identity, and a source-file fingerprint containing path, size, modification time, and SHA-256. A malformed JSON editor draft is preserved as raw text without being promoted into the authoritative project model. The recovery scanner reports malformed artifacts explicitly and classifies the source project as unchanged, changed, missing, or newer. This foundation never automatically overwrites a newer project file.
 
@@ -82,7 +82,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Desktop writes use the verified atomic writer, and durability/verification/filesystem errors are surfaced in the GUI.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
@@ -118,7 +118,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, verified atomic-write failure injection, recovery-v1 compatibility, recovery-v2 corruption detection, autosave persistence-failure handling, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

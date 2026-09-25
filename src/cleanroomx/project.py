@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import copy
+import errno
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 import os
+import stat
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 import uuid
 
 from . import __version__
@@ -65,6 +68,15 @@ def _merge_extra_fields(extra_fields: dict[str, Any], known: dict[str, Any]) -> 
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectFileBusyError(RuntimeError):
+    """Raised when another cooperating CleanroomX writer owns the save lock."""
+
+    def __init__(self, path: str | Path, lock_path: str | Path):
+        self.path = Path(path)
+        self.lock_path = Path(lock_path)
+        super().__init__(f"another CleanroomX process is currently saving {self.path}")
 
 
 class ProjectWriteConflictError(RuntimeError):
@@ -521,6 +533,71 @@ def project_file_revision_matches(
     return expected.size == current.size and expected.sha256 == current.sha256
 
 
+def project_save_lock_path(path: str | Path) -> Path:
+    """Return the stable adjacent sidecar used to coordinate CleanroomX writers."""
+    destination = _normalized_project_path(path)
+    key = sha256(os.fsencode(os.path.normcase(str(destination)))).hexdigest()[:24]
+    return destination.parent / f".cleanroomx-save-{key}.lock"
+
+
+def _lock_descriptor_nonblocking(descriptor: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if exc.errno in {
+                errno.EACCES,
+                errno.EAGAIN,
+                getattr(errno, "EDEADLK", -1),
+            }:
+                raise BlockingIOError(exc.errno, str(exc)) from exc
+            raise
+        return
+
+    import fcntl
+
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        if isinstance(exc, BlockingIOError) or exc.errno in {
+            errno.EACCES,
+            errno.EAGAIN,
+        }:
+            raise BlockingIOError(exc.errno, str(exc)) from exc
+        raise
+
+
+@contextmanager
+def project_save_lock(path: str | Path) -> Iterator[Path]:
+    """Hold one persistent adjacent advisory lock across a guarded project save.
+
+    The sidecar is intentionally not deleted: unlinking a lock path while another
+    process owns its inode can split cooperating writers across different locks.
+    """
+    destination = _normalized_project_path(path)
+    lock_path = project_save_lock_path(destination)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    flags = os.O_RDWR | os.O_CREAT
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(lock_path, flags, 0o666)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise OSError(f"project save lock is not a regular file: {lock_path}")
+        try:
+            _lock_descriptor_nonblocking(descriptor)
+        except BlockingIOError as exc:
+            raise ProjectFileBusyError(destination, lock_path) from exc
+        yield lock_path
+    finally:
+        os.close(descriptor)
+
+
 def load_project_document_with_revision(
     path: str | Path,
     *,
@@ -580,11 +657,12 @@ def save_project_document_guarded(
         if not project_file_revision_matches(expected_revision, current):
             raise ProjectWriteConflictError(destination, expected_revision, current)
 
-    assert_unchanged()
-    text = _project_document_text(project)
-    saved_path = _atomic_write_text(
-        destination,
-        text,
-        before_replace=assert_unchanged,
-    )
-    return saved_path, capture_project_file_revision(saved_path)
+    with project_save_lock(destination):
+        assert_unchanged()
+        text = _project_document_text(project)
+        saved_path = _atomic_write_text(
+            destination,
+            text,
+            before_replace=assert_unchanged,
+        )
+        return saved_path, capture_project_file_revision(saved_path)

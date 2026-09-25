@@ -234,6 +234,37 @@ def test_explicit_save_cleanup_preserves_prior_session_recovery(tmp_path):
         current_manager.shutdown(wait=True)
 
 
+def test_recovery_scan_accepts_legacy_recovery_filename(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+        current_path = manager.status().artifact_path
+        assert current_path is not None
+        payload = load_recovery_artifact(current_path)
+    finally:
+        manager.shutdown(wait=True)
+
+    legacy_path = recovery_dir / (
+        f"{payload['project_identity']}-20260925T000000000000Z-"
+        f"{payload['recovery_id'][:8]}.recovery.json"
+    )
+    current_path.replace(legacy_path)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    assert scan.candidates[0].path == legacy_path
+    assert load_recovery_artifact(legacy_path)["session_id"] == "session-a"
+
+
 def test_recovery_scan_detects_newer_changed_source(tmp_path):
     source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
     recovery_dir = tmp_path / "recovery"

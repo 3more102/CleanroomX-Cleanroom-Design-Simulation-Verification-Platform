@@ -1,48 +1,32 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any, Callable
+from typing import Any
 
 from . import __version__
 from .application import ANALYSIS_SPECS
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
+PROJECT_REVISION_SCHEMA = "cleanroomx.project-revision"
+PROJECT_REVISION_SCHEMA_VERSION = 1
+DEFAULT_PROJECT_REVISION_HISTORY_LIMIT = 5
 
 
 class ProjectFormatError(ValueError):
     pass
 
 
-class ProjectWriteConflictError(RuntimeError):
-    """Raised when an explicit save would overwrite a different on-disk revision."""
-
-    def __init__(
-        self,
-        path: str | Path,
-        expected: "ProjectFileRevision",
-        current: "ProjectFileRevision",
-    ):
-        self.path = Path(path)
-        self.expected = expected
-        self.current = current
-        super().__init__(
-            f"project file changed on disk since it was opened or last saved: {self.path}"
-        )
-
-
-@dataclass(frozen=True)
-class ProjectFileRevision:
-    path: str
-    exists: bool
-    size: int | None
-    mtime_ns: int | None
-    sha256: str | None
+class ProjectRevisionError(ProjectFormatError):
+    """Raised when a saved project revision is malformed, unsafe, or unusable."""
 
 
 @dataclass
@@ -83,6 +67,39 @@ class ProjectDocument:
             if item.id == analysis_id:
                 return item
         raise KeyError(analysis_id)
+
+
+@dataclass(frozen=True)
+class ProjectRevisionRecord:
+    path: Path
+    created_at_utc: str
+    project_name: str
+    source_sha256: str
+    source_size: int
+    application_version: str
+
+
+@dataclass(frozen=True)
+class ProjectRevisionIssue:
+    path: Path
+    error: str
+
+
+@dataclass(frozen=True)
+class ProjectRevisionScan:
+    revisions: tuple[ProjectRevisionRecord, ...]
+    issues: tuple[ProjectRevisionIssue, ...]
+
+
+@dataclass(frozen=True)
+class ProjectRevisionSnapshot:
+    project: ProjectDocument
+    source_path: Path
+    source_bytes: bytes
+    created_at_utc: str
+    source_sha256: str
+    application_version: str
+    artifact_path: Path
 
 
 def _reject_json_constant(value: str):
@@ -217,122 +234,60 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _project_from_bytes(data: bytes) -> ProjectDocument:
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be UTF-8 text") from exc
+    try:
+        payload = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    return project_from_dict(payload)
 
 
-def _normalized_project_path(path: str | Path) -> Path:
-    return Path(path).expanduser().resolve(strict=False)
+def load_project_document(path: str | Path) -> ProjectDocument:
+    return _project_from_bytes(Path(path).read_bytes())
 
 
-def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
-    """Capture a stable content revision for optimistic project-save protection."""
-    source = _normalized_project_path(path)
-    normalized = os.path.normcase(str(source))
-    if not source.exists():
-        return ProjectFileRevision(
-            path=normalized, exists=False, size=None, mtime_ns=None, sha256=None
-        )
-    if not source.is_file():
-        raise OSError(f"project path is not a regular file: {source}")
-
-    last_error: OSError | None = None
-    for _attempt in range(3):
-        before = source.stat()
-        digest = sha256()
-        try:
-            with source.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            last_error = exc
-            continue
-        after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return ProjectFileRevision(
-                path=normalized,
-                exists=True,
-                size=after.st_size,
-                mtime_ns=after.st_mtime_ns,
-                sha256=digest.hexdigest(),
-            )
-        last_error = OSError(f"project file changed while fingerprinting: {source}")
-
-    assert last_error is not None
-    raise last_error
+def _fsync_directory(directory: Path) -> None:
+    """Best-effort directory metadata sync after replace/delete on POSIX filesystems."""
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        fd = os.open(directory, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
-def project_file_revision_matches(
-    expected: ProjectFileRevision,
-    current: ProjectFileRevision,
-) -> bool:
-    """Compare content revisions while ignoring metadata-only timestamp changes."""
-    if expected.path != current.path or expected.exists != current.exists:
-        return False
-    if not expected.exists:
-        return True
-    return expected.size == current.size and expected.sha256 == current.sha256
-
-
-def load_project_document_with_revision(
-    path: str | Path,
-    *,
-    attempts: int = 3,
-) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
-    source = _normalized_project_path(path)
-    for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        project = load_project_document(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return project, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
-
-
-def _project_document_text(project: ProjectDocument) -> str:
-    data = project.to_dict()
-    project_from_dict(data)
-    return json.dumps(
-        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-    ) + "\n"
-
-
-def _atomic_write_text(
-    path: str | Path,
-    text: str,
-    *,
-    before_replace: Callable[[], None] | None = None,
-) -> Path:
+def atomic_write_bytes(path: str | Path, payload: bytes) -> Path:
+    """Atomically replace a file with flushed bytes and sync directory metadata."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
 
-        if before_replace is not None:
-            before_replace()
         temp_path.replace(destination)
+        _fsync_directory(destination.parent)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -342,33 +297,372 @@ def _atomic_write_text(
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
     """Atomically replace a UTF-8 text file using a same-directory temporary file."""
-    return _atomic_write_text(path, text)
+    return atomic_write_bytes(path, text.encode("utf-8"))
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    """Save a project atomically without an external-revision precondition."""
-    return atomic_write_text(path, _project_document_text(project))
+def _normalized_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
 
 
-def save_project_document_guarded(
+def _utc_now_text() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _parse_revision_time(value: Any) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ProjectRevisionError("created_at_utc must be a non-empty string")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ProjectRevisionError("created_at_utc is not a valid ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ProjectRevisionError("created_at_utc must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def project_revision_dir(project_path: str | Path) -> Path:
+    project = Path(project_path)
+    return project.parent / f".{project.name}.revisions"
+
+
+def _validate_history_limit(limit: int) -> int:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+        raise ValueError("project revision history limit must be a non-negative integer")
+    return limit
+
+
+def _revision_payload(
+    destination: Path,
+    source_bytes: bytes,
+    *,
+    created_at_utc: str,
+) -> dict[str, Any]:
+    previous_project = _project_from_bytes(source_bytes)
+    digest = sha256(source_bytes).hexdigest()
+    return {
+        "schema": PROJECT_REVISION_SCHEMA,
+        "schema_version": PROJECT_REVISION_SCHEMA_VERSION,
+        "application_version": __version__,
+        "created_at_utc": created_at_utc,
+        "source": {
+            "path": str(_normalized_path(destination)),
+            "size": len(source_bytes),
+            "sha256": digest,
+            "project_name": previous_project.name,
+            "content_base64": base64.b64encode(source_bytes).decode("ascii"),
+        },
+    }
+
+
+def _write_project_revision(destination: Path, source_bytes: bytes) -> Path:
+    created_at = _utc_now_text()
+    payload = _revision_payload(destination, source_bytes, created_at_utc=created_at)
+    digest = payload["source"]["sha256"]
+    stamp = (
+        _parse_revision_time(created_at)
+        .strftime("%Y%m%dT%H%M%S%fZ")
+    )
+    directory = project_revision_dir(destination)
+    directory.mkdir(parents=True, exist_ok=True)
+    candidate = directory / f"{stamp}-{digest[:12]}.cleanroomx.revision.json"
+    suffix = 1
+    while candidate.exists():
+        candidate = directory / (
+            f"{stamp}-{digest[:12]}-{suffix}.cleanroomx.revision.json"
+        )
+        suffix += 1
+    text = json.dumps(
+        payload,
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+    ) + "\n"
+    return atomic_write_text(candidate, text)
+
+
+def _load_revision_payload(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(
+            path.read_text(encoding="utf-8"),
+            parse_constant=_reject_json_constant,
+        )
+    except UnicodeDecodeError as exc:
+        raise ProjectRevisionError("project revision must be UTF-8 text") from exc
+    except json.JSONDecodeError as exc:
+        raise ProjectRevisionError(
+            f"invalid project revision JSON at line {exc.lineno}, column {exc.colno}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ProjectRevisionError("project revision must contain a JSON object")
+    if data.get("schema") != PROJECT_REVISION_SCHEMA:
+        raise ProjectRevisionError(
+            f"project revision schema must be {PROJECT_REVISION_SCHEMA!r}"
+        )
+    version = data.get("schema_version")
+    if version != PROJECT_REVISION_SCHEMA_VERSION:
+        raise ProjectRevisionError(
+            f"unsupported project revision schema version {version!r}; "
+            f"expected {PROJECT_REVISION_SCHEMA_VERSION}"
+        )
+    _parse_revision_time(data.get("created_at_utc"))
+    source = data.get("source")
+    if not isinstance(source, dict):
+        raise ProjectRevisionError("project revision source must be an object")
+    return data
+
+
+def load_project_revision(
+    path: str | Path,
+    *,
+    expected_source_path: str | Path | None = None,
+) -> ProjectRevisionSnapshot:
+    artifact_path = Path(path)
+    data = _load_revision_payload(artifact_path)
+    source = data["source"]
+
+    source_path_text = source.get("path")
+    if not isinstance(source_path_text, str) or not source_path_text:
+        raise ProjectRevisionError("project revision source.path must be a non-empty string")
+    source_path = _normalized_path(source_path_text)
+    if expected_source_path is not None:
+        expected = os.path.normcase(str(_normalized_path(expected_source_path)))
+        recorded = os.path.normcase(str(source_path))
+        if recorded != expected:
+            raise ProjectRevisionError(
+                "project revision belongs to a different source project"
+            )
+
+    source_size = source.get("size")
+    if isinstance(source_size, bool) or not isinstance(source_size, int) or source_size < 0:
+        raise ProjectRevisionError("project revision source.size must be a non-negative integer")
+    source_digest = source.get("sha256")
+    if (
+        not isinstance(source_digest, str)
+        or len(source_digest) != 64
+        or any(ch not in "0123456789abcdef" for ch in source_digest.lower())
+    ):
+        raise ProjectRevisionError("project revision source.sha256 must be a SHA-256 hex digest")
+    encoded = source.get("content_base64")
+    if not isinstance(encoded, str) or not encoded:
+        raise ProjectRevisionError("project revision source.content_base64 is required")
+    try:
+        source_bytes = base64.b64decode(encoded.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, binascii.Error, ValueError) as exc:
+        raise ProjectRevisionError("project revision content is not valid base64") from exc
+    if len(source_bytes) != source_size:
+        raise ProjectRevisionError(
+            "project revision size does not match the recorded source size"
+        )
+    actual_digest = sha256(source_bytes).hexdigest()
+    if actual_digest != source_digest.lower():
+        raise ProjectRevisionError(
+            "project revision SHA-256 does not match the recorded source digest"
+        )
+
+    try:
+        project = _project_from_bytes(source_bytes)
+    except ProjectFormatError as exc:
+        raise ProjectRevisionError(f"saved revision project is invalid: {exc}") from exc
+
+    project_name = source.get("project_name")
+    if isinstance(project_name, str) and project_name and project.name != project_name:
+        raise ProjectRevisionError(
+            "project revision project name does not match its recorded metadata"
+        )
+
+    application_version = data.get("application_version", "unknown")
+    return ProjectRevisionSnapshot(
+        project=project,
+        source_path=source_path,
+        source_bytes=source_bytes,
+        created_at_utc=data["created_at_utc"],
+        source_sha256=actual_digest,
+        application_version=str(application_version),
+        artifact_path=artifact_path,
+    )
+
+
+def scan_project_revisions(project_path: str | Path) -> ProjectRevisionScan:
+    source = _normalized_path(project_path)
+    directory = project_revision_dir(source)
+    if not directory.exists():
+        return ProjectRevisionScan(revisions=(), issues=())
+
+    revisions: list[ProjectRevisionRecord] = []
+    issues: list[ProjectRevisionIssue] = []
+    for artifact in sorted(directory.glob("*.cleanroomx.revision.json")):
+        try:
+            snapshot = load_project_revision(
+                artifact,
+                expected_source_path=source,
+            )
+        except (OSError, ProjectRevisionError) as exc:
+            issues.append(ProjectRevisionIssue(path=artifact, error=str(exc)))
+            continue
+        revisions.append(
+            ProjectRevisionRecord(
+                path=artifact,
+                created_at_utc=snapshot.created_at_utc,
+                project_name=snapshot.project.name,
+                source_sha256=snapshot.source_sha256,
+                source_size=len(snapshot.source_bytes),
+                application_version=snapshot.application_version,
+            )
+        )
+    revisions.sort(key=lambda item: (item.created_at_utc, item.path.name), reverse=True)
+    issues.sort(key=lambda item: item.path.name)
+    return ProjectRevisionScan(revisions=tuple(revisions), issues=tuple(issues))
+
+
+def _rotate_project_revisions(project_path: Path, limit: int) -> None:
+    limit = _validate_history_limit(limit)
+    directory = project_revision_dir(project_path)
+    if not directory.exists():
+        return
+    artifacts = sorted(
+        directory.glob("*.cleanroomx.revision.json"),
+        key=lambda item: item.name,
+        reverse=True,
+    )
+    for artifact in artifacts[limit:]:
+        artifact.unlink(missing_ok=True)
+    if len(artifacts) > limit:
+        _fsync_directory(directory)
+
+
+def _remove_failed_revision(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+        _fsync_directory(path.parent)
+    except OSError:
+        pass
+
+
+def _verify_project_write(
+    destination: Path,
+    expected_bytes: bytes,
+    expected_project: ProjectDocument,
+) -> None:
+    actual_bytes = destination.read_bytes()
+    if actual_bytes != expected_bytes:
+        raise OSError("saved project verification failed: persisted bytes differ")
+    actual_project = _project_from_bytes(actual_bytes)
+    if actual_project != expected_project:
+        raise OSError("saved project verification failed: project model differs after reload")
+
+
+def _rollback_destination(destination: Path, previous_bytes: bytes | None) -> None:
+    if previous_bytes is None:
+        destination.unlink(missing_ok=True)
+        _fsync_directory(destination.parent)
+    else:
+        atomic_write_bytes(destination, previous_bytes)
+
+
+def save_project_document(
     path: str | Path,
     project: ProjectDocument,
     *,
-    expected_revision: ProjectFileRevision,
-) -> tuple[Path, ProjectFileRevision]:
-    """Save only while the destination still matches the expected content revision."""
-    destination = _normalized_project_path(path)
+    history_limit: int = DEFAULT_PROJECT_REVISION_HISTORY_LIMIT,
+) -> Path:
+    history_limit = _validate_history_limit(history_limit)
+    destination = Path(path)
+    data = project.to_dict()
+    project_from_dict(data)
+    text = json.dumps(
+        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+    ) + "\n"
+    expected_bytes = text.encode("utf-8")
 
-    def assert_unchanged() -> None:
-        current = capture_project_file_revision(destination)
-        if not project_file_revision_matches(expected_revision, current):
-            raise ProjectWriteConflictError(destination, expected_revision, current)
+    previous_bytes = destination.read_bytes() if destination.exists() else None
+    if previous_bytes == expected_bytes:
+        _verify_project_write(destination, expected_bytes, project)
+        return destination
 
-    assert_unchanged()
-    text = _project_document_text(project)
-    saved_path = _atomic_write_text(
-        destination,
-        text,
-        before_replace=assert_unchanged,
+    revision_path: Path | None = None
+    if previous_bytes is not None and history_limit:
+        try:
+            revision_path = _write_project_revision(destination, previous_bytes)
+        except (OSError, ProjectFormatError) as exc:
+            raise ProjectRevisionError(
+                "cannot preserve the previous project revision; save was not attempted: "
+                f"{exc}"
+            ) from exc
+
+    try:
+        atomic_write_bytes(destination, expected_bytes)
+        _verify_project_write(destination, expected_bytes, project)
+    except Exception as save_error:
+        try:
+            _rollback_destination(destination, previous_bytes)
+        except Exception as rollback_error:
+            raise OSError(
+                "project save failed and rollback could not restore the previous file; "
+                f"saved revision retained at {revision_path!s}: {rollback_error}"
+            ) from save_error
+        _remove_failed_revision(revision_path)
+        raise
+
+    if history_limit:
+        _rotate_project_revisions(destination, history_limit)
+    return destination
+
+
+def restore_project_revision(
+    revision_path: str | Path,
+    destination: str | Path,
+    *,
+    expected_source_path: str | Path | None = None,
+    history_limit: int = DEFAULT_PROJECT_REVISION_HISTORY_LIMIT,
+) -> Path:
+    """Restore a verified historical snapshot to a separate explicit project file."""
+    history_limit = _validate_history_limit(history_limit)
+    snapshot = load_project_revision(
+        revision_path,
+        expected_source_path=expected_source_path,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    target = Path(destination)
+    if os.path.normcase(str(_normalized_path(target))) == os.path.normcase(
+        str(snapshot.source_path)
+    ):
+        raise ProjectRevisionError(
+            "refusing to overwrite the source project; restore the revision to a separate file"
+        )
+
+    previous_bytes = target.read_bytes() if target.exists() else None
+    target_revision: Path | None = None
+    if previous_bytes is not None and previous_bytes != snapshot.source_bytes and history_limit:
+        try:
+            target_revision = _write_project_revision(target, previous_bytes)
+        except (OSError, ProjectFormatError) as exc:
+            raise ProjectRevisionError(
+                "cannot preserve the destination before revision restore; "
+                f"restore was not attempted: {exc}"
+            ) from exc
+
+    try:
+        atomic_write_bytes(target, snapshot.source_bytes)
+        actual = target.read_bytes()
+        if actual != snapshot.source_bytes:
+            raise OSError("restored project verification failed: persisted bytes differ")
+        restored = _project_from_bytes(actual)
+        if restored != snapshot.project:
+            raise OSError("restored project verification failed after reload")
+    except Exception as restore_error:
+        try:
+            _rollback_destination(target, previous_bytes)
+        except Exception as rollback_error:
+            raise OSError(
+                "project revision restore failed and rollback could not restore the "
+                f"destination; destination revision retained at {target_revision!s}: "
+                f"{rollback_error}"
+            ) from restore_error
+        _remove_failed_revision(target_revision)
+        raise
+
+    if history_limit:
+        _rotate_project_revisions(target, history_limit)
+    return target

@@ -15,9 +15,8 @@ from . import __version__
 from .application import (
     _external_dependency_references,
     _resolve_relative,
-    _stable_file_fingerprint,
 )
-from .persistence import atomic_write_generated
+from .persistence import atomic_write_generated, stable_file_sha256
 from .project import (
     ProjectDocument,
     ProjectFormatError,
@@ -166,15 +165,15 @@ def _build_portable_project(
             if record is None:
                 archive_path = _dependency_filename(len(source_to_record) + 1, source)
                 try:
-                    fingerprint = _stable_file_fingerprint(source)
-                except (OSError, RuntimeError) as exc:
+                    source_stat, source_sha256 = stable_file_sha256(source)
+                except OSError as exc:
                     raise ProjectBundleError(
                         f"dependency is unavailable or changing while packaging: {source}"
                     ) from exc
                 record = {
                     "path": archive_path,
-                    "size_bytes": fingerprint["size_bytes"],
-                    "sha256": fingerprint["sha256"],
+                    "size_bytes": source_stat.st_size,
+                    "sha256": source_sha256,
                     "references": [],
                 }
                 source_to_record[source_key] = record
@@ -265,11 +264,11 @@ def export_project_bundle(
         before_replace=before_replace,
     )
 
-    fingerprint = _stable_file_fingerprint(destination.resolve(strict=False))
+    bundle_stat, bundle_sha256 = stable_file_sha256(destination.resolve(strict=False))
     return {
         "bundle_path": str(destination),
-        "bundle_sha256": fingerprint["sha256"],
-        "bundle_size_bytes": fingerprint["size_bytes"],
+        "bundle_sha256": bundle_sha256,
+        "bundle_size_bytes": bundle_stat.st_size,
         "project_name": portable.name,
         "dependency_count": len(dependencies),
         "dependency_bytes": sum(item["size_bytes"] for item in dependencies),
@@ -441,8 +440,8 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
     source = Path(path).expanduser()
     source_resolved = source.resolve(strict=False)
     try:
-        bundle_before = _stable_file_fingerprint(source_resolved)
-    except (OSError, RuntimeError) as exc:
+        bundle_before_stat, bundle_before_sha256 = stable_file_sha256(source_resolved)
+    except OSError as exc:
         raise ProjectBundleError(f"bundle is unavailable or changing: {source}") from exc
     try:
         with zipfile.ZipFile(source, mode="r") as archive:
@@ -563,12 +562,12 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
         raise ProjectBundleError("file is not a valid CleanroomX project bundle") from exc
 
     try:
-        bundle_after = _stable_file_fingerprint(source_resolved)
-    except (OSError, RuntimeError) as exc:
+        bundle_after_stat, bundle_after_sha256 = stable_file_sha256(source_resolved)
+    except OSError as exc:
         raise ProjectBundleError(f"bundle changed during verification: {source}") from exc
     if (
-        bundle_before["size_bytes"] != bundle_after["size_bytes"]
-        or bundle_before["sha256"] != bundle_after["sha256"]
+        bundle_before_stat.st_size != bundle_after_stat.st_size
+        or bundle_before_sha256 != bundle_after_sha256
     ):
         raise ProjectBundleError(f"bundle changed during verification: {source}")
 
@@ -576,8 +575,8 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
         "schema": PROJECT_BUNDLE_SCHEMA,
         "schema_version": PROJECT_BUNDLE_SCHEMA_VERSION,
         "bundle_path": str(source),
-        "bundle_sha256": bundle_before["sha256"],
-        "bundle_size_bytes": bundle_before["size_bytes"],
+        "bundle_sha256": bundle_before_sha256,
+        "bundle_size_bytes": bundle_before_stat.st_size,
         "manifest_sha256": _sha256_bytes(manifest_bytes),
         "manifest_size_bytes": len(manifest_bytes),
         "project_name": bundled_project.name,
@@ -654,12 +653,14 @@ def extract_project_bundle(
             raise ProjectBundleError("bundle changed during extraction") from exc
 
         try:
-            bundle_after_copy = _stable_file_fingerprint(source.resolve(strict=False))
-        except (OSError, RuntimeError) as exc:
+            bundle_after_copy_stat, bundle_after_copy_sha256 = stable_file_sha256(
+                source.resolve(strict=False)
+            )
+        except OSError as exc:
             raise ProjectBundleError("bundle changed during extraction") from exc
         if (
-            bundle_after_copy["size_bytes"] != report["bundle_size_bytes"]
-            or bundle_after_copy["sha256"] != report["bundle_sha256"]
+            bundle_after_copy_stat.st_size != report["bundle_size_bytes"]
+            or bundle_after_copy_sha256 != report["bundle_sha256"]
         ):
             raise ProjectBundleError("bundle changed during extraction")
 

@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    project_file_fingerprint,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -244,7 +250,56 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
 
     saved = load_project_document(app.project_path)
     assert saved.analysis_by_id("a").input == {"value": 2}
+    assert app._project_file_fingerprint == project_file_fingerprint(app.project_path)
     assert "Saved" in app.status_var.value
+
+
+def test_save_project_preserves_external_change_and_reports_conflict(tmp_path, monkeypatch):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(name="Shared"),
+    )
+    fingerprint = project_file_fingerprint(path)
+    assert fingerprint is not None
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Local edit")
+    app.project_path = path
+    app._project_file_fingerprint = fingerprint
+    app._editor_analysis_id = None
+    app.name_var = Value("Local edit")
+    app.description_var = Value("")
+    app.status_var = Value("Editing")
+    app.root = object()
+    app._capture_saved_state = lambda: None
+    app._notify_explicit_save = lambda saved_path: None
+
+    external_text = '{"external":"newer"}\n'
+    path.write_text(external_text, encoding="utf-8")
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.save_project()
+
+    assert path.read_text(encoding="utf-8") == external_text
+    assert app.status_var.value == "Editing"
+    assert errors
+    assert errors[0][0] == "Save conflict"
+    assert "Save Project As" in errors[0][1]
 
 
 def test_save_project_as_invalidates_results_when_base_directory_changes(

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased saved project version history — 2026-09-25
+
+- Preserves the exact previous valid UTF-8 project bytes before every explicit overwrite, including legacy project shapes that are migrated only after load.
+- Stores saved versions in a separate per-user bounded history with source path, byte size, SHA-256, application version, and UTC archive time; project schema version 1 is unchanged.
+- Refuses an overwrite when the existing destination cannot be validated and archived first, preventing destructive Save/Save As behavior when historical preservation fails.
+- Validates revision schema, checksum, byte size, strict JSON, and embedded CleanroomX project integrity before listing or restoring a version.
+- Keeps unreadable/corrupt revision artifacts as diagnostic evidence instead of silently deleting them during history rotation.
+- Adds File > Saved Versions... and restores historical versions only as protected unsaved copies; the first save must use a different destination so the current project is never overwritten implicitly.
+- Adds focused persistence, corruption, bounded-history, legacy-byte, discard-boundary, and desktop lifecycle regressions without changing solver equations, tolerances, acceptance criteria, or engineering outputs.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

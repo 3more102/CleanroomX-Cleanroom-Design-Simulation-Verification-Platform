@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -7,7 +8,11 @@ import pytest
 
 from cleanroomx.autosave import (
     AutosaveManager,
+    RECOVERY_INTEGRITY_ALGORITHM,
+    RECOVERY_INTEGRITY_CANONICALIZATION,
+    RECOVERY_INTEGRITY_SCOPE,
     RECOVERY_SCHEMA,
+    RecoveryFormatError,
     load_recovery_artifact,
     scan_recovery_artifacts,
 )
@@ -205,3 +210,74 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
         assert not (tmp_path / "recovery").exists()
     finally:
         manager.shutdown(wait=True)
+
+
+def test_recovery_artifact_embeds_integrity_record(tmp_path):
+    manager = AutosaveManager(tmp_path / "recovery", session_id="integrity-session")
+    try:
+        manager.begin_project(None)
+        assert manager.request_autosave(_snapshot(_project()), source_path=None)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+
+        artifact = load_recovery_artifact(artifact_path)
+
+        assert artifact["integrity"]["algorithm"] == RECOVERY_INTEGRITY_ALGORITHM
+        assert (
+            artifact["integrity"]["canonicalization"]
+            == RECOVERY_INTEGRITY_CANONICALIZATION
+        )
+        assert artifact["integrity"]["scope"] == RECOVERY_INTEGRITY_SCOPE
+        assert len(artifact["integrity"]["sha256"]) == 64
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_recovery_loader_rejects_tampered_editor_state(tmp_path):
+    manager = AutosaveManager(tmp_path / "recovery", session_id="tamper-session")
+    try:
+        manager.begin_project(None)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=None,
+        )
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    raw["snapshot"]["ui_state"]["marker"] = 999
+    artifact_path.write_text(
+        json.dumps(raw, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="SHA-256 mismatch"):
+        load_recovery_artifact(artifact_path)
+
+
+def test_pre_integrity_recovery_artifact_remains_loadable(tmp_path):
+    manager = AutosaveManager(tmp_path / "recovery", session_id="legacy-session")
+    try:
+        manager.begin_project(None)
+        assert manager.request_autosave(_snapshot(_project()), source_path=None)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    raw = json.loads(artifact_path.read_text(encoding="utf-8"))
+    raw.pop("integrity")
+    artifact_path.write_text(
+        json.dumps(raw, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_recovery_artifact(artifact_path)
+
+    assert loaded["schema"] == RECOVERY_SCHEMA
+    assert "integrity" not in loaded

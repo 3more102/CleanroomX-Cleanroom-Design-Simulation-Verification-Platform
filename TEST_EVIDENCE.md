@@ -1,8 +1,29 @@
-# CleanroomX v0.101.0 Release 2 Test Evidence
+# CleanroomX v0.101.1 Final Spatial Release Test Evidence
 
 ## Verified final baseline
 
 Validation date: 2026-09-25
+
+## v0.101.1 final spatial closure
+
+The completed spatial-design tree was validated before the release-identity-only patch bump:
+
+- PR **#436 — Finish synchronized CleanroomX 2D/3D spatial design**
+- Exact tested PR head: `407f1d8adf028a3ab4091ba740c027646d7acad6`
+- Final merged `main` commit: `d4b8f6294dd7deed207935423a52cf5f19a035eb`
+- PR CI run **#1491** / id `36166788690`: **success**
+- Post-merge `main` CI run **#1493** / id `36167376732`: **success**
+- Python 3.11 complete suite: **973 passed**
+- Python 3.12 complete suite: **973 passed**
+- Python 3.13 complete suite: **973 passed**
+- Windows PowerShell/CMD checkout launcher smoke: **success**
+- Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+- Compare of tested PR head to merged `main`: **no file differences**
+
+The `v0.101.1` patch changes release identity/evidence only after this functional validation. The normal CI matrix must pass again on the version-bump pull request and post-merge `main` before the immutable `v0.101.1` tag is created.
+
+The previously published `v0.101.0` tag remains immutable at its original verified commit; it is not moved to the later spatial-completion tree.
+
 
 Final Release 2 merge on `main`:
 

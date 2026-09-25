@@ -27,17 +27,34 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Verify validated release baseline
+      - name: Qualify one-time release closure
+        id: closure
         shell: bash
         run: |
           set -euo pipefail
+          workflow=.github/workflows/publish-v0101-release.yml
           git cat-file -e "${TARGET_SHA}^{commit}"
+          git cat-file -e "${TARGET_SHA}:${workflow}"
+          if git cat-file -e "${TARGET_SHA}^:${workflow}" 2>/dev/null; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Release workflow already existed in the parent; skip publication."
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+            echo "This commit introduces the release workflow; publication is eligible."
+          fi
+
+      - name: Verify validated release baseline
+        if: steps.closure.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
           test "$(git show "${TARGET_SHA}:pyproject.toml" | grep -E '^version = "0\.101\.0"$')" = 'version = "0.101.0"'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'Release: CleanroomX v0.101.0'
           git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'conclusion SUCCESS'
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.101.0 Release 2 Test Evidence'
 
       - name: Publish tag and GitHub Release
+        if: steps.closure.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -45,7 +62,9 @@ jobs:
           set -euo pipefail
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            echo "Release ${TAG} already exists; immutable release is unchanged."
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${existing_sha}" = "${TARGET_SHA}"
+            echo "Release ${TAG} already exists at the validated closure commit; nothing to do."
             exit 0
           fi
 

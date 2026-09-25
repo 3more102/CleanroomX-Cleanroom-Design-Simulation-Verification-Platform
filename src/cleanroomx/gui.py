@@ -1044,6 +1044,25 @@ class CleanroomXApp:
             return
 
         destination = Path(path)
+        recovery_source = getattr(self, "_recovery_source_path", None)
+        restored_artifact = getattr(self, "_restored_recovery_artifact", None)
+        if (
+            restored_artifact is not None
+            and recovery_source is not None
+            and destination.resolve(strict=False)
+            == recovery_source.resolve(strict=False)
+        ):
+            messagebox.showwarning(
+                "Choose a different recovery file",
+                (
+                    "Recovered work must be saved to a different file first. "
+                    "The original project is preserved so both versions remain "
+                    "available for comparison."
+                ),
+                parent=self.root,
+            )
+            return
+
         previous_base = self._base_dir()
         editor_id = self._editor_analysis_id
         candidate = copy.deepcopy(self.project)

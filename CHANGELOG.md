@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased immutable external analysis input snapshots — 2026-09-25
+
+- Executes file-backed `consistency` and `dossier` workflows from private temporary copies whose SHA-256 and byte count must match the stable pre-run dependency fingerprints.
+- Closes the fingerprint-to-backend time-of-check/time-of-use window: the custom adapters no longer reopen the original engineering files after the execution snapshot is accepted, and each private snapshot is re-fingerprinted after backend execution before results are accepted.
+- Retains the existing post-run fingerprint of the original references, so persistent changes/disappearance still discard the result while a transient change-and-revert cannot alter the bytes consumed by the backend.
+- Adds execution-snapshot SHA-256/size and `immutable_content_snapshot_v1` mode to application provenance while restoring user-declared dossier source paths before results/reports are retained; temporary paths never become durable evidence.
+- Distinguishes local snapshot-storage failures from source-file instability so disk/write failures stop before backend execution with an actionable error.
+- Adds regressions for transient source replacement during both consistency and dossier execution, snapshot cleanup, repeated source changes while a snapshot is being prepared, injected snapshot-storage failure, and backend mutation of a private snapshot.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

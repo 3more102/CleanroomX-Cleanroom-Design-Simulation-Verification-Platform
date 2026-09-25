@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -528,6 +530,238 @@ def test_stable_file_backed_run_records_revision_timestamps(tmp_path):
     for dependency in provenance["external_dependencies"]:
         assert dependency["mtime_ns_before"] == dependency["mtime_ns_after"]
         assert dependency["mtime_ns_before"] > 0
+
+
+def test_consistency_executes_from_immutable_dependency_snapshot(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_bytes = target.read_bytes()
+    original_stat = target.stat()
+    original_runner = application_module._run_consistency
+    observed = {}
+
+    def run_while_original_is_transiently_invalid(run_payload, base_dir):
+        snapshot_path = Path(run_payload["verification_project"])
+        observed["snapshot_path"] = snapshot_path
+        assert snapshot_path != target
+        assert snapshot_path.is_file()
+
+        target.write_text("{broken", encoding="utf-8")
+        os.utime(
+            target,
+            ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+        )
+        try:
+            return original_runner(run_payload, base_dir)
+        finally:
+            target.write_bytes(original_bytes)
+            os.utime(
+                target,
+                ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+            )
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_while_original_is_transiently_invalid,
+    )
+
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    assert provenance["external_dependency_execution_mode"] == (
+        "immutable_content_snapshot_v1"
+    )
+    verification = next(
+        item
+        for item in provenance["external_dependencies"]
+        if item["field"] == "verification_project"
+    )
+    expected = hashlib.sha256(original_bytes).hexdigest()
+    assert verification["sha256_before"] == expected
+    assert verification["sha256_after"] == expected
+    assert verification["execution_snapshot_sha256"] == expected
+    assert verification["execution_snapshot_size_bytes"] == len(original_bytes)
+    assert provenance["external_dependencies_stable"] is True
+    assert observed["snapshot_path"].exists() is False
+
+
+def test_dossier_executes_from_immutable_dependency_snapshot(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    payload = {
+        "name": "Immutable dependency snapshot regression",
+        "verification_project": "facility_project.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_bytes = target.read_bytes()
+    original_stat = target.stat()
+    original_runner = application_module._run_dossier
+    observed = {}
+
+    def run_while_original_is_transiently_invalid(run_payload, base_dir):
+        snapshot_path = Path(run_payload["verification_project"])
+        observed["snapshot_path"] = snapshot_path
+        assert snapshot_path != target
+        assert snapshot_path.is_file()
+
+        target.write_text("{broken", encoding="utf-8")
+        os.utime(
+            target,
+            ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+        )
+        try:
+            return original_runner(run_payload, base_dir)
+        finally:
+            target.write_bytes(original_bytes)
+            os.utime(
+                target,
+                ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+            )
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_dossier",
+        run_while_original_is_transiently_invalid,
+    )
+
+    run = run_analysis("dossier", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    assert provenance["external_dependency_execution_mode"] == (
+        "immutable_content_snapshot_v1"
+    )
+    assert provenance["external_dependencies"][0]["execution_snapshot_sha256"] == (
+        hashlib.sha256(original_bytes).hexdigest()
+    )
+    assert provenance["external_dependencies_stable"] is True
+    assert run.result["source_files"][0]["path"] == "facility_project.json"
+    assert str(observed["snapshot_path"]) not in json.dumps(run.result, sort_keys=True)
+    assert observed["snapshot_path"].exists() is False
+
+
+def test_external_dependency_snapshot_storage_failure_is_reported_separately(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_bytes = target.read_bytes()
+    original_copyfile = application_module.shutil.copyfile
+
+    def fail_target_snapshot_copy(source, destination):
+        if Path(source) == target:
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+        return original_copyfile(source, destination)
+
+    monkeypatch.setattr(
+        application_module.shutil,
+        "copyfile",
+        fail_target_snapshot_copy,
+    )
+
+    def backend_must_not_start(*_args, **_kwargs):
+        pytest.fail("analysis backend started after snapshot storage failure")
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        backend_must_not_start,
+    )
+
+    with pytest.raises(
+        application_module.ExternalDependencySnapshotError,
+        match="analysis was not started",
+    ) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert raised.value.field == "verification_project"
+    assert raised.value.declared_path == "facility_project.json"
+    assert os.strerror(errno.ENOSPC) in str(raised.value)
+    assert target.read_bytes() == original_bytes
+
+
+def test_external_dependency_snapshot_mutation_by_backend_fails_closed(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    source = tmp_path / "facility_project.json"
+    source_bytes = source.read_bytes()
+    original_runner = application_module._run_consistency
+    observed = {}
+
+    def run_then_mutate_snapshot(run_payload, base_dir):
+        result = original_runner(run_payload, base_dir)
+        snapshot_path = Path(run_payload["verification_project"])
+        observed["snapshot_path"] = snapshot_path
+        snapshot_path.write_bytes(snapshot_path.read_bytes() + b" ")
+        return result
+
+    monkeypatch.setattr(
+        application_module,
+        "_run_consistency",
+        run_then_mutate_snapshot,
+    )
+
+    with pytest.raises(
+        application_module.ExternalDependencySnapshotError,
+        match="private snapshot changed during backend execution",
+    ) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert raised.value.field == "verification_project"
+    assert raised.value.declared_path == "facility_project.json"
+    assert source.read_bytes() == source_bytes
+    assert observed["snapshot_path"].exists() is False
+
+
+def test_external_dependency_snapshot_fails_closed_on_repeated_copy_races(
+    tmp_path, monkeypatch
+):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_copyfile = application_module.shutil.copyfile
+    mutations = {"count": 0}
+
+    def mutate_before_every_target_copy(source, destination):
+        source_path = Path(source)
+        if source_path == target:
+            source_path.write_bytes(source_path.read_bytes() + b" ")
+            mutations["count"] += 1
+        return original_copyfile(source, destination)
+
+    monkeypatch.setattr(
+        application_module.shutil,
+        "copyfile",
+        mutate_before_every_target_copy,
+    )
+
+    with pytest.raises(ExternalDependencyChangedError) as raised:
+        run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert mutations["count"] == application_module._DEPENDENCY_FINGERPRINT_ATTEMPTS
+    assert raised.value.changes[0]["field"] == "verification_project"
+    assert raised.value.changes[0]["status"] == "changed_while_snapshotting"
 
 
 def test_dossier_analysis_uses_same_external_dependency_guard(tmp_path, monkeypatch):

@@ -9,6 +9,7 @@ import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
 from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project_history import ProjectEditHistory, ProjectEditState
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +67,189 @@ def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():
     assert app.project.analysis_by_id("a").input == {"value": 2}
     assert app.project.analysis_by_id("b").input == {"value": 9}
     assert app.project.description == "Preserve editor state"
+
+
+def test_commit_editor_records_authoritative_input_transaction():
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Text:
+        def get(self, *args):
+            return '{"value": 2}'
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app.input_text = Text()
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app._runs_by_analysis = {}
+    app._project_history = ProjectEditHistory()
+    app._update_project_history_controls = lambda: None
+
+    app._commit_editor()
+
+    assert app.project.analysis_by_id("a").input == {"value": 2}
+    assert app._project_history.can_undo is True
+    restored, description = app._project_history.undo()
+    assert description == "Edit A input"
+    assert restored.analyses[0]["input"] == {"value": 1}
+    assert json.loads(restored.editor_text) == {"value": 1}
+
+
+def test_commit_editor_metadata_failure_is_transactional():
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Text:
+        def get(self, *args):
+            return '{"value": 2}'
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app.input_text = Text()
+    app.name_var = Value("   ")
+    app.description_var = Value("")
+    app._runs_by_analysis = {}
+    app._project_history = ProjectEditHistory()
+    app._update_project_history_controls = lambda: None
+
+    with pytest.raises(ValueError, match="project name cannot be empty"):
+        app._commit_editor()
+
+    assert app.project.analysis_by_id("a").input == {"value": 1}
+    assert app._project_history.can_undo is False
+
+
+def test_restore_project_edit_state_restores_analysis_without_rewinding_metadata():
+    class Text:
+        def __init__(self):
+            self.value = ""
+
+        def get(self, *args):
+            return self.value
+
+        def delete(self, *args):
+            self.value = ""
+
+        def insert(self, index, value):
+            self.value = value
+
+        def edit_modified(self, value):
+            self.modified = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[],
+        metadata={"spatial_layout": {"marker": "keep-current-spatial-state"}},
+    )
+    app._editor_analysis_id = None
+    app.input_text = Text()
+    cleared = []
+    selected = []
+    app._clear_run_cache = lambda: cleared.append(True)
+    app._refresh_analysis_list = lambda select_id=None: selected.append(select_id)
+    app.refresh_structure = lambda silent=False: None
+    app._update_title = lambda: None
+
+    state = ProjectEditState(
+        analyses=[
+            {
+                "id": "a",
+                "name": "A",
+                "kind": "room_verification",
+                "input": {"value": 1},
+            }
+        ],
+        active_analysis_id="a",
+        editor_analysis_id="a",
+        editor_text='{"value": 7}',
+    )
+
+    app._restore_project_edit_state(state)
+
+    assert app.project.analysis_by_id("a").input == {"value": 1}
+    assert app.project.metadata == {
+        "spatial_layout": {"marker": "keep-current-spatial-state"}
+    }
+    assert app.project.active_analysis_id == "a"
+    assert app._editor_analysis_id == "a"
+    assert app.input_text.value == '{"value": 7}'
+    assert cleared == [True]
+    assert selected == ["a"]
+
+
+def test_remove_analysis_records_restorable_transaction(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    removed = AnalysisDocument(
+        id="b",
+        name="Remove me",
+        kind="room_verification",
+        input={"value": 2},
+    )
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="Keep",
+                kind="room_verification",
+                input={"value": 1},
+            ),
+            removed,
+        ],
+        active_analysis_id="b",
+    )
+    app._running = False
+    app._editor_analysis_id = None
+    app._project_history = ProjectEditHistory()
+    app._current_analysis = lambda: removed
+    app._invalidate_last_run_for = lambda analysis_id: None
+    app._refresh_analysis_list = lambda select_id=None: None
+    app._update_project_history_controls = lambda: None
+    app._update_title = lambda: None
+    app.root = object()
+    monkeypatch.setattr(gui_module.messagebox, "askyesno", lambda *args, **kwargs: True)
+
+    app.remove_analysis()
+
+    assert [item.id for item in app.project.analyses] == ["a"]
+    restored, description = app._project_history.undo()
+    assert description == "Remove Remove me"
+    assert [item["id"] for item in restored.analyses] == ["a", "b"]
+    assert restored.active_analysis_id == "b"
 
 
 def test_restore_run_discards_cached_result_when_analysis_input_changed():

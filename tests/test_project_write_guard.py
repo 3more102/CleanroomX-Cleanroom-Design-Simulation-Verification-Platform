@@ -33,17 +33,17 @@ class Value:
 def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
+    original_parse = project_module._project_document_from_bytes
     calls = {"count": 0}
 
-    def changing_load(source):
-        project = original_load(source)
+    def changing_parse(payload):
+        project = original_parse(payload)
         if calls["count"] == 0:
             save_project_document(path, ProjectDocument(name="Second"))
         calls["count"] += 1
         return project
 
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+    monkeypatch.setattr(project_module, "_project_document_from_bytes", changing_parse)
 
     project, revision = load_project_document_with_revision(path)
 

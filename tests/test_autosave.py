@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
+    RecoveryFormatError,
     load_recovery_artifact,
     scan_recovery_artifacts,
 )
@@ -65,6 +67,8 @@ def test_autosave_writes_separate_artifact_and_preserves_source(tmp_path):
 
         artifact = load_recovery_artifact(status.artifact_path)
         assert artifact["schema"] == RECOVERY_SCHEMA
+        assert artifact["integrity"]["algorithm"] == "sha256"
+        assert len(artifact["integrity"]["payload_sha256"]) == 64
         assert artifact["source"]["path"] == str(source.resolve())
         assert artifact["source"]["sha256"]
         assert artifact["snapshot"]["project"]["project"]["name"] == "Autosave Demo"
@@ -205,3 +209,49 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
         assert not (tmp_path / "recovery").exists()
     finally:
         manager.shutdown(wait=True)
+
+
+def test_recovery_artifact_rejects_valid_json_content_corruption(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["snapshot"]["ui_state"]["marker"] = 99
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="integrity check failed"):
+        load_recovery_artifact(artifact_path)
+
+
+def test_unsigned_recovery_artifact_remains_backward_compatible(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload.pop("integrity")
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_recovery_artifact(artifact_path)
+    assert loaded["snapshot"]["project"]["project"]["name"] == "Autosave Demo"

@@ -171,3 +171,37 @@ def test_project_history_snapshots_are_isolated_and_strictly_validated():
     )
     with pytest.raises(ProjectFormatError, match="unique"):
         history.capture(project)
+
+
+def test_project_history_memory_budget_prunes_oldest_entries_but_keeps_latest():
+    project = _project()
+    probe = ProjectEditHistory()
+    snapshot_bytes = probe.capture(project).serialized_bytes
+    history = ProjectEditHistory(
+        limit=100,
+        max_bytes=snapshot_bytes * 3,
+    )
+
+    for value in range(2, 12):
+        before = history.capture(project)
+        project.analysis_by_id("analysis-a").input = {
+            "value": value,
+            "payload": "x" * 512,
+        }
+        history.record(before, project, description=f"Set {value}")
+
+    assert 1 <= history.undo_count < 10
+    assert history.approximate_bytes <= history.max_bytes or history.undo_count == 1
+    restored, description = history.undo(project)
+    assert description == "Set 11"
+    assert restored.analysis_by_id("analysis-a").input["value"] == 10
+
+
+def test_project_history_defaults_selection_to_active_analysis():
+    project = _project()
+    project.active_analysis_id = "analysis-b"
+    history = ProjectEditHistory()
+
+    state = history.capture(project)
+
+    assert state.selected_analysis_id == "analysis-b"

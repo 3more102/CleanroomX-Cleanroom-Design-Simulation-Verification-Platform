@@ -203,6 +203,7 @@ def test_run_bundle_captures_immutable_input_and_verifies():
     bundle = run.to_dict()
     verification = verify_analysis_run_bundle(bundle)
 
+    assert run.to_dict() == bundle
     assert bundle["schema"] == "cleanroomx.analysis-run"
     assert bundle["schema_version"] == 1
     assert bundle["input_snapshot"] == submitted

@@ -82,10 +82,13 @@ jobs:
           tests/test_application.py
           tests/test_application_all_workflows.py
           tests/test_project_document.py
+          tests/test_history.py
+          tests/test_project_history.py
           tests/test_autosave.py
           tests/test_crash_recovery.py
           tests/test_recovery_diff.py
           tests/test_gui.py
+          tests/test_gui_project_history.py
           tests/test_gui_autosave.py
           tests/test_gui_recovery.py
       - name: Run complete test suite

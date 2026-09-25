@@ -11,9 +11,10 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 3. **Project persistence** — `src/cleanroomx/project.py` implements the `cleanroomx.project` schema, strict JSON validation, supported legacy migration, duplicate-id and active-analysis checks, and atomic temporary-file replacement on save.
 4. **Recovery persistence** — `src/cleanroomx/autosave.py` owns separate versioned recovery artifacts, source-file fingerprints, bounded rotation, asynchronous write/coalescing, validated restore/discard operations, and recovery scanning. It never writes the explicit project path.
 5. **Recovery UI** — `src/cleanroomx/recovery_ui.py` provides startup recovery discovery, evidence inspection, explicit discard, and restore selection without owning project-save semantics.
-6. **Desktop UI** — `src/cleanroomx/gui.py` provides project lifecycle, JSON editing, validation, non-blocking execution, per-analysis result ownership, diagnostics, reporting, export, plotting, dirty-state tracking, unsaved-change protection, recovery-autosave status, protected recovery restoration, and active-run mutation guards.
-7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
-8. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
+6. **Transactional history** — `src/cleanroomx/history.py` provides shared bounded snapshot mechanics. `src/cleanroomx/project_history.py` adds validated project/UI snapshots with both count and byte budgets, while `src/cleanroomx/spatial_history.py` reuses the same engine for geometry-local undo/redo.
+7. **Desktop UI** — `src/cleanroomx/gui.py` provides project lifecycle, JSON editing, project-level transactional undo/redo, validation, non-blocking execution, per-analysis result ownership, diagnostics, reporting, export, plotting, dirty-state tracking, unsaved-change protection, recovery-autosave status, protected recovery restoration, and active-run mutation guards.
+8. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
+9. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
 
 ## Desktop data flow
 
@@ -24,6 +25,9 @@ Result ownership remains tied to the analysis id so stale results are not silent
 Recovery autosave is deliberately outside the project schema. The UI captures a model snapshot plus raw draft state on the Tk thread and submits it to a single background writer. Recovery artifacts are atomically written in a user-specific recovery directory, retain source-project fingerprint evidence, and are bounded by project identity. Explicit saves remain authoritative; recovery artifacts are never substituted for or written over the project file.
 
 Startup restoration keeps save ownership equally explicit. A recovery is parsed through the ordinary project validator, then loaded into the application with no explicit save path and a forced dirty baseline. The original source path, when present, is held separately only for relative-reference context. Therefore Ctrl+S routes through Save As, and a newer or changed source file cannot be overwritten by recovery startup logic.
+
+
+Project-level history is an in-memory editing concern and does not alter the persisted schema. Structural desktop transactions capture strict JSON project state plus the raw active editor draft. Restore passes persisted state back through the ordinary project parser/validator and invalidates cached analysis results. Histories are reset when document/path ownership changes through New/Open/Recovery/Save As. JSON-draft and spatial edits retain their own local histories and invalidate older project-history branches before they can replay stale state over newer local work.
 
 ## Engineering boundary
 

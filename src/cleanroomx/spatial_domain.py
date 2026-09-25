@@ -147,10 +147,10 @@ def _target_pairs(layout: Any, analysis: Any) -> list[tuple[dict, dict | None]]:
                 if str(ref.get("analysis_id") or "") != analysis_id:
                     pairs.append((room, None))
                     continue
-                ref_name = str(ref.get("room_name") or "")
-                if ref_name and ref_name != str(target.get("name") or ""):
-                    pairs.append((room, None))
-                    continue
+                # A room-verification analysis has exactly one engineering room.
+                # The analysis id is therefore the stable mapping identity; the
+                # stored room name is descriptive and may legitimately change
+                # during an explicit rename/synchronization transaction.
                 pairs.append((room, target))
                 continue
             pairs.append((room, target if index == 0 else None))
@@ -371,3 +371,55 @@ def engineering_fields_for_room(layout: Any, analysis: Any, room_id: str) -> dic
             return {}
         return {key: target[key] for key in interesting if key in target}
     return {}
+
+
+def engineering_mapping_issues(layout: Any, analysis: Any) -> list[dict[str, Any]]:
+    """Return deterministic advisory mapping/conflict diagnostics."""
+
+    if getattr(analysis, "kind", "") not in SUPPORTED_ROOM_ANALYSIS_KINDS:
+        return []
+    issues: list[dict[str, Any]] = []
+    for record in engineering_sync_states(layout, analysis):
+        state = record["state"]
+        room_id = record["room_id"]
+        if state == "unmapped":
+            issues.append(
+                {
+                    "code": "missing_engineering_mapping",
+                    "severity": "warning",
+                    "item_ids": [room_id],
+                    "message": (
+                        f"Spatial room {room_id!r} is not mapped to a room in "
+                        f"analysis {record.get('analysis_id')!r}."
+                    ),
+                }
+            )
+        elif state == "conflicting":
+            fields = ", ".join(record.get("differences", {})) or "geometry"
+            issues.append(
+                {
+                    "code": "engineering_geometry_conflict",
+                    "severity": "warning",
+                    "item_ids": [room_id],
+                    "message": (
+                        f"Spatial room {room_id!r} conflicts with mapped engineering "
+                        f"geometry ({fields}); synchronize deliberately before analysis."
+                    ),
+                }
+            )
+    return issues
+
+
+def mapped_pressure_values(layout: Any, analysis: Any) -> dict[str, float | None]:
+    """Return display pressure by spatial room, preferring current engineering input."""
+
+    result: dict[str, float | None] = {}
+    for room, target in _target_pairs(layout, analysis):
+        room_id = str(room.get("id") or "")
+        value = None
+        if target is not None:
+            value = _finite(target.get("observed_pressure_pa"))
+        if value is None:
+            value = _finite(room.get("pressure_pa"))
+        result[room_id] = value
+    return result

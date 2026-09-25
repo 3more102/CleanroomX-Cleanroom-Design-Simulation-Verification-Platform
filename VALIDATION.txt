@@ -77,6 +77,8 @@ PASS - deterministic 2D/3D viewport transforms
 PASS - 3D Fit derives zoom and both pan axes from real room floor/ceiling geometry
 PASS - explicit 2D viewport reset preserves model geometry
 PASS - Shift+left-drag 3D orbit updates azimuth and clamps elevation to 5–75 degrees
+PASS - autosave completion-callback race fix is merged with deterministic regression coverage
+PASS - PR #479 full suite: 1002 passed on Python 3.11, 3.12, and 3.13
 PASS - persisted window and generic-opening object types
 PASS - immutable v0.102.1 publisher tags only a successful CI SHA that still equals current main
 

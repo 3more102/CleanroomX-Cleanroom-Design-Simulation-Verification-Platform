@@ -24,18 +24,133 @@ class AnalysisSpec:
     description: str
 
 
+_RUN_BUNDLE_SCHEMA = "cleanroomx.analysis-run"
+_RUN_BUNDLE_SCHEMA_VERSION = 1
+_RUN_BUNDLE_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
+
+
+def _canonical_json_sha256(payload: dict) -> str:
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 @dataclass(frozen=True)
 class AnalysisRun:
     kind: str
     title: str
     status: str
+    input_snapshot: dict
     result: dict
     markdown: str
     diagnostics: dict
     plot: dict | None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        document = {
+            "schema": _RUN_BUNDLE_SCHEMA,
+            "schema_version": _RUN_BUNDLE_SCHEMA_VERSION,
+            "cleanroomx_version": __version__,
+            "kind": self.kind,
+            "title": self.title,
+            "status": self.status,
+            "input_snapshot": copy.deepcopy(self.input_snapshot),
+            "result": copy.deepcopy(self.result),
+            "markdown": self.markdown,
+            "diagnostics": copy.deepcopy(self.diagnostics),
+            "plot": copy.deepcopy(self.plot),
+        }
+        document["integrity"] = {
+            "algorithm": "sha256",
+            "canonicalization": _RUN_BUNDLE_CANONICALIZATION,
+            "sha256": _canonical_json_sha256(document),
+        }
+        return document
+
+
+def verify_analysis_run_bundle(document: dict) -> dict:
+    """Validate a versioned exported run bundle without re-running the solver."""
+    if not isinstance(document, dict):
+        raise ValueError("run bundle must be a JSON object")
+    if document.get("schema") != _RUN_BUNDLE_SCHEMA:
+        raise ValueError(
+            f"unsupported run bundle schema: {document.get('schema')!r}"
+        )
+    if document.get("schema_version") != _RUN_BUNDLE_SCHEMA_VERSION:
+        raise ValueError(
+            f"unsupported run bundle schema version: {document.get('schema_version')!r}"
+        )
+
+    bundle_version = document.get("cleanroomx_version")
+    if not isinstance(bundle_version, str) or not bundle_version:
+        raise ValueError("run bundle cleanroomx_version must be a non-empty string")
+
+    integrity = document.get("integrity")
+    if not isinstance(integrity, dict):
+        raise ValueError("run bundle integrity record is missing")
+    if integrity.get("algorithm") != "sha256":
+        raise ValueError("run bundle integrity algorithm must be sha256")
+    if integrity.get("canonicalization") != _RUN_BUNDLE_CANONICALIZATION:
+        raise ValueError("unsupported run bundle canonicalization")
+    expected_bundle_sha256 = integrity.get("sha256")
+    if not isinstance(expected_bundle_sha256, str) or len(expected_bundle_sha256) != 64:
+        raise ValueError("run bundle integrity sha256 must be a 64-character digest")
+
+    unsigned_document = copy.deepcopy(document)
+    unsigned_document.pop("integrity", None)
+    actual_bundle_sha256 = _canonical_json_sha256(unsigned_document)
+    if actual_bundle_sha256 != expected_bundle_sha256:
+        raise ValueError("run bundle integrity check failed: content has changed")
+
+    kind = document.get("kind")
+    if kind not in ANALYSIS_SPECS:
+        raise ValueError(f"run bundle contains unsupported analysis kind: {kind!r}")
+    input_snapshot = document.get("input_snapshot")
+    if not isinstance(input_snapshot, dict):
+        raise ValueError("run bundle input_snapshot must be a JSON object")
+
+    diagnostics = document.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        raise ValueError("run bundle diagnostics must be a JSON object")
+    provenance = diagnostics.get("application_execution_provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("run bundle execution provenance is missing")
+    if provenance.get("analysis_kind") != kind:
+        raise ValueError("run bundle analysis kind disagrees with execution provenance")
+    if provenance.get("cleanroomx_version") != bundle_version:
+        raise ValueError("run bundle version disagrees with execution provenance")
+    if provenance.get("input_canonicalization") != _APPLICATION_INPUT_CANONICALIZATION:
+        raise ValueError("unsupported application input canonicalization")
+
+    input_sha256 = _canonical_input_sha256(input_snapshot)
+    if provenance.get("input_sha256") != input_sha256:
+        raise ValueError("run bundle input snapshot does not match execution provenance")
+
+    dependency_count = provenance.get("external_dependency_count")
+    dependencies = provenance.get("external_dependencies")
+    if not isinstance(dependency_count, int) or dependency_count < 0:
+        raise ValueError("run bundle external dependency count is invalid")
+    if not isinstance(dependencies, list) or len(dependencies) != dependency_count:
+        raise ValueError("run bundle external dependency manifest is inconsistent")
+
+    return {
+        "status": "ok",
+        "schema": _RUN_BUNDLE_SCHEMA,
+        "schema_version": _RUN_BUNDLE_SCHEMA_VERSION,
+        "cleanroomx_version": bundle_version,
+        "analysis_kind": kind,
+        "input_sha256": input_sha256,
+        "bundle_sha256": actual_bundle_sha256,
+        "external_dependency_count": dependency_count,
+        "external_dependencies_stable": provenance.get(
+            "external_dependencies_stable"
+        ),
+    }
 
 
 def _spec(key, title, category, parser, runner, reporter, description):
@@ -736,19 +851,23 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
-    validate_analysis_input(kind, payload, base_dir=base_dir)
-    input_sha256 = _canonical_input_sha256(payload)
+    submitted_input = copy.deepcopy(payload)
+    execution_payload = copy.deepcopy(submitted_input)
+    validate_analysis_input(kind, execution_payload, base_dir=base_dir)
+    input_sha256 = _canonical_input_sha256(submitted_input)
     spec = ANALYSIS_SPECS[kind]
     base = Path(base_dir) if base_dir is not None else None
-    dependencies_before = _capture_external_dependencies(kind, payload, base)
+    dependencies_before = _capture_external_dependencies(kind, execution_payload, base)
 
     if kind == "consistency":
-        result = _run_consistency(payload, base)
+        result = _run_consistency(execution_payload, base)
     elif kind == "dossier":
-        result = _run_dossier(payload, base)
+        result = _run_dossier(execution_payload, base)
     else:
         assert spec.parser is not None and spec.runner is not None
-        result = _load_callable(spec.runner)(_load_callable(spec.parser)(payload))
+        result = _load_callable(spec.runner)(
+            _load_callable(spec.parser)(execution_payload)
+        )
 
     normalized = _normalize_result(result)
     markdown = (
@@ -756,7 +875,7 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         if spec.reporter is None
         else _load_callable(spec.reporter)(normalized)
     )
-    dependencies_after = _capture_external_dependencies(kind, payload, base)
+    dependencies_after = _capture_external_dependencies(kind, execution_payload, base)
     diagnostics = diagnostic_summary(normalized)
     diagnostics["application_execution_provenance"] = _application_execution_provenance(
         kind,
@@ -768,10 +887,11 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         kind=kind,
         title=spec.title,
         status=_derive_status(normalized),
+        input_snapshot=submitted_input,
         result=normalized,
         markdown=markdown,
         diagnostics=diagnostics,
-        plot=build_plot_model(payload, normalized),
+        plot=build_plot_model(execution_payload, normalized),
     )
 
 

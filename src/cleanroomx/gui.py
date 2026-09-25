@@ -1029,12 +1029,14 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
+        before = self._capture_project_history_state()
         changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
         if not changed:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
+        self._record_project_edit(before, "Synchronize spatial geometry")
         self._update_title()
         self.status_var.set(
             f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
@@ -1069,6 +1071,7 @@ class CleanroomXApp:
         self.project = recovered.project
         self.project_path = None
         self._project_file_revision = None
+        self._clear_project_history()
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -1162,6 +1165,7 @@ class CleanroomXApp:
         self.project = new_project()
         self.project_path = None
         self._project_file_revision = None
+        self._clear_project_history()
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -1201,6 +1205,7 @@ class CleanroomXApp:
         self.project = project
         self.project_path = project_path
         self._project_file_revision = project_revision
+        self._clear_project_history()
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1362,6 +1367,7 @@ class CleanroomXApp:
         self.project_path = saved_path
         self._project_file_revision = saved_revision
         self._recovery_source_path = None
+        self._clear_project_history()
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()
         if editor_id is not None:
@@ -1396,6 +1402,7 @@ class CleanroomXApp:
             return
         kind = picker.result
         spec = ANALYSIS_SPECS[kind]
+        before = self._capture_project_history_state()
         analysis_id = f"{kind}-{uuid.uuid4().hex[:8]}"
         payload = {"name": "New Dossier"} if kind == "dossier" else {}
         analysis = AnalysisDocument(
@@ -1407,6 +1414,7 @@ class CleanroomXApp:
         self.project.analyses.append(analysis)
         self.project.active_analysis_id = analysis_id
         self._refresh_analysis_list(select_id=analysis_id)
+        self._record_project_edit(before, f"Add analysis {analysis.name}")
         self._update_title()
 
     def rename_analysis(self) -> None:
@@ -1419,9 +1427,11 @@ class CleanroomXApp:
         value = simpledialog.askstring(
             "Rename analysis", "Analysis name", initialvalue=analysis.name, parent=self.root
         )
-        if value and value.strip():
+        if value and value.strip() and value.strip() != analysis.name:
+            before = self._capture_project_history_state()
             analysis.name = value.strip()
             self.analysis_tree.item(analysis.id, text=analysis.name)
+            self._record_project_edit(before, f"Rename analysis {analysis.name}")
             self._update_title()
 
     def remove_analysis(self) -> None:
@@ -1437,12 +1447,14 @@ class CleanroomXApp:
             parent=self.root,
         ):
             return
+        before = self._capture_project_history_state()
         self._invalidate_last_run_for(analysis.id)
         self.project.analyses = [item for item in self.project.analyses if item.id != analysis.id]
         self.project.active_analysis_id = (
             self.project.analyses[0].id if self.project.analyses else None
         )
         self._refresh_analysis_list()
+        self._record_project_edit(before, f"Remove analysis {analysis.name}")
         self._update_title()
 
     def import_input_json(self) -> None:
@@ -1474,9 +1486,11 @@ class CleanroomXApp:
         except Exception as exc:
             messagebox.showerror("Import failed", str(exc), parent=self.root)
             return
+        before = self._capture_project_history_state()
         analysis.input = payload
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
+        self._record_project_edit(before, f"Import input for {analysis.name}")
         self.status_var.set(f"Imported {source_path.name}")
         self._update_title()
 

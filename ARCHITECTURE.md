@@ -13,8 +13,7 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 5. **Recovery UI** — `src/cleanroomx/recovery_ui.py` provides startup recovery discovery, evidence inspection, explicit discard, and restore selection without owning project-save semantics.
 6. **Desktop UI** — `src/cleanroomx/gui.py` provides project lifecycle, JSON editing, validation, non-blocking execution, per-analysis result ownership, diagnostics, reporting, export, plotting, dirty-state tracking, unsaved-change protection, recovery-autosave status, protected recovery restoration, and active-run mutation guards.
 7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
-8. **Spatial model integrity** — `src/cleanroomx/spatial.py` owns canonical room/device geometry, deterministic unique identity repair for legacy or malformed spatial metadata, spatial validation, and fail-closed mapping from layout geometry into supported verification inputs. `src/cleanroomx/spatial_history.py` owns bounded model snapshots for undo/redo without mixing camera state into engineering edits.
-9. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
+8. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
 
 ## Desktop data flow
 
@@ -28,7 +27,7 @@ Recovery autosave is deliberately outside the project schema. The UI captures a 
 
 Startup restoration keeps save ownership equally explicit. A recovery is parsed through the ordinary project validator, then loaded into the application with no explicit save path and a forced dirty baseline. The original source path, when present, is held separately only for relative-reference context. Therefore Ctrl+S routes through Save As, and a newer or changed source file cannot be overwritten by recovery startup logic.
 
-Spatial metadata is canonicalized independently of solver inputs. Existing unique room/device ids are preserved; missing or duplicate ids are repaired with deterministic suffix allocation so repeated normalization of identical data yields identical object identities. Geometry synchronization validates the complete room-name mapping before applying any change. Ambiguous room identities or an unresolved single-room target raise a synchronization error before mutation, preventing partial or last-write-wins engineering input updates.
+Spatial geometry synchronization is an explicit engineering-input transaction. Before changing a room-verification or project-verification input, the application validates the complete room-identity mapping used by the operation. Ambiguous room names or an unresolved single-room target fail before mutation, so synchronization cannot leave a partially updated analysis or silently select a last duplicate.
 
 ## Engineering boundary
 

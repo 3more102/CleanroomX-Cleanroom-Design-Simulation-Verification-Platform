@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased durable verified persistence — 2026-09-25
+
+- Hardens the existing shared atomic-write primitive used by explicit project saves, recovery artifacts, and GUI text exports instead of introducing a parallel persistence subsystem.
+- Writes canonical UTF-8 bytes in binary mode so persisted content is deterministic across platform newline conventions.
+- Flushes and fsyncs the same-directory staging file, then re-reads it and requires an exact byte-count and SHA-256 match **before** the authoritative destination can be replaced; a staged corruption/short write therefore leaves an existing destination untouched.
+- After atomic replacement, fsyncs the containing directory on POSIX so the rename is durably committed, then re-reads the destination and requires the exact requested size/SHA-256 before callers can report success.
+- Surfaces staging, directory-sync, and committed-write verification failures through the existing project-save/export/autosave error paths rather than silently accepting an unverified write.
+- Preserves project schema version 1, external-revision conflict semantics, recovery ownership, solver equations, numerical tolerances, and engineering acceptance behavior. Windows retains atomic replacement plus staged/committed byte verification; Python provides no portable directory-fsync primitive there.
+- Adds failure-injection regression coverage for pre-replace corruption, post-replace corruption, exact UTF-8 bytes, temporary-file cleanup, and parent-directory sync invocation.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

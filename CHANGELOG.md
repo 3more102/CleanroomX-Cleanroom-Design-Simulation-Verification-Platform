@@ -1,13 +1,12 @@
 # Changelog
 
-## Unreleased deterministic project batch automation — 2026-09-25
+## Unreleased strict engineering JSON ingestion — 2026-09-25
 
-- Adds `cleanroomx-project-run` and `cleanroomx.project_batch.run_project_file()` for headless execution of complete or selected saved-project analyses through the existing application service.
-- Binds the batch to one exact project SHA-256/size revision, executes in deterministic persisted project order, and rechecks the source before and after every attempted analysis.
-- Stops scheduling new analyses if the source changes; isolates ordinary per-analysis exceptions unless fail-fast is requested.
-- Preserves each completed `AnalysisRun`, including canonical input and external-dependency provenance, and emits strict JSON or Markdown with atomic file output.
-- Routes user-controlled Markdown labels, paths, and errors through the shared Markdown escaping boundary.
-- Keeps engineering PASS/FAIL/indeterminate states as domain results rather than process exit semantics; no project schema, solver equation, tolerance, convergence rule, or unit convention changes.
+- Routes all public file-backed engineering JSON loaders and dossier manifests through the shared strict JSON parser.
+- Rejects non-standard `NaN`, `Infinity`, and `-Infinity` constants before model construction or solver execution.
+- Rejects duplicate JSON object keys at the same ingestion boundary instead of silently accepting the last occurrence.
+- Preserves UTF-8 file reading, ordinary JSON syntax errors, solver equations, numerical tolerances, engineering acceptance semantics, project schema version 1, and existing finite standards-compliant inputs.
+- Adds focused regression coverage across every migrated engineering loader plus dossier library/CLI ingestion.
 
 ## Unreleased verification outcome integrity — 2026-09-25
 

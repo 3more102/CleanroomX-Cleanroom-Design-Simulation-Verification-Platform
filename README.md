@@ -67,16 +67,6 @@ cleanroomx-gui --check
 
 The CI smoke path starts the real Tk application under a virtual display and runs the active demo analysis before exiting. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the project format, operator workflow, supported analysis catalog, validation/run/export behavior, and engineering boundaries.
 
-### Project batch automation
-
-Run every analysis in a saved CleanroomX project headlessly through the same validated application service as the desktop:
-
-```bash
-cleanroomx-project-run project.cleanroomx.json
-```
-
-Repeat `--analysis ID` for a deterministic subset, add `--fail-fast` to stop after the first execution exception, and use `--format json|markdown --output PATH` for an atomic report. The runner binds the batch to the parsed project SHA-256, preserves each completed run's existing execution/dependency provenance, and stops scheduling if the source project changes during execution. Engineering PASS/FAIL-style states remain domain results; batch exit codes describe orchestration integrity. See [docs/PROJECT_BATCH_AUTOMATION.md](docs/PROJECT_BATCH_AUTOMATION.md).
-
 ### v0.95 solver-result integrity linkage
 
 v0.95 adds a separate deterministic identity for the complete standalone nonlinear fan/variable-friction solver result. The digest excludes only its own `result_integrity` block, normalizes signed zero, sorts semantically named node/edge/closure collections, and preserves solver/search order where ordering is meaningful.

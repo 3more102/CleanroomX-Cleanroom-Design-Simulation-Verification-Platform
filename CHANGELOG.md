@@ -2,7 +2,7 @@
 
 ## Unreleased external project write protection — 2026-09-25
 
-- Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.
+- Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open. Revision SHA-256 is now derived from the same stable byte snapshot passed to JSON parsing, eliminating the separate-read race between fingerprinting and deserialization.
 - Protects explicit project saves with SHA-256 optimistic write checks before serialization and immediately before atomic replacement.
 - Blocks silent overwrite when another CleanroomX session or external editor changes, deletes, replaces, or races to create the destination.
 - Keeps the user's in-memory work available for Save As, and prevents same-path Save As from bypassing the guard.

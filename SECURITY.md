@@ -14,7 +14,7 @@ Application workflow bindings are fixed in `src/cleanroomx/application.py`. The 
 
 Some workflows, including dossier and consistency, resolve user-supplied file references relative to the saved project directory. Treat project files and referenced engineering data as trusted local inputs and review their paths before execution.
 
-Project saving uses a temporary file followed by replacement to reduce the chance of leaving a partially written project after an interrupted save.
+Project saving uses a temporary file followed by replacement to reduce the chance of leaving a partially written project after an interrupted save. Desktop guarded saves also use SHA-256 content-revision checks and a non-blocking OS advisory lock shared by CleanroomX processes. The adjacent lock sidecar contains no project data or credentials and may persist after the lock is released; ownership is represented by the kernel lock, not by the sidecar's existence. External applications are not forced to honor advisory locks, so the content-revision checks remain the protection against non-cooperating writers.
 
 ## Operational guidance
 

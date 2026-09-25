@@ -255,7 +255,7 @@ def test_pressure_cascade_links_ignore_corner_touch_equal_pressure_and_separated
                 "x_m": 2,
                 "y_m": 0,
                 "length_m": 2,
-                "width_m": 2,
+                "width_m": 1.5,
                 "height_m": 3,
                 "pressure_pa": 20,
             },

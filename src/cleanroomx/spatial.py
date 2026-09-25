@@ -150,6 +150,84 @@ def normalize_layout(value: Any) -> dict:
     return result
 
 
+def _shared_wall_midpoint(
+    room_a: dict,
+    room_b: dict,
+    *,
+    tolerance_m: float = 0.05,
+) -> tuple[float, float] | None:
+    """Return the midpoint of a shared wall, allowing a small drafting tolerance."""
+    ax0 = room_a["x_m"]
+    ay0 = room_a["y_m"]
+    ax1 = ax0 + room_a["length_m"]
+    ay1 = ay0 + room_a["width_m"]
+    bx0 = room_b["x_m"]
+    by0 = room_b["y_m"]
+    bx1 = bx0 + room_b["length_m"]
+    by1 = by0 + room_b["width_m"]
+
+    y0 = max(ay0, by0)
+    y1 = min(ay1, by1)
+    if y1 - y0 > tolerance_m:
+        if abs(ax1 - bx0) <= tolerance_m:
+            return ((ax1 + bx0) / 2.0, (y0 + y1) / 2.0)
+        if abs(bx1 - ax0) <= tolerance_m:
+            return ((bx1 + ax0) / 2.0, (y0 + y1) / 2.0)
+
+    x0 = max(ax0, bx0)
+    x1 = min(ax1, bx1)
+    if x1 - x0 > tolerance_m:
+        if abs(ay1 - by0) <= tolerance_m:
+            return ((x0 + x1) / 2.0, (ay1 + by0) / 2.0)
+        if abs(by1 - ay0) <= tolerance_m:
+            return ((x0 + x1) / 2.0, (by1 + ay0) / 2.0)
+    return None
+
+
+def pressure_cascade_links(
+    layout: dict,
+    *,
+    tolerance_m: float = 0.05,
+) -> list[dict]:
+    """Build deterministic high-to-low pressure links for geometrically adjacent rooms."""
+    rooms = normalize_layout(layout)["rooms"]
+    links: list[dict] = []
+    for index, room_a in enumerate(rooms):
+        pressure_a = room_a.get("pressure_pa")
+        if pressure_a is None:
+            continue
+        for room_b in rooms[index + 1 :]:
+            pressure_b = room_b.get("pressure_pa")
+            if pressure_b is None:
+                continue
+            boundary = _shared_wall_midpoint(room_a, room_b, tolerance_m=tolerance_m)
+            if boundary is None:
+                continue
+            delta = pressure_a - pressure_b
+            if abs(delta) <= 1e-9:
+                continue
+            higher, lower = (room_a, room_b) if delta > 0 else (room_b, room_a)
+            links.append(
+                {
+                    "higher_room_id": higher["id"],
+                    "higher_room_name": higher["name"],
+                    "lower_room_id": lower["id"],
+                    "lower_room_name": lower["name"],
+                    "delta_pa": abs(delta),
+                    "start": (
+                        higher["x_m"] + higher["length_m"] / 2.0,
+                        higher["y_m"] + higher["width_m"] / 2.0,
+                    ),
+                    "end": (
+                        lower["x_m"] + lower["length_m"] / 2.0,
+                        lower["y_m"] + lower["width_m"] / 2.0,
+                    ),
+                    "boundary": boundary,
+                }
+            )
+    return links
+
+
 def derive_layout_from_analysis(analysis: Any) -> dict:
     layout = empty_layout()
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
@@ -312,6 +390,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_rulers = tk.BooleanVar(value=True)
         self._show_crosshair = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
+        self._show_cascade = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._cursor_world: tuple[float, float] | None = None
@@ -399,6 +478,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Checkbutton(displaybar, text="Pressure", variable=self._show_pressure, command=self.redraw).pack(
             side="left", padx=2
         )
+        ttk.Checkbutton(
+            displaybar,
+            text="ΔP Links",
+            variable=self._show_cascade,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
         ttk.Checkbutton(displaybar, text="Devices", variable=self._show_devices, command=self.redraw).pack(
             side="left", padx=(2, 6)
         )
@@ -1255,6 +1340,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                         tags=(f"resize:{room['id']}:{handle}", "resize"),
                     )
 
+        if self._show_cascade.get():
+            self._draw_pressure_cascade_2d(canvas)
+
         symbols = {
             "door": "D",
             "supply": "S",
@@ -1311,6 +1399,40 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
                 justify="center",
                 fill="#667788",
+            )
+
+    def _draw_pressure_cascade_2d(self, canvas: tk.Canvas) -> None:
+        """Overlay high-to-low pressure links only across shared room boundaries."""
+        for link in pressure_cascade_links(self.layout):
+            sx, sy = self._world_to_canvas(*link["start"])
+            ex, ey = self._world_to_canvas(*link["end"])
+            dx = ex - sx
+            dy = ey - sy
+            length = math.hypot(dx, dy)
+            if length <= 1e-6:
+                continue
+            padding = min(28.0, length * 0.22)
+            ux = dx / length
+            uy = dy / length
+            start = (sx + ux * padding, sy + uy * padding)
+            end = (ex - ux * padding, ey - uy * padding)
+            canvas.create_line(
+                *start,
+                *end,
+                fill="#dc2626",
+                width=2,
+                arrow="last",
+                arrowshape=(9, 11, 4),
+                tags=("cascade",),
+            )
+            bx, by = self._world_to_canvas(*link["boundary"])
+            canvas.create_text(
+                bx,
+                by - 11,
+                text=f"ΔP {link['delta_pa']:g} Pa",
+                fill="#991b1b",
+                font=("TkDefaultFont", 7, "bold"),
+                tags=("cascade",),
             )
 
     def _draw_room_dimensions(
@@ -1667,6 +1789,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                     tags=(tag, "room3d"),
                 )
 
+        if self._show_cascade.get():
+            self._draw_pressure_cascade_3d(canvas, cx, cy)
+
         if self._show_devices.get():
             for device in self.layout["devices"]:
                 x, y = self._project_3d(
@@ -1704,6 +1829,42 @@ class SpatialDesignWorkspace(ttk.Frame):
         if self.layout["devices"] and self._show_devices.get():
             self._draw_device_legend(canvas, dark=True)
         self._draw_3d_hud(canvas)
+
+    def _draw_pressure_cascade_3d(self, canvas: tk.Canvas, cx: float, cy: float) -> None:
+        """Project pressure-cascade links into the digital-twin view."""
+        rooms_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for link in pressure_cascade_links(self.layout):
+            higher = rooms_by_id.get(link["higher_room_id"])
+            lower = rooms_by_id.get(link["lower_room_id"])
+            if higher is None or lower is None:
+                continue
+            z = max(0.2, min(higher["height_m"], lower["height_m"]) * 0.55)
+            sx, sy = self._project_3d(link["start"][0] - cx, link["start"][1] - cy, z)
+            ex, ey = self._project_3d(link["end"][0] - cx, link["end"][1] - cy, z)
+            canvas.create_line(
+                sx,
+                sy,
+                ex,
+                ey,
+                fill="#fb7185",
+                width=3,
+                arrow="last",
+                arrowshape=(10, 12, 5),
+                tags=("cascade3d",),
+            )
+            bx, by = self._project_3d(
+                link["boundary"][0] - cx,
+                link["boundary"][1] - cy,
+                z + 0.12,
+            )
+            canvas.create_text(
+                bx,
+                by - 8,
+                text=f"ΔP {link['delta_pa']:g} Pa",
+                fill="#fecdd3",
+                font=("TkDefaultFont", 7, "bold"),
+                tags=("cascade3d",),
+            )
 
     def _draw_3d_hud(self, canvas: tk.Canvas) -> None:
         az = self.layout["view"]["azimuth_deg"] % 360

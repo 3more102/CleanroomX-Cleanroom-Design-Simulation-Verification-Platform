@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased project transactional undo/redo — 2026-09-25
+
+- Adds bounded application-level project history for structural desktop edits while preserving the existing JSON-editor and spatial-workspace local histories.
+- Makes analysis add, rename, remove, imported-input replacement, project-metadata focus edits, and explicit spatial-to-analysis synchronization reversible through the new Edit menu.
+- Restores validated project snapshots plus the exact raw editor draft, so Undo can recover text that had not yet been committed to the project model.
+- Invalidates cached analysis results after project-history restoration and resets history across New/Open/Recovery/Save-As document identity boundaries.
+- Consolidates spatial and project history storage on one shared bounded snapshot engine with copy isolation and divergent-edit redo invalidation.
+- Preserves project schema version 1, save-conflict protection, autosave/recovery behavior, solver equations, tolerances, and engineering acceptance semantics.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

@@ -2668,6 +2668,25 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(run.to_dict(), allow_nan=False)
         root.update_idletasks()
         root.update()
+        if project_path:
+            workspace = app.spatial_workspace
+            failures: list[str] = []
+            if len(workspace.layout.get("rooms", [])) < 3:
+                failures.append("demo spatial layout has fewer than three rooms")
+            if not workspace.canvas_2d.find_withtag("room"):
+                failures.append("2D room geometry did not render")
+            if not workspace.canvas_3d.find_withtag("room3d"):
+                failures.append("3D room geometry did not render")
+            if not workspace._pressure_relationships():
+                failures.append("pressure-cascade relationships are unavailable")
+            if not workspace.canvas_2d.find_withtag("pressure_relationship"):
+                failures.append("2D pressure-cascade relationships did not render")
+            if not workspace.canvas_3d.find_withtag("pressure_relationship_3d"):
+                failures.append("3D pressure-cascade relationships did not render")
+            if failures:
+                root.destroy()
+                print("CleanroomX GUI smoke: FAIL — " + "; ".join(failures))
+                return 2
         root.destroy()
         print("CleanroomX GUI smoke: PASS")
         return 0

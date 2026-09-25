@@ -7,7 +7,7 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import simpledialog, ttk
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -55,6 +55,13 @@ def _unique_id(preferred: Any, used_ids: set[str], *, fallback: str) -> str:
 def empty_layout() -> dict:
     return {
         "version": SPATIAL_LAYOUT_VERSION,
+        "floor": {
+            "id": "floor-1",
+            "name": "Floor 1",
+            "elevation_m": 0.0,
+            "default_ceiling_height_m": 3.0,
+            "units": "m",
+        },
         "grid_m": 0.5,
         "rooms": [],
         "devices": [],
@@ -67,6 +74,11 @@ def empty_layout() -> dict:
             "zoom_3d": 1.0,
             "pan_3d_x": 0.0,
             "pan_3d_y": 0.0,
+            "snap_to_grid": True,
+            "show_pressure": True,
+            "show_labels": True,
+            "show_devices": True,
+            "show_relationships": True,
         },
     }
 
@@ -75,6 +87,20 @@ def normalize_layout(value: Any) -> dict:
     source = value if isinstance(value, dict) else {}
     result = empty_layout()
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
+
+    raw_floor = source.get("floor", {})
+    if isinstance(raw_floor, dict):
+        result["floor"] = {
+            "id": str(raw_floor.get("id") or "floor-1").strip() or "floor-1",
+            "name": str(raw_floor.get("name") or "Floor 1").strip() or "Floor 1",
+            "elevation_m": _finite_number(raw_floor.get("elevation_m"), 0.0),
+            "default_ceiling_height_m": _positive(
+                raw_floor.get("default_ceiling_height_m"), 3.0
+            ),
+            "units": "m",
+        }
+    floor_elevation = result["floor"]["elevation_m"]
+    default_height = result["floor"]["default_ceiling_height_m"]
 
     rooms: list[dict] = []
     used_ids: set[str] = set()
@@ -96,10 +122,18 @@ def normalize_layout(value: Any) -> dict:
                 "y_m": _finite_number(raw.get("y_m"), 0.0),
                 "length_m": _positive(raw.get("length_m"), 4.0),
                 "width_m": _positive(raw.get("width_m"), 4.0),
-                "height_m": _positive(raw.get("height_m"), 3.0),
+                "height_m": _positive(raw.get("height_m"), default_height),
+                "floor_elevation_m": _finite_number(
+                    raw.get("floor_elevation_m"), floor_elevation
+                ),
             }
             if raw.get("pressure_pa") is not None:
                 room["pressure_pa"] = _finite_number(raw.get("pressure_pa"), 0.0)
+            for field in ("classification", "analysis_room_name"):
+                if raw.get(field) is not None:
+                    text = str(raw.get(field)).strip()
+                    if text:
+                        room[field] = text
             rooms.append(room)
     result["rooms"] = rooms
 
@@ -121,17 +155,27 @@ def normalize_layout(value: Any) -> dict:
             room_id = raw.get("room_id")
             if room_id is not None:
                 room_id = str(room_id).strip() or None
-            devices.append(
-                {
-                    "id": device_id,
-                    "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": room_id,
-                    "x_m": _finite_number(raw.get("x_m"), 0.0),
-                    "y_m": _finite_number(raw.get("y_m"), 0.0),
-                    "z_m": _finite_number(raw.get("z_m"), 0.0),
-                }
-            )
+            default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
+            default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+            device = {
+                "id": device_id,
+                "type": device_type,
+                "name": str(raw.get("name") or device_type.upper()),
+                "room_id": room_id,
+                "x_m": _finite_number(raw.get("x_m"), 0.0),
+                "y_m": _finite_number(raw.get("y_m"), 0.0),
+                "z_m": _finite_number(raw.get("z_m"), 0.0),
+                "width_m": _positive(raw.get("width_m"), default_width),
+                "height_m": _positive(raw.get("height_m"), default_height),
+                "orientation_deg": _finite_number(raw.get("orientation_deg"), 0.0),
+            }
+            wall_side = str(raw.get("wall_side") or "").strip().lower()
+            if wall_side in {"north", "south", "east", "west"}:
+                device["wall_side"] = wall_side
+            swing = str(raw.get("swing") or "").strip()
+            if swing:
+                device["swing"] = swing
+            devices.append(device)
     result["devices"] = devices
 
     view = source.get("view", {})
@@ -146,9 +190,32 @@ def normalize_layout(value: Any) -> dict:
                 "zoom_3d": max(0.2, min(8.0, _positive(view.get("zoom_3d"), 1.0))),
                 "pan_3d_x": _finite_number(view.get("pan_3d_x"), 0.0),
                 "pan_3d_y": _finite_number(view.get("pan_3d_y"), 0.0),
+                "snap_to_grid": bool(view.get("snap_to_grid", True)),
+                "show_pressure": bool(view.get("show_pressure", True)),
+                "show_labels": bool(view.get("show_labels", True)),
+                "show_devices": bool(view.get("show_devices", True)),
+                "show_relationships": bool(view.get("show_relationships", True)),
             }
         )
     return result
+
+
+def layout_metrics(value: Any) -> dict:
+    """Return deterministic geometry/device counts without changing solver semantics."""
+    layout = normalize_layout(value)
+    rooms = layout["rooms"]
+    devices = layout["devices"]
+    counts = {device_type: 0 for device_type in DEVICE_TYPES}
+    for device in devices:
+        counts[device["type"]] += 1
+    return {
+        "room_count": len(rooms),
+        "total_floor_area_m2": sum(room["length_m"] * room["width_m"] for room in rooms),
+        "total_volume_m3": sum(
+            room["length_m"] * room["width_m"] * room["height_m"] for room in rooms
+        ),
+        "device_counts": counts,
+    }
 
 
 def derive_layout_from_analysis(analysis: Any) -> dict:
@@ -177,11 +244,13 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         room = {
             "id": _unique_id(None, used_ids, fallback=_room_id(name)),
             "name": name,
+            "analysis_room_name": name,
             "x_m": x_cursor,
             "y_m": 0.0,
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "floor_elevation_m": layout["floor"]["elevation_m"],
         }
         if raw.get("observed_pressure_pa") is not None:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
@@ -277,9 +346,14 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
     _require_unique_sync_names(rooms, source="the spatial layout")
     _require_unique_sync_names(raw_rooms, source="the active analysis")
-    by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
+    by_name = {
+        str(room.get("name")).strip().casefold(): room
+        for room in raw_rooms
+        if isinstance(room, dict) and str(room.get("name") or "").strip()
+    }
     for source in rooms:
-        target = by_name.get(source["name"])
+        source_name = str(source.get("analysis_room_name") or source["name"]).strip()
+        target = by_name.get(source_name.casefold())
         if target is None:
             continue
         for key in ("length_m", "width_m", "height_m"):

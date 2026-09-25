@@ -528,3 +528,45 @@ def test_dossier_analysis_uses_same_external_dependency_guard(tmp_path, monkeypa
         "verification_project"
     ]
     assert raised.value.changes[0]["status"] == "changed_during_run"
+
+
+def test_external_dependency_fingerprint_retries_a_torn_read(tmp_path, monkeypatch):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    target = tmp_path / "facility_project.json"
+    original_sha256_file = application_module._sha256_file
+    calls = {"count": 0}
+
+    def mutate_after_first_hash(path):
+        digest = original_sha256_file(path)
+        if path == target and calls["count"] == 0:
+            calls["count"] += 1
+            path.write_text(
+                path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        return digest
+
+    monkeypatch.setattr(
+        application_module,
+        "_sha256_file",
+        mutate_after_first_hash,
+    )
+
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    provenance = run.diagnostics["application_execution_provenance"]
+    verification = next(
+        item
+        for item in provenance["external_dependencies"]
+        if item["field"] == "verification_project"
+    )
+    expected = hashlib.sha256(target.read_bytes()).hexdigest()
+    assert calls["count"] == 1
+    assert verification["sha256_before"] == expected
+    assert verification["sha256_after"] == expected
+    assert verification["stable_during_run"] is True

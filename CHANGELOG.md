@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased spatial schema integrity — 2026-09-25
+
+- Adds an explicit versioned contract for persisted `project.metadata.spatial_layout` data while keeping the outer `cleanroomx.project` schema at version 1.
+- Rejects unsupported future spatial versions, malformed persisted room/device/view collection shapes, and duplicate explicit room/device ids instead of silently coercing or overwriting ambiguous state.
+- Canonicalizes missing room/device ids deterministically and reserves explicit ids before allocation, so identical input bytes produce the same persistent identity graph across sessions.
+- Preserves unknown top-level, room, device, and view extension fields during spatial normalization instead of dropping forward-compatible metadata.
+- Removes random UUID allocation from spatial normalization and normal GUI room/device creation; derived layouts with colliding names receive stable deterministic suffixes.
+- Adds focused persistence, deterministic-replay, duplicate-id, malformed-shape, extension-preservation, and save/reload regression coverage without changing solver equations, engineering tolerances, acceptance semantics, or project schema version.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

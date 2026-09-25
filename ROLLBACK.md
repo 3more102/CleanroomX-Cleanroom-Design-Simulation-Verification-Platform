@@ -61,7 +61,7 @@ revert and CI rather than moving release history.
 
 ## v0.102.1 final spatial production closure anchor
 
-The final functional v0.102.1 baseline is `54fc239853cf4a2ab92b7686169e07acab34b8dd`.
+The final functional v0.102.1 runtime baseline is `89eaf6b1548ca0748dd72431eecc101bddec9af9`.
 It includes PR #467 (tested head `4be4fb840480df7a5f1e0313a73830313150d9dd`,
 CI #1540 / `36170548238`), PR #472 (tested head
 `8a34c3d649aee54c377b4194a6d619559d219421`, CI #1551 / `36171758793`),
@@ -71,7 +71,7 @@ CI #1554 / `36172740683`), PR #473 (tested head
 PR #476 (tested head `df1ef16207fcca8abfbaf08a48fe13fadd77c221`,
 CI #1561 / `36183831885`), and PR #479 (tested head
 `4a802f43be7bc891e2c4de90b631ddea7c1fa9e4`, CI #1565 / `36184210616`,
-merged as `54fc239853cf4a2ab92b7686169e07acab34b8dd`). All six pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag
+merged as `54fc239853cf4a2ab92b7686169e07acab34b8dd`), and PR #487 (tested head `3823a4e34d0cf855a374e1a9773dc6d059d644e5`, CI #1585 / `36185323572`, merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 

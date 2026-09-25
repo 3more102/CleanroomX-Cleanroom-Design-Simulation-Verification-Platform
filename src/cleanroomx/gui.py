@@ -1024,13 +1024,17 @@ class CleanroomXApp:
             self.save_project_as()
             return
         try:
-            save_project_document(
-                self.project_path,
-                self.project,
-                expected_fingerprint=getattr(
-                    self, "_project_source_fingerprint", None
-                ),
+            expected_fingerprint = getattr(
+                self, "_project_source_fingerprint", None
             )
+            if expected_fingerprint is None:
+                save_project_document(self.project_path, self.project)
+            else:
+                save_project_document(
+                    self.project_path,
+                    self.project,
+                    expected_fingerprint=expected_fingerprint,
+                )
         except ProjectConflictError as exc:
             self.status_var.set("Save blocked: project changed on disk")
             messagebox.showwarning(

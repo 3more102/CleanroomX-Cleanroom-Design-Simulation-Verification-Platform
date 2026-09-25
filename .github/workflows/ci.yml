@@ -99,6 +99,7 @@ jobs:
           tests/test_persistence.py
           tests/test_project_history.py
           tests/test_project_revisions.py
+          tests/test_gui_migration.py
           tests/test_run_history.py
           tests/test_dependency_state.py
           tests/test_engineering_report.py

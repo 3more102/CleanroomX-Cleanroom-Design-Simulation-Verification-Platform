@@ -156,3 +156,27 @@ def test_save_project_document_accepts_matching_source_digest(tmp_path):
 
     assert load_project_document(path).name == "Updated"
     assert project_file_sha256(path) != expected
+
+
+def test_atomic_write_missing_guard_refuses_file_reappearance(tmp_path):
+    target = tmp_path / "reappeared.json"
+
+    target.write_text("external\n", encoding="utf-8")
+    with pytest.raises(ProjectWriteConflictError, match="reappeared on disk"):
+        atomic_write_text(target, "cleanroomx\n", expected_missing=True)
+
+    assert target.read_text(encoding="utf-8") == "external\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_rejects_conflicting_guard_modes(tmp_path):
+    target = tmp_path / "invalid-guard.json"
+    target.write_text("original\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        atomic_write_text(
+            target,
+            "cleanroomx\n",
+            expected_sha256=project_file_sha256(target),
+            expected_missing=True,
+        )

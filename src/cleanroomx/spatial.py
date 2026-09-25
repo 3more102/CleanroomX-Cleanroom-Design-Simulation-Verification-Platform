@@ -228,25 +228,27 @@ def normalize_layout(value: Any) -> dict:
     return result
 
 
-def derive_layout_from_analysis(analysis: Any) -> dict:
-    layout = empty_layout()
+def _analysis_room_payloads(analysis: Any) -> list[dict]:
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
-        return layout
-
+        return []
     payload = analysis.input
     kind = getattr(analysis, "kind", "")
     if kind == "room_verification":
-        raw_rooms = [payload]
-    elif kind == "project_verification":
-        raw_rooms = payload.get("rooms", [])
-    else:
-        raw_rooms = []
+        return [payload]
+    if kind == "project_verification":
+        rooms = payload.get("rooms", [])
+        return [room for room in rooms if isinstance(room, dict)] if isinstance(rooms, list) else []
+    return []
 
+
+def derive_layout_from_analysis(analysis: Any) -> dict:
+    """Create spatial geometry from real verification inputs without inventing values."""
+
+    layout = empty_layout()
+    raw_rooms = _analysis_room_payloads(analysis)
     x_cursor = 0.0
     used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
-        if not isinstance(raw, dict):
-            continue
         name = str(raw.get("name") or f"Room {index + 1}")
         length = _positive(raw.get("length_m"), 4.0)
         width = _positive(raw.get("width_m"), 4.0)
@@ -259,9 +261,16 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "elevation_m": 0.0,
+            "engineering_ref": name,
+            "engineering_baseline": _engineering_baseline(raw),
         }
-        if raw.get("observed_pressure_pa") is not None:
-            room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
+        pressure = _optional_finite(raw.get("observed_pressure_pa"))
+        if pressure is not None:
+            room["pressure_pa"] = pressure
+        pressure_target = _optional_finite(raw.get("min_pressure_pa"))
+        if pressure_target is not None:
+            room["pressure_target_pa"] = pressure_target
         layout["rooms"].append(room)
         x_cursor += length + 1.0
     return layout
@@ -325,49 +334,338 @@ def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
     )
 
 
+def _room_mapping_ref(room: dict) -> str | None:
+    return _optional_string(room.get("engineering_ref"))
+
+
+def _engineering_lookup(analysis: Any) -> dict[str, dict]:
+    rooms = _analysis_room_payloads(analysis)
+    _require_unique_sync_names(rooms, source="the active analysis")
+    return {
+        str(room.get("name") or "").strip().casefold(): room
+        for room in rooms
+        if str(room.get("name") or "").strip()
+    }
+
+
+def _geometry_snapshot(room: dict, target: dict | None = None) -> dict:
+    snapshot = {
+        "length_m": _positive(room.get("length_m"), 4.0),
+        "width_m": _positive(room.get("width_m"), 4.0),
+        "height_m": _positive(room.get("height_m"), 3.0),
+    }
+    if target is not None and "observed_pressure_pa" in target:
+        pressure = _optional_finite(room.get("pressure_pa"))
+        if pressure is not None:
+            snapshot["pressure_pa"] = pressure
+    return snapshot
+
+
+def _engineering_snapshot(target: dict) -> dict:
+    return _engineering_baseline(target)
+
+
+def _snapshots_equal(left: dict, right: dict) -> bool:
+    if set(left) != set(right):
+        return False
+    return all(
+        math.isclose(
+            float(left[key]),
+            float(right[key]),
+            rel_tol=0.0,
+            abs_tol=SPATIAL_GEOMETRY_EPSILON_M,
+        )
+        for key in left
+    )
+
+
+def spatial_sync_status(layout: dict, analysis: Any) -> list[dict]:
+    """Describe mapping and edit provenance without changing either source."""
+
+    normalized = normalize_layout(layout)
+    if getattr(analysis, "kind", "") not in {"room_verification", "project_verification"}:
+        return [
+            {
+                "room_id": room["id"],
+                "engineering_ref": _room_mapping_ref(room),
+                "state": "unmapped",
+                "reason": "active analysis has no room-geometry synchronization contract",
+            }
+            for room in normalized["rooms"]
+        ]
+
+    try:
+        targets = _engineering_lookup(analysis)
+    except SpatialSyncError as exc:
+        return [
+            {
+                "room_id": room["id"],
+                "engineering_ref": _room_mapping_ref(room),
+                "state": "conflicting",
+                "reason": str(exc),
+            }
+            for room in normalized["rooms"]
+        ]
+
+    records: list[dict] = []
+    for room in normalized["rooms"]:
+        ref = _room_mapping_ref(room)
+        if ref is None:
+            records.append(
+                {
+                    "room_id": room["id"],
+                    "engineering_ref": None,
+                    "state": "unmapped",
+                    "reason": "room has no engineering mapping",
+                }
+            )
+            continue
+        target = targets.get(ref.casefold())
+        if target is None:
+            records.append(
+                {
+                    "room_id": room["id"],
+                    "engineering_ref": ref,
+                    "state": "missing_target",
+                    "reason": f"engineering room {ref!r} is not present in the active analysis",
+                }
+            )
+            continue
+
+        geometry = _geometry_snapshot(room, target)
+        engineering = _engineering_snapshot(target)
+        baseline = room.get("engineering_baseline")
+        if _snapshots_equal(geometry, engineering):
+            state = "synchronized"
+            reason = "geometry matches the mapped engineering input"
+        elif not isinstance(baseline, dict) or not baseline:
+            state = "conflicting"
+            reason = "geometry and engineering differ and no synchronization baseline exists"
+        else:
+            baseline_normalized = {
+                key: float(value)
+                for key, value in baseline.items()
+                if key in {"length_m", "width_m", "height_m", "pressure_pa"}
+                and _optional_finite(value) is not None
+            }
+            geometry_matches_baseline = _snapshots_equal(geometry, baseline_normalized)
+            engineering_matches_baseline = _snapshots_equal(engineering, baseline_normalized)
+            if geometry_matches_baseline and not engineering_matches_baseline:
+                state = "engineering_data_newer"
+                reason = "engineering input changed since the last synchronization"
+            elif engineering_matches_baseline and not geometry_matches_baseline:
+                state = "geometry_newer"
+                reason = "spatial geometry changed since the last synchronization"
+            else:
+                state = "conflicting"
+                reason = "both geometry and engineering changed since the last synchronization"
+        records.append(
+            {
+                "room_id": room["id"],
+                "engineering_ref": ref,
+                "state": state,
+                "reason": reason,
+                "geometry": geometry,
+                "engineering": engineering,
+                "baseline": copy.deepcopy(baseline) if isinstance(baseline, dict) else None,
+            }
+        )
+    return records
+
+
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+    """Deliberately copy mapped spatial dimensions into supported engineering inputs."""
+
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
-    rooms = normalize_layout(layout)["rooms"]
+    kind = getattr(analysis, "kind", "")
+    if kind not in {"room_verification", "project_verification"}:
+        return False
+
+    normalized = normalize_layout(layout)
+    rooms = normalized["rooms"]
     if not rooms:
         return False
 
     changed = False
-    if getattr(analysis, "kind", "") == "room_verification":
+    if kind == "room_verification":
         source = rooms[0]
+        target = analysis.input
         for key in ("name", "length_m", "width_m", "height_m"):
             value = source[key]
-            if analysis.input.get(key) != value:
-                analysis.input[key] = value
-                changed = True
-        if "observed_pressure_pa" in analysis.input and "pressure_pa" in source:
-            if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
-                analysis.input["observed_pressure_pa"] = source["pressure_pa"]
-                changed = True
-        return changed
-
-    if getattr(analysis, "kind", "") != "project_verification":
-        return False
-    raw_rooms = analysis.input.get("rooms")
-    if not isinstance(raw_rooms, list):
-        return False
-
-    _require_unique_sync_names(rooms, source="the spatial layout")
-    _require_unique_sync_names(raw_rooms, source="the active analysis")
-    by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
-    for source in rooms:
-        target = by_name.get(source["name"])
-        if target is None:
-            continue
-        for key in ("length_m", "width_m", "height_m"):
-            if target.get(key) != source[key]:
-                target[key] = source[key]
+            if target.get(key) != value:
+                target[key] = value
                 changed = True
         if "observed_pressure_pa" in target and "pressure_pa" in source:
             if target.get("observed_pressure_pa") != source["pressure_pa"]:
                 target["observed_pressure_pa"] = source["pressure_pa"]
                 changed = True
+        source["engineering_ref"] = str(target.get("name") or source["name"])
+        if changed:
+            source["engineering_baseline"] = _engineering_baseline(target)
+        if isinstance(layout, dict):
+            layout.clear()
+            layout.update(normalized)
+        return changed
+
+    raw_rooms = analysis.input.get("rooms")
+    if not isinstance(raw_rooms, list):
+        return False
+    _require_unique_sync_names(rooms, source="the spatial layout")
+    targets = _engineering_lookup(analysis)
+    mapped_refs: set[str] = set()
+    for source in rooms:
+        ref = _room_mapping_ref(source) or source["name"]
+        ref_key = ref.casefold()
+        if ref_key in mapped_refs:
+            raise SpatialSyncError(
+                f"Cannot synchronize spatial geometry because multiple rooms map to {ref!r}."
+            )
+        target = targets.get(ref_key)
+        if target is None:
+            continue
+        mapped_refs.add(ref_key)
+        source["engineering_ref"] = str(target.get("name") or ref)
+        target_changed = False
+        for key in ("length_m", "width_m", "height_m"):
+            if target.get(key) != source[key]:
+                target[key] = source[key]
+                changed = True
+                target_changed = True
+        if "observed_pressure_pa" in target and "pressure_pa" in source:
+            if target.get("observed_pressure_pa") != source["pressure_pa"]:
+                target["observed_pressure_pa"] = source["pressure_pa"]
+                changed = True
+                target_changed = True
+        if target_changed:
+            source["engineering_baseline"] = _engineering_baseline(target)
+    if isinstance(layout, dict):
+        layout.clear()
+        layout.update(normalized)
     return changed
+
+
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Deliberately accept mapped engineering dimensions into the spatial model."""
+
+    if analysis is None or getattr(analysis, "kind", "") not in {
+        "room_verification",
+        "project_verification",
+    }:
+        return False
+    normalized = normalize_layout(layout)
+    rooms = normalized["rooms"]
+    if not rooms:
+        return False
+    targets = _engineering_lookup(analysis)
+    changed = False
+
+    for index, room in enumerate(rooms):
+        if getattr(analysis, "kind", "") == "room_verification" and index == 0:
+            target = analysis.input
+            ref = str(target.get("name") or room["name"])
+        else:
+            ref = _room_mapping_ref(room) or ""
+            target = targets.get(ref.casefold()) if ref else None
+        if not isinstance(target, dict):
+            continue
+        room["engineering_ref"] = str(target.get("name") or ref)
+        for key in ("length_m", "width_m", "height_m"):
+            value = _positive(target.get(key), room[key])
+            if room[key] != value:
+                room[key] = value
+                changed = True
+        if "observed_pressure_pa" in target:
+            pressure = _optional_finite(target.get("observed_pressure_pa"))
+            if pressure is not None and room.get("pressure_pa") != pressure:
+                room["pressure_pa"] = pressure
+                changed = True
+        target_pressure = _optional_finite(target.get("min_pressure_pa"))
+        if target_pressure is not None and room.get("pressure_target_pa") != target_pressure:
+            room["pressure_target_pa"] = target_pressure
+            changed = True
+        room["engineering_baseline"] = _engineering_baseline(target)
+
+    if isinstance(layout, dict):
+        before = normalize_layout(layout)
+        layout.clear()
+        layout.update(normalized)
+        return changed or before != normalized
+    return changed
+
+
+def pressure_relationships(layout: dict, analysis: Any) -> list[dict]:
+    """Resolve pressure-cascade intent against configured observed pressures.
+
+    This never synthesizes a pressure result. A relationship is unresolved unless
+    both mapped engineering rooms provide finite observed-pressure values.
+    """
+
+    if getattr(analysis, "kind", "") != "project_verification":
+        return []
+    payload = getattr(analysis, "input", None)
+    if not isinstance(payload, dict):
+        return []
+    requirements = payload.get("pressure_cascade", [])
+    if not isinstance(requirements, list):
+        return []
+
+    normalized = normalize_layout(layout)
+    room_by_ref = {
+        ref.casefold(): room
+        for room in normalized["rooms"]
+        if (ref := _room_mapping_ref(room)) is not None
+    }
+    try:
+        engineering = _engineering_lookup(analysis)
+    except SpatialSyncError:
+        engineering = {}
+
+    records: list[dict] = []
+    for index, requirement in enumerate(requirements):
+        if not isinstance(requirement, dict):
+            continue
+        high_name = str(requirement.get("higher_pressure_room") or "").strip()
+        low_name = str(requirement.get("lower_pressure_room") or "").strip()
+        minimum = _optional_finite(requirement.get("min_delta_pa"))
+        high_room = room_by_ref.get(high_name.casefold())
+        low_room = room_by_ref.get(low_name.casefold())
+        high_engineering = engineering.get(high_name.casefold())
+        low_engineering = engineering.get(low_name.casefold())
+        high_pressure = (
+            _optional_finite(high_engineering.get("observed_pressure_pa"))
+            if isinstance(high_engineering, dict)
+            else None
+        )
+        low_pressure = (
+            _optional_finite(low_engineering.get("observed_pressure_pa"))
+            if isinstance(low_engineering, dict)
+            else None
+        )
+        delta = (
+            high_pressure - low_pressure
+            if high_pressure is not None and low_pressure is not None
+            else None
+        )
+        if high_room is None or low_room is None or delta is None or minimum is None:
+            state = "unavailable"
+        else:
+            state = "pass" if delta + SPATIAL_GEOMETRY_EPSILON_M >= minimum else "fail"
+        records.append(
+            {
+                "index": index,
+                "higher_pressure_room": high_name,
+                "lower_pressure_room": low_name,
+                "higher_room_id": high_room["id"] if high_room else None,
+                "lower_room_id": low_room["id"] if low_room else None,
+                "higher_pressure_pa": high_pressure,
+                "lower_pressure_pa": low_pressure,
+                "delta_pa": delta,
+                "min_delta_pa": minimum,
+                "state": state,
+            }
+        )
+    return records
 
 
 def _room_overlap_records(

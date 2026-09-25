@@ -120,7 +120,7 @@ def test_project_load_rejects_corrupt_spatial_layout_from_disk(tmp_path):
         load_project_document(path)
 
 
-def test_project_load_rejects_future_spatial_layout_version(tmp_path):
+def test_project_save_rejects_future_spatial_layout_version(tmp_path):
     layout = _valid_layout()
     layout["version"] = SPATIAL_LAYOUT_VERSION + 1
     project = ProjectDocument(

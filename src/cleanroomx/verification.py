@@ -1,12 +1,36 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import Iterable, Literal
 
 from .calculations import air_changes_per_hour, room_volume_m3
 from .models import RoomSpec
 
 Status = Literal["pass", "fail", "not_checked"]
+AggregateVerificationStatus = Literal[
+    "pass", "fail", "pass_with_unchecked", "not_checked"
+]
+
+
+def aggregate_verification_status(
+    statuses: Iterable[Status],
+) -> AggregateVerificationStatus:
+    """Aggregate finding states without promoting unchecked evidence to pass."""
+    values = tuple(statuses)
+    unsupported = [
+        status for status in values if status not in {"pass", "fail", "not_checked"}
+    ]
+    if unsupported:
+        raise ValueError(f"unsupported verification status: {unsupported[0]!r}")
+    if "fail" in values:
+        return "fail"
+    has_pass = "pass" in values
+    has_unchecked = "not_checked" in values
+    if has_pass and has_unchecked:
+        return "pass_with_unchecked"
+    if has_pass:
+        return "pass"
+    return "not_checked"
 
 
 @dataclass(frozen=True)
@@ -27,7 +51,18 @@ class VerificationReport:
     findings: tuple[Finding, ...]
 
     @property
+    def status(self) -> AggregateVerificationStatus:
+        return aggregate_verification_status(item.status for item in self.findings)
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.findings) and all(
+            item.status != "not_checked" for item in self.findings
+        )
+
+    @property
     def passed(self) -> bool:
+        """Compatibility boolean: true when no configured check failed."""
         return all(item.status != "fail" for item in self.findings)
 
     def to_dict(self) -> dict:
@@ -35,6 +70,8 @@ class VerificationReport:
             "room": self.room,
             "volume_m3": self.volume_m3,
             "ach": self.ach,
+            "status": self.status,
+            "complete": self.complete,
             "passed": self.passed,
             "findings": [asdict(item) for item in self.findings],
         }

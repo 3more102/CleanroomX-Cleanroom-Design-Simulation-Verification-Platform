@@ -15,7 +15,12 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .project import ProjectDocument, atomic_write_text, project_from_dict
+from .project import (
+    ProjectDocument,
+    atomic_write_text,
+    project_from_dict,
+    stable_file_digest,
+)
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"
@@ -202,57 +207,6 @@ def project_identity(path: str | Path | None, *, unsaved_id: str) -> str:
     return "file-" + sha256(normalized.encode("utf-8")).hexdigest()[:24]
 
 
-def _file_sha256(path: Path) -> tuple[os.stat_result, str]:
-    last_error: OSError | None = None
-    for _attempt in range(2):
-        try:
-            before_path = path.stat()
-            digest = sha256()
-            with path.open("rb") as handle:
-                before_handle = os.fstat(handle.fileno())
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-                after_handle = os.fstat(handle.fileno())
-            after_path = path.stat()
-        except OSError as exc:
-            last_error = exc
-            continue
-        before_identity = (
-            before_path.st_dev,
-            before_path.st_ino,
-            before_path.st_size,
-            before_path.st_mtime_ns,
-        )
-        before_handle_identity = (
-            before_handle.st_dev,
-            before_handle.st_ino,
-            before_handle.st_size,
-            before_handle.st_mtime_ns,
-        )
-        after_handle_identity = (
-            after_handle.st_dev,
-            after_handle.st_ino,
-            after_handle.st_size,
-            after_handle.st_mtime_ns,
-        )
-        after_identity = (
-            after_path.st_dev,
-            after_path.st_ino,
-            after_path.st_size,
-            after_path.st_mtime_ns,
-        )
-        if (
-            before_identity
-            == before_handle_identity
-            == after_handle_identity
-            == after_identity
-        ):
-            return after_path, digest.hexdigest()
-        last_error = OSError(f"source changed while fingerprinting: {path}")
-    assert last_error is not None
-    raise last_error
-
-
 def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
     if path is None:
         return {
@@ -271,7 +225,7 @@ def source_fingerprint(path: str | Path | None) -> dict[str, Any]:
             "mtime_ns": None,
             "sha256": None,
         }
-    stat, digest = _file_sha256(source)
+    stat, digest = stable_file_digest(source, attempts=2)
     return {
         "path": str(source),
         "exists": True,

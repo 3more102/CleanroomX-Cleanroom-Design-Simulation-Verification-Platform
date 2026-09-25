@@ -199,8 +199,18 @@ def normalize_layout(value: Any) -> dict:
             room_id = raw.get("room_id")
             if room_id is not None:
                 room_id = str(room_id).strip() or None
-            default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
-            default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+            default_width = {
+                "door": 0.9,
+                "window": 1.2,
+                "opening": 1.0,
+                "transfer": 0.6,
+            }.get(device_type, 0.4)
+            default_height = {
+                "door": 2.1,
+                "window": 1.2,
+                "opening": 2.1,
+                "transfer": 0.4,
+            }.get(device_type, 0.2)
             device = {
                 "id": device_id,
                 "type": device_type,
@@ -697,6 +707,100 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def sync_analysis_to_layout(layout: dict, analysis: Any) -> bool:
+    """Explicitly pull mapped engineering geometry into the spatial model.
+
+    Mapping is resolved completely before mutation. The pull changes only spatial
+    room dimensions and an explicitly configured observed pressure; X/Y placement
+    and unrelated spatial metadata remain untouched.
+    """
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return False
+    raw_rooms = layout.get("rooms") if isinstance(layout, dict) else None
+    if not isinstance(raw_rooms, list) or not raw_rooms:
+        return False
+
+    normalized_rooms = normalize_layout(layout)["rooms"]
+    original_by_id = {
+        str(room.get("id")): room
+        for room in raw_rooms
+        if isinstance(room, dict) and str(room.get("id") or "").strip()
+    }
+    kind = getattr(analysis, "kind", "")
+    mapped_pairs: list[tuple[dict, dict]] = []
+
+    if kind == "room_verification":
+        source = original_by_id.get(normalized_rooms[0]["id"])
+        if source is None:
+            return False
+        mapped_pairs = [(source, analysis.input)]
+    elif kind == "project_verification":
+        engineering_rooms = analysis.input.get("rooms")
+        if not isinstance(engineering_rooms, list):
+            return False
+        _require_unique_sync_names(normalized_rooms, source="the spatial layout")
+        _require_unique_sync_names(engineering_rooms, source="the active analysis")
+        by_name = {
+            str(room.get("name")).strip().casefold(): room
+            for room in engineering_rooms
+            if isinstance(room, dict) and str(room.get("name") or "").strip()
+        }
+        used_links: set[str] = set()
+        for normalized in normalized_rooms:
+            link = str(
+                normalized.get("analysis_room_name") or normalized["name"]
+            ).strip()
+            key = link.casefold()
+            if key in used_links:
+                raise SpatialSyncError(
+                    "Cannot synchronize engineering geometry because multiple layout "
+                    f"rooms map to analysis room {link!r}."
+                )
+            used_links.add(key)
+            target = by_name.get(key)
+            if target is None:
+                if normalized.get("analysis_room_name"):
+                    raise SpatialSyncError(
+                        f"Linked analysis room {link!r} does not exist in the active analysis."
+                    )
+                continue
+            source = original_by_id.get(normalized["id"])
+            if source is not None:
+                mapped_pairs.append((source, target))
+    else:
+        return False
+
+    before_sync = copy.deepcopy(layout.get("engineering_sync"))
+    changed = False
+    for source, target in mapped_pairs:
+        for field in ("length_m", "width_m", "height_m"):
+            value = _geometry_number(target.get(field))
+            if not math.isfinite(value) or value <= 0:
+                raise SpatialSyncError(
+                    f"Engineering room {target.get('name')!r} has invalid {field}."
+                )
+            if not math.isclose(
+                _geometry_number(source.get(field)),
+                value,
+                rel_tol=0.0,
+                abs_tol=SPATIAL_GEOMETRY_EPSILON_M,
+            ):
+                source[field] = value
+                changed = True
+        if target.get("observed_pressure_pa") is not None:
+            pressure = _geometry_number(target.get("observed_pressure_pa"))
+            if not math.isfinite(pressure):
+                raise SpatialSyncError(
+                    f"Engineering room {target.get('name')!r} has invalid observed_pressure_pa."
+                )
+            if source.get("pressure_pa") != pressure:
+                source["pressure_pa"] = pressure
+                changed = True
+
+    _record_sync_baseline(layout, analysis, mapped_pairs)
+    return changed or layout.get("engineering_sync") != before_sync
+
+
 def _room_overlap_records(
     rooms: list[dict],
 ) -> list[tuple[int, int, list[float]]]:
@@ -902,7 +1006,7 @@ def validate_layout(value: Any) -> list[dict]:
                     ),
                 }
             )
-        if device["type"] in {"door", "transfer"}:
+        if device["type"] in {"door", "window", "opening", "transfer"}:
             opening_top = z + device.get("height_m", 0.0)
             if opening_top > room["height_m"] + SPATIAL_GEOMETRY_EPSILON_M:
                 issues.append(
@@ -961,37 +1065,225 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
+def _analysis_room_targets(analysis: Any) -> list[dict]:
+    payload = getattr(analysis, "input", None)
+    if not isinstance(payload, dict):
+        return []
+    kind = getattr(analysis, "kind", "")
+    if kind == "room_verification":
+        return [payload]
+    if kind == "project_verification":
+        rooms = payload.get("rooms")
+        if isinstance(rooms, list):
+            return [room for room in rooms if isinstance(room, dict)]
+    return []
+
+
+def _result_room_reports(result: dict | None) -> list[dict]:
+    if not isinstance(result, dict):
+        return []
+    if isinstance(result.get("room"), str) and isinstance(result.get("findings"), list):
+        return [result]
+    rooms = result.get("rooms")
+    return [room for room in rooms if isinstance(room, dict)] if isinstance(rooms, list) else []
+
+
+def pressure_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> dict:
+    """Describe pressure rendering from explicit configured or supplied result evidence."""
     normalized = normalize_layout(layout)
+    sync = engineering_sync_status(normalized, analysis)
+    mapping_by_room = {
+        record["room_id"]: record for record in sync["rooms"]
+    }
+
+    targets = _analysis_room_targets(analysis)
+    target_by_name = {
+        str(room.get("name") or "").strip().casefold(): room
+        for room in targets
+        if str(room.get("name") or "").strip()
+    }
+    reports = _result_room_reports(result)
+    report_by_name = {
+        str(report.get("room") or "").strip().casefold(): report
+        for report in reports
+        if str(report.get("room") or "").strip()
+    }
+
+    evidence: list[dict] = []
+    for index, room in enumerate(normalized["rooms"]):
+        mapping = mapping_by_room.get(room["id"], {})
+        linked_name = str(
+            mapping.get("analysis_room_name")
+            or room.get("analysis_room_name")
+            or room.get("name")
+            or ""
+        ).strip()
+        target = None
+        if getattr(analysis, "kind", "") == "room_verification" and index == 0 and targets:
+            target = targets[0]
+            linked_name = str(target.get("name") or linked_name)
+        elif linked_name:
+            target = target_by_name.get(linked_name.casefold())
+
+        pressure = None
+        target_pressure = None
+        source = "unavailable"
+        status = "unavailable"
+
+        report = report_by_name.get(linked_name.casefold()) if linked_name else None
+        if report is not None:
+            findings = report.get("findings")
+            if isinstance(findings, list):
+                finding = next(
+                    (
+                        item for item in findings
+                        if isinstance(item, dict) and item.get("code") == "PRESSURE"
+                    ),
+                    None,
+                )
+                if finding is not None:
+                    actual = _geometry_number(finding.get("actual"))
+                    if math.isfinite(actual):
+                        pressure = actual
+                        source = "result"
+                        status = str(finding.get("status") or "unavailable")
+                    limit = _geometry_number(finding.get("limit"))
+                    if math.isfinite(limit):
+                        target_pressure = limit
+
+        if pressure is None and target is not None:
+            configured = _geometry_number(target.get("observed_pressure_pa"))
+            if math.isfinite(configured):
+                pressure = configured
+                source = "configured"
+                status = "configured"
+            target_value = _geometry_number(target.get("min_pressure_pa"))
+            if math.isfinite(target_value):
+                target_pressure = target_value
+
+        if pressure is None:
+            spatial_value = _geometry_number(room.get("pressure_pa"))
+            if math.isfinite(spatial_value):
+                pressure = spatial_value
+                source = "spatial"
+                status = "spatial"
+
+        evidence.append(
+            {
+                "room_id": room["id"],
+                "analysis_room_name": linked_name or None,
+                "availability": "available" if pressure is not None else "unavailable",
+                "pressure_pa": pressure,
+                "pressure_target_pa": target_pressure,
+                "source": source,
+                "status": status,
+                "engineering_state": mapping.get("state", "unmapped"),
+            }
+        )
+
     pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+        item["pressure_pa"] for item in evidence if item["pressure_pa"] is not None
     ]
     minimum = min(pressures) if pressures else None
     maximum = max(pressures) if pressures else None
-    sync = engineering_sync_status(normalized, analysis)
-    mapping_by_room = {
-        record["room_id"]: record["state"] for record in sync["rooms"]
-    }
-    rooms = []
-    for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
-        rooms.append(
-            {
-                "room_id": room["id"],
-                "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
-                "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
-            }
-        )
+    for item in evidence:
+        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,
-        "rooms": rooms,
+        "rooms": evidence,
     }
+
+
+def pressure_relationships_state(
+    layout: dict,
+    analysis: Any,
+    result: dict | None = None,
+) -> list[dict]:
+    """Project explicit pressure-cascade requirements and supplied result evidence."""
+    payload = getattr(analysis, "input", None)
+    if getattr(analysis, "kind", "") != "project_verification" or not isinstance(payload, dict):
+        return []
+    requirements = payload.get("pressure_cascade")
+    if not isinstance(requirements, list):
+        return []
+
+    normalized = normalize_layout(layout)
+    room_by_link: dict[str, dict] = {}
+    duplicates: set[str] = set()
+    for room in normalized["rooms"]:
+        for label in (room.get("analysis_room_name"), room.get("name")):
+            key = str(label or "").strip().casefold()
+            if not key:
+                continue
+            if key in room_by_link and room_by_link[key]["id"] != room["id"]:
+                duplicates.add(key)
+            else:
+                room_by_link[key] = room
+    for key in duplicates:
+        room_by_link.pop(key, None)
+
+    raw_findings = (
+        result.get("pressure_cascade")
+        if isinstance(result, dict)
+        else None
+    )
+    result_findings = raw_findings if isinstance(raw_findings, list) else []
+
+    relationships: list[dict] = []
+    for requirement in requirements:
+        if not isinstance(requirement, dict):
+            continue
+        high_name = str(requirement.get("higher_pressure_room") or "").strip()
+        low_name = str(requirement.get("lower_pressure_room") or "").strip()
+        high = room_by_link.get(high_name.casefold())
+        low = room_by_link.get(low_name.casefold())
+        if high is None or low is None:
+            continue
+        limit = _geometry_number(requirement.get("min_delta_pa"))
+        limit_value = limit if math.isfinite(limit) else None
+
+        finding = next(
+            (
+                item for item in result_findings
+                if isinstance(item, dict)
+                and str(item.get("higher_pressure_room") or "").strip() == high_name
+                and str(item.get("lower_pressure_room") or "").strip() == low_name
+            ),
+            None,
+        )
+        actual = None
+        status = "unavailable"
+        source = "configured_requirement"
+        if finding is not None:
+            actual_value = _geometry_number(finding.get("actual_delta_pa"))
+            actual = actual_value if math.isfinite(actual_value) else None
+            finding_limit = _geometry_number(
+                finding.get("limit_pa", finding.get("min_delta_pa"))
+            )
+            if math.isfinite(finding_limit):
+                limit_value = finding_limit
+            status = str(finding.get("status") or "unavailable")
+            source = "result"
+
+        relationships.append(
+            {
+                "higher_room_id": high["id"],
+                "lower_room_id": low["id"],
+                "higher_pressure_room": high_name,
+                "lower_pressure_room": low_name,
+                "limit_pa": limit_value,
+                "actual_delta_pa": actual,
+                "status": status,
+                "source": source,
+            }
+        )
+    return relationships
 
 
 @dataclass
@@ -1012,6 +1304,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        on_pull_requested: Callable[[], None] | None = None,
+        result_getter: Callable[[], Any] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -1024,6 +1318,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._analysis_getter = analysis_getter
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
+        self._on_pull_requested = on_pull_requested
+        self._result_getter = result_getter or (lambda: None)
         self._status_setter = status_setter
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
@@ -1064,6 +1360,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
         for device_type, label in (
             ("door", "+ Door"),
+            ("window", "+ Window"),
+            ("opening", "+ Opening"),
             ("ffu", "+ FFU"),
             ("supply", "+ Supply"),
             ("return", "+ Return"),
@@ -1087,8 +1385,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Push dimensions to analysis",
             command=self._on_sync_requested,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Pull dimensions from analysis",
+            command=self._on_pull_requested or (lambda: None),
+            state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -1586,14 +1890,27 @@ class SpatialDesignWorkspace(ttk.Frame):
             y = room["y_m"] + room["width_m"] / 2.0
             z = room["height_m"] if device_type in {"ffu", "supply", "return", "exhaust", "sensor"} else 0.0
             room_id = room["id"]
-            if device_type in {"door", "transfer"}:
+            if device_type in {"door", "window", "opening", "transfer"}:
                 y = room["y_m"]
-                z = 0.0 if device_type == "door" else min(1.0, room["height_m"] / 2.0)
+                if device_type in {"door", "opening"}:
+                    z = 0.0
+                else:
+                    z = min(1.0, room["height_m"] / 2.0)
         else:
             x = y = z = 0.0
             room_id = None
-        default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
-        default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
+        default_width = {
+            "door": 0.9,
+            "window": 1.2,
+            "opening": 1.0,
+            "transfer": 0.6,
+        }.get(device_type, 0.4)
+        default_height = {
+            "door": 2.1,
+            "window": 1.2,
+            "opening": 2.1,
+            "transfer": 0.4,
+        }.get(device_type, 0.2)
         device = {
             "id": f"device-{uuid.uuid4().hex[:8]}",
             "type": device_type,
@@ -1606,7 +1923,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "height_m": default_height,
             "orientation_deg": 0.0,
         }
-        if device_type in {"door", "transfer"}:
+        if device_type in {"door", "window", "opening", "transfer"}:
             device["wall_side"] = "south"
         if device_type == "door":
             device["swing"] = "left"
@@ -1863,7 +2180,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
                 )
                 tag = f"device:{device['id']}"
-                if device["type"] in {"door", "transfer"}:
+                if device["type"] in {"door", "window", "opening", "transfer"}:
                     half = device.get("width_m", 0.9) / 2.0
                     side = device.get("wall_side", "south")
                     if side in {"north", "south"}:
@@ -2032,7 +2349,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     if selected
                     else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
                 )
-                if device["type"] in {"door", "transfer"}:
+                if device["type"] in {"door", "window", "opening", "transfer"}:
                     bottom = self._project_3d(
                         device["x_m"] - cx,
                         device["y_m"] - cy,

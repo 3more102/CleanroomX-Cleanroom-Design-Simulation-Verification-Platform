@@ -299,15 +299,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._mode_buttons: dict[str, ttk.Button] = {}
         self._property_vars: dict[str, tk.StringVar] = {}
         self._property_entries: dict[str, ttk.Entry] = {}
+        self._device_type_var = tk.StringVar()
+        self._device_room_var = tk.StringVar()
+        self._device_type_box: ttk.Combobox | None = None
+        self._device_room_box: ttk.Combobox | None = None
+        self._room_label_to_id: dict[str, str | None] = {}
+        self._orbit_anchor: tuple[int, int] | None = None
+        self._orbit_origin: tuple[float, float] | None = None
 
         self._build()
         self.refresh()
 
     def _build(self) -> None:
-        toolbar = ttk.Frame(self, padding=(6, 6, 6, 3))
-        toolbar.pack(fill="x")
-
-        ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
+        objectbar = ttk.Frame(self, padding=(6, 6, 6, 2))
+        objectbar.pack(fill="x")
+        ttk.Label(objectbar, text="OBJECTS").pack(side="left", padx=(0, 6))
+        ttk.Button(objectbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
         for device_type, label in (
             ("door", "+ Door"),
             ("ffu", "+ FFU"),
@@ -318,33 +325,38 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("sensor", "+ Sensor"),
         ):
             ttk.Button(
-                toolbar,
+                objectbar,
                 text=label,
                 command=lambda t=device_type: self.add_device(t),
             ).pack(side="left", padx=2)
-        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
-        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Reset 3D", command=self.reset_3d).pack(side="left", padx=2)
-        ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
+        ttk.Separator(objectbar, orient="vertical").pack(side="left", fill="y", padx=6)
+        ttk.Button(objectbar, text="Center Selected", command=self.center_selected).pack(side="left", padx=2)
+        ttk.Button(objectbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
+
+        displaybar = ttk.Frame(self, padding=(6, 0, 6, 3))
+        displaybar.pack(fill="x")
+        ttk.Label(displaybar, text="VIEW / LAYERS").pack(side="left", padx=(0, 6))
+        ttk.Button(displaybar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(displaybar, text="Reset 3D", command=self.reset_3d).pack(side="left", padx=2)
+        ttk.Checkbutton(displaybar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=(6, 2)
         )
-        ttk.Checkbutton(toolbar, text="Labels", variable=self._show_labels, command=self.redraw).pack(
+        ttk.Checkbutton(displaybar, text="Labels", variable=self._show_labels, command=self.redraw).pack(
             side="left", padx=2
         )
-        ttk.Checkbutton(toolbar, text="Pressure", variable=self._show_pressure, command=self.redraw).pack(
+        ttk.Checkbutton(displaybar, text="Pressure", variable=self._show_pressure, command=self.redraw).pack(
             side="left", padx=2
         )
-        ttk.Checkbutton(toolbar, text="Devices", variable=self._show_devices, command=self.redraw).pack(
+        ttk.Checkbutton(displaybar, text="Devices", variable=self._show_devices, command=self.redraw).pack(
             side="left", padx=(2, 6)
         )
-        ttk.Label(toolbar, text="Wheel: zoom  ·  Right-drag: pan  ·  Drag corners: resize").pack(
-            side="left", padx=(8, 2)
-        )
+        ttk.Label(
+            displaybar,
+            text="Wheel zoom · right/middle drag pan · Shift+left drag 3D orbit · F center",
+        ).pack(side="left", padx=(8, 2))
         ttk.Button(
-            toolbar,
-            text="Sync dimensions to active analysis",
+            displaybar,
+            text="Sync geometry to analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
 
@@ -462,7 +474,33 @@ class SpatialDesignWorkspace(ttk.Frame):
             entry.grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        device_row = 2 + (len(fields) + 1) // 2
+        ttk.Label(inspector, text="Device type").grid(
+            row=device_row, column=0, sticky="w", padx=(0, 4), pady=2
+        )
+        self._device_type_box = ttk.Combobox(
+            inspector,
+            textvariable=self._device_type_var,
+            values=DEVICE_TYPES,
+            state="disabled",
+            width=16,
+        )
+        self._device_type_box.grid(row=device_row, column=1, sticky="ew", padx=(0, 8), pady=2)
+        ttk.Label(inspector, text="Assigned room").grid(
+            row=device_row, column=2, sticky="w", padx=(0, 4), pady=2
+        )
+        self._device_room_box = ttk.Combobox(
+            inspector,
+            textvariable=self._device_room_var,
+            state="disabled",
+            width=18,
+        )
+        self._device_room_box.grid(row=device_row, column=3, sticky="ew", padx=(0, 8), pady=2)
+
+        button_row = device_row + 1
+        ttk.Button(inspector, text="Center selected", command=self.center_selected).grid(
+            row=button_row, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -486,6 +524,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_down)
+        self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)
@@ -494,6 +534,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Delete>", lambda event: self.delete_selected())
         self.canvas_3d.bind("<Delete>", lambda event: self.delete_selected())
         self.bind_all("<Escape>", lambda event: self.clear_selection())
+        self.bind_all("<Key-f>", lambda event: self.center_selected())
+        self.bind_all("<Key-F>", lambda event: self.center_selected())
         self._update_view_mode_buttons()
 
     def _update_view_mode_buttons(self) -> None:
@@ -587,6 +629,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 entry = self._property_entries.get(key)
                 if entry is not None:
                     entry.configure(state="disabled")
+            self._device_type_var.set("")
+            self._device_room_var.set("")
+            if self._device_type_box is not None:
+                self._device_type_box.configure(state="disabled")
+            if self._device_room_box is not None:
+                self._device_room_box.configure(state="disabled", values=())
             return
 
         is_room = bool(self.selected and self.selected.kind == "room")
@@ -606,6 +654,34 @@ class SpatialDesignWorkspace(ttk.Frame):
             if not is_room and key in device_only:
                 allowed = True
             entry.configure(state="normal" if allowed else "disabled")
+
+        labels: list[str] = ["Unassigned"]
+        self._room_label_to_id = {"Unassigned": None}
+        for room in self.layout["rooms"]:
+            label = f"{room['name']} · {room['id'][-6:]}"
+            labels.append(label)
+            self._room_label_to_id[label] = room["id"]
+
+        if is_room:
+            self._device_type_var.set("")
+            self._device_room_var.set("")
+            if self._device_type_box is not None:
+                self._device_type_box.configure(state="disabled")
+            if self._device_room_box is not None:
+                self._device_room_box.configure(state="disabled", values=labels)
+        else:
+            self._device_type_var.set(item.get("type", "equipment"))
+            selected_room = "Unassigned"
+            room_id = item.get("room_id")
+            for label, mapped_id in self._room_label_to_id.items():
+                if mapped_id == room_id:
+                    selected_room = label
+                    break
+            self._device_room_var.set(selected_room)
+            if self._device_type_box is not None:
+                self._device_type_box.configure(state="readonly")
+            if self._device_room_box is not None:
+                self._device_room_box.configure(state="readonly", values=labels)
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -632,6 +708,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             z_text = self._property_vars["z_m"].get().strip()
             if z_text:
                 item["z_m"] = _finite_number(z_text, item.get("z_m", 0.0))
+            device_type = self._device_type_var.get().strip().lower()
+            if device_type in DEVICE_TYPES:
+                item["type"] = device_type
+            room_label = self._device_room_var.get().strip()
+            if room_label in self._room_label_to_id:
+                item["room_id"] = self._room_label_to_id[room_label]
         self._load_property_panel()
         self._persist("Spatial properties updated")
 
@@ -737,6 +819,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_y"] = -cy * scale
         self.layout["view"]["zoom_3d"] = 1.0
         self._persist("Fit spatial views")
+
+    def center_selected(self) -> None:
+        item = self._selected_object()
+        if item is None:
+            self._status_setter("Select a room or device to center")
+            return
+
+        if self.selected and self.selected.kind == "room":
+            target_x = item["x_m"] + item["length_m"] / 2.0
+            target_y = item["y_m"] + item["width_m"] / 2.0
+            target_z = item["height_m"] / 2.0
+        else:
+            target_x = item["x_m"]
+            target_y = item["y_m"]
+            target_z = item.get("z_m", 0.0)
+
+        scale = self._scale_2d()
+        self.layout["view"]["pan_x"] = -target_x * scale
+        self.layout["view"]["pan_y"] = -target_y * scale
+
+        min_x, min_y, max_x, max_y = self._bounds()
+        cx = (min_x + max_x) / 2.0
+        cy = (min_y + max_y) / 2.0
+        px, py = self._project_3d(target_x - cx, target_y - cy, target_z)
+        self.layout["view"]["pan_3d_x"] += self.canvas_3d.winfo_width() / 2.0 - px
+        self.layout["view"]["pan_3d_y"] += self.canvas_3d.winfo_height() / 2.0 - py
+        self.redraw()
+        self._status_setter(f"Centered {item.get('name', 'selection')} in 2D and 3D")
 
     def redraw(self) -> None:
         self._draw_2d()
@@ -1287,6 +1397,25 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["zoom_3d"] = 1.0
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
+        self._draw_3d()
+
+    def _on_orbit_down(self, event: tk.Event) -> None:
+        self.canvas_3d.focus_set()
+        self._orbit_anchor = (event.x, event.y)
+        self._orbit_origin = (
+            self.layout["view"]["azimuth_deg"],
+            self.layout["view"]["elevation_deg"],
+        )
+
+    def _on_orbit_drag(self, event: tk.Event) -> None:
+        if self._orbit_anchor is None or self._orbit_origin is None:
+            return
+        dx = event.x - self._orbit_anchor[0]
+        dy = event.y - self._orbit_anchor[1]
+        self.layout["view"]["azimuth_deg"] = (self._orbit_origin[0] + dx * 0.45) % 360.0
+        self.layout["view"]["elevation_deg"] = max(
+            5.0, min(75.0, self._orbit_origin[1] - dy * 0.30)
+        )
         self._draw_3d()
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:

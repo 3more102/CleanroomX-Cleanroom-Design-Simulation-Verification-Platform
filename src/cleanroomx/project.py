@@ -27,13 +27,24 @@ class ProjectWriteConflictError(RuntimeError):
         path: str | Path,
         expected: "ProjectFileRevision",
         current: "ProjectFileRevision",
+        *,
+        phase: str = "precondition",
     ):
         self.path = Path(path)
         self.expected = expected
         self.current = current
-        super().__init__(
-            f"project file changed on disk since it was opened or last saved: {self.path}"
-        )
+        self.phase = phase
+        if phase == "post_write":
+            message = (
+                "project file does not match the bytes CleanroomX just wrote: "
+                f"{self.path}"
+            )
+        else:
+            message = (
+                "project file changed on disk since it was opened or last saved: "
+                f"{self.path}"
+            )
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -217,22 +228,64 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _project_from_bytes(data: bytes) -> ProjectDocument:
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        payload = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
-
+    return project_from_dict(payload)
 
 def _normalized_project_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
+
+
+def _stat_identity(stat: os.stat_result) -> tuple[int, int, int | None, int | None]:
+    return (
+        stat.st_size,
+        stat.st_mtime_ns,
+        getattr(stat, "st_dev", None),
+        getattr(stat, "st_ino", None),
+    )
+
+
+def _stable_project_bytes(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+) -> tuple[bytes, ProjectFileRevision]:
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    source = _normalized_project_path(path)
+    normalized = os.path.normcase(str(source))
+    last_error: OSError | None = None
+
+    for _attempt in range(attempts):
+        try:
+            before = source.stat()
+            data = source.read_bytes()
+            after = source.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+
+        if _stat_identity(before) == _stat_identity(after) and len(data) == after.st_size:
+            return data, ProjectFileRevision(
+                path=normalized,
+                exists=True,
+                size=after.st_size,
+                mtime_ns=after.st_mtime_ns,
+                sha256=sha256(data).hexdigest(),
+            )
+        last_error = OSError(f"project file changed while reading: {source}")
+
+    assert last_error is not None
+    raise last_error
 
 
 def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
@@ -258,7 +311,7 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
             last_error = exc
             continue
         after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+        if _stat_identity(before) == _stat_identity(after):
             return ProjectFileRevision(
                 path=normalized,
                 exists=True,
@@ -289,17 +342,14 @@ def load_project_document_with_revision(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
-    source = _normalized_project_path(path)
-    for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        project = load_project_document(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return project, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
+    """Parse the exact stable bytes used to compute the returned file revision."""
+    data, revision = _stable_project_bytes(path, attempts=attempts)
+    return _project_from_bytes(data), revision
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _revision = load_project_document_with_revision(path)
+    return project
 
 
 def _project_document_text(project: ProjectDocument) -> str:
@@ -366,9 +416,25 @@ def save_project_document_guarded(
 
     assert_unchanged()
     text = _project_document_text(project)
+    intended_bytes = text.encode("utf-8")
+    intended_revision = ProjectFileRevision(
+        path=os.path.normcase(str(destination)),
+        exists=True,
+        size=len(intended_bytes),
+        mtime_ns=None,
+        sha256=sha256(intended_bytes).hexdigest(),
+    )
     saved_path = _atomic_write_text(
         destination,
         text,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    saved_revision = capture_project_file_revision(saved_path)
+    if not project_file_revision_matches(intended_revision, saved_revision):
+        raise ProjectWriteConflictError(
+            destination,
+            intended_revision,
+            saved_revision,
+            phase="post_write",
+        )
+    return saved_path, saved_revision

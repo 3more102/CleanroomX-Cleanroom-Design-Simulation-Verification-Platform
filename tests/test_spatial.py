@@ -9,6 +9,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    pressure_cascade_links,
     sync_layout_to_analysis,
 )
 
@@ -185,3 +186,90 @@ def test_nice_ruler_step_keeps_cad_ticks_readable_across_zoom_levels():
     assert _nice_ruler_step(80.0) == 1.0
     assert _nice_ruler_step(400.0) == 0.2
     assert _nice_ruler_step(float("nan")) > 0
+
+
+def test_pressure_cascade_links_connect_adjacent_rooms_high_to_low():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+                "pressure_pa": 30,
+            },
+            {
+                "id": "ante",
+                "name": "Ante",
+                "x_m": 4,
+                "y_m": 1,
+                "length_m": 3,
+                "width_m": 2,
+                "height_m": 3,
+                "pressure_pa": 10,
+            },
+        ]
+    }
+
+    links = pressure_cascade_links(layout)
+
+    assert len(links) == 1
+    link = links[0]
+    assert link["higher_room_id"] == "process"
+    assert link["lower_room_id"] == "ante"
+    assert link["delta_pa"] == 20
+    assert link["boundary"] == (4.0, 2.0)
+    assert link["start"] == (2.0, 2.0)
+    assert link["end"] == (5.5, 2.0)
+
+
+def test_pressure_cascade_links_ignore_corner_touch_equal_pressure_and_separated_rooms():
+    layout = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "A",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+                "pressure_pa": 20,
+            },
+            {
+                "id": "corner",
+                "name": "Corner",
+                "x_m": 2,
+                "y_m": 2,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+                "pressure_pa": 10,
+            },
+            {
+                "id": "equal",
+                "name": "Equal",
+                "x_m": 2,
+                "y_m": 0,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+                "pressure_pa": 20,
+            },
+            {
+                "id": "far",
+                "name": "Far",
+                "x_m": 8,
+                "y_m": 0,
+                "length_m": 2,
+                "width_m": 2,
+                "height_m": 3,
+                "pressure_pa": 0,
+            },
+        ]
+    }
+
+    assert pressure_cascade_links(layout) == []

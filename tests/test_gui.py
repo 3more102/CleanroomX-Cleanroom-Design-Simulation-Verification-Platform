@@ -108,8 +108,6 @@ def test_restore_run_discards_cached_result_when_analysis_input_changed():
 
 
 def test_completed_run_is_discarded_if_analysis_input_changed_during_execution():
-    import queue
-
     payload = json.loads(
         (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
     )
@@ -126,20 +124,26 @@ def test_completed_run_is_discarded_if_analysis_input_changed_during_execution()
             self.delay = delay
             self.callback = callback
 
+    class Worker:
+        def poll(self):
+            return ("success", run)
+
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.project = ProjectDocument(
         name="Demo",
         analyses=[
             AnalysisDocument(
-                id="a", name="Room", kind="room_verification", input=changed
+                id="a",
+                name="Room",
+                kind="room_verification",
+                input=changed,
             )
         ],
         active_analysis_id="a",
     )
-    app._queue = queue.Queue()
-    app._queue.put(("success", 3, "a", run))
-    app._run_generation = 3
-    app._abandon_requested = False
+    app._analysis_worker = Worker()
+    app._running_analysis_id = "a"
+    app._cancel_requested = False
     app._running = True
     app._runs_by_analysis = {}
     app.last_run = None
@@ -163,7 +167,6 @@ def test_completed_run_is_discarded_if_analysis_input_changed_during_execution()
     assert rendered == []
     assert "discarded" in app.status_var.value.lower()
     assert "inputs changed" in app.status_var.value.lower()
-
 
 def test_result_export_refuses_stale_cached_run(monkeypatch):
     payload = json.loads(
@@ -220,9 +223,7 @@ def test_result_export_refuses_stale_cached_run(monkeypatch):
     assert app.last_run is None
 
 
-def test_abandon_waits_for_worker_exit_before_reenabling_ui():
-    import queue
-
+def test_cancel_terminates_worker_before_reenabling_ui():
     class Widget:
         def __init__(self):
             self.state = None
@@ -240,11 +241,23 @@ def test_abandon_waits_for_worker_exit_before_reenabling_ui():
             self.delay = delay
             self.callback = callback
 
+    class Worker:
+        def __init__(self):
+            self.cancel_calls = 0
+            self.message = None
+
+        def cancel(self):
+            self.cancel_calls += 1
+            return True
+
+        def poll(self):
+            return self.message
+
     app = CleanroomXApp.__new__(CleanroomXApp)
     app._running = True
-    app._abandon_requested = False
-    app._run_generation = 7
-    app._queue = queue.Queue()
+    app._cancel_requested = False
+    app._running_analysis_id = "analysis-a"
+    app._analysis_worker = Worker()
     app.run_button = Widget()
     app.cancel_button = Widget()
     app.input_text = Widget()
@@ -254,22 +267,82 @@ def test_abandon_waits_for_worker_exit_before_reenabling_ui():
     app.cancel_run()
 
     assert app._running is True
-    assert app._abandon_requested is True
-    assert app._run_generation == 7
+    assert app._cancel_requested is True
+    assert app._running_analysis_id == "analysis-a"
+    assert app._analysis_worker.cancel_calls == 1
     assert app.cancel_button.state == "disabled"
-    assert "waiting" in app.status_var.value.lower()
+    assert "cancelling" in app.status_var.value.lower()
 
-    app._queue.put(("success", 7, "analysis-a", object()))
+    app._analysis_worker.message = ("cancelled", None)
     app._poll_worker()
 
     assert app._running is False
-    assert app._abandon_requested is False
+    assert app._cancel_requested is False
+    assert app._running_analysis_id is None
     assert app.run_button.state == "normal"
     assert app.cancel_button.state == "disabled"
     assert app.input_text.state == "normal"
-    assert "worker finished" in app.status_var.value.lower()
+    assert "cancelled" in app.status_var.value.lower()
     assert app.root.delay == 100
 
+
+def test_worker_monitoring_failure_reaps_worker_before_reenabling_ui(monkeypatch):
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Worker:
+        def __init__(self):
+            self.shutdown_calls = 0
+
+        def poll(self):
+            raise OSError("worker pipe failed")
+
+        def shutdown(self):
+            self.shutdown_calls += 1
+
+    shown = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: shown.append((title, message)),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._cancel_requested = False
+    app._running_analysis_id = "analysis-a"
+    app._analysis_worker = Worker()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+
+    app._poll_worker()
+
+    assert app._analysis_worker.shutdown_calls == 1
+    assert app._running is False
+    assert app._running_analysis_id is None
+    assert app.run_button.state == "normal"
+    assert app.input_text.state == "normal"
+    assert shown == [
+        ("Analysis failed", "Analysis worker monitoring failed: worker pipe failed")
+    ]
+    assert app.root.delay == 100
 
 def test_running_analysis_prevents_switching_to_another_analysis():
     class Tree:
@@ -314,7 +387,7 @@ def test_running_analysis_prevents_switching_to_another_analysis():
 
     assert app.analysis_tree.selection() == ("a",)
     assert app.project.active_analysis_id == "a"
-    assert "abandon" in app.status_var.value.lower()
+    assert "cancel" in app.status_var.value.lower()
 
 
 def test_unsaved_state_detects_uncommitted_editor_changes():

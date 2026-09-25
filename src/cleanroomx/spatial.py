@@ -301,6 +301,32 @@ def reassociate_device(layout: dict, device: dict) -> str | None:
     return room_id
 
 
+def repair_device_assignments(layout: dict) -> int:
+    """Repair device-to-room associations from current plan positions.
+
+    This changes only device room_id metadata. Room geometry, device
+    coordinates, solver inputs, and engineering acceptance logic are untouched.
+    """
+
+    if not isinstance(layout, dict):
+        return 0
+    changed = 0
+    for device in layout.get("devices", []):
+        if not isinstance(device, dict):
+            continue
+        previous = device.get("room_id")
+        resolved = find_room_for_point(
+            layout,
+            _finite_number(device.get("x_m"), 0.0),
+            _finite_number(device.get("y_m"), 0.0),
+            preferred_room_id=previous,
+        )
+        if resolved != previous:
+            device["room_id"] = resolved
+            changed += 1
+    return changed
+
+
 def spatial_issues(layout: dict) -> list[dict[str, Any]]:
     """Return deterministic, non-blocking spatial design warnings."""
 
@@ -447,6 +473,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._issues_var = tk.StringVar(value="Spatial checks: OK")
+        self._issue_cursor = -1
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -483,6 +510,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
         ttk.Button(toolbar, text="Issues", command=self.show_issues).pack(side="right", padx=2)
+        ttk.Button(toolbar, text="Next Issue", command=self.show_next_issue).pack(side="right", padx=2)
+        ttk.Button(toolbar, text="Fix Devices", command=self.fix_device_assignments).pack(side="right", padx=2)
         ttk.Label(toolbar, textvariable=self._issues_var).pack(side="right", padx=(8, 2))
 
         body = ttk.Panedwindow(self, orient="horizontal")
@@ -635,6 +664,62 @@ class SpatialDesignWorkspace(ttk.Frame):
             "\n".join(lines),
             parent=self,
         )
+
+    def _select_issue_target(self, issue: dict[str, Any]) -> bool:
+        device_id = issue.get("device_id")
+        if device_id is not None:
+            self.selected = _Hit("device", str(device_id))
+        else:
+            room_ids = issue.get("room_ids", [])
+            if not room_ids:
+                return False
+            self.selected = _Hit("room", str(room_ids[0]))
+        if self._selected_object() is None:
+            self.selected = None
+            return False
+        item = self._selected_object()
+        assert item is not None
+        if self.selected.kind == "room":
+            target_x = item["x_m"] + item["length_m"] / 2.0
+            target_y = item["y_m"] + item["width_m"] / 2.0
+        else:
+            target_x = item["x_m"]
+            target_y = item["y_m"]
+        scale = self._scale_2d()
+        self.layout["view"]["pan_x"] = -target_x * scale
+        self.layout["view"]["pan_y"] = -target_y * scale
+        self._load_property_panel()
+        self.redraw()
+        return True
+
+    def show_next_issue(self) -> None:
+        issues = self._current_issues()
+        if not issues:
+            self._issue_cursor = -1
+            self._status_setter("Spatial checks: no issues")
+            return
+        self._issue_cursor = (self._issue_cursor + 1) % len(issues)
+        issue = issues[self._issue_cursor]
+        selected = self._select_issue_target(issue)
+        prefix = f"Issue {self._issue_cursor + 1}/{len(issues)}"
+        self._status_setter(
+            f"{prefix}: {issue['message']}"
+            if selected
+            else f"{prefix}: {issue['message']} (target unavailable)"
+        )
+
+    def fix_device_assignments(self) -> None:
+        changed = repair_device_assignments(self.layout)
+        self._issue_cursor = -1
+        if changed:
+            self._load_property_panel()
+            self._persist(
+                f"Repaired {changed} device room association"
+                f"{'s' if changed != 1 else ''}"
+            )
+        else:
+            self.redraw()
+            self._status_setter("Device room associations already consistent")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -897,6 +982,17 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+        issues = self._current_issues()
+        problem_rooms = {
+            room_id
+            for issue in issues
+            for room_id in issue.get("room_ids", [])
+        }
+        problem_devices = {
+            issue["device_id"]
+            for issue in issues
+            if issue.get("device_id") is not None
+        }
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
@@ -924,7 +1020,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             ]
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#7dd3fc" if selected else "#c8d5e3"
+            has_issue = room["id"] in problem_rooms
+            outline = "#ef4444" if has_issue else ("#7dd3fc" if selected else "#c8d5e3")
             tag = f"room:{room['id']}"
             canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
             canvas.create_polygon(
@@ -946,11 +1043,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
+            has_issue = device["id"] in problem_devices
             radius = 5 if selected else 4
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline="#ffffff" if selected else "#d6a20f",
-                width=2, tags=(tag, "device3d"),
+                fill="#fecaca" if has_issue else "#fbbf24",
+                outline="#ef4444" if has_issue else ("#ffffff" if selected else "#d6a20f"),
+                width=3 if has_issue else 2, tags=(tag, "device3d"),
             )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:

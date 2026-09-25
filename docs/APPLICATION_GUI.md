@@ -48,6 +48,10 @@ Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stor
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load. Within supported schema version 1, unrecognized additive fields at the document, project, and analysis-record levels are retained as opaque strict-JSON data across open/edit/save round trips instead of being silently discarded. CleanroomX-owned fields remain authoritative.
 
+### Protected legacy conversion
+
+When one of the supported legacy formats is opened, the desktop displays it as a migrated unsaved copy rather than treating the in-memory schema-v1 model as a normal saved project. The original legacy path remains available for resolving relative engineering references, but **Save Project** routes to **Save Project As**. The first Save As must use a different path; CleanroomX refuses the legacy source itself. Cancelled or failed saves keep that protection active. Only a successful validated schema-v1 save elsewhere clears the migration protection.
+
 ### External-change write protection
 
 When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.

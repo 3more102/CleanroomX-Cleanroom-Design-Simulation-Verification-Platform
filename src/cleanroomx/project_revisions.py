@@ -340,7 +340,9 @@ def rotate_project_revisions(
             pass
 
 
-def discard_project_revision(path: str | Path) -> None:
+def discard_project_revision(path: str | Path | None) -> None:
+    if path is None:
+        return
     try:
         Path(path).unlink(missing_ok=True)
     except OSError:

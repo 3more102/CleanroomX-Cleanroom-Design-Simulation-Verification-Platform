@@ -1363,64 +1363,101 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(self) -> list[dict[str, Any]]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
-            if high is None or low is None:
-                continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            relationships.append((high, low, delta_value))
-        return relationships
+        return pressure_relationships(self.layout, self._analysis_getter())
+
+    @staticmethod
+    def _relationship_style(status: str) -> tuple[str, tuple[int, int] | tuple[()]]:
+        if status == "pass":
+            return "#15803d", ()
+        if status == "fail":
+            return "#dc2626", ()
+        return "#6b7280", (5, 4)
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for relationship in self._pressure_relationships():
+            high = room_by_id.get(relationship.get("higher_room_id"))
+            low = room_by_id.get(relationship.get("lower_room_id"))
+            if high is None or low is None:
+                continue
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            color, dash = self._relationship_style(relationship["status"])
             self.canvas_2d.create_line(
-                x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                x0,
+                y0,
+                x1,
+                y1,
+                arrow="last",
+                width=3,
+                dash=dash,
+                fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                actual = relationship.get("actual_delta_pa")
+                minimum = relationship.get("min_delta_pa")
+                label = "Δp unavailable" if actual is None else f"Δp {actual:g} Pa"
+                if minimum is not None:
+                    label += f" / min {minimum:g}"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
+
+    def _draw_relationships_3d(
+        self,
+        *,
+        center_x_m: float,
+        center_y_m: float,
+        floor_z_m: float,
+    ) -> None:
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for relationship in self._pressure_relationships():
+            high = room_by_id.get(relationship.get("higher_room_id"))
+            low = room_by_id.get(relationship.get("lower_room_id"))
+            if high is None or low is None:
+                continue
+            high_z = (
+                high.get("floor_elevation_m", floor_z_m)
+                + high["height_m"]
+                + 0.35
+            )
+            low_z = (
+                low.get("floor_elevation_m", floor_z_m)
+                + low["height_m"]
+                + 0.35
+            )
+            start = self._project_3d(
+                high["x_m"] - center_x_m + high["length_m"] / 2.0,
+                high["y_m"] - center_y_m + high["width_m"] / 2.0,
+                high_z,
+            )
+            end = self._project_3d(
+                low["x_m"] - center_x_m + low["length_m"] / 2.0,
+                low["y_m"] - center_y_m + low["width_m"] / 2.0,
+                low_z,
+            )
+            color, dash = self._relationship_style(relationship["status"])
+            self.canvas_3d.create_line(
+                *start,
+                *end,
+                arrow="last",
+                width=3,
+                dash=dash,
+                fill=color,
+                tags=("pressure_relationship_3d",),
+            )
 
     def _draw_2d(self) -> None:
         canvas = self.canvas_2d
@@ -1448,14 +1485,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        pressures = [
-            room.get("pressure_pa")
+        analysis = self._analysis_getter()
+        pressure_by_id = {
+            room["id"]: room_pressure_value(room, analysis)[0]
             for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
-        ]
+        }
+        pressures = [value for value in pressure_by_id.values() if value is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        mapping_by_id = {
+            item["room_id"]: item
+            for item in engineering_mapping_diagnostics(self.layout, analysis)
+        }
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
@@ -1464,34 +1506,46 @@ class SpatialDesignWorkspace(ttk.Frame):
                 room["y_m"] + room["width_m"],
             )
             selected = self.selected == _Hit("room", room["id"])
-            outline = (
-                "#1d4ed8"
-                if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
-            )
+            mapping_state = mapping_by_id.get(room["id"], {}).get("state")
+            if selected:
+                outline = "#1d4ed8"
+            elif mapping_state == "conflicting":
+                outline = "#dc2626"
+            elif mapping_state in {"ambiguous", "missing_target"}:
+                outline = "#d97706"
+            elif room["id"] in warning_ids:
+                outline = "#b45309"
+            else:
+                outline = "#34495e"
+            pressure = pressure_by_id[room["id"]]
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                _pressure_fill(pressure, pmin, pmax)
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                fill=fill,
+                outline=outline,
+                width=3 if selected or mapping_state == "conflicting" else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
-                pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
-                )
+                pressure_text = ""
+                if self._show_pressure.get():
+                    pressure_text = (
+                        "\nPressure unavailable"
+                        if pressure is None
+                        else f"\n{pressure:g} Pa"
+                    )
+                mapping_text = "\nENG CONFLICT" if mapping_state == "conflicting" else ""
                 canvas.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2,
                     text=(
                         f"{room['name']}\n"
                         f"{room['length_m']:g} × {room['width_m']:g} × "
-                        f"{room['height_m']:g} m{pressure_text}"
+                        f"{room['height_m']:g} m{pressure_text}{mapping_text}"
                     ),
                     justify="center",
                     tags=(f"room:{room['id']}", "room"),
@@ -1631,14 +1685,19 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        pressures = [
-            room.get("pressure_pa")
+        analysis = self._analysis_getter()
+        pressure_by_id = {
+            room["id"]: room_pressure_value(room, analysis)[0]
             for room in self.layout["rooms"]
-            if room.get("pressure_pa") is not None
-        ]
+        }
+        pressures = [value for value in pressure_by_id.values() if value is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        mapping_by_id = {
+            item["room_id"]: item
+            for item in engineering_mapping_diagnostics(self.layout, analysis)
+        }
 
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
@@ -1667,17 +1726,24 @@ class SpatialDesignWorkspace(ttk.Frame):
                 self._project_3d(x1, y1, z1),
                 self._project_3d(x0, y1, z1),
             ]
+            pressure = pressure_by_id[room["id"]]
             fill = (
-                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                _pressure_fill(pressure, pmin, pmax)
                 if self._show_pressure.get()
                 else "#dfe7ef"
             )
             selected = self.selected == _Hit("room", room["id"])
-            outline = (
-                "#7dd3fc"
-                if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
-            )
+            mapping_state = mapping_by_id.get(room["id"], {}).get("state")
+            if selected:
+                outline = "#7dd3fc"
+            elif mapping_state == "conflicting":
+                outline = "#fb7185"
+            elif mapping_state in {"ambiguous", "missing_target"}:
+                outline = "#fbbf24"
+            elif room["id"] in warning_ids:
+                outline = "#fb923c"
+            else:
+                outline = "#c8d5e3"
             tag = f"room:{room['id']}"
             canvas.create_polygon(
                 *sum(top, ()), fill=fill, outline=outline, width=2,
@@ -1702,6 +1768,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )
+
+        self._draw_relationships_3d(
+            center_x_m=cx,
+            center_y_m=cy,
+            floor_z_m=floor_z,
+        )
 
         if self._show_devices.get():
             room_by_id = {room["id"]: room for room in self.layout["rooms"]}

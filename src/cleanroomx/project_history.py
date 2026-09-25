@@ -118,6 +118,8 @@ class ProjectEditHistory:
     ) -> ProjectHistoryState:
         data = self._validated_data(project)
         ids = {item["id"] for item in data["analyses"]}
+        if selected_analysis_id is None:
+            selected_analysis_id = data["active_analysis_id"]
         if selected_analysis_id is not None and selected_analysis_id not in ids:
             selected_analysis_id = None
 

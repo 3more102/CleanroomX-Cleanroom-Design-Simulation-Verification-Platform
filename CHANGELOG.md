@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased shared durable persistence primitive — 2026-09-25
+
+- Moves generic file replacement out of the project domain into dependency-light `cleanroomx.persistence`, so project saves, recovery autosaves, desktop exports, and all 23 CLI report outputs share one explicit persistence contract.
+- Writes deterministic UTF-8 bytes through a same-directory temporary file, flushes and fsyncs before replacement, preserves existing POSIX permission bits, and cleans staging files on ordinary exceptions and interrupts.
+- Synchronizes the containing directory after replacement on POSIX when supported. Explicit unsupported-directory-fsync errors are tolerated; genuine post-replace sync failures raise `AtomicWriteDurabilityError` with `committed=True` so callers know the destination was already replaced even though crash durability could not be confirmed.
+- Preserves `cleanroomx.project.atomic_write_text` as a compatibility re-export and leaves project schema version 1, CLI options/output content, solver equations, numerical tolerances, and engineering acceptance semantics unchanged.
+- Adds focused failure-injection tests for rollback, exact UTF-8 bytes, permission preservation, directory-sync portability, genuine durability failure reporting, and the pre-replace guard contract.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

@@ -82,6 +82,7 @@ jobs:
           tests/test_application.py
           tests/test_application_all_workflows.py
           tests/test_project_document.py
+          tests/test_persistence.py
           tests/test_cli_output_persistence.py
           tests/test_autosave.py
           tests/test_crash_recovery.py

@@ -14,7 +14,8 @@ import uuid
 from typing import Any
 
 from . import __version__
-from .project import ProjectDocument, atomic_write_text, project_from_dict
+from .persistence import atomic_write_text
+from .project import ProjectDocument, project_from_dict
 
 
 RECOVERY_SCHEMA = "cleanroomx.autosave"

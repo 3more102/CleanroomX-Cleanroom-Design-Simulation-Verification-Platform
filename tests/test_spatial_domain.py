@@ -18,6 +18,10 @@ from cleanroomx.spatial_domain import (
     mapped_pressure_values,
     mark_layout_synchronized,
     pressure_relationships,
+    resized_room_dimensions,
+    room_plan_bounds,
+    room_prism_vertices,
+    translated_position,
 )
 from cleanroomx.spatial_integrity import (
     SpatialLayoutFormatError,
@@ -314,3 +318,77 @@ def test_spatial_integrity_rejects_bad_extended_metadata():
     broken["rooms"][0]["metadata"] = ["not", "an", "object"]
     with pytest.raises(SpatialLayoutFormatError, match="metadata"):
         validate_spatial_layout_document(broken)
+
+
+def test_plan_and_prism_geometry_share_one_authoritative_room_state():
+    room = normalize_layout(_layout())["rooms"][1]
+
+    assert room_plan_bounds(room) == (6.0, 0.0, 10.0, 3.0)
+    prism = room_prism_vertices(room)
+    assert prism["base"] == (
+        (6.0, 0.0, 0.2),
+        (10.0, 0.0, 0.2),
+        (10.0, 3.0, 0.2),
+        (6.0, 3.0, 0.2),
+    )
+    assert prism["top"][0][2] == pytest.approx(3.2)
+
+    room["length_m"] = 5.25
+    room["height_m"] = 3.5
+    assert room_plan_bounds(room)[2] == pytest.approx(11.25)
+    changed_prism = room_prism_vertices(room)
+    assert changed_prism["top"][1] == pytest.approx((11.25, 0.0, 3.7))
+
+
+def test_move_and_resize_math_support_optional_metric_snap():
+    assert translated_position(1.1, 2.2, 0.26, -0.24) == pytest.approx((1.36, 1.96))
+    assert translated_position(
+        1.1,
+        2.2,
+        0.26,
+        -0.24,
+        grid_m=0.5,
+    ) == pytest.approx((1.5, 2.0))
+
+    room = {"x_m": 1.0, "y_m": 2.0}
+    assert resized_room_dimensions(room, 5.3, 6.2) == pytest.approx((4.3, 4.2))
+    assert resized_room_dimensions(
+        room,
+        5.3,
+        6.2,
+        grid_m=0.5,
+    ) == pytest.approx((4.5, 4.0))
+
+
+def test_packaged_and_source_demo_contain_same_persisted_spatial_layout():
+    from pathlib import Path
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    source = json.loads(
+        (root / "examples" / "gui_demo.cleanroomx.json").read_text(encoding="utf-8")
+    )
+    packaged = json.loads(
+        (root / "src" / "cleanroomx" / "demo" / "gui_demo.cleanroomx.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    source_layout = source["project"]["metadata"][SPATIAL_METADATA_KEY]
+    packaged_layout = packaged["project"]["metadata"][SPATIAL_METADATA_KEY]
+    assert source_layout == packaged_layout
+    assert source["active_analysis_id"] == "verification"
+    assert packaged["active_analysis_id"] == "verification"
+    assert [room["id"] for room in source_layout["rooms"]] == [
+        "corridor",
+        "ante",
+        "preparation",
+        "process",
+        "support",
+    ]
+    assert {
+        room["engineering_ref"]["room_name"]
+        for room in source_layout["rooms"]
+        if "engineering_ref" in room
+    } == {"Ante", "Preparation", "Process"}
+    assert len(source_layout["devices"]) >= 6

@@ -12,8 +12,9 @@ version-1 layouts that predate floor metadata are defaulted to a metric `Floor 1
 0 m with a 3 m default ceiling.
 
 Floor data includes a stable ID, floor name, elevation, default ceiling height, and metric units.
-Rooms have stable IDs, X/Y position, length, width, height, floor elevation, optional pressure,
-optional project-defined classification text, and an optional `analysis_room_name` link.
+Rooms have stable IDs, X/Y position, length, width, height, floor elevation, optional pressure
+with explicit provenance (`user` or `engineering_input` when known), optional project-defined
+classification text, and an optional `analysis_room_name` link.
 Devices use stable IDs and support doors, supply diffusers, return grilles, exhaust grilles,
 FFUs, equipment, sensors, and transfer openings. Door/transfer records may carry width, height,
 wall side, orientation, and swing metadata.
@@ -34,18 +35,22 @@ selected room resizes its footprint. The property inspector can edit device Z el
 association, opening dimensions/orientation/wall side/swing, room floor elevation,
 classification text, and analysis-room linkage.
 
-Pressure color is shown only when a room has a supplied pressure value. Relationship arrows are
-drawn only from the active analysis's explicit `pressure_cascade` records. When both linked rooms
-have supplied pressures, each relationship reports the observed pressure delta and marks the
-configured minimum relationship as pass or fail; missing pressure remains explicitly unavailable.
-CleanroomX does not invent missing pressure or airflow values.
+Pressure color is shown only when a room has a supplied pressure value. Room labels distinguish
+user-entered pressure from pressure copied from an engineering input when that provenance is known.
+Relationship arrows are drawn only from the active analysis's explicit `pressure_cascade` records.
+When both linked rooms have supplied pressures, each relationship reports the observed pressure
+delta and marks the configured minimum relationship as pass or fail; missing pressure remains
+explicitly unavailable. CleanroomX does not invent missing pressure, airflow values, or a
+calculated pressure field.
 
 ## 3D viewer
 
 The right side projects the same room footprints and heights into an interactive pure-Tk 3D
 view. It renders the floor plane, room top/wall geometry, room labels, and placed devices/openings.
 Mouse wheel zooms. Middle/right drag pans. The rotate, tilt, reset, and fit controls move the
-camera. Selecting a room or object in 3D selects the same canonical object used by the 2D editor.
+camera. Fit-to-view uses deterministic tested projection math over every room corner, including
+floor elevation and ceiling height, and recenters both 3D pan axes. Selecting a room or object in
+3D selects the same canonical object used by the 2D editor.
 
 Room floor elevation and room height control the vertical extrusion. Device Z is relative to its
 assigned room floor elevation. Door and transfer-opening height is rendered from the same device
@@ -84,15 +89,20 @@ These checks are geometry/model-integrity checks, not cleanroom certification cr
 
 ## Demo
 
-`cleanroomx-gui --demo` includes an explicit three-room spatial layout for Process,
-Preparation, and Ante/Airlock, together with pressure data, pressure-cascade relationships,
-doors, supply/return devices, an FFU, equipment, and a transfer opening.
+`cleanroomx-gui --demo` opens the verification analysis with an explicit three-room spatial
+layout for Process, Preparation, and Ante/Airlock, together with engineering-input pressure
+provenance, pressure-cascade relationships, doors, supply/return devices, an FFU, equipment,
+and a transfer opening.
 
 For an automated GUI smoke path on Linux with a virtual display:
 
 ```bash
 xvfb-run -a cleanroomx-gui --demo --smoke
 ```
+
+The smoke command fails closed unless the packaged demo loads, the active analysis runs, the real
+2D room geometry renders, the 3D room geometry renders, and pressure-cascade relationship graphics
+are present.
 
 ## Engineering boundary
 

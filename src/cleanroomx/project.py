@@ -90,10 +90,21 @@ class AnalysisDocument:
     input: dict = field(default_factory=dict)
     extra_fields: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # The model is mutable, but it owns its nested JSON state. Caller-owned
+        # parser/build dictionaries must never remain aliases into project state.
+        self.input = copy.deepcopy(self.input)
+        self.extra_fields = _copy_extra_fields(self.extra_fields)
+
     def to_dict(self) -> dict:
         return _merge_extra_fields(
             self.extra_fields,
-            {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input},
+            {
+                "id": self.id,
+                "name": self.name,
+                "kind": self.kind,
+                "input": copy.deepcopy(self.input),
+            },
         )
 
 
@@ -107,13 +118,21 @@ class ProjectDocument:
     project_extra_fields: dict[str, Any] = field(default_factory=dict)
     top_level_extra_fields: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Preserve AnalysisDocument object identity for in-model editing while
+        # detaching every caller-owned container at the model boundary.
+        self.analyses = list(self.analyses)
+        self.metadata = copy.deepcopy(self.metadata)
+        self.project_extra_fields = _copy_extra_fields(self.project_extra_fields)
+        self.top_level_extra_fields = _copy_extra_fields(self.top_level_extra_fields)
+
     def to_dict(self) -> dict:
         project_block = _merge_extra_fields(
             self.project_extra_fields,
             {
                 "name": self.name,
                 "description": self.description,
-                "metadata": self.metadata,
+                "metadata": copy.deepcopy(self.metadata),
             },
         )
         return _merge_extra_fields(

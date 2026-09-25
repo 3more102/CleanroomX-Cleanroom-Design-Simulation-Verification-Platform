@@ -318,8 +318,17 @@ def test_normalize_layout_repairs_duplicate_and_missing_ids_deterministically():
                 "height_m": 3,
             },
             {
-                "name": "Gamma",
+                "id": "dup-2",
+                "name": "Reserved",
                 "x_m": 10,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "name": "Gamma",
+                "x_m": 15,
                 "y_m": 0,
                 "length_m": 4,
                 "width_m": 4,
@@ -346,6 +355,15 @@ def test_normalize_layout_repairs_duplicate_and_missing_ids_deterministically():
                 "z_m": 1,
             },
             {
+                "id": "device-2",
+                "type": "sensor",
+                "name": "Reserved sensor",
+                "room_id": "dup",
+                "x_m": 3,
+                "y_m": 3,
+                "z_m": 1,
+            },
+            {
                 "type": "equipment",
                 "name": "Tool",
                 "room_id": None,
@@ -360,11 +378,17 @@ def test_normalize_layout_repairs_duplicate_and_missing_ids_deterministically():
     second = normalize_layout(raw)
 
     assert first == second
-    assert [room["id"] for room in first["rooms"]] == ["dup", "dup-2", "gamma"]
+    assert [room["id"] for room in first["rooms"]] == [
+        "dup",
+        "dup-3",
+        "dup-2",
+        "gamma",
+    ]
     assert [device["id"] for device in first["devices"]] == [
         "device",
-        "device-2",
         "device-3",
+        "device-2",
+        "device-4",
     ]
 
 

@@ -36,6 +36,7 @@ from .project import (
     atomic_write_text,
     capture_project_file_revision,
     load_project_document,
+    load_project_document_with_revision,
     new_project,
     save_project_document,
     save_project_document_guarded,
@@ -982,11 +983,11 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
-        project = load_project_document(project_path)
+        project, project_revision = load_project_document_with_revision(project_path)
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
-        self._project_file_revision = capture_project_file_revision(project_path)
+        self._project_file_revision = project_revision
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)

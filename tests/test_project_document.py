@@ -315,7 +315,7 @@ def test_programmatic_additive_field_contract_rejects_invalid_mappings():
         project.to_dict()
 
     project.top_level_extra_fields = {1: "invalid-key"}  # type: ignore[dict-item]
-    with pytest.raises(ProjectFormatError, match="field names must be strings"):
+    with pytest.raises(ProjectFormatError, match="string object keys"):
         project.to_dict()
 
 
@@ -362,15 +362,14 @@ def test_pre_schema_migration_preserves_unconsumed_fields_without_reinterpretati
     assert migrated["analyses"][0]["kind"] == "fan_operating_point"
 
 
-def test_non_finite_additive_field_is_rejected_before_save(tmp_path):
-    project = ProjectDocument(
-        name="Unsafe extension",
-        top_level_extra_fields={"vendor_extension": {"value": float("nan")}},
-    )
+def test_non_finite_additive_field_is_rejected_at_model_boundary(tmp_path):
     path = tmp_path / "unsafe.cleanroomx.json"
 
-    with pytest.raises(ProjectFormatError, match="strict JSON"):
-        save_project_document(path, project)
+    with pytest.raises(ProjectFormatError, match="non-finite number"):
+        ProjectDocument(
+            name="Unsafe extension",
+            top_level_extra_fields={"vendor_extension": {"value": float("nan")}},
+        )
 
     assert not path.exists()
 

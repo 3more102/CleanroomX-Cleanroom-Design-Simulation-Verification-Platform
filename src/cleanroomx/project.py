@@ -367,7 +367,12 @@ def _fsync_directory(directory: Path) -> None:
     except OSError:
         return
     try:
-        os.fsync(fd)
+        try:
+            os.fsync(fd)
+        except OSError:
+            # Some filesystems do not support directory fsync. The file itself has
+            # already been flushed and fsynced before atomic replacement.
+            pass
     finally:
         os.close(fd)
 

@@ -227,11 +227,13 @@ def test_plugin_parser_cannot_mutate_submitted_project_payload(monkeypatch):
     monkeypatch.setitem(application.ANALYSIS_SPECS, spec.key, spec)
     payload = {"value": 2.0, "nested": {"changed": False}}
 
-    run = application.run_analysis("mutating_plugin", payload)
+    with pytest.raises(
+        application.AnalysisInputMutationError,
+        match="mutated its submitted analysis input",
+    ):
+        application.run_analysis("mutating_plugin", payload)
 
     assert payload == {"value": 2.0, "nested": {"changed": False}}
-    assert run.result["doubled"] == pytest.approx(8.0)
-    assert application.analysis_run_matches_input(run, "mutating_plugin", payload)
 
 
 def test_plugin_reporter_cannot_mutate_normalized_result(monkeypatch):

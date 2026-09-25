@@ -10,6 +10,7 @@ import cleanroomx.application as application_module
 from cleanroomx.application import (
     ANALYSIS_SPECS,
     ExternalDependencyChangedError,
+    RuntimeCodeChangedError,
     analysis_catalog,
     analysis_run_matches_input,
     application_info,
@@ -602,3 +603,129 @@ def test_external_dependency_fingerprint_retries_a_torn_read(tmp_path, monkeypat
     assert verification["sha256_before"] == expected
     assert verification["sha256_after"] == expected
     assert verification["stable_during_run"] is True
+
+
+
+def test_run_provenance_binds_exact_runtime_code_and_environment():
+    run = run_analysis("room_verification", _example("basic_room.json"))
+    provenance = run.diagnostics["application_execution_provenance"]
+
+    code = provenance["code_revision"]
+    assert code["algorithm"] == "sha256-python-source-tree-v1"
+    assert len(code["sha256_before"]) == 64
+    assert code["sha256_before"] == code["sha256_after"]
+    assert code["source_file_count_before"] == code["source_file_count_after"]
+    assert code["source_file_count_before"] > 0
+    assert code["stable_during_run"] is True
+
+    binding = provenance["execution_binding"]
+    assert binding["parser"] == "cleanroomx.io:room_from_dict"
+    assert binding["runner"] == "cleanroomx.verification:verify_room"
+    assert binding["reporter"] == "cleanroomx.application:_fallback_markdown"
+    assert binding["custom_adapter"] is None
+
+    runtime = provenance["runtime_environment"]
+    assert runtime["python_implementation"]
+    assert runtime["python_version"]
+    assert runtime["platform_system"]
+    assert runtime["byteorder"] in {"little", "big"}
+    assert runtime["float_radix"] == 2
+    assert runtime["float_mant_dig"] >= 53
+    json.dumps(run.to_dict(), sort_keys=True, allow_nan=False)
+
+
+def test_analysis_discards_result_when_runtime_code_revision_changes(monkeypatch):
+    fingerprints = iter(
+        [
+            {
+                "algorithm": "sha256-python-source-tree-v1",
+                "sha256": "1" * 64,
+                "source_file_count": 100,
+            },
+            {
+                "algorithm": "sha256-python-source-tree-v1",
+                "sha256": "2" * 64,
+                "source_file_count": 100,
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        application_module,
+        "_capture_runtime_code_fingerprint",
+        lambda: next(fingerprints),
+    )
+
+    with pytest.raises(RuntimeCodeChangedError, match="result was discarded") as raised:
+        run_analysis("room_verification", _example("basic_room.json"))
+
+    assert raised.value.before["sha256"] == "1" * 64
+    assert raised.value.after["sha256"] == "2" * 64
+
+
+def test_python_tree_fingerprint_is_deterministic_and_content_sensitive(tmp_path):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    (root / "b.py").write_text("VALUE = 2\n", encoding="utf-8")
+    (root / "a.py").write_text("VALUE = 1\n", encoding="utf-8")
+    cache = root / "__pycache__"
+    cache.mkdir()
+    (cache / "noise.py").write_text("IGNORED = True\n", encoding="utf-8")
+    (root / "note.txt").write_text("not executable source\n", encoding="utf-8")
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    first = application_module._fingerprint_python_tree(root)
+    second = application_module._fingerprint_python_tree(root)
+
+    assert first == second
+    assert first["source_file_count"] == 2
+    assert len(first["sha256"]) == 64
+
+    (root / "a.py").write_text("VALUE = 3\n", encoding="utf-8")
+    changed = application_module._fingerprint_python_tree(root)
+
+    assert changed["source_file_count"] == first["source_file_count"]
+    assert changed["sha256"] != first["sha256"]
+
+
+def test_python_tree_fingerprint_cache_reuses_only_unchanged_manifest(tmp_path):
+    root = tmp_path / "cleanroomx"
+    root.mkdir()
+    source = root / "module.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+
+    application_module._hash_python_tree_manifest.cache_clear()
+    first = application_module._fingerprint_python_tree(root)
+    first_cache = application_module._hash_python_tree_manifest.cache_info()
+
+    second = application_module._fingerprint_python_tree(root)
+    second_cache = application_module._hash_python_tree_manifest.cache_info()
+
+    assert second == first
+    assert second_cache.hits == first_cache.hits + 1
+    assert second_cache.misses == first_cache.misses
+
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    changed = application_module._fingerprint_python_tree(root)
+    changed_cache = application_module._hash_python_tree_manifest.cache_info()
+
+    assert changed["sha256"] != first["sha256"]
+    assert changed_cache.misses == second_cache.misses + 1
+
+
+def test_custom_adapter_binding_is_explicit_in_provenance(tmp_path):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+
+    run = run_analysis(
+        "consistency",
+        {
+            "verification_project": "facility_project.json",
+            "hvac_project": "consistency_hvac_demo.json",
+        },
+        base_dir=tmp_path,
+    )
+
+    binding = run.diagnostics["application_execution_provenance"]["execution_binding"]
+    assert binding["parser"] is None
+    assert binding["runner"] is None
+    assert binding["custom_adapter"] == "cleanroomx.application:_run_consistency"

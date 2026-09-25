@@ -627,15 +627,22 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
+        self._show_pressure = tk.BooleanVar(value=True)
+        self._show_labels = tk.BooleanVar(value=True)
+        self._show_devices = tk.BooleanVar(value=True)
+        self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
+        self._metrics_var = tk.StringVar(value="0 rooms")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
         self._property_vars: dict[str, tk.StringVar] = {}
         self._history_can_undo = False
         self._history_can_redo = False
         self._drag_history_before: tuple[dict, tuple[str, str] | None] | None = None
+        self._resize_room_id: str | None = None
 
         self._build()
         self.refresh()
@@ -653,6 +660,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("exhaust", "+ Exhaust"),
             ("equipment", "+ Equipment"),
             ("sensor", "+ Sensor"),
+            ("transfer", "+ Transfer"),
         ):
             ttk.Button(
                 toolbar,
@@ -666,9 +674,23 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+            side="left", padx=(6, 2)
         )
+        for label, variable, key in (
+            ("Snap", self._snap_to_grid, "snap_to_grid"),
+            ("Pressure", self._show_pressure, "show_pressure"),
+            ("Labels", self._show_labels, "show_labels"),
+            ("Devices", self._show_devices, "show_devices"),
+            ("Relations", self._show_relationships, "show_relationships"),
+        ):
+            ttk.Checkbutton(
+                toolbar,
+                text=label,
+                variable=variable,
+                command=lambda k=key, v=variable: self._set_view_flag(k, v.get()),
+            ).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
         ttk.Label(toolbar, textvariable=self._validation_var).pack(side="left", padx=(8, 2))
         ttk.Button(
@@ -687,7 +709,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         self.canvas_2d = tk.Canvas(two_d, background="#f7f9fb", highlightthickness=1)
         self.canvas_2d.pack(fill="both", expand=True)
-        ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=2)
+        ttk.Label(two_d, textvariable=self._coord_var, anchor="w").pack(fill="x", padx=4, pady=(2, 0))
+        ttk.Label(two_d, textvariable=self._metrics_var, anchor="w").pack(fill="x", padx=4, pady=(0, 2))
 
         right = ttk.Panedwindow(body, orient="vertical")
         body.add(right, weight=4)
@@ -721,10 +744,18 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("name", "Name"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
+            ("z_m", "Z (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
             ("pressure_pa", "Pressure (Pa)"),
+            ("floor_elevation_m", "Floor elev. (m)"),
+            ("classification", "Classification"),
+            ("analysis_room_name", "Analysis room"),
+            ("room_id", "Room ID"),
+            ("orientation_deg", "Orientation (deg)"),
+            ("wall_side", "Wall side"),
+            ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
             row = 2 + index // 2
@@ -773,11 +804,83 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
+        view = self.layout.get("view", {})
+        self._snap_to_grid.set(bool(view.get("snap_to_grid", True)))
+        self._show_pressure.set(bool(view.get("show_pressure", True)))
+        self._show_labels.set(bool(view.get("show_labels", True)))
+        self._show_devices.set(bool(view.get("show_devices", True)))
+        self._show_relationships.set(bool(view.get("show_relationships", True)))
         if self.selected and not self._selected_object():
             self.selected = None
         self._load_property_panel()
         self._update_history_controls()
         self.redraw()
+
+    def _set_view_flag(self, key: str, value: bool) -> None:
+        self.layout.setdefault("view", {})[key] = bool(value)
+        project = self._project_getter()
+        project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
+        self.layout = project.metadata[SPATIAL_METADATA_KEY]
+        self.redraw()
+
+    def _update_metrics(self) -> None:
+        metrics = layout_metrics(self.layout)
+        counts = metrics["device_counts"]
+        self._metrics_var.set(
+            f"{metrics['room_count']} rooms · "
+            f"{metrics['total_floor_area_m2']:.1f} m² · "
+            f"{metrics['total_volume_m3']:.1f} m³ · "
+            f"FFU {counts['ffu']} · Supply {counts['supply']} · "
+            f"Return {counts['return']} · Exhaust {counts['exhaust']}"
+        )
+
+    def edit_floor(self) -> None:
+        floor = self.layout["floor"]
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        name = simpledialog.askstring(
+            "Floor",
+            "Floor name:",
+            initialvalue=floor["name"],
+            parent=self,
+        )
+        if name is None:
+            return
+        elevation = simpledialog.askfloat(
+            "Floor",
+            "Elevation (m):",
+            initialvalue=floor["elevation_m"],
+            parent=self,
+        )
+        if elevation is None:
+            return
+        ceiling = simpledialog.askfloat(
+            "Floor",
+            "Default ceiling height (m):",
+            initialvalue=floor["default_ceiling_height_m"],
+            minvalue=0.01,
+            parent=self,
+        )
+        if ceiling is None:
+            return
+        grid = simpledialog.askfloat(
+            "Grid",
+            "Grid spacing (m):",
+            initialvalue=self.layout["grid_m"],
+            minvalue=0.01,
+            parent=self,
+        )
+        if grid is None:
+            return
+        floor["name"] = name.strip() or floor["name"]
+        floor["elevation_m"] = float(elevation)
+        floor["default_ceiling_height_m"] = float(ceiling)
+        self.layout["grid_m"] = float(grid)
+        self._persist(
+            "Floor settings updated",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
 
     def _selection_state(self) -> tuple[str, str] | None:
         if self.selected is None:
@@ -1069,6 +1172,7 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def redraw(self) -> None:
         self._refresh_validation()
+        self._update_metrics()
         self._draw_2d()
         self._draw_3d()
 

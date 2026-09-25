@@ -53,8 +53,13 @@ def test_release2_project_rejects_duplicate_spatial_ids_and_orphans():
         project_from_dict(_project(orphan))
 
 
-def test_release2_project_rejects_future_spatial_schema():
+def test_release2_project_accepts_v1_and_rejects_future_spatial_schema():
+    legacy = _layout()
+    legacy["version"] = 1
+    loaded = project_from_dict(_project(legacy))
+    assert loaded.metadata["spatial_layout"]["version"] == 1
+
     future = _layout()
-    future["version"] = 2
+    future["version"] = 3
     with pytest.raises(ProjectFormatError):
         project_from_dict(_project(future))

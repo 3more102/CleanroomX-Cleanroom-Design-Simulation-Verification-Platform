@@ -404,7 +404,7 @@ def _atomic_write_text(
     text: str,
     *,
     before_replace: Callable[[], None] | None = None,
-) -> Path:
+) -> tuple[Path, ProjectFileRevision]:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -434,17 +434,18 @@ def _atomic_write_text(
         # The file contents are fsynced before rename. Sync the parent directory
         # where the platform/filesystem supports it so the rename itself is durable.
         _fsync_parent_directory(destination)
-        _verify_atomic_write(destination, payload)
+        verified_revision = _verify_atomic_write(destination, payload)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
         raise
-    return destination
+    return destination, verified_revision
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
-    return _atomic_write_text(path, text)
+    """Atomically replace and verify a UTF-8 text file."""
+    destination, _revision = _atomic_write_text(path, text)
+    return destination
 
 
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
@@ -468,9 +469,9 @@ def save_project_document_guarded(
 
     assert_unchanged()
     text = _project_document_text(project)
-    saved_path = _atomic_write_text(
+    saved_path, saved_revision = _atomic_write_text(
         destination,
         text,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    return saved_path, saved_revision

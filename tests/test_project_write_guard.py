@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import multiprocessing
 
 import pytest
 
@@ -9,14 +10,25 @@ import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
     ProjectDocument,
+    ProjectFileBusyError,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
     load_project_document_with_revision,
     project_file_revision_matches,
+    project_save_lock,
+    project_save_lock_path,
     save_project_document,
     save_project_document_guarded,
 )
+
+
+
+def _hold_project_save_lock(path: str, ready, release) -> None:
+    with project_save_lock(path):
+        ready.set()
+        if not release.wait(15):
+            raise RuntimeError("test lock holder timed out waiting for release")
 
 
 class Value:
@@ -208,3 +220,111 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+
+def test_project_save_lock_is_stable_adjacent_and_persistent(tmp_path):
+    path = tmp_path / "project.cleanroomx.json"
+    lock_path = project_save_lock_path(path)
+
+    assert lock_path.parent == tmp_path.resolve()
+    assert lock_path.name.startswith(".cleanroomx-save-")
+    assert lock_path.name.endswith(".lock")
+
+    with project_save_lock(path) as acquired:
+        assert acquired == lock_path
+        assert acquired.exists()
+
+    # The sidecar is deliberately persistent. Removing it after unlock could let
+    # a new writer lock a different inode while another process still owns the old one.
+    assert lock_path.exists()
+
+
+def test_guarded_save_refuses_concurrent_cleanroomx_writer_across_processes(tmp_path):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    expected = capture_project_file_revision(path)
+
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    holder = context.Process(
+        target=_hold_project_save_lock,
+        args=(str(path), ready, release),
+    )
+    holder.start()
+    try:
+        assert ready.wait(10), "child process did not acquire project save lock"
+        with pytest.raises(ProjectFileBusyError) as exc_info:
+            save_project_document_guarded(
+                path,
+                ProjectDocument(name="Contending writer"),
+                expected_revision=expected,
+            )
+
+        assert exc_info.value.path == path.resolve(strict=False)
+        assert exc_info.value.lock_path == project_save_lock_path(path)
+        assert load_project_document(path).name == "Opened"
+    finally:
+        release.set()
+        holder.join(10)
+        if holder.is_alive():
+            holder.terminate()
+            holder.join(5)
+
+    assert holder.exitcode == 0
+
+    saved_path, saved_revision = save_project_document_guarded(
+        path,
+        ProjectDocument(name="Saved after release"),
+        expected_revision=expected,
+    )
+    assert saved_path == path.resolve(strict=False)
+    assert saved_revision == capture_project_file_revision(path)
+    assert load_project_document(path).name == "Saved after release"
+
+
+def test_guarded_save_releases_lock_when_revision_check_fails(tmp_path):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    stale = capture_project_file_revision(path)
+    save_project_document(path, ProjectDocument(name="External edit"))
+
+    with pytest.raises(ProjectWriteConflictError):
+        save_project_document_guarded(
+            path,
+            ProjectDocument(name="Window edit"),
+            expected_revision=stale,
+        )
+
+    # Failure must not strand a process-owned lock.
+    with project_save_lock(path):
+        pass
+
+
+def test_gui_save_reports_busy_project_without_writing(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+
+    warnings = []
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    with project_save_lock(path):
+        app.save_project()
+
+    assert load_project_document(path).name == "Opened"
+    assert errors == []
+    assert warnings
+    assert warnings[-1][0] == "Project save in progress"
+    assert "another CleanroomX process" in app.status_var.value

@@ -116,3 +116,12 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+
+def test_project_loader_reports_invalid_utf8(tmp_path):
+    path = tmp_path / "invalid-utf8.cleanroomx.json"
+    path.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(ProjectFormatError, match="UTF-8"):
+        load_project_document(path)

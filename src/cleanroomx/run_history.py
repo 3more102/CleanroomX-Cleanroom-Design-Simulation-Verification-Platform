@@ -285,39 +285,19 @@ def run_history_records(
     return copy.deepcopy(raw["records"])
 
 
-def append_run_history_record(
-    metadata: dict[str, Any],
-    *,
-    analysis_id: str,
-    analysis_name: str,
-    analysis_kind: str,
+def build_run_history_evidence(
     input_payload: dict[str, Any],
     run: Any,
-    completed_at_utc: str | None = None,
-    limit: int = DEFAULT_RUN_HISTORY_LIMIT,
 ) -> dict[str, Any]:
-    """Append one completed analysis record transactionally to project metadata."""
-    if not isinstance(metadata, dict):
-        raise RunHistoryIntegrityError("project metadata must be an object")
-    if type(limit) is not int or limit < 1:
-        raise ValueError("run history limit must be a positive integer")
+    """Build immutable run evidence without mutating project state.
 
-    _require_non_empty_string(analysis_id, "analysis_id")
-    _require_non_empty_string(analysis_name, "analysis_name")
-    _require_non_empty_string(analysis_kind, "analysis_kind")
+    This may hash large result/diagnostic payloads and is therefore suitable for
+    execution on the existing analysis worker before returning to the GUI thread.
+    """
     if not isinstance(input_payload, dict):
         raise RunHistoryIntegrityError(
             "analysis input snapshot must be an object"
         )
-
-    validate_run_history(metadata)
-    existing = metadata.get(RUN_HISTORY_METADATA_KEY)
-    history = (
-        copy.deepcopy(existing)
-        if existing is not None
-        else _empty_history()
-    )
-    records = history["records"]
 
     diagnostics = getattr(run, "diagnostics", None)
     provenance = (
@@ -329,20 +309,20 @@ def append_run_history_record(
         raise RunHistoryIntegrityError(
             "completed analysis is missing application execution provenance"
         )
-    if getattr(run, "kind", None) != analysis_kind:
-        raise RunHistoryIntegrityError(
-            "completed analysis kind does not match selected analysis"
-        )
+
+    analysis_kind = _require_non_empty_string(
+        getattr(run, "kind", None), "run.kind"
+    )
     if provenance.get("analysis_kind") != analysis_kind:
         raise RunHistoryIntegrityError(
-            "execution provenance kind does not match selected analysis"
+            "execution provenance kind does not match completed analysis"
         )
 
     input_snapshot = copy.deepcopy(input_payload)
     input_sha256 = _sha256_json(input_snapshot)
     if provenance.get("input_sha256") != input_sha256:
         raise RunHistoryIntegrityError(
-            "completed analysis input digest does not match the current input snapshot"
+            "completed analysis input digest does not match the submitted input snapshot"
         )
 
     result = getattr(run, "result", None)
@@ -357,6 +337,89 @@ def append_run_history_record(
             "completed analysis plot must be an object or null"
         )
 
+    evidence = {
+        "analysis_kind": analysis_kind,
+        "run_title": _require_non_empty_string(
+            getattr(run, "title", None), "run.title"
+        ),
+        "status": _require_non_empty_string(
+            getattr(run, "status", None), "run.status"
+        ),
+        "cleanroomx_version": _require_non_empty_string(
+            provenance.get("cleanroomx_version"),
+            "execution_provenance.cleanroomx_version",
+        ),
+        "input_canonicalization": _require_non_empty_string(
+            provenance.get("input_canonicalization"),
+            "execution_provenance.input_canonicalization",
+        ),
+        "input_sha256": input_sha256,
+        "input_snapshot": input_snapshot,
+        "execution_provenance": copy.deepcopy(provenance),
+        "result_sha256": _sha256_json(result),
+        "diagnostics_sha256": _sha256_json(diagnostics),
+        "report_sha256": _sha256_text(markdown),
+        "plot_sha256": None if plot is None else _sha256_json(plot),
+    }
+    _canonical_bytes(evidence)
+    return evidence
+
+
+def append_run_history_evidence(
+    metadata: dict[str, Any],
+    *,
+    analysis_id: str,
+    analysis_name: str,
+    analysis_kind: str,
+    evidence: dict[str, Any],
+    completed_at_utc: str | None = None,
+    limit: int = DEFAULT_RUN_HISTORY_LIMIT,
+) -> dict[str, Any]:
+    """Append already-prepared run evidence transactionally to project metadata."""
+    if not isinstance(metadata, dict):
+        raise RunHistoryIntegrityError("project metadata must be an object")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("run history limit must be a positive integer")
+
+    _require_non_empty_string(analysis_id, "analysis_id")
+    _require_non_empty_string(analysis_name, "analysis_name")
+    _require_non_empty_string(analysis_kind, "analysis_kind")
+    if not isinstance(evidence, dict):
+        raise RunHistoryIntegrityError("prepared run evidence must be an object")
+    if evidence.get("analysis_kind") != analysis_kind:
+        raise RunHistoryIntegrityError(
+            "prepared run evidence kind does not match selected analysis"
+        )
+
+    # Validate the evidence through the same record invariants before project mutation.
+    input_snapshot = evidence.get("input_snapshot")
+    provenance = evidence.get("execution_provenance")
+    if not isinstance(input_snapshot, dict) or not isinstance(provenance, dict):
+        raise RunHistoryIntegrityError(
+            "prepared run evidence is missing input/provenance objects"
+        )
+    if evidence.get("input_sha256") != _sha256_json(input_snapshot):
+        raise RunHistoryIntegrityError(
+            "prepared run evidence input digest does not match its snapshot"
+        )
+    if provenance.get("analysis_kind") != analysis_kind:
+        raise RunHistoryIntegrityError(
+            "prepared run provenance kind does not match selected analysis"
+        )
+    if provenance.get("input_sha256") != evidence.get("input_sha256"):
+        raise RunHistoryIntegrityError(
+            "prepared run provenance input digest does not match"
+        )
+
+    validate_run_history(metadata)
+    existing = metadata.get(RUN_HISTORY_METADATA_KEY)
+    history = (
+        copy.deepcopy(existing)
+        if existing is not None
+        else _empty_history()
+    )
+    records = history["records"]
+
     previous_hash = (
         records[-1]["record_sha256"]
         if records
@@ -366,36 +429,23 @@ def append_run_history_record(
 
     completed = completed_at_utc or _utc_now_text()
     _validate_utc_timestamp(completed)
-    cleanroomx_version = _require_non_empty_string(
-        provenance.get("cleanroomx_version"),
-        "execution_provenance.cleanroomx_version",
-    )
-    input_canonicalization = _require_non_empty_string(
-        provenance.get("input_canonicalization"),
-        "execution_provenance.input_canonicalization",
-    )
-
     record = {
         "sequence": sequence,
         "completed_at_utc": completed,
         "analysis_id": analysis_id,
         "analysis_name": analysis_name,
         "analysis_kind": analysis_kind,
-        "run_title": _require_non_empty_string(
-            getattr(run, "title", None), "run.title"
-        ),
-        "status": _require_non_empty_string(
-            getattr(run, "status", None), "run.status"
-        ),
-        "cleanroomx_version": cleanroomx_version,
-        "input_canonicalization": input_canonicalization,
-        "input_sha256": input_sha256,
-        "input_snapshot": input_snapshot,
+        "run_title": evidence.get("run_title"),
+        "status": evidence.get("status"),
+        "cleanroomx_version": evidence.get("cleanroomx_version"),
+        "input_canonicalization": evidence.get("input_canonicalization"),
+        "input_sha256": evidence.get("input_sha256"),
+        "input_snapshot": copy.deepcopy(input_snapshot),
         "execution_provenance": copy.deepcopy(provenance),
-        "result_sha256": _sha256_json(result),
-        "diagnostics_sha256": _sha256_json(diagnostics),
-        "report_sha256": _sha256_text(markdown),
-        "plot_sha256": None if plot is None else _sha256_json(plot),
+        "result_sha256": evidence.get("result_sha256"),
+        "diagnostics_sha256": evidence.get("diagnostics_sha256"),
+        "report_sha256": evidence.get("report_sha256"),
+        "plot_sha256": evidence.get("plot_sha256"),
         "previous_record_sha256": previous_hash,
     }
     record["record_sha256"] = _record_sha256(record)
@@ -415,3 +465,27 @@ def append_run_history_record(
     # Commit only after the complete candidate ledger has validated.
     metadata[RUN_HISTORY_METADATA_KEY] = history
     return copy.deepcopy(record)
+
+
+def append_run_history_record(
+    metadata: dict[str, Any],
+    *,
+    analysis_id: str,
+    analysis_name: str,
+    analysis_kind: str,
+    input_payload: dict[str, Any],
+    run: Any,
+    completed_at_utc: str | None = None,
+    limit: int = DEFAULT_RUN_HISTORY_LIMIT,
+) -> dict[str, Any]:
+    """Prepare and append one completed run in a single non-GUI convenience call."""
+    evidence = build_run_history_evidence(input_payload, run)
+    return append_run_history_evidence(
+        metadata,
+        analysis_id=analysis_id,
+        analysis_name=analysis_name,
+        analysis_kind=analysis_kind,
+        evidence=evidence,
+        completed_at_utc=completed_at_utc,
+        limit=limit,
+    )

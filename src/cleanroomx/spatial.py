@@ -519,6 +519,120 @@ def spatial_layout_schedule_csv(value: Any) -> str:
     return stream.getvalue()
 
 
+
+def spatial_layout_dxf(value: Any) -> str:
+    """Export the canonical spatial model as deterministic ASCII DXF in metres."""
+
+    layout = normalize_layout(value)
+
+    def num(value: Any) -> str:
+        number = _finite_number(value, 0.0)
+        text = f"{number:.6f}".rstrip("0").rstrip(".")
+        return text or "0"
+
+    def text_value(value: Any) -> str:
+        return str(value).replace("\r", " ").replace("\n", " ").replace("\t", " ").strip()
+
+    lines: list[str] = []
+
+    def emit(code: int, value: Any) -> None:
+        lines.extend((str(code), str(value)))
+
+    # AutoCAD 2000 ASCII DXF. $INSUNITS=6 declares metres.
+    emit(0, "SECTION")
+    emit(2, "HEADER")
+    emit(9, "$ACADVER")
+    emit(1, "AC1015")
+    emit(9, "$INSUNITS")
+    emit(70, 6)
+    emit(0, "ENDSEC")
+
+    emit(0, "SECTION")
+    emit(2, "TABLES")
+    emit(0, "TABLE")
+    emit(2, "LAYER")
+    emit(70, 4)
+    for layer_name, color_index in (
+        ("ROOMS", 7),
+        ("ROOM_LABELS", 3),
+        ("DEVICES", 5),
+        ("DEVICE_LABELS", 2),
+    ):
+        emit(0, "LAYER")
+        emit(2, layer_name)
+        emit(70, 0)
+        emit(62, color_index)
+        emit(6, "CONTINUOUS")
+    emit(0, "ENDTAB")
+    emit(0, "ENDSEC")
+
+    emit(0, "SECTION")
+    emit(2, "ENTITIES")
+
+    def line_entity(layer: str, x1: float, y1: float, x2: float, y2: float) -> None:
+        emit(0, "LINE")
+        emit(8, layer)
+        emit(10, num(x1))
+        emit(20, num(y1))
+        emit(30, "0")
+        emit(11, num(x2))
+        emit(21, num(y2))
+        emit(31, "0")
+
+    def text_entity(layer: str, x: float, y: float, value: Any, height: float = 0.22) -> None:
+        emit(0, "TEXT")
+        emit(8, layer)
+        emit(10, num(x))
+        emit(20, num(y))
+        emit(30, "0")
+        emit(40, num(height))
+        emit(1, text_value(value))
+
+    for room in layout["rooms"]:
+        x0 = room["x_m"]
+        y0 = room["y_m"]
+        x1 = x0 + room["length_m"]
+        y1 = y0 + room["width_m"]
+        emit(999, f"CLEANROOMX_ROOM_ID={text_value(room['id'])}")
+        emit(999, f"CLEANROOMX_ROOM_HEIGHT_M={num(room['height_m'])}")
+        line_entity("ROOMS", x0, y0, x1, y0)
+        line_entity("ROOMS", x1, y0, x1, y1)
+        line_entity("ROOMS", x1, y1, x0, y1)
+        line_entity("ROOMS", x0, y1, x0, y0)
+
+        cx = (x0 + x1) / 2.0
+        cy = (y0 + y1) / 2.0
+        text_entity("ROOM_LABELS", cx, cy, room["name"])
+        detail = f"{room['length_m']:g} x {room['width_m']:g} m"
+        if room.get("pressure_pa") is not None:
+            detail += f" | {room['pressure_pa']:g} Pa"
+        text_entity("ROOM_LABELS", cx, cy - 0.28, detail, 0.16)
+
+    for device in layout["devices"]:
+        emit(999, f"CLEANROOMX_DEVICE_ID={text_value(device['id'])}")
+        emit(999, f"CLEANROOMX_DEVICE_TYPE={text_value(device['type'])}")
+        room_id = device.get("room_id")
+        emit(999, f"CLEANROOMX_ROOM_ID={text_value(room_id) if room_id is not None else ''}")
+        emit(999, f"CLEANROOMX_DEVICE_Z_M={num(device['z_m'])}")
+        emit(0, "CIRCLE")
+        emit(8, "DEVICES")
+        emit(10, num(device["x_m"]))
+        emit(20, num(device["y_m"]))
+        emit(30, "0")
+        emit(40, "0.12")
+        text_entity(
+            "DEVICE_LABELS",
+            device["x_m"] + 0.18,
+            device["y_m"] + 0.18,
+            f"{device['name']} [{device['type']}] z={device['z_m']:g}m",
+            0.14,
+        )
+
+    emit(0, "ENDSEC")
+    emit(0, "EOF")
+    return "\n".join(lines) + "\n"
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -586,6 +700,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export SVG", command=self.export_svg).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Export CSV", command=self.export_schedule_csv).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Export DXF", command=self.export_dxf).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
             side="left", padx=(6, 2)
         )
@@ -770,6 +885,28 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
             return
         self._status_setter(f"Exported spatial schedule CSV: {path}")
+
+    def export_dxf(self) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export 2D plan as DXF",
+            defaultextension=".dxf",
+            initialfile="cleanroomx-plan.dxf",
+            filetypes=(("AutoCAD DXF", "*.dxf"), ("All files", "*.*")),
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(spatial_layout_dxf(self.layout))
+        except OSError as exc:
+            messagebox.showerror(
+                "Export DXF",
+                f"Could not export the 2D CAD plan:\n{exc}",
+                parent=self,
+            )
+            return
+        self._status_setter(f"Exported 2D plan DXF: {path}")
 
     def _selected_object(self) -> dict | None:
         if self.selected is None:

@@ -253,6 +253,40 @@ def nearest_nonoverlap_room_position(
     return best[1], best[2]
 
 
+def room_overlap_resolution_preview(
+    room: dict, rooms: list[dict]
+) -> dict | None:
+    """Return a deterministic, non-mutating preview for one overlap repair.
+
+    The preview describes the exact room translation proposed by the existing
+    nearest-nonoverlap resolver. None means no geometry change is required.
+    """
+
+    if not isinstance(room, dict):
+        return None
+
+    source_x = _finite_number(room.get("x_m"), 0.0)
+    source_y = _finite_number(room.get("y_m"), 0.0)
+    target_x, target_y = nearest_nonoverlap_room_position(room, rooms)
+    dx = target_x - source_x
+    dy = target_y - source_y
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return None
+
+    return {
+        "room_id": str(room.get("id") or ""),
+        "source_x_m": source_x,
+        "source_y_m": source_y,
+        "target_x_m": target_x,
+        "target_y_m": target_y,
+        "length_m": _positive(room.get("length_m"), 0.0),
+        "width_m": _positive(room.get("width_m"), 0.0),
+        "dx_m": dx,
+        "dy_m": dy,
+        "distance_m": math.hypot(dx, dy),
+    }
+
+
 def resolve_room_overlaps(rooms: list[dict]) -> list[dict]:
     """Return deterministic moves that eliminate positive-area room overlaps.
 
@@ -1139,6 +1173,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_conflicts = tk.BooleanVar(value=True)
         self._conflict_cursor = -1
         self._active_conflict_pair: tuple[str, str] | None = None
+        self._resolution_preview: dict | None = None
 
         self._build()
         self.refresh()
@@ -1360,6 +1395,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._alignment_guides = []
         self._conflict_cursor = -1
         self._active_conflict_pair = None
+        self._resolution_preview = None
         self._history.clear()
         self._update_history_controls()
         if self.selected and not self._selected_object():
@@ -1381,6 +1417,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self._conflict_cursor = -1
         self._active_conflict_pair = None
+        self._resolution_preview = None
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
         if self.selected and not self._selected_object():
             self.selected = None
@@ -1639,6 +1676,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if conflict is None:
             self._conflict_cursor = -1
             self._active_conflict_pair = None
+            self._resolution_preview = None
             self._status_setter("No room overlap conflicts to review")
             self.redraw()
             return
@@ -1654,6 +1692,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         target_room_id = conflict["room_b_id"] or conflict["room_a_id"]
         if target_room_id:
             self.selected = _Hit("room", target_room_id)
+        target_room = self._selected_object() if target_room_id else None
+        self._resolution_preview = (
+            room_overlap_resolution_preview(target_room, self.layout["rooms"])
+            if target_room is not None
+            else None
+        )
         self._show_conflicts.set(True)
         self._load_property_panel()
         self.redraw()
@@ -1663,10 +1707,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             if target_room_id == conflict["room_b_id"]
             else conflict["room_a_name"]
         )
+        preview_text = ""
+        if self._resolution_preview is not None:
+            preview = self._resolution_preview
+            assigned_devices = sum(
+                1
+                for device in self.layout["devices"]
+                if device.get("room_id") == preview["room_id"]
+            )
+            device_text = (
+                f" + {assigned_devices} assigned device"
+                f"{'s' if assigned_devices != 1 else ''}"
+                if assigned_devices
+                else ""
+            )
+            preview_text = (
+                f"; proposed move {preview['distance_m']:.2f} m "
+                f"(Δx {preview['dx_m']:+.2f}, Δy {preview['dy_m']:+.2f})"
+                f"{device_text}"
+            )
         self._status_setter(
             f"Conflict {conflict['index'] + 1}/{conflict['count']}: "
             f"{conflict['room_a_name']} ↔ {conflict['room_b_name']} · "
             f"{conflict['area_m2']:.2f} m² overlap; selected {target_name}"
+            f"{preview_text}"
         )
 
     def select_previous_overlap_conflict(self) -> None:
@@ -1682,16 +1746,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         room = self._selected_object()
         if room is None:
             return
-        target_x, target_y = nearest_nonoverlap_room_position(
-            room, self.layout["rooms"]
-        )
-        dx = target_x - room["x_m"]
-        dy = target_y - room["y_m"]
-        if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        preview = room_overlap_resolution_preview(room, self.layout["rooms"])
+        if preview is None:
             self._status_setter("Selected room has no overlap conflicts")
             return
         before = self._snapshot_layout()
-        if not self._translate_selected(dx, dy):
+        if not self._translate_selected(preview["dx_m"], preview["dy_m"]):
             return
         self._alignment_guides = []
         self._load_property_panel()
@@ -1896,6 +1956,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                         tags=(f"resize:{handle}", f"room:{room['id']}", "resize"),
                     )
 
+        if self._resolution_preview is not None:
+            self._draw_overlap_resolution_preview()
+
         if self._show_conflicts.get():
             self._draw_room_overlap_conflicts()
 
@@ -1940,6 +2003,58 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 fill="#667788",
             )
+
+    def _draw_overlap_resolution_preview(self) -> None:
+        preview = self._resolution_preview
+        if preview is None:
+            return
+
+        canvas = self.canvas_2d
+        x0, y0 = self._world_to_canvas(
+            preview["target_x_m"], preview["target_y_m"]
+        )
+        x1, y1 = self._world_to_canvas(
+            preview["target_x_m"] + preview["length_m"],
+            preview["target_y_m"] + preview["width_m"],
+        )
+        source_cx, source_cy = self._world_to_canvas(
+            preview["source_x_m"] + preview["length_m"] / 2.0,
+            preview["source_y_m"] + preview["width_m"] / 2.0,
+        )
+        target_cx = (x0 + x1) / 2.0
+        target_cy = (y0 + y1) / 2.0
+        color = "#0f766e"
+
+        canvas.create_rectangle(
+            x0,
+            y0,
+            x1,
+            y1,
+            outline=color,
+            width=3,
+            dash=(8, 4),
+            tags=("resolution-preview",),
+        )
+        canvas.create_line(
+            source_cx,
+            source_cy,
+            target_cx,
+            target_cy,
+            fill=color,
+            width=2,
+            arrow=tk.LAST,
+            arrowshape=(8, 10, 4),
+            tags=("resolution-preview",),
+        )
+        canvas.create_text(
+            target_cx,
+            target_cy,
+            text=f"PROPOSED\n{preview['distance_m']:.2f} m",
+            fill=color,
+            font=("TkDefaultFont", 8, "bold"),
+            justify="center",
+            tags=("resolution-preview",),
+        )
 
     def _draw_room_overlap_conflicts(self) -> None:
         canvas = self.canvas_2d

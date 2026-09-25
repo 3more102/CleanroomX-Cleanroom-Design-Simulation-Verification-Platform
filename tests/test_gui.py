@@ -28,6 +28,11 @@ def test_gui_json_parser_rejects_non_finite_constants():
         _strict_json_loads('{"value": NaN}')
 
 
+def test_gui_json_parser_rejects_duplicate_engineering_keys():
+    with pytest.raises(ValueError, match="duplicate JSON object key 'pressure_pa'"):
+        _strict_json_loads('{"pressure_pa": 10.0, "pressure_pa": 20.0}')
+
+
 def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows

@@ -45,7 +45,6 @@ def test_stable_project_load_binds_parsed_bytes_to_reported_revision(
     assert revision == project_module.capture_project_file_revision(path)
 
 
-
 def test_stable_project_load_retries_transient_malformed_read(tmp_path, monkeypatch):
     path = save_project_document(
         tmp_path / "project.cleanroomx.json",
@@ -77,6 +76,7 @@ def test_stable_project_load_rejects_stably_malformed_project(tmp_path):
 
     with pytest.raises(project_module.ProjectFormatError, match="invalid JSON"):
         load_project_document_with_revision(path)
+
 
 def test_atomic_write_uses_deterministic_utf8_bytes_and_fsyncs_directory(
     tmp_path, monkeypatch

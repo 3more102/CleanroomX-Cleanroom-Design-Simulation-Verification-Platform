@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .json_integrity import JSONIntegrityError, strict_json_loads
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -83,10 +84,6 @@ class ProjectDocument:
             if item.id == analysis_id:
                 return item
         raise KeyError(analysis_id)
-
-
-def _reject_json_constant(value: str):
-    raise ProjectFormatError(f"non-finite JSON constant is not allowed: {value}")
 
 
 def _validated_string(value: Any, field_name: str) -> str:
@@ -220,14 +217,13 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
 def load_project_document(path: str | Path) -> ProjectDocument:
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        data = strict_json_loads(source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except JSONIntegrityError as exc:
+        raise ProjectFormatError(str(exc)) from exc
     return project_from_dict(data)
 
 

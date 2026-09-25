@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased explicit-save conflict protection — 2026-09-25
+
+- Captures stable SHA-256-backed project-file revisions when projects are opened and after successful saves.
+- Blocks normal **Save Project** when the on-disk file was changed or deleted by another process/session after the captured revision, preventing silent stale-writer overwrites.
+- Preserves the in-memory edited project and recovery path on conflict, with an actionable **Save Project As** or reopen workflow instead of force-overwriting external work.
+- Verifies the exact bytes after atomic replacement before marking a save clean, while allowing metadata-only timestamp changes when file content is identical.
+- Consolidates recovery source fingerprinting onto the same stable file-revision primitive so persistence and recovery use one content-identity implementation.
+- Adds project-persistence and desktop regressions for external replacement, external deletion, sequential guarded saves, timestamp-only changes, and conflict UI behavior without changing the project schema or engineering calculations.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

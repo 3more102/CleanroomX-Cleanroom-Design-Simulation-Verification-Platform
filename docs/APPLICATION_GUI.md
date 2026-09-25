@@ -46,7 +46,9 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. When an existing project is opened, CleanroomX also records the exact stable SHA-256 and byte-size identity of that on-disk revision. **Save Project** compares the current file against that opened/saved revision immediately before replacement. If another editor, sync client, script, or process changed or removed the file, the save is blocked and nothing is overwritten; preserve the current in-memory work with **Save Project As**, then reopen or compare the external revision. Choosing the currently opened path through **Save Project As** is routed back through the same guard rather than bypassing it.
+
+The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, invalid UTF-8 project content, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ## Recovery autosave
 

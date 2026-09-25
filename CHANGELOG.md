@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased autosave completion ownership hardening — 2026-09-25
+
+- Keeps a background recovery `Future` coordinator-owned until its completion callback has finalized shared autosave state; `Future.done()` alone is no longer treated as idle.
+- Queues/coalesces snapshots that arrive in the done-before-callback window instead of replacing the tracked Future/request pair.
+- Prevents delayed completion callbacks from clearing newer tracked state and makes `wait_for_idle()` require no Future, active request, or pending request.
+- Adds a deterministic concurrency regression that forces the exact callback-finalization race and verifies the newest recovery snapshot remains tracked and persisted.
+- Preserves project/recovery schemas, explicit-save behavior, bounded history, solver semantics, and runtime dependencies.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

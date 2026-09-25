@@ -8,15 +8,14 @@ Merged Release 2 commit on `main`:
 
 `763929bc1abdc4e7b3436e0c718bcc3b5d5db00a`
 
-Exact CI-tested pull-request merge tree:
+Final combined-tree verification gate:
 
 - PR **#423 — Release 2 final combined-tree verification gate**
 - PR head: `25888c6a7564ae3448b6deb0a5c7396aed64bbd7`
-- Synthetic merge commit tested by GitHub Actions: `a468f229146433c88396e6d59dd61d716a16d990`
-- Tested tree: `b024e3b8789de11f605a81ee42bc01c4d8e6a3a4`
-- Merged `main` tree: `b024e3b8789de11f605a81ee42bc01c4d8e6a3a4`
+- GitHub Actions checkout tested: `a468f229146433c88396e6d59dd61d716a16d990`, the pull-request merge ref of that head into `ec7b7a4e7f836159defa5591d396a951bfd5a3ba`.
+- Final merged `main` commit: `763929bc1abdc4e7b3436e0c718bcc3b5d5db00a`.
 
-The tested PR merge tree and the merged `main` tree are byte-for-byte the same Git tree.
+PR #423 changed only `tests/test_numeric_integrity.py`, adding the non-functional comment `# Foundational finite-number boundary regressions.`. That comment is present in the CI checkout, PR head, and final merged `main`; no production source file changed between `ec7b7a4e7f836159defa5591d396a951bfd5a3ba` and the final merge.
 
 Release 2 integration history:
 

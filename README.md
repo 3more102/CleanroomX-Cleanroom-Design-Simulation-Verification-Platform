@@ -4,7 +4,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.100.0**, built directly on the verified v0.99.1 `main` lineage. It preserves the validated solver/provenance backend and adds desktop execution-integrity evidence, portable external-file references, atomic project/export writes, backend-derived fan/system plotting, and the self-contained installed demonstration.
+The current release line is **CleanroomX v0.100.0**, built directly on the verified v0.99.1 `main` lineage. It preserves the validated solver/provenance backend and adds desktop execution-integrity evidence, portable external-file references, revision-stable verified project/export writes, backend-derived fan/system plotting, and the self-contained installed demonstration.
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused v0.100 application/desktop regressions plus the complete suite on Python **3.11, 3.12, and 3.13**, builds and installs a clean wheel in every matrix job, validates the packaged demo/resources, and runs the installed Tk/Xvfb demo smoke on Python 3.13.
 
@@ -702,3 +702,8 @@ The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer p
 Always use the applicable purchased standard, local regulations, client URS/specification, qualification protocol, manufacturer data, and qualified engineering judgment for real projects.
 
 v0.37 adds deterministic bounded corner uncertainty around the nonlinear fan/variable-friction loop solver for explicit fixed-pressure and selected automatic-friction local-loss bounds. Every corner rebuilds the affected geometry evidence and re-runs the full Darcy-friction fan/network solve. Complete operating-point and internal edge-flow envelopes are reported only when the nominal case and every evaluated corner solve inside the supplied fan-curve range; no-intersection or numerical non-convergence remains indeterminate. The analysis is deterministic corner evidence, not statistical uncertainty propagation, and does not infer K-factor uncertainty, covariance, geometry manufacturing tolerances, fan-curve uncertainty, controls, leakage, commissioning acceptance, or certification.
+
+
+## Project persistence integrity
+
+Explicit project saves serialize deterministic UTF-8 bytes, fsync the temporary file, atomically replace the destination, verify the resulting size and SHA-256, and flush the containing directory on platforms that support directory fsync. Desktop opens bind the parsed bytes to the same content revision observed before and after the read, so a mixed or transient revision is retried instead of being accepted. If a post-replace directory flush fails, CleanroomX reports durability uncertainty, keeps recovery data and dirty state, and preserves the verified revision token so the user can retry safely instead of encountering a false external-write conflict. Existing project schema version 1 and supported legacy migrations are unchanged. Run `python benchmarks/project_io.py` to measure the actual durable save and revision-stable load path for small, medium, large, and stress payloads; CI records this benchmark on Python 3.13 without enforcing machine-dependent timing thresholds.

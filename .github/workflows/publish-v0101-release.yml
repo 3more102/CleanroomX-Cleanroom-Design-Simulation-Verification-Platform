@@ -27,24 +27,22 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Qualify one-time release closure
-        id: closure
+      - name: Verify tested current-main release candidate
         shell: bash
         run: |
           set -euo pipefail
-          workflow=.github/workflows/publish-v0101-release.yml
           git cat-file -e "${TARGET_SHA}^{commit}"
+          workflow=.github/workflows/publish-v0101-release.yml
           git cat-file -e "${TARGET_SHA}:${workflow}"
-          if git cat-file -e "${TARGET_SHA}^:${workflow}" 2>/dev/null; then
-            echo "publish=false" >> "${GITHUB_OUTPUT}"
-            echo "Release workflow already existed in the parent; skip publication."
-          else
-            echo "publish=true" >> "${GITHUB_OUTPUT}"
-            echo "This commit introduces the release workflow; publication is eligible."
+
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
+            echo "Successful CI belongs to stale main ${TARGET_SHA}; current main is ${current_main_sha}."
+            echo "A later successful main CI will retry publication."
+            exit 0
           fi
 
       - name: Verify validated release baseline
-        if: steps.closure.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +52,6 @@ jobs:
           git show "${TARGET_SHA}:TEST_EVIDENCE.md" | grep -F '# CleanroomX v0.101.0 Release 2 Test Evidence'
 
       - name: Publish tag and GitHub Release
-        if: steps.closure.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

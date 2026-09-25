@@ -113,3 +113,52 @@ def test_release2_spatial_rejects_invalid_floor_units_view_toggles_and_openings(
     bad_opening["devices"][0]["width_m"] = 0
     with pytest.raises(Exception, match="width_m"):
         validate_spatial_layout_document(bad_opening)
+
+def test_release2_spatial_engineering_sync_baseline_is_strictly_validated():
+    layout = _layout()
+    layout["engineering_sync"] = {
+        "analysis_id": "verification",
+        "rooms": [
+            {
+                "room_id": "r1",
+                "analysis_room_name": "Room 1",
+                "length_m": 4.0,
+                "width_m": 3.0,
+                "height_m": 2.8,
+            }
+        ],
+    }
+    validate_spatial_layout_document(layout)
+
+    orphan = _layout()
+    orphan["engineering_sync"] = {
+        "analysis_id": "verification",
+        "rooms": [
+            {
+                "room_id": "missing",
+                "analysis_room_name": "Room 1",
+                "length_m": 4.0,
+                "width_m": 3.0,
+                "height_m": 2.8,
+            }
+        ],
+    }
+    with pytest.raises(Exception, match="engineering_sync.*missing room"):
+        validate_spatial_layout_document(orphan)
+
+    invalid_geometry = _layout()
+    invalid_geometry["engineering_sync"] = {
+        "analysis_id": "verification",
+        "rooms": [
+            {
+                "room_id": "r1",
+                "analysis_room_name": "Room 1",
+                "length_m": 0.0,
+                "width_m": 3.0,
+                "height_m": 2.8,
+            }
+        ],
+    }
+    with pytest.raises(Exception, match="engineering_sync.*length_m"):
+        validate_spatial_layout_document(invalid_geometry)
+

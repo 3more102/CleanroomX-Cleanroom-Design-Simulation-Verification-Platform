@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+import os
 
 import pytest
 
@@ -208,3 +210,64 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+
+def test_revision_capture_retries_path_replacement_with_same_size_and_mtime(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    replacement = tmp_path / "replacement.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Alpha"))
+    save_project_document(replacement, ProjectDocument(name="Bravo"))
+    assert path.stat().st_size == replacement.stat().st_size
+
+    original_revision = capture_project_file_revision(path)
+    assert original_revision.mtime_ns is not None
+    os.utime(
+        replacement,
+        ns=(original_revision.mtime_ns, original_revision.mtime_ns),
+    )
+    expected_replacement_sha = hashlib.sha256(replacement.read_bytes()).hexdigest()
+
+    original_open = project_module.Path.open
+    swapped = {"done": False}
+
+    class SwapAfterRead:
+        def __init__(self, handle):
+            self._handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return self._handle.__exit__(exc_type, exc, tb)
+
+        def fileno(self):
+            return self._handle.fileno()
+
+        def read(self, size=-1):
+            chunk = self._handle.read(size)
+            if chunk and not swapped["done"]:
+                swapped["done"] = True
+                replacement.replace(path)
+            return chunk
+
+    def open_and_swap(self, *args, **kwargs):
+        handle = original_open(self, *args, **kwargs)
+        if (
+            self.resolve(strict=False) == path.resolve(strict=False)
+            and args
+            and args[0] == "rb"
+            and not swapped["done"]
+        ):
+            return SwapAfterRead(handle)
+        return handle
+
+    monkeypatch.setattr(project_module.Path, "open", open_and_swap)
+
+    captured = capture_project_file_revision(path)
+
+    assert swapped["done"] is True
+    assert captured.sha256 == expected_replacement_sha
+    assert captured.sha256 != original_revision.sha256

@@ -3,6 +3,14 @@ from __future__ import annotations
 import pytest
 
 from cleanroomx.spatial import SpatialDesignWorkspace, empty_layout
+from cleanroomx.spatial_transforms import (
+    MAX_ZOOM,
+    MIN_ZOOM,
+    model_to_screen_2d,
+    project_3d,
+    screen_to_model_2d,
+    zoom_2d_at,
+)
 
 
 class _Canvas:
@@ -61,3 +69,58 @@ def test_zoom_keeps_model_point_under_cursor_fixed() -> None:
     assert workspace.layout["view"]["zoom_2d"] == pytest.approx(1.25)
     after = workspace._canvas_to_world(*cursor)
     assert after == pytest.approx(before, abs=1e-12)
+
+
+def test_pure_2d_transform_round_trip_and_zoom_anchor() -> None:
+    view = {
+        "width_px": 1200.0,
+        "height_px": 800.0,
+        "zoom": 1.75,
+        "pan_x_px": 83.0,
+        "pan_y_px": -47.0,
+    }
+    point = (-8.125, 14.75)
+    screen = model_to_screen_2d(*point, **view)
+    assert screen_to_model_2d(*screen, **view) == pytest.approx(point, abs=1e-12)
+
+    anchor = (731.25, 244.5)
+    before = screen_to_model_2d(*anchor, **view)
+    zoom, pan_x, pan_y = zoom_2d_at(1.6, *anchor, **view)
+    after = screen_to_model_2d(
+        *anchor,
+        width_px=view["width_px"],
+        height_px=view["height_px"],
+        zoom=zoom,
+        pan_x_px=pan_x,
+        pan_y_px=pan_y,
+    )
+    assert after == pytest.approx(before, abs=1e-12)
+
+
+def test_pure_zoom_clamps_supported_range() -> None:
+    common = {
+        "width_px": 1000.0,
+        "height_px": 600.0,
+        "zoom": 1.0,
+        "pan_x_px": 0.0,
+        "pan_y_px": 0.0,
+    }
+    assert zoom_2d_at(0.0001, 500, 300, **common)[0] == MIN_ZOOM
+    assert zoom_2d_at(1000, 500, 300, **common)[0] == MAX_ZOOM
+
+
+def test_3d_projection_is_deterministic_and_elevation_moves_up_screen() -> None:
+    view = {
+        "width_px": 900.0,
+        "height_px": 600.0,
+        "azimuth_deg": 35.0,
+        "elevation_deg": 28.0,
+        "zoom": 1.2,
+        "pan_x_px": 10.0,
+        "pan_y_px": -5.0,
+    }
+    floor = project_3d(2.0, 3.0, 0.0, **view)
+    elevated = project_3d(2.0, 3.0, 2.0, **view)
+    assert floor == project_3d(2.0, 3.0, 0.0, **view)
+    assert elevated[0] == pytest.approx(floor[0])
+    assert elevated[1] < floor[1]

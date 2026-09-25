@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import errno
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,46 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class AtomicWriteVerificationError(OSError):
+    """Raised when a completed atomic replacement does not contain the intended bytes."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        expected_sha256: str,
+        current_revision: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.current_revision = current_revision
+        super().__init__(
+            "atomic write verification failed for "
+            f"{self.path}: expected size={expected_size}, sha256={expected_sha256}; "
+            f"found size={current_revision.size}, sha256={current_revision.sha256}"
+        )
+
+
+class AtomicWriteDurabilityError(OSError):
+    """Raised when verified replacement bytes cannot be durably committed."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        current_revision: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.current_revision = current_revision
+        super().__init__(
+            "atomic replacement bytes were verified, but the directory durability "
+            f"flush failed for {self.path}; retry the save before relying on "
+            "crash/power-loss durability"
+        )
 
 
 class ProjectWriteConflictError(RuntimeError):
@@ -217,18 +258,25 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _project_document_from_bytes(payload: bytes) -> ProjectDocument:
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError(
+            f"project file must be UTF-8 text; invalid byte at offset {exc.start}"
+        ) from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
     return project_from_dict(data)
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    source = Path(path)
+    return _project_document_from_bytes(source.read_bytes())
 
 
 def _normalized_project_path(path: str | Path) -> Path:
@@ -289,15 +337,40 @@ def load_project_document_with_revision(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
+    """Load a project together with the exact stable content revision that was parsed.
+
+    The parsed byte stream must hash to the same revision observed before and after
+    the read. This closes the gap where a file could change and then return to the
+    original revision while a different byte stream was being parsed.
+    """
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
     source = _normalized_project_path(path)
     for _attempt in range(attempts):
         before = capture_project_file_revision(source)
-        project = load_project_document(source)
+        payload = source.read_bytes()
+        payload_sha256 = sha256(payload).hexdigest()
+        try:
+            project = _project_document_from_bytes(payload)
+        except ProjectFormatError:
+            after = capture_project_file_revision(source)
+            stable_invalid_revision = (
+                project_file_revision_matches(before, after)
+                and after.exists
+                and after.size == len(payload)
+                and after.sha256 == payload_sha256
+            )
+            if stable_invalid_revision:
+                raise
+            continue
+
         after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
+        if (
+            project_file_revision_matches(before, after)
+            and after.exists
+            and after.size == len(payload)
+            and after.sha256 == payload_sha256
+        ):
             return project, after
     raise OSError(f"project file changed repeatedly while opening: {source}")
 
@@ -310,6 +383,32 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+_UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS = {
+    errno.EINVAL,
+    getattr(errno, "ENOTSUP", errno.EINVAL),
+    getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+}
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Persist a directory-entry update when the platform exposes directory fsync."""
+    if os.name == "nt":
+        return
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    descriptor = os.open(directory, flags)
+    try:
+        try:
+            os.fsync(descriptor)
+        except OSError as exc:
+            if exc.errno not in _UNSUPPORTED_DIRECTORY_FSYNC_ERRNOS:
+                raise
+    finally:
+        os.close(descriptor)
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -319,20 +418,43 @@ def _atomic_write_text(
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
+    payload = text.encode("utf-8")
+    expected_sha256 = sha256(payload).hexdigest()
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
+            mode="wb", prefix=f".{destination.name}.",
             suffix=".tmp", dir=destination.parent, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+
+        current = capture_project_file_revision(destination)
+        if (
+            not current.exists
+            or current.size != len(payload)
+            or current.sha256 != expected_sha256
+        ):
+            raise AtomicWriteVerificationError(
+                destination,
+                expected_size=len(payload),
+                expected_sha256=expected_sha256,
+                current_revision=current,
+            )
+
+        try:
+            _fsync_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(
+                destination,
+                current_revision=current,
+            ) from exc
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

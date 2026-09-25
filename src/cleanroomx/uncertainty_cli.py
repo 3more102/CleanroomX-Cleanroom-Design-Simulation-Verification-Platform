@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .persistence import atomic_write_text
 from .uncertainty import analyze_room_uncertainty
 from .uncertainty_io import load_uncertain_room
 from .uncertainty_report import markdown_uncertainty_report
@@ -29,7 +30,7 @@ def main() -> int:
         else markdown_uncertainty_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
 

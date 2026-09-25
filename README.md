@@ -683,6 +683,20 @@ The v0.17 checker matches rooms by exact name and compares verification supply a
 
 The numeric limits in the examples are demonstration project inputs, **not quoted ISO limits**.
 
+## Versioned analysis plugins
+
+CleanroomX can extend the desktop/application workflow registry through trusted
+installed Python packages using the versioned `cleanroomx.analysis_plugins`
+entry-point contract. Valid plugins appear in the normal **Add analysis** picker,
+run through the same result/provenance pipeline as built-ins, and retain plugin
+distribution/version identity in execution provenance. Invalid, incompatible, or
+colliding plugins are disabled deterministically without replacing built-in
+workflows.
+
+Plugins are trusted executable Python code, not sandboxed data. See
+[`docs/PLUGINS.md`](docs/PLUGINS.md) for the API contract, packaging example,
+failure behavior, engineering responsibilities, and security boundary.
+
 ## Roadmap
 
 The desktop GUI is implemented in v0.96-v0.99. Remaining future work is richer provenance/dependency handling across supplied performance datasets, optional web delivery, and CFD adapters; these are extensions beyond the current desktop release rather than blockers for the supported v0.99 workflows.

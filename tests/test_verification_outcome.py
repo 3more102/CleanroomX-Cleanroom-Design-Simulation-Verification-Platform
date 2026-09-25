@@ -89,6 +89,32 @@ def test_failure_remains_failure_even_when_other_checks_are_unchecked():
     assert report.complete is False
 
 
+def test_fully_checked_failure_is_complete_but_not_passed():
+    report = verify_room(
+        RoomSpec(
+            name="Checked failing room",
+            length_m=5,
+            width_m=4,
+            height_m=3,
+            supply_airflow_m3_h=300,
+            min_ach=20,
+            min_pressure_pa=10,
+            observed_pressure_pa=5,
+            particle_requirements=(
+                ParticleRequirement(
+                    size_um=0.5,
+                    max_concentration_per_m3=400000,
+                    observed_concentration_per_m3=500000,
+                ),
+            ),
+        )
+    )
+
+    assert report.passed is False
+    assert report.status == "fail"
+    assert report.complete is True
+
+
 def test_fully_checked_room_reports_complete_pass():
     report = verify_room(
         RoomSpec(

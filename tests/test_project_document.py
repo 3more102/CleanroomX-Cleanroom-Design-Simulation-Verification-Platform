@@ -7,8 +7,9 @@ import pytest
 
 import cleanroomx.project as project_module
 from cleanroomx.project import (
-    AnalysisDocument, AtomicWriteVerificationError, PROJECT_SCHEMA,
-    PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError, atomic_write_text,
+    AnalysisDocument, AtomicWriteDurabilityError, AtomicWriteVerificationError,
+    PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError,
+    atomic_write_text,
     load_project_document, project_from_dict, save_project_document,
 )
 
@@ -57,13 +58,42 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 
+def test_atomic_write_text_writes_exact_utf8_bytes(tmp_path):
+    target = tmp_path / "export.txt"
+
+    atomic_write_text(target, "line 1\nΔP\n")
+
+    assert target.read_bytes() == "line 1\nΔP\n".encode("utf-8")
+
+
+def test_atomic_write_text_rejects_corrupt_stage_before_replacing_existing_file(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_bytes(b"previous")
+    original_verify = project_module._verify_file_payload
+
+    def corrupt_stage(path, payload, *, stage):
+        if stage == "staged write":
+            path.write_bytes(b"corrupt")
+        return original_verify(path, payload, stage=stage)
+
+    monkeypatch.setattr(project_module, "_verify_file_payload", corrupt_stage)
+
+    with pytest.raises(AtomicWriteVerificationError, match="staged write"):
+        atomic_write_text(target, "replacement\n")
+
+    assert target.read_bytes() == b"previous"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
 def test_atomic_write_text_fsyncs_parent_directory_after_replace(tmp_path, monkeypatch):
     target = tmp_path / "export.json"
     calls = []
 
     monkeypatch.setattr(
         project_module,
-        "_fsync_directory",
+        "_fsync_parent_directory",
         lambda directory: calls.append(Path(directory)) or True,
     )
 
@@ -75,19 +105,37 @@ def test_atomic_write_text_fsyncs_parent_directory_after_replace(tmp_path, monke
 
 def test_atomic_write_text_rejects_post_replace_content_corruption(tmp_path, monkeypatch):
     target = tmp_path / "export.json"
-    original_replace = type(target).replace
+    original_sync = project_module._fsync_parent_directory
 
-    def replace_then_corrupt(self, destination):
-        result = original_replace(self, destination)
-        Path(destination).write_text("corrupted\n", encoding="utf-8")
+    def corrupt_after_replace(directory):
+        result = original_sync(directory)
+        target.write_text("corrupted\n", encoding="utf-8")
         return result
 
-    monkeypatch.setattr(type(target), "replace", replace_then_corrupt)
+    monkeypatch.setattr(project_module, "_fsync_parent_directory", corrupt_after_replace)
 
-    with pytest.raises(AtomicWriteVerificationError, match="verification failed"):
+    with pytest.raises(AtomicWriteVerificationError, match="committed write"):
         atomic_write_text(target, "expected\n")
 
     assert target.read_text(encoding="utf-8") == "corrupted\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_reports_directory_sync_failure_after_replace(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "export.json"
+    target.write_bytes(b"previous")
+
+    def fail_sync(directory):
+        raise OSError("simulated directory sync failure")
+
+    monkeypatch.setattr(project_module, "_fsync_parent_directory", fail_sync)
+
+    with pytest.raises(AtomicWriteDurabilityError, match="durability sync failed"):
+        atomic_write_text(target, "replacement\n")
+
+    assert target.read_bytes() == b"replacement\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

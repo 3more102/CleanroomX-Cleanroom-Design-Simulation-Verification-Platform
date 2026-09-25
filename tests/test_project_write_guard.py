@@ -8,6 +8,8 @@ import cleanroomx.gui as gui_module
 import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
+    AtomicWriteDurabilityError,
+    AtomicWriteVerificationError,
     ProjectDocument,
     ProjectWriteConflictError,
     capture_project_file_revision,
@@ -208,3 +210,64 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+def test_gui_save_surfaces_committed_but_unconfirmed_durability(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+    warnings = []
+
+    def fail_guarded_save(*args, **kwargs):
+        raise AtomicWriteDurabilityError(path)
+
+    monkeypatch.setattr(gui_module, "save_project_document_guarded", fail_guarded_save)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("durability uncertainty should use the dedicated warning")
+        ),
+    )
+
+    app.save_project()
+
+    assert "durability not confirmed" in app.status_var.value.lower()
+    assert len(warnings) == 1
+    assert warnings[0][0] == "Save durability not confirmed"
+
+
+def test_gui_save_verification_failure_preserves_actionable_status(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+    errors = []
+    expected = capture_project_file_revision(path)
+
+    def fail_guarded_save(*args, **kwargs):
+        raise AtomicWriteVerificationError(
+            path,
+            phase="project save",
+            expected_size=expected.size or 0,
+            expected_sha256=expected.sha256 or "",
+            actual_revision=expected,
+        )
+
+    monkeypatch.setattr(gui_module, "save_project_document_guarded", fail_guarded_save)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    app.save_project()
+
+    assert "verification failed" in app.status_var.value.lower()
+    assert "save project as" in app.status_var.value.lower()
+    assert len(errors) == 1
+    assert errors[0][0] == "Save verification failed"
+

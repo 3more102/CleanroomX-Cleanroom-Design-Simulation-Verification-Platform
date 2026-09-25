@@ -8,7 +8,14 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    load_project_document_with_revision,
+    project_file_revision,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -872,3 +879,111 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+
+def test_load_project_path_captures_disk_revision(tmp_path):
+    class Value:
+        def __init__(self, value=""):
+            self.value = value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "opened.cleanroomx.json",
+        ProjectDocument(
+            name="Opened",
+            analyses=[
+                AnalysisDocument(
+                    id="a",
+                    name="A",
+                    kind="room_verification",
+                    input={"value": 1},
+                )
+            ],
+            active_analysis_id="a",
+        ),
+    )
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Old")
+    app.project_path = None
+    app._project_file_revision = None
+    app._recovery_source_path = None
+    app._restored_recovery_artifact = None
+    app.name_var = Value()
+    app.description_var = Value()
+    app.status_var = Value()
+    app._discard_current_autosave = lambda: None
+    app._begin_autosave_project = lambda path: None
+    app._clear_run_cache = lambda: None
+    app._refresh_analysis_list = lambda: None
+    app._capture_saved_state = lambda: None
+    app._update_title = lambda: None
+
+    app.load_project_path(path)
+
+    assert app.project.name == "Opened"
+    assert app.project_path == path
+    assert app._project_file_revision == project_file_revision(path)
+
+
+def test_gui_save_blocks_external_project_change_and_keeps_work_dirty(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value=""):
+            self.value = value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(
+            name="Conflict",
+            description="disk baseline",
+            analyses=[],
+        ),
+    )
+    _loaded, revision = load_project_document_with_revision(path)
+    external_text = path.read_text(encoding="utf-8").replace(
+        '"disk baseline"',
+        '"external update"',
+    )
+    path.write_text(external_text, encoding="utf-8")
+    external_bytes = path.read_bytes()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(
+        name="Conflict",
+        description="local unsaved work",
+        analyses=[],
+    )
+    app.project_path = path
+    app._project_file_revision = revision
+    app.status_var = Value()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+
+    calls = {"capture": 0, "notify": 0}
+    app._capture_saved_state = lambda: calls.__setitem__("capture", calls["capture"] + 1)
+    app._notify_explicit_save = lambda saved: calls.__setitem__(
+        "notify", calls["notify"] + 1
+    )
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    app.save_project()
+
+    assert path.read_bytes() == external_bytes
+    assert calls == {"capture": 0, "notify": 0}
+    assert app.status_var.value == "Save blocked: project changed on disk"
+    assert errors and errors[0][0] == "Project changed on disk"
+    assert "did not overwrite" in errors[0][1]
+    assert "Save Project As" in errors[0][1]

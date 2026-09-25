@@ -614,7 +614,7 @@ def markdown_dossier_report(result: dict) -> str:
                 "no_intersection_corner_count", 0
             )
             scenario_names = ", ".join(
-                scenario["name"]
+                markdown_text(scenario["name"])
                 for scenario in item.get("fan_curve_scenarios", [])
             ) or "—"
             solver_quality = item.get("solver_quality_summary", {})

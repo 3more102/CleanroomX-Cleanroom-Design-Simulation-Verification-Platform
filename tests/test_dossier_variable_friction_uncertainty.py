@@ -1002,3 +1002,32 @@ def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
     assert "fan_curve_scenarios=2" in report
     assert "Whole fan-curve scenarios" in report
     assert "lower_envelope, upper_envelope" in report
+
+
+def test_dossier_escapes_whole_fan_curve_scenario_names(tmp_path) -> None:
+    analysis_path = tmp_path / "fan-scenarios.json"
+    payload = json.loads(
+        Path("examples/fan_variable_friction_curve_scenarios_demo.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    payload["fan_curve_scenarios"][0]["name"] = "lower | envelope\nA"
+    analysis_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Scenario escaping dossier",
+                "fan_variable_friction_uncertainty_analyses": [
+                    str(analysis_path.resolve())
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = markdown_dossier_report(build_dossier(manifest))
+
+    assert "lower \\| envelope<br>A" in report
+    assert "lower | envelope\nA" not in report

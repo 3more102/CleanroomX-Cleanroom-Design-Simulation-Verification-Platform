@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import copy
 import math
 
+import pytest
+
 from cleanroomx.project import AnalysisDocument, ProjectDocument
+import cleanroomx.spatial as spatial_module
 from cleanroomx.spatial import (
+    _spatial_validation_key,
+    _room_overlap_records,
+    SpatialDesignWorkspace,
+    SPATIAL_GEOMETRY_EPSILON_M,
     SPATIAL_METADATA_KEY,
+    SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -98,6 +107,130 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["view"]["elevation_deg"] == 5
 
 
+def test_normalize_layout_repairs_missing_and_duplicate_ids_deterministically():
+    raw = {
+        "rooms": [
+            {"id": "dup", "name": "Process"},
+            {"id": "dup", "name": "Ante"},
+            {"name": "!!!"},
+        ],
+        "devices": [
+            {"id": "device", "type": "sensor", "room_id": "dup"},
+            {"id": "device", "type": "equipment", "room_id": "dup"},
+            {"type": "sensor", "room_id": "dup"},
+        ],
+    }
+
+    first = normalize_layout(raw)
+    second = normalize_layout(copy.deepcopy(raw))
+
+    assert first == second
+    assert normalize_layout(first) == first
+    assert [room["id"] for room in first["rooms"]] == ["dup", "dup-2", "room"]
+    assert [device["id"] for device in first["devices"]] == [
+        "device",
+        "device-2",
+        "device-3",
+    ]
+    assert len({room["id"] for room in first["rooms"]}) == 3
+    assert len({device["id"] for device in first["devices"]}) == 3
+
+
+def test_derive_layout_assigns_unique_deterministic_ids_for_duplicate_room_names():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "Process", "length_m": 5, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+
+    first = derive_layout_from_analysis(analysis)
+    second = derive_layout_from_analysis(analysis)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == ["process", "process-2"]
+
+
+def test_project_sync_rejects_duplicate_spatial_room_names_before_mutation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "Ante", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    original = copy.deepcopy(analysis.input)
+    layout = {
+        "rooms": [
+            {
+                "id": "process-a",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 5,
+                "height_m": 3,
+            },
+            {
+                "id": "process-b",
+                "name": "process",
+                "x_m": 8,
+                "y_m": 0,
+                "length_m": 8,
+                "width_m": 5,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    with pytest.raises(SpatialSyncError, match="spatial layout.*duplicate room name"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == original
+
+
+def test_project_sync_rejects_duplicate_analysis_room_names_before_mutation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "process", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    original = copy.deepcopy(analysis.input)
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 5,
+                "height_m": 3,
+            }
+        ]
+    }
+
+    with pytest.raises(SpatialSyncError, match="active analysis.*duplicate room name"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == original
+
+
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():
     analysis = AnalysisDocument(
         id="verification",
@@ -179,6 +312,122 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
     ) is False
     assert analysis.input == original
 
+
+
+def test_room_overlap_broad_phase_preserves_original_pair_order_and_bounds():
+    rooms = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4},
+                {"id": "b", "name": "B", "x_m": 3, "y_m": 1, "length_m": 3, "width_m": 2},
+                {"id": "c", "name": "C", "x_m": 1, "y_m": 3, "length_m": 2, "width_m": 2},
+                {"id": "d", "name": "D", "x_m": 4, "y_m": 0, "length_m": 2, "width_m": 2},
+            ]
+        }
+    )["rooms"]
+
+    assert _room_overlap_records(rooms) == [
+        (0, 1, [3.0, 1.0, 4.0, 3.0]),
+        (0, 2, [1.0, 3.0, 3.0, 4.0]),
+        (1, 3, [4.0, 1.0, 6.0, 2.0]),
+    ]
+
+
+def test_room_overlap_broad_phase_preserves_explicit_geometry_tolerance():
+    epsilon = SPATIAL_GEOMETRY_EPSILON_M
+    touching_within_tolerance = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4},
+                {
+                    "id": "b",
+                    "name": "B",
+                    "x_m": 4 - 0.5 * epsilon,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                },
+            ]
+        }
+    )["rooms"]
+    material_overlap = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4},
+                {
+                    "id": "b",
+                    "name": "B",
+                    "x_m": 4 - 2 * epsilon,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                },
+            ]
+        }
+    )["rooms"]
+
+    assert _room_overlap_records(touching_within_tolerance) == []
+    assert [pair[:2] for pair in _room_overlap_records(material_overlap)] == [(0, 1)]
+
+
+def test_spatial_validation_key_ignores_view_state_but_tracks_validation_inputs():
+    layout = normalize_layout(
+        {
+            "rooms": [{"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4}],
+            "devices": [
+                {
+                    "id": "sensor",
+                    "type": "sensor",
+                    "name": "Sensor",
+                    "room_id": "a",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 1,
+                }
+            ],
+        }
+    )
+    baseline = _spatial_validation_key(layout)
+
+    layout["view"]["zoom_2d"] = 3.0
+    layout["view"]["azimuth_deg"] = 120.0
+    layout["rooms"][0]["pressure_pa"] = 25.0
+    assert _spatial_validation_key(layout) == baseline
+
+    layout["devices"][0]["z_m"] = 5.0
+    assert _spatial_validation_key(layout) != baseline
+
+
+def test_workspace_redraw_reuses_validation_until_model_changes(monkeypatch):
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = normalize_layout(
+        {
+            "rooms": [
+                {"id": "a", "name": "A", "x_m": 0, "y_m": 0, "length_m": 4, "width_m": 4}
+            ]
+        }
+    )
+    workspace._validation_issues = []
+    workspace._last_validation_key = None
+    workspace._update_validation_summary = lambda: None
+    workspace._draw_2d = lambda: None
+    workspace._draw_3d = lambda: None
+    calls: list[int] = []
+
+    def counted_validate(layout):
+        calls.append(1)
+        return []
+
+    monkeypatch.setattr(spatial_module, "validate_layout", counted_validate)
+
+    workspace.redraw()
+    workspace.layout["view"]["zoom_2d"] = 2.0
+    workspace.redraw()
+    assert len(calls) == 1
+
+    workspace.layout["rooms"][0]["x_m"] = 1.0
+    workspace.redraw()
+    assert len(calls) == 2
 
 
 def test_validate_layout_detects_overlap_duplicate_names_and_device_assignment_problems():

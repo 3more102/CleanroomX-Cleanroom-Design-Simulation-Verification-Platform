@@ -44,7 +44,7 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
-from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .spatial import SpatialDesignWorkspace, SpatialSyncError, sync_layout_to_analysis
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
@@ -907,7 +907,16 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
-        changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
+        try:
+            changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
+        except SpatialSyncError as exc:
+            self.status_var.set("Spatial synchronization blocked by ambiguous room names")
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                str(exc),
+                parent=self.root,
+            )
+            return
         if not changed:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return

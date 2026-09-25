@@ -1696,7 +1696,7 @@ class CleanroomXApp:
             except (KeyError, RunHistoryIntegrityError):
                 is_current = False
             freshness[entry.sequence] = is_current
-            marker = "CURRENT" if is_current else "HISTORICAL"
+            marker = "INPUT MATCH" if is_current else "HISTORICAL INPUT"
             listbox.insert(
                 "end",
                 (

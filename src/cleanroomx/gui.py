@@ -43,6 +43,13 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
+from .run_history import (
+    DEFAULT_RUN_HISTORY_LIMIT,
+    RunHistoryManager,
+    default_run_history_dir,
+    scan_run_history,
+)
+from .run_history_ui import RunHistoryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -176,6 +183,8 @@ class CleanroomXApp:
         *,
         autosave_interval_seconds: float = DEFAULT_AUTOSAVE_INTERVAL_SECONDS,
         autosave_manager: AutosaveManager | None = None,
+        run_history_limit: int = DEFAULT_RUN_HISTORY_LIMIT,
+        run_history_manager: RunHistoryManager | None = None,
     ):
         self.root = root
         self.root.title(f"CleanroomX {__version__}")
@@ -203,6 +212,23 @@ class CleanroomXApp:
         self._autosave_manager.begin_project(None)
         self._autosave_status_sequence = -1
         self._recovery_checkpoint_after_id = None
+
+        if run_history_limit < 0:
+            raise ValueError("run_history_limit must be zero or greater")
+        if run_history_manager is not None:
+            self._run_history_manager = run_history_manager
+        elif run_history_limit:
+            self._run_history_manager = RunHistoryManager(
+                history_limit=run_history_limit
+            )
+        else:
+            self._run_history_manager = None
+        self._run_history_dir = (
+            self._run_history_manager.history_dir
+            if self._run_history_manager is not None
+            else default_run_history_dir()
+        )
+        self._run_history_project_identity = self._autosave_manager.current_identity
 
         self._queue: queue.Queue = queue.Queue()
         self._run_generation = 0
@@ -233,6 +259,8 @@ class CleanroomXApp:
         if self._autosave_interval_ms:
             self.root.after(self._autosave_interval_ms, self._autosave_tick)
             self.root.after(500, self._poll_autosave_status)
+        if self._run_history_manager is not None:
+            self.root.after(500, self._poll_run_history_status)
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
@@ -243,6 +271,7 @@ class CleanroomXApp:
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
+        file_menu.add_command(label="Analysis Run History...", command=self.show_run_history)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
         file_menu.add_command(label="Export Analysis Input JSON...", command=self.export_input_json)
@@ -935,6 +964,7 @@ class CleanroomXApp:
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
+        self._use_unsaved_run_history_identity()
 
         ui_state = recovered.ui_state
         name_text = ui_state.get("name_text")
@@ -1015,6 +1045,84 @@ class CleanroomXApp:
     def offer_startup_recovery(self) -> bool:
         return self.show_recovery_center(announce_empty=False)
 
+    def show_run_history(self) -> bool:
+        try:
+            scan = scan_run_history(self._run_history_dir)
+        except OSError as exc:
+            messagebox.showerror(
+                "Run history scan failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+        if not scan.entries and not scan.issues:
+            self.status_var.set("No retained analysis runs found.")
+            return False
+        dialog = RunHistoryCenter(self.root, scan)
+        self.root.wait_window(dialog)
+        return True
+
+    def _use_autosave_identity_for_run_history(self) -> None:
+        identity = getattr(self._autosave_manager, "current_identity", None)
+        if isinstance(identity, str) and identity:
+            self._run_history_project_identity = identity
+
+    def _use_unsaved_run_history_identity(self) -> None:
+        self._run_history_project_identity = f"session-{uuid.uuid4().hex}"
+
+    def _archive_completed_run(
+        self,
+        analysis: AnalysisDocument,
+        run: AnalysisRun,
+    ) -> None:
+        manager = getattr(self, "_run_history_manager", None)
+        if manager is None:
+            return
+        identity = getattr(self, "_run_history_project_identity", None)
+        if not isinstance(identity, str) or not identity:
+            identity = f"session-{uuid.uuid4().hex}"
+            self._run_history_project_identity = identity
+        try:
+            manager.archive(
+                project_identity=identity,
+                project_name=self.project.name,
+                source_path=self.project_path,
+                analysis_id=analysis.id,
+                analysis_name=analysis.name,
+                run=run,
+            )
+        except (TypeError, ValueError) as exc:
+            self.status_var.set("Run completed, but history retention failed")
+            messagebox.showerror(
+                "Run history save failed",
+                str(exc),
+                parent=self.root,
+            )
+
+    def _poll_run_history_status(self) -> None:
+        manager = getattr(self, "_run_history_manager", None)
+        if manager is None:
+            return
+        failures = manager.drain_failures()
+        if failures:
+            preview = "\n".join(failures[:3])
+            suffix = (
+                f"\n(+{len(failures) - 3} more failure(s))"
+                if len(failures) > 3
+                else ""
+            )
+            self.status_var.set("Run history save failed")
+            messagebox.showerror(
+                "Run history save failed",
+                (
+                    f"{preview}{suffix}\n\n"
+                    "The current in-memory result is unchanged. Export it manually "
+                    "if you need to preserve this run."
+                ),
+                parent=self.root,
+            )
+        self.root.after(500, self._poll_run_history_status)
+
     def new_project(self) -> None:
         if self._running:
             messagebox.showwarning("Analysis running", "Abandon the current run first.")
@@ -1028,6 +1136,7 @@ class CleanroomXApp:
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
+        self._use_autosave_identity_for_run_history()
         self.name_var.set(self.project.name)
         self.description_var.set("")
         self._clear_run_cache()
@@ -1067,6 +1176,7 @@ class CleanroomXApp:
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
+        self._use_autosave_identity_for_run_history()
         self.name_var.set(project.name)
         self.description_var.set(project.description)
         self._clear_run_cache()
@@ -1141,6 +1251,7 @@ class CleanroomXApp:
         self._project_file_revision = saved_revision
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
+        self._use_autosave_identity_for_run_history()
         self.status_var.set(f"Saved {self.project_path.name}")
 
     def save_project_as(self) -> None:
@@ -1234,6 +1345,7 @@ class CleanroomXApp:
                 self._refresh_analysis_list()
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
+        self._use_autosave_identity_for_run_history()
         self._discard_restored_recovery()
         self.status_var.set(f"Saved {self.project_path.name}")
         self._update_title()
@@ -1470,6 +1582,7 @@ class CleanroomXApp:
                     self._runs_by_analysis[analysis_id] = payload
                     self.last_run = payload
                     self.last_run_analysis_id = analysis_id
+                    self._archive_completed_run(analysis, payload)
                     self._render_run(payload)
                     self.status_var.set(
                         f"Completed — {payload.title} — status: {payload.status}"
@@ -1670,6 +1783,22 @@ class CleanroomXApp:
         if not self._confirm_project_replacement():
             return
         self._discard_current_autosave()
+        history_manager = getattr(self, "_run_history_manager", None)
+        if history_manager is not None:
+            try:
+                history_manager.wait_for_idle()
+            except (RuntimeError, TimeoutError) as exc:
+                if not messagebox.askyesno(
+                    "Run history not fully saved",
+                    (
+                        f"{exc}\n\n"
+                        "Close anyway? Choose No to keep CleanroomX open so you can "
+                        "export the current result manually."
+                    ),
+                    parent=self.root,
+                ):
+                    return
+            history_manager.shutdown(wait=True)
         manager = getattr(self, "_autosave_manager", None)
         if manager is not None:
             manager.shutdown(wait=False)
@@ -1714,6 +1843,15 @@ def build_parser() -> argparse.ArgumentParser:
             f"(default: {DEFAULT_AUTOSAVE_INTERVAL_SECONDS:g})"
         ),
     )
+    parser.add_argument(
+        "--run-history-limit",
+        type=int,
+        default=DEFAULT_RUN_HISTORY_LIMIT,
+        help=(
+            "Retained completed runs per project identity; use 0 to disable new "
+            f"run-history capture (default: {DEFAULT_RUN_HISTORY_LIMIT})"
+        ),
+    )
     return parser
 
 
@@ -1724,6 +1862,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("project path and --demo cannot be used together")
     if args.autosave_interval_seconds < 0:
         parser.error("--autosave-interval-seconds must be zero or greater")
+    if args.run_history_limit < 0:
+        parser.error("--run-history-limit must be zero or greater")
     if args.check:
         print(json.dumps(application_info(), indent=2, ensure_ascii=False))
         return 0
@@ -1735,6 +1875,7 @@ def main(argv: list[str] | None = None) -> int:
     app = CleanroomXApp(
         root,
         autosave_interval_seconds=args.autosave_interval_seconds,
+        run_history_limit=args.run_history_limit,
     )
     recovered_at_startup = False
     if not args.smoke:

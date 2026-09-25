@@ -416,6 +416,11 @@ def _spatial_validation_key(layout: dict) -> tuple:
                 room.get("length_m"),
                 room.get("width_m"),
                 room.get("height_m"),
+                room.get("elevation_m"),
+                room.get("classification"),
+                room.get("temperature_target_c"),
+                room.get("humidity_target_percent"),
+                repr(room.get("engineering_ref")),
             )
             for room in rooms
             if isinstance(room, dict)
@@ -595,8 +600,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
         self._show_grid = tk.BooleanVar(value=True)
+        self._snap_to_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._engineering_var = tk.StringVar(value="Engineering mapping: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._validation_issues: list[dict] = []
         self._last_validation_key: tuple | None = None
@@ -635,7 +642,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
         ttk.Checkbutton(toolbar, text="Grid", variable=self._show_grid, command=self.redraw).pack(
-            side="left", padx=6
+            side="left", padx=(6, 2)
+        )
+        ttk.Checkbutton(toolbar, text="Snap", variable=self._snap_to_grid).pack(
+            side="left", padx=(2, 6)
         )
         ttk.Button(toolbar, text="Validate", command=self.report_validation).pack(side="left", padx=2)
         ttk.Label(toolbar, textvariable=self._validation_var).pack(side="left", padx=(8, 2))
@@ -689,10 +699,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("name", "Name"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
+            ("elevation_m", "Elevation (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
             ("pressure_pa", "Pressure (Pa)"),
+            ("classification", "Classification"),
+            ("temperature_target_c", "Temp target (°C)"),
+            ("humidity_target_percent", "RH target (%)"),
+            ("notes", "Notes"),
         )
         for index, (key, label) in enumerate(fields):
             row = 2 + index // 2
@@ -703,9 +718,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        mapping_row = 2 + (len(fields) + 1) // 2
+        ttk.Label(
+            inspector,
+            textvariable=self._engineering_var,
+            anchor="w",
+            justify="left",
+            wraplength=560,
+        ).grid(row=mapping_row, column=0, columnspan=4, sticky="ew", pady=(6, 2))
+        button_row = mapping_row + 1
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
-            row=button_row, column=3, sticky="e", pady=(8, 0)
+            row=button_row, column=3, sticky="e", pady=(6, 0)
         )
         inspector.columnconfigure(1, weight=1)
         inspector.columnconfigure(3, weight=1)
@@ -875,6 +898,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._engineering_var.set("Engineering mapping: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
@@ -883,6 +907,30 @@ class SpatialDesignWorkspace(ttk.Frame):
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        if self.selected and self.selected.kind == "room":
+            analysis = self._analysis_getter()
+            diagnostic = next(
+                (
+                    entry
+                    for entry in engineering_mapping_diagnostics(self.layout, analysis)
+                    if entry["room_id"] == item["id"]
+                ),
+                None,
+            )
+            if diagnostic is None:
+                self._engineering_var.set("Engineering mapping: unavailable")
+            else:
+                state = str(diagnostic["state"]).replace("_", " ").upper()
+                differences = diagnostic.get("differences", [])
+                suffix = ""
+                if differences:
+                    fields = ", ".join(str(diff.get("field")) for diff in differences[:4])
+                    suffix = f" — differences: {fields}"
+                self._engineering_var.set(
+                    f"Engineering mapping: {state} — {diagnostic['message']}{suffix}"
+                )
+        else:
+            self._engineering_var.set("Engineering mapping: not applicable")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -898,6 +946,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             if text:
                 item[key] = _finite_number(text, item.get(key, 0.0))
         if self.selected and self.selected.kind == "room":
+            elevation = self._property_vars["elevation_m"].get().strip()
+            if elevation:
+                item["elevation_m"] = _finite_number(elevation, item.get("elevation_m", 0.0))
             for key in ("length_m", "width_m", "height_m"):
                 text = self._property_vars[key].get().strip()
                 if text:
@@ -907,6 +958,18 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+            for key in ("temperature_target_c", "humidity_target_percent"):
+                text = self._property_vars[key].get().strip()
+                if text:
+                    item[key] = _finite_number(text, item.get(key, 0.0))
+                else:
+                    item.pop(key, None)
+            for key in ("classification", "notes"):
+                text = self._property_vars[key].get().strip()
+                if text:
+                    item[key] = text
+                else:
+                    item.pop(key, None)
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",
@@ -930,6 +993,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "length_m": 4.0,
             "width_m": 4.0,
             "height_m": 3.0,
+            "elevation_m": 0.0,
         }
         self.layout["rooms"].append(room)
         self.selected = _Hit("room", room["id"])
@@ -1274,9 +1338,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         world = self._canvas_to_world(event.x, event.y)
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
-        grid = self.layout["grid_m"]
-        item["x_m"] = round((item["x_m"] + dx) / grid) * grid
-        item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self._snap_to_grid.get():
+            grid = self.layout["grid_m"]
+            item["x_m"] = round((item["x_m"] + dx) / grid) * grid
+            item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        else:
+            item["x_m"] += dx
+            item["y_m"] += dy
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.101.1 Final spatial closure — 2026-09-25
+
+- Publishes the completed synchronized 2D/3D spatial-design tree without moving or rewriting the already-published immutable `v0.101.0` tag.
+- Includes final floor metadata, room elevation/classification and stable analysis links, doors/transfer openings, deterministic spatial metrics, resize/snap/nudge controls, pressure/label/device/relation visibility, explicit pressure-cascade overlays, shared-model 3D rendering, and guarded geometry-to-analysis synchronization.
+- Adds opening height/wall-association validation and focused regression coverage for snapped drag/resize, assigned-device translation, keyboard nudge, and opening placement.
+- Final functional merge `d4b8f6294dd7deed207935423a52cf5f19a035eb` is byte-for-byte identical to tested PR #436 head `407f1d8adf028a3ab4091ba740c027646d7acad6`.
+- PR #436 CI run #1491 and post-merge main CI run #1493 / `36167376732` passed Windows launcher smoke and the full Python 3.11/3.12/3.13 matrix; the post-merge suite reports **973 passed** per interpreter and Python 3.13 reports **CleanroomX GUI smoke: PASS**.
+- Changes no solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion.
+
 ## v0.101.0 Release 2 closure — 2026-09-25
 
 - Assigns a new package/release identity to the completed Release 2 tree instead of moving or rewriting the already-published `v0.100.0` tag.

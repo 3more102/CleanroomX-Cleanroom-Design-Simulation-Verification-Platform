@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased lossless project extension round-trip — 2026-09-25
+
+- Preserves unknown schema-v1 JSON fields at the project-document, project-block, and analysis-entry levels instead of silently dropping them on the next save.
+- Keeps opaque extension data isolated from CleanroomX semantics: reserved core fields always win during serialization and unsupported future schema versions remain rejected.
+- Deep-copies retained extension payloads at ingestion/serialization boundaries so external extension dictionaries cannot mutate the preserved opaque state through shared references.
+- Adds file round-trip, reserved-key authority, and source-detachment regression coverage without changing schema version 1, solver equations, numerical tolerances, or existing project workflows.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

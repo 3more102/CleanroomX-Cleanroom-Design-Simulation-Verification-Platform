@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased recovery session isolation — 2026-09-25
+
+- Scopes automatic recovery-history rotation by both project identity and autosave session identity, preventing one CleanroomX process from pruning another process's unsaved recovery generations for the same project.
+- Adds a SHA-256-derived session token to newly written recovery filenames for efficient per-session discovery while keeping the `cleanroomx.autosave` schema at version 1 and preserving discovery of older filenames.
+- Revalidates project/session ownership from each recovery envelope before automatic deletion and preserves malformed, unreadable, or ownership-mismatched artifacts for explicit recovery inspection.
+- Keeps explicit-save/discard cleanup limited to artifacts tracked by the current manager and adds cross-session retention plus malformed-artifact regression coverage.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

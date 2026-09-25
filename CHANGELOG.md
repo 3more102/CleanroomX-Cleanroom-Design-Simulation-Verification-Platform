@@ -6,6 +6,7 @@
 - Reconstructs restored states through the ordinary project validator, detects out-of-history document divergence, invalidates redo after a new edit, and blocks replay rather than overwriting untracked state.
 - Preserves the independently-owned spatial layout during project-history replay and keeps the existing fine-grained spatial undo stack authoritative for geometry edits.
 - Clears cached analysis results whenever project history restores older inputs, preventing stale engineering results from being displayed or exported against restored state.
+- Commits valid active drafts before remove/import operations and blocks those destructive actions on malformed drafts, preventing silent loss of in-editor work.
 - Resets history at project replacement/recovery boundaries and after Save As relocation across directories so old relative external-file references cannot be replayed under a different base path.
 - Keeps project schema version 1 unchanged and adds focused history-engine and GUI integration regressions.
 

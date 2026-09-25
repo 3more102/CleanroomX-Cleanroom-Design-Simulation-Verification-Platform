@@ -1195,6 +1195,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._pressure_result_var = tk.StringVar(value="Pressure evidence: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1312,8 +1313,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
         )
+        ttk.Label(
+            inspector,
+            textvariable=self._pressure_result_var,
+            anchor="w",
+            justify="left",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(0, 6))
         fields = (
             ("name", "Name"),
             ("x_m", "X (m)"),
@@ -1322,7 +1329,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
-            ("pressure_pa", "Pressure (Pa)"),
+            ("pressure_pa", "Pressure input (Pa)"),
             ("floor_elevation_m", "Floor elev. (m)"),
             ("classification", "Classification"),
             ("analysis_room_name", "Analysis room"),
@@ -1332,7 +1339,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -1340,7 +1347,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -1612,6 +1619,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._pressure_result_var.set("Pressure evidence: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
@@ -1630,6 +1638,32 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            evidence = next(
+                (
+                    record
+                    for record in self._overlay()["rooms"]
+                    if record["room_id"] == self.selected.item_id
+                ),
+                None,
+            )
+            if evidence is None or evidence.get("pressure_pa") is None:
+                self._pressure_result_var.set("Pressure evidence: unavailable")
+            else:
+                source = str(evidence.get("source") or "unavailable").upper()
+                detail = f"{evidence['pressure_pa']:g} Pa"
+                target = evidence.get("pressure_target_pa")
+                if target is not None:
+                    detail += f" · target {target:g} Pa"
+                ach = evidence.get("ach")
+                if ach is not None:
+                    detail += f" · ACH {ach:g}"
+                status = str(evidence.get("status") or "")
+                if status and status not in {"configured", "unmapped"}:
+                    detail += f" · {status}"
+                self._pressure_result_var.set(f"Pressure evidence: {source} · {detail}")
+        else:
+            self._pressure_result_var.set("Pressure evidence: not applicable")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))

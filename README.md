@@ -34,7 +34,7 @@ CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused
 
 v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves and GUI exports use same-directory atomic replacement; export failures are surfaced in the desktop UI.
 
-Fan operating-point plots reuse backend-computed system-pressure evidence and render labeled fan/system series. Abandoned runs remain exclusive until their backend worker exits. The installed wheel includes the self-contained demo and supports `cleanroomx-gui --demo`.
+Fan operating-point plots reuse backend-computed system-pressure evidence and render labeled fan/system series. Abandoned runs remain exclusive until their backend worker exits. The desktop can also export a self-contained, print-friendly HTML engineering report that fail-closes on stale run/input provenance and bundles input, result, diagnostics, backend Markdown, and deterministic report-payload SHA-256 evidence without external web assets. The installed wheel includes the self-contained demo and supports `cleanroomx-gui --demo`.
 
 
 ### v0.99 application registry integrity

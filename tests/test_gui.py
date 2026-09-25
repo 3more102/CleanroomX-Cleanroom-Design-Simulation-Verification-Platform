@@ -966,7 +966,6 @@ def test_save_project_blocks_external_file_change_without_losing_either_version(
     assert captured["parent"] is app.root
 
 
-
 def test_save_project_as_current_path_uses_same_external_change_guard(
     tmp_path, monkeypatch
 ):

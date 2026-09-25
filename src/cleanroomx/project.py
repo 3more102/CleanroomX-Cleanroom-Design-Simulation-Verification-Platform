@@ -6,12 +6,12 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
-import tempfile
-from typing import Any, Callable
+from typing import Any
 import uuid
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .persistence import atomic_write_text as _shared_atomic_write_text
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
@@ -547,40 +547,19 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def atomic_write_text(path: str | Path, text: str) -> Path:
+    """Backward-compatible project-domain re-export of the shared durable writer."""
+    return _shared_atomic_write_text(path, text)
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
     *,
-    before_replace: Callable[[], None] | None = None,
+    before_replace=None,
 ) -> Path:
-    destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
-        ) as handle:
-            temp_path = Path(handle.name)
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-
-        if before_replace is not None:
-            before_replace()
-        temp_path.replace(destination)
-    except Exception:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
-        raise
-    return destination
-
-
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
-    return _atomic_write_text(path, text)
-
+    """Compatibility shim preserving guarded-save pre-replace checks."""
+    return _shared_atomic_write_text(path, text, before_replace=before_replace)
 
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
     """Save a project atomically without an external-revision precondition."""

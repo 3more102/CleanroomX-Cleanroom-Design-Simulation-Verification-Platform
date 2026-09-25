@@ -242,3 +242,91 @@ def test_file_backed_run_history_preserves_dependency_revision_evidence(tmp_path
         assert dependency["sha256_before"] == dependency["sha256_after"]
         assert dependency["size_bytes_before"] == dependency["size_bytes_after"]
         assert dependency["mtime_ns_before"] == dependency["mtime_ns_after"]
+
+
+def test_run_history_retains_full_reopenable_evidence_and_cross_checks_content_hashes():
+    payload = _room_payload()
+    run = run_analysis("room_verification", payload)
+    metadata: dict = {}
+
+    record = append_run_history_record(
+        metadata,
+        analysis_id="room-1",
+        analysis_name="Room verification",
+        analysis_kind="room_verification",
+        input_payload=payload,
+        run=run,
+        completed_at_utc="2026-09-25T11:00:00Z",
+    )
+    run_bundle = run.to_dict()
+
+    assert record["result"] == run_bundle["result"]
+    assert record["diagnostics"] == run_bundle["diagnostics"]
+    assert record["report_markdown"] == run_bundle["markdown"]
+    assert record["plot"] == run_bundle["plot"]
+
+    stored = metadata[RUN_HISTORY_METADATA_KEY]["records"][0]
+    stored["result"]["release2_tamper_probe"] = True
+
+    # Recompute the outer chain digest to prove validation also verifies the
+    # independently retained result digest, rather than relying only on chaining.
+    from hashlib import sha256
+
+    unsigned = {key: value for key, value in stored.items() if key != "record_sha256"}
+    canonical = json.dumps(
+        unsigned,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    stored["record_sha256"] = sha256(canonical).hexdigest()
+
+    with pytest.raises(RunHistoryIntegrityError, match="result digest"):
+        validate_run_history(metadata)
+
+
+def test_run_history_byte_budget_prunes_oldest_evidence_but_keeps_latest():
+    payload = _room_payload()
+    run = run_analysis("room_verification", payload)
+
+    probe: dict = {}
+    append_run_history_record(
+        probe,
+        analysis_id="room-1",
+        analysis_name="Room verification",
+        analysis_kind="room_verification",
+        input_payload=payload,
+        run=run,
+        completed_at_utc="2026-09-25T11:00:00Z",
+    )
+    one_record_bytes = len(
+        json.dumps(
+            probe[RUN_HISTORY_METADATA_KEY],
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+
+    metadata: dict = {}
+    for index in range(1, 5):
+        append_run_history_record(
+            metadata,
+            analysis_id="room-1",
+            analysis_name="Room verification",
+            analysis_kind="room_verification",
+            input_payload=payload,
+            run=run,
+            completed_at_utc=f"2026-09-25T11:00:0{index}Z",
+            limit=50,
+            max_bytes=one_record_bytes + 256,
+        )
+
+    summary = validate_run_history(metadata)
+    records = run_history_records(metadata)
+    assert summary["record_count"] == 1
+    assert records[0]["sequence"] == 4
+    assert records[0]["result"] == run.to_dict()["result"]
+    assert metadata[RUN_HISTORY_METADATA_KEY]["anchor_record_sha256"] is not None

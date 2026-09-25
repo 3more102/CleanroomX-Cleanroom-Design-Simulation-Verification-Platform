@@ -21,9 +21,11 @@ Both are converted in memory to the current project model with one analysis and 
 
 ## Rejection rules
 
-The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `Infinity`, unexpected schemas, non-integer schema versions, unsupported future/older schema versions after known migration, unsupported analysis kinds, non-object analysis inputs, duplicate analysis ids, and invalid active-analysis references.
+The loader rejects malformed JSON, non-finite JSON constants such as `NaN` and `Infinity`, unexpected schemas, non-integer schema versions, unsupported future/older schema versions after known migration, unsupported analysis kinds, non-object analysis inputs, duplicate analysis ids, invalid active-analysis references, and malformed persisted spatial metadata (including unsupported spatial versions, duplicate object IDs, invalid geometry primitives, unsupported device types, and dangling device-to-room references).
 
 Unknown future project formats are rejected rather than silently reinterpreted.
+
+The spatial integrity gate does **not** change the top-level project schema version. Valid existing version-1 spatial layouts remain compatible. Invalid spatial metadata that older builds could silently coerce is now rejected so repair can be explicit and reviewable rather than nondeterministic.
 
 ## Save behavior after migration
 

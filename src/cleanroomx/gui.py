@@ -32,9 +32,11 @@ from .application import (
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectSaveConflictError,
     atomic_write_text,
     load_project_document,
     new_project,
+    project_file_fingerprint,
     save_project_document,
 )
 from .recovery_ui import RecoveryCenter
@@ -179,6 +181,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_file_fingerprint = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -891,6 +894,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = recovered.project
         self.project_path = None
+        self._project_file_fingerprint = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -983,6 +987,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_file_fingerprint = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -1017,10 +1022,18 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
+        fingerprint_before = project_file_fingerprint(project_path)
         project = load_project_document(project_path)
+        fingerprint_after = project_file_fingerprint(project_path)
+        if not fingerprint_before.same_content_as(fingerprint_after):
+            raise ProjectSaveConflictError(
+                f"project file changed while it was being opened: {project_path}. "
+                "Open it again so CleanroomX starts from one stable on-disk version."
+            )
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_file_fingerprint = fingerprint_after
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1062,10 +1075,31 @@ class CleanroomXApp:
             self.save_project_as()
             return
         try:
-            save_project_document(self.project_path, self.project)
+            save_project_document(
+                self.project_path,
+                self.project,
+                expected_fingerprint=getattr(
+                    self, "_project_file_fingerprint", None
+                ),
+            )
+            saved_fingerprint = project_file_fingerprint(self.project_path)
+        except ProjectSaveConflictError as exc:
+            self.status_var.set("Save blocked: project changed on disk")
+            self._schedule_recovery_checkpoint()
+            messagebox.showerror(
+                "Project changed on disk",
+                (
+                    f"{exc}\n\n"
+                    "Your in-memory edits were not discarded. Use Save Project As "
+                    "to preserve them separately, or reopen the changed project."
+                ),
+                parent=self.root,
+            )
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._project_file_fingerprint = saved_fingerprint
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
@@ -1125,12 +1159,14 @@ class CleanroomXApp:
 
         try:
             saved_path = save_project_document(destination, candidate)
+            saved_fingerprint = project_file_fingerprint(saved_path)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
         self.project = candidate
         self.project_path = saved_path
+        self._project_file_fingerprint = saved_fingerprint
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

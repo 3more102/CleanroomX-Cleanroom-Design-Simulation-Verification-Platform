@@ -1373,7 +1373,7 @@ class CleanroomXApp:
                 self.project,
                 base_dir=self._base_dir(),
             )
-        except Exception as exc:
+        except (OSError, TypeError, ValueError) as exc:
             self.status_var.set("Project validation failed")
             messagebox.showerror(
                 "Project validation failed",

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased external project write protection — 2026-09-25
+
+- Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.
+- Protects explicit project saves with SHA-256 optimistic write checks before serialization and immediately before atomic replacement.
+- Blocks silent overwrite when another CleanroomX session or external editor changes, deletes, replaces, or races to create the destination.
+- Keeps the user's in-memory work available for Save As, and prevents same-path Save As from bypassing the guard.
+- Preserves the low-latency recovery checkpoint workflow, project schema, engineering solver behavior, and the legacy unguarded persistence helper for non-GUI callers.
+
+## Unreleased low-latency recovery checkpoints — 2026-09-25
+
+- Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.
+- Coalesces rapid edits by cancelling and rescheduling the pending checkpoint instead of emitting a recovery artifact for every keystroke or drag event.
+- Reuses the existing background autosave worker, snapshot validation, duplicate suppression, bounded history rotation, and source fingerprinting; explicit project files remain untouched.
+- Keeps the periodic autosave timer as a fallback and preserves `--autosave-interval-seconds 0` as a complete recovery-autosave disable switch.
+- Cancels pending debounced callbacks when a project is saved, discarded, switched, or rebound so stale callbacks cannot write recovery state for the wrong project identity.
+- Adds focused scheduler/checkpoint/save-cancellation regressions without changing project schema, solver equations, numerical tolerances, or engineering acceptance semantics.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

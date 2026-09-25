@@ -58,7 +58,7 @@ For a genuinely different Save As destination, CleanroomX captures the destinati
 
 ## Recovery autosave
 
-The desktop application maintains crash-recovery autosaves separately from explicit project files. By default, a dirty project is sampled every 60 seconds; use `--autosave-interval-seconds N` to change the interval or `0` to disable recovery autosave. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
+The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
 
 Autosave never writes to the open `.cleanroomx.json` path. It writes a versioned `cleanroomx.autosave` recovery envelope in the per-user recovery directory using the same atomic-write primitive as project persistence. Writes run on a single background worker, identical snapshots are suppressed, newer pending edits are coalesced, and history is bounded per project identity.
 

@@ -232,13 +232,171 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
     return normalized
 
 
-def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+def spatial_sync_preview(layout: dict, analysis: Any) -> dict:
+    """Describe a spatial-to-analysis sync without mutating the analysis."""
+
+    kind = getattr(analysis, "kind", "")
+    report = {
+        "analysis_kind": kind,
+        "supported": kind in {"room_verification", "project_verification"},
+        "blocked": False,
+        "changes": [],
+        "warnings": [],
+        "matched_rooms": 0,
+        "unmatched_layout_rooms": [],
+        "unmatched_analysis_rooms": [],
+    }
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
-        return False
+        report["supported"] = False
+        report["warnings"].append("Active analysis has no object input to synchronize.")
+        return report
+
     rooms = normalize_layout(layout)["rooms"]
     if not rooms:
+        report["warnings"].append("Spatial layout has no rooms to synchronize.")
+        return report
+
+    if kind == "room_verification":
+        source = rooms[0]
+        report["matched_rooms"] = 1
+        if len(rooms) > 1:
+            report["warnings"].append(
+                "Room verification accepts one room; additional spatial rooms will be ignored."
+            )
+        for key in ("name", "length_m", "width_m", "height_m"):
+            current = analysis.input.get(key)
+            value = source[key]
+            if current != value:
+                report["changes"].append(
+                    {
+                        "room": source["name"],
+                        "field": key,
+                        "analysis_value": current,
+                        "spatial_value": value,
+                    }
+                )
+        if "observed_pressure_pa" in analysis.input and "pressure_pa" in source:
+            current = analysis.input.get("observed_pressure_pa")
+            value = source["pressure_pa"]
+            if current != value:
+                report["changes"].append(
+                    {
+                        "room": source["name"],
+                        "field": "observed_pressure_pa",
+                        "analysis_value": current,
+                        "spatial_value": value,
+                    }
+                )
+        return report
+
+    if kind != "project_verification":
+        report["warnings"].append(
+            "Active analysis kind has no spatial room-geometry synchronization contract."
+        )
+        return report
+
+    raw_rooms = analysis.input.get("rooms")
+    if not isinstance(raw_rooms, list):
+        report["blocked"] = True
+        report["warnings"].append(
+            "Project verification input has no valid rooms list to synchronize."
+        )
+        return report
+
+    analysis_rooms = [room for room in raw_rooms if isinstance(room, dict)]
+    layout_name_counts: dict[str, int] = {}
+    analysis_name_counts: dict[str, int] = {}
+    for room in rooms:
+        name = str(room["name"])
+        layout_name_counts[name] = layout_name_counts.get(name, 0) + 1
+    for room in analysis_rooms:
+        name = str(room.get("name") or "")
+        analysis_name_counts[name] = analysis_name_counts.get(name, 0) + 1
+
+    duplicate_layout_names = sorted(
+        name for name, count in layout_name_counts.items() if count > 1
+    )
+    duplicate_analysis_names = sorted(
+        name for name, count in analysis_name_counts.items() if count > 1
+    )
+    if duplicate_layout_names:
+        report["blocked"] = True
+        report["warnings"].append(
+            "Duplicate spatial room names make name-based synchronization ambiguous: "
+            + ", ".join(duplicate_layout_names)
+        )
+    if duplicate_analysis_names:
+        report["blocked"] = True
+        report["warnings"].append(
+            "Duplicate analysis room names make name-based synchronization ambiguous: "
+            + ", ".join(duplicate_analysis_names)
+        )
+
+    by_name = {
+        str(room.get("name") or ""): room
+        for room in analysis_rooms
+        if analysis_name_counts.get(str(room.get("name") or ""), 0) == 1
+    }
+    matched_names: set[str] = set()
+    for source in rooms:
+        name = str(source["name"])
+        if layout_name_counts.get(name, 0) != 1:
+            continue
+        target = by_name.get(name)
+        if target is None:
+            report["unmatched_layout_rooms"].append(name)
+            continue
+        matched_names.add(name)
+        report["matched_rooms"] += 1
+        for key in ("length_m", "width_m", "height_m"):
+            current = target.get(key)
+            value = source[key]
+            if current != value:
+                report["changes"].append(
+                    {
+                        "room": name,
+                        "field": key,
+                        "analysis_value": current,
+                        "spatial_value": value,
+                    }
+                )
+        if "observed_pressure_pa" in target and "pressure_pa" in source:
+            current = target.get("observed_pressure_pa")
+            value = source["pressure_pa"]
+            if current != value:
+                report["changes"].append(
+                    {
+                        "room": name,
+                        "field": "observed_pressure_pa",
+                        "analysis_value": current,
+                        "spatial_value": value,
+                    }
+                )
+
+    report["unmatched_analysis_rooms"] = sorted(
+        name
+        for name, count in analysis_name_counts.items()
+        if count == 1 and name not in matched_names
+    )
+    if report["unmatched_layout_rooms"]:
+        report["warnings"].append(
+            "Spatial rooms not present in the active analysis: "
+            + ", ".join(sorted(report["unmatched_layout_rooms"]))
+        )
+    if report["unmatched_analysis_rooms"]:
+        report["warnings"].append(
+            "Analysis rooms not present in the spatial layout: "
+            + ", ".join(report["unmatched_analysis_rooms"])
+        )
+    return report
+
+
+def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+    preview = spatial_sync_preview(layout, analysis)
+    if not preview["supported"] or preview["blocked"] or not preview["changes"]:
         return False
 
+    rooms = normalize_layout(layout)["rooms"]
     changed = False
     if getattr(analysis, "kind", "") == "room_verification":
         source = rooms[0]
@@ -253,13 +411,20 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
                 changed = True
         return changed
 
-    if getattr(analysis, "kind", "") != "project_verification":
-        return False
     raw_rooms = analysis.input.get("rooms")
     if not isinstance(raw_rooms, list):
         return False
 
-    by_name = {str(room.get("name")): room for room in raw_rooms if isinstance(room, dict)}
+    analysis_rooms = [room for room in raw_rooms if isinstance(room, dict)]
+    analysis_name_counts: dict[str, int] = {}
+    for room in analysis_rooms:
+        name = str(room.get("name") or "")
+        analysis_name_counts[name] = analysis_name_counts.get(name, 0) + 1
+    by_name = {
+        str(room.get("name") or ""): room
+        for room in analysis_rooms
+        if analysis_name_counts.get(str(room.get("name") or ""), 0) == 1
+    }
     for source in rooms:
         target = by_name.get(source["name"])
         if target is None:
@@ -594,7 +759,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
+            text="Preview + sync to analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
 

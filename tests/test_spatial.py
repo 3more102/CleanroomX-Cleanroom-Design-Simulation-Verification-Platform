@@ -607,18 +607,42 @@ def test_room_overlap_conflicts_returns_each_pair_once_in_stable_order():
 
 
 def test_nearest_nonoverlap_room_position_returns_current_position_when_clear():
-    room = {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 2.0, "width_m": 2.0}
+    room = {
+        "id": "a",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 2.0,
+        "width_m": 2.0,
+    }
     rooms = [
         room,
-        {"id": "b", "x_m": 4.0, "y_m": 0.0, "length_m": 2.0, "width_m": 2.0},
+        {
+            "id": "b",
+            "x_m": 4.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
     ]
 
     assert nearest_nonoverlap_room_position(room, rooms) == (0.0, 0.0)
 
 
 def test_nearest_nonoverlap_room_position_resolves_single_overlap_by_shortest_move():
-    fixed = {"id": "fixed", "x_m": 0.0, "y_m": 0.0, "length_m": 5.0, "width_m": 4.0}
-    room = {"id": "move", "x_m": 3.5, "y_m": 1.0, "length_m": 3.0, "width_m": 2.0}
+    fixed = {
+        "id": "fixed",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 5.0,
+        "width_m": 4.0,
+    }
+    room = {
+        "id": "move",
+        "x_m": 3.5,
+        "y_m": 1.0,
+        "length_m": 3.0,
+        "width_m": 2.0,
+    }
 
     target = nearest_nonoverlap_room_position(room, [fixed, room])
 
@@ -628,7 +652,13 @@ def test_nearest_nonoverlap_room_position_resolves_single_overlap_by_shortest_mo
 
 
 def test_nearest_nonoverlap_room_position_handles_multiple_blockers_deterministically():
-    room = {"id": "move", "x_m": 1.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0}
+    room = {
+        "id": "move",
+        "x_m": 1.0,
+        "y_m": 1.0,
+        "length_m": 2.0,
+        "width_m": 2.0,
+    }
     blockers = [
         {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 2.0, "width_m": 3.0},
         {"id": "b", "x_m": 2.0, "y_m": 0.0, "length_m": 2.0, "width_m": 3.0},

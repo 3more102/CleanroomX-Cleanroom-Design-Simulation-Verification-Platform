@@ -1037,11 +1037,47 @@ class SpatialDesignWorkspace(ttk.Frame):
                 text = self._property_vars[key].get().strip()
                 if text:
                     item[key] = _positive(text, item[key])
+            floor_elevation = self._property_vars["floor_elevation_m"].get().strip()
+            if floor_elevation:
+                item["floor_elevation_m"] = _finite_number(
+                    floor_elevation, item.get("floor_elevation_m", 0.0)
+                )
             pressure = self._property_vars["pressure_pa"].get().strip()
             if pressure:
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+            for key in ("classification", "analysis_room_name"):
+                text = self._property_vars[key].get().strip()
+                if text:
+                    item[key] = text
+                else:
+                    item.pop(key, None)
+        elif self.selected and self.selected.kind == "device":
+            z_text = self._property_vars["z_m"].get().strip()
+            if z_text:
+                item["z_m"] = _finite_number(z_text, item.get("z_m", 0.0))
+            for key in ("width_m", "height_m"):
+                text = self._property_vars[key].get().strip()
+                if text:
+                    item[key] = _positive(text, item.get(key, 0.2))
+            orientation = self._property_vars["orientation_deg"].get().strip()
+            if orientation:
+                item["orientation_deg"] = _finite_number(
+                    orientation, item.get("orientation_deg", 0.0)
+                )
+            room_id = self._property_vars["room_id"].get().strip()
+            item["room_id"] = room_id or None
+            wall_side = self._property_vars["wall_side"].get().strip().lower()
+            if wall_side in {"north", "south", "east", "west"}:
+                item["wall_side"] = wall_side
+            else:
+                item.pop("wall_side", None)
+            swing = self._property_vars["swing"].get().strip()
+            if swing:
+                item["swing"] = swing
+            else:
+                item.pop("swing", None)
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",
@@ -1064,7 +1100,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             "y_m": 0.0,
             "length_m": 4.0,
             "width_m": 4.0,
-            "height_m": 3.0,
+            "height_m": self.layout["floor"]["default_ceiling_height_m"],
+            "floor_elevation_m": self.layout["floor"]["elevation_m"],
         }
         self.layout["rooms"].append(room)
         self.selected = _Hit("room", room["id"])
@@ -1087,9 +1124,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             y = room["y_m"] + room["width_m"] / 2.0
             z = room["height_m"] if device_type in {"ffu", "supply", "return", "exhaust", "sensor"} else 0.0
             room_id = room["id"]
+            if device_type in {"door", "transfer"}:
+                y = room["y_m"]
+                z = 0.0 if device_type == "door" else min(1.0, room["height_m"] / 2.0)
         else:
             x = y = z = 0.0
             room_id = None
+        default_width = 0.9 if device_type == "door" else (0.6 if device_type == "transfer" else 0.4)
+        default_height = 2.1 if device_type == "door" else (0.4 if device_type == "transfer" else 0.2)
         device = {
             "id": f"device-{uuid.uuid4().hex[:8]}",
             "type": device_type,
@@ -1098,7 +1140,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             "x_m": x,
             "y_m": y,
             "z_m": z,
+            "width_m": default_width,
+            "height_m": default_height,
+            "orientation_deg": 0.0,
         }
+        if device_type in {"door", "transfer"}:
+            device["wall_side"] = "south"
+        if device_type == "door":
+            device["swing"] = "left"
         self.layout["devices"].append(device)
         self.selected = _Hit("device", device["id"])
         self._load_property_panel()

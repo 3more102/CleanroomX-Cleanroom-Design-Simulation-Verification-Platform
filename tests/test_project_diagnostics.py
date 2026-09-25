@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from cleanroomx.application import run_analysis
+import cleanroomx.project_diagnostics_cli as diagnostics_cli
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.project_diagnostics import (
     PROJECT_DIAGNOSTICS_SCHEMA,
@@ -315,6 +316,39 @@ def test_project_diagnostics_cli_writes_revision_bound_strict_json(tmp_path):
     assert payload["source"]["stable_during_check"] is True
     assert len(payload["source"]["sha256"]) == 64
     json.dumps(payload, allow_nan=False)
+
+
+def test_project_diagnostics_cli_discards_output_if_source_changes_during_check(
+    tmp_path, monkeypatch
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Revision guard"),
+    )
+    output_path = tmp_path / "diagnostics.json"
+    output_path.write_text("previous-valid-report\n", encoding="utf-8")
+    real_analyze = diagnostics_cli.analyze_project_diagnostics
+
+    def mutate_source(project, *, base_dir=None):
+        result = real_analyze(project, base_dir=base_dir)
+        project_path.write_text(
+            project_path.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        return result
+
+    monkeypatch.setattr(
+        diagnostics_cli,
+        "analyze_project_diagnostics",
+        mutate_source,
+    )
+
+    exit_code = diagnostics_cli.main(
+        [str(project_path), "--output", str(output_path)]
+    )
+
+    assert exit_code == 2
+    assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
 
 
 def test_project_diagnostics_cli_returns_one_for_actionable_findings(tmp_path):

@@ -17,6 +17,7 @@ SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
 SPATIAL_HISTORY_LIMIT = 100
 DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor")
+RESIZE_HANDLES = ("nw", "n", "ne", "e", "se", "s", "sw", "w")
 
 
 def _finite_number(value: Any, default: float) -> float:
@@ -520,6 +521,50 @@ def spatial_layout_schedule_csv(value: Any) -> str:
     return stream.getvalue()
 
 
+
+def resize_room(
+    room: dict,
+    handle: str,
+    target_x_m: float,
+    target_y_m: float,
+    *,
+    grid_m: float | None = None,
+    min_size_m: float = 0.25,
+) -> bool:
+    """Resize a room from one edge/corner while preserving the opposite edge."""
+    if handle not in RESIZE_HANDLES:
+        return False
+
+    x0 = _finite_number(room.get("x_m"), 0.0)
+    y0 = _finite_number(room.get("y_m"), 0.0)
+    x1 = x0 + _positive(room.get("length_m"), 4.0)
+    y1 = y0 + _positive(room.get("width_m"), 4.0)
+    original = (x0, y0, x1, y1)
+
+    grid = _positive(grid_m, 0.0) if grid_m is not None else 0.0
+    min_size = max(0.01, _positive(min_size_m, 0.25), grid)
+    tx = _finite_number(target_x_m, x0)
+    ty = _finite_number(target_y_m, y0)
+    if grid > 0:
+        tx = round(tx / grid) * grid
+        ty = round(ty / grid) * grid
+
+    if "w" in handle:
+        x0 = min(tx, x1 - min_size)
+    if "e" in handle:
+        x1 = max(tx, x0 + min_size)
+    if "n" in handle:
+        y0 = min(ty, y1 - min_size)
+    if "s" in handle:
+        y1 = max(ty, y0 + min_size)
+
+    room["x_m"] = x0
+    room["y_m"] = y0
+    room["length_m"] = x1 - x0
+    room["width_m"] = y1 - y0
+    return (x0, y0, x1, y1) != original
+
+
 class SpatialEditHistory:
     """Bounded undo/redo history for normalized spatial-layout snapshots."""
 
@@ -612,6 +657,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._history = SpatialEditHistory()
         self._drag_before: dict | None = None
         self._drag_changed = False
+        self._resize_handle: str | None = None
 
         self._build()
         self.refresh()
@@ -1175,6 +1221,29 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
             )
+            if selected:
+                handle_points = {
+                    "nw": (x0, y0),
+                    "n": ((x0 + x1) / 2, y0),
+                    "ne": (x1, y0),
+                    "e": (x1, (y0 + y1) / 2),
+                    "se": (x1, y1),
+                    "s": ((x0 + x1) / 2, y1),
+                    "sw": (x0, y1),
+                    "w": (x0, (y0 + y1) / 2),
+                }
+                for handle, (hx, hy) in handle_points.items():
+                    radius = 5
+                    canvas.create_rectangle(
+                        hx - radius,
+                        hy - radius,
+                        hx + radius,
+                        hy + radius,
+                        fill="#ffffff",
+                        outline="#1d4ed8",
+                        width=2,
+                        tags=(f"resize:{handle}", f"room:{room['id']}", "resize"),
+                    )
 
         symbols = {
             "door": "D",
@@ -1337,8 +1406,14 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.focus_set()
         current = self.canvas_2d.find_withtag("current")
         hit = None
+        self._resize_handle = None
         if current:
-            hit = self._parse_hit(self.canvas_2d.gettags(current[0]))
+            tags = self.canvas_2d.gettags(current[0])
+            self._resize_handle = next(
+                (tag.split(":", 1)[1] for tag in tags if tag.startswith("resize:")),
+                None,
+            )
+            hit = self._parse_hit(tags)
         self.selected = hit
         self._drag_anchor = self._canvas_to_world(event.x, event.y) if hit else None
         self._drag_before = self._snapshot_layout() if hit else None
@@ -1351,6 +1426,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         if item is None or self._drag_anchor is None:
             return
         world = self._canvas_to_world(event.x, event.y)
+        if self._resize_handle and self.selected and self.selected.kind == "room":
+            grid = self.layout["grid_m"] if self._snap_to_grid.get() else None
+            if resize_room(
+                item,
+                self._resize_handle,
+                world[0],
+                world[1],
+                grid_m=grid,
+            ):
+                self._drag_changed = True
+            self._load_property_panel()
+            self.redraw()
+            return
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
         old_x = item["x_m"]
@@ -1400,12 +1488,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             and self.selected is not None
             and self._drag_changed
         ):
-            self._reassign_selected_device_room()
+            if self._resize_handle:
+                message = "Spatial room resized"
+            else:
+                self._reassign_selected_device_room()
+                message = "Spatial item moved"
             self._load_property_panel()
-            self._persist("Spatial item moved", history_before=self._drag_before)
+            self._persist(message, history_before=self._drag_before)
         self._drag_anchor = None
         self._drag_before = None
         self._drag_changed = False
+        self._resize_handle = None
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)

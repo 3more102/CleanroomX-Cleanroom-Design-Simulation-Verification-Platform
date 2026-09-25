@@ -10,6 +10,11 @@ from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
+from .spatial_schema import (
+    SPATIAL_METADATA_KEY,
+    SpatialLayoutFormatError,
+    migrate_spatial_layout,
+)
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
@@ -186,6 +191,15 @@ def project_from_dict(data: dict) -> ProjectDocument:
     metadata = project_data.get("metadata", {})
     if not isinstance(metadata, dict):
         raise ProjectFormatError("project.metadata must be an object")
+    if SPATIAL_METADATA_KEY in metadata:
+        try:
+            metadata = dict(metadata)
+            metadata[SPATIAL_METADATA_KEY] = migrate_spatial_layout(
+                metadata[SPATIAL_METADATA_KEY],
+                strict=True,
+            )
+        except SpatialLayoutFormatError as exc:
+            raise ProjectFormatError(str(exc)) from exc
 
     raw_analyses = data.get("analyses", [])
     if not isinstance(raw_analyses, list):
@@ -304,7 +318,8 @@ def load_project_document_with_revision(
 
 def _project_document_text(project: ProjectDocument) -> str:
     data = project.to_dict()
-    project_from_dict(data)
+    validated = project_from_dict(data)
+    data["project"]["metadata"] = validated.metadata
     return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"

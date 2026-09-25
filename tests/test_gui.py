@@ -799,9 +799,30 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
 
 
 def test_per_analysis_run_cache_restores_without_forcing_result_tab():
-    run_a = object()
-    run_b = object()
+    payload = json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+    run_a = run_analysis("room_verification", payload)
+    run_b = run_analysis("room_verification", payload)
     app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="analysis-a",
+                name="A",
+                kind="room_verification",
+                input=dict(payload),
+            ),
+            AnalysisDocument(
+                id="analysis-b",
+                name="B",
+                kind="room_verification",
+                input=dict(payload),
+            ),
+        ],
+        active_analysis_id="analysis-a",
+    )
     app._runs_by_analysis = {"analysis-a": run_a, "analysis-b": run_b}
     app.last_run = None
     app.last_run_analysis_id = None

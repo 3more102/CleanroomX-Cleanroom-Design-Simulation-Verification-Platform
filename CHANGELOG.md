@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased file-backed input contract hardening — 2026-09-25
+
+- Adds a shared fail-closed field contract for the custom `consistency` and `dossier` application workflows.
+- Rejects misspelled or unsupported top-level consistency fields, dossier manifest fields, consistency-check names, and nested consistency options before analysis execution.
+- Applies the same dossier contract to direct `build_dossier()` / CLI execution, preventing GUI and CLI validation drift.
+- Preserves all currently supported dossier metadata/source fields, project schema version 1, solver equations, tolerances, and engineering acceptance semantics.
+- Adds deterministic typo regressions to the focused v0.100 application CI gate and the complete test suite.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

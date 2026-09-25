@@ -312,6 +312,61 @@ def test_save_project_rejects_external_disk_change_and_preserves_both_versions(
     assert explicit_save_calls == []
 
 
+def test_save_project_as_same_path_cannot_bypass_external_change_guard(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "same-path.cleanroomx.json",
+        ProjectDocument(name="Initially opened"),
+    )
+    opened_revision = project_file_revision(path)
+    external_project = ProjectDocument(name="Changed externally")
+    save_project_document(path, external_project)
+    external_bytes = path.read_bytes()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Local version")
+    app.project_path = path
+    app._project_disk_revision = opened_revision
+    app._editor_analysis_id = None
+    app.name_var = Value("Local version")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+
+    captured = {}
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(path),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.save_project_as()
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path) == external_project
+    assert app.project.name == "Local version"
+    assert app.status_var.value == "Save conflict — disk file preserved"
+    assert captured["title"] == "Save conflict"
+
+
 def test_save_project_as_invalidates_results_when_base_directory_changes(
     tmp_path, monkeypatch
 ):

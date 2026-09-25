@@ -12,8 +12,9 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 4. **Recovery persistence** — `src/cleanroomx/autosave.py` owns separate versioned recovery artifacts, source-file fingerprints, bounded rotation, asynchronous write/coalescing, validated restore/discard operations, and recovery scanning. It never writes the explicit project path.
 5. **Recovery UI** — `src/cleanroomx/recovery_ui.py` provides startup recovery discovery, evidence inspection, explicit discard, and restore selection without owning project-save semantics.
 6. **Desktop UI** — `src/cleanroomx/gui.py` provides project lifecycle, JSON editing, validation, non-blocking execution, per-analysis result ownership, diagnostics, reporting, export, plotting, dirty-state tracking, unsaved-change protection, recovery-autosave status, protected recovery restoration, and active-run mutation guards.
-7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
-8. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
+7. **Spatial model and editing** — `src/cleanroomx/spatial.py` owns the canonical room/device layout model, deterministic identity normalization, referential-integrity diagnostics, geometry validation, synchronized 2D/3D views, and integration with bounded transactional history in `spatial_history.py`. Valid persisted ids are preserved; missing or colliding ids are repaired deterministically without stealing ids explicitly declared by later objects.
+8. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
+9. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
 
 ## Desktop data flow
 
@@ -24,6 +25,8 @@ Result ownership remains tied to the analysis id so stale results are not silent
 Recovery autosave is deliberately outside the project schema. The UI captures a model snapshot plus raw draft state on the Tk thread and submits it to a single background writer. Recovery artifacts are atomically written in a user-specific recovery directory, retain source-project fingerprint evidence, and are bounded by project identity. Explicit saves remain authoritative; recovery artifacts are never substituted for or written over the project file.
 
 Startup restoration keeps save ownership equally explicit. A recovery is parsed through the ordinary project validator, then loaded into the application with no explicit save path and a forced dirty baseline. The original source path, when present, is held separately only for relative-reference context. Therefore Ctrl+S routes through Save As, and a newer or changed source file cannot be overwritten by recovery startup logic.
+
+Spatial metadata has its own identity invariant inside schema-version-1 project metadata: every normalized room and device has a unique non-empty id. Normalization preserves the first valid persisted id, reserves all explicit ids before generating repairs, and deterministically suffixes missing/colliding ids. A device that references a duplicated original room id remains attached to the first occurrence for backward compatibility, but the ambiguity is reported to the operator instead of being silently treated as clean data. Re-normalizing a canonical layout is idempotent.
 
 ## Engineering boundary
 

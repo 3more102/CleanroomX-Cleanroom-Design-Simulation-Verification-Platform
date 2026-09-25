@@ -6,7 +6,237 @@
     "name": "CleanroomX GUI Demonstration",
     "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
     "metadata": {
-      "purpose": "GUI and application-service demonstration"
+      "purpose": "GUI and application-service demonstration",
+      "spatial_layout": {
+        "version": 1,
+        "grid_m": 0.5,
+        "rooms": [
+          {
+            "id": "room-process",
+            "name": "Cleanroom / Process",
+            "x_m": 0,
+            "y_m": 0,
+            "length_m": 6,
+            "width_m": 5,
+            "height_m": 3,
+            "elevation_m": 0,
+            "classification": "ISO 7 project descriptor",
+            "pressure_pa": 30,
+            "pressure_target_pa": 30,
+            "temperature_target_c": 22,
+            "humidity_target_percent": 45,
+            "airflow_ref": "Verification supply 2700 m3/h",
+            "engineering_ref": "Process",
+            "engineering_analysis_id": "verification",
+            "notes": "Primary process cleanroom",
+            "metadata": {
+              "demo_role": "cleanroom"
+            },
+            "engineering_snapshot": {
+              "analysis_id": "verification",
+              "room_ref": "Process",
+              "length_m": 6,
+              "width_m": 5,
+              "height_m": 3,
+              "observed_pressure_pa": 30
+            }
+          },
+          {
+            "id": "room-preparation",
+            "name": "Gowning / Preparation",
+            "x_m": 6.5,
+            "y_m": 0,
+            "length_m": 5,
+            "width_m": 4,
+            "height_m": 3,
+            "elevation_m": 0,
+            "classification": "ISO 8 project descriptor",
+            "pressure_pa": 16,
+            "pressure_target_pa": 15,
+            "temperature_target_c": 22,
+            "humidity_target_percent": 45,
+            "airflow_ref": "Verification supply 1200 m3/h",
+            "engineering_ref": "Preparation",
+            "engineering_analysis_id": "verification",
+            "notes": "Preparation and gowning area",
+            "metadata": {
+              "demo_role": "gowning"
+            },
+            "engineering_snapshot": {
+              "analysis_id": "verification",
+              "room_ref": "Preparation",
+              "length_m": 5,
+              "width_m": 4,
+              "height_m": 3,
+              "observed_pressure_pa": 16
+            }
+          },
+          {
+            "id": "room-ante",
+            "name": "Airlock / Ante",
+            "x_m": 12,
+            "y_m": 0,
+            "length_m": 4,
+            "width_m": 3,
+            "height_m": 3,
+            "elevation_m": 0,
+            "classification": "Controlled support area",
+            "pressure_pa": 8,
+            "pressure_target_pa": 5,
+            "temperature_target_c": 22,
+            "humidity_target_percent": 50,
+            "airflow_ref": "Verification supply 720 m3/h",
+            "engineering_ref": "Ante",
+            "engineering_analysis_id": "verification",
+            "notes": "Personnel/material airlock",
+            "metadata": {
+              "demo_role": "airlock"
+            },
+            "engineering_snapshot": {
+              "analysis_id": "verification",
+              "room_ref": "Ante",
+              "length_m": 4,
+              "width_m": 3,
+              "height_m": 3,
+              "observed_pressure_pa": 8
+            }
+          },
+          {
+            "id": "room-corridor",
+            "name": "Clean Corridor",
+            "x_m": 0,
+            "y_m": 5.5,
+            "length_m": 16,
+            "width_m": 2.5,
+            "height_m": 3,
+            "elevation_m": 0,
+            "classification": "Project-controlled corridor",
+            "pressure_target_pa": 5,
+            "temperature_target_c": 22,
+            "humidity_target_percent": 50,
+            "notes": "Spatial-only demo area; no engineering room mapping",
+            "metadata": {
+              "demo_role": "corridor"
+            }
+          },
+          {
+            "id": "room-support",
+            "name": "Support / Process Utility",
+            "x_m": 0,
+            "y_m": 8.5,
+            "length_m": 5,
+            "width_m": 4,
+            "height_m": 3.2,
+            "elevation_m": 0,
+            "classification": "Support area",
+            "temperature_target_c": 24,
+            "humidity_target_percent": 55,
+            "notes": "Spatial-only support room; no engineering room mapping",
+            "metadata": {
+              "demo_role": "support"
+            }
+          }
+        ],
+        "devices": [
+          {
+            "id": "ffu-process-1",
+            "type": "ffu",
+            "name": "FFU-P1",
+            "room_id": "room-process",
+            "x_m": 2,
+            "y_m": 2,
+            "z_m": 3
+          },
+          {
+            "id": "supply-process-1",
+            "type": "supply",
+            "name": "Supply-P1",
+            "room_id": "room-process",
+            "x_m": 4,
+            "y_m": 2,
+            "z_m": 3
+          },
+          {
+            "id": "return-process-1",
+            "type": "return",
+            "name": "Return-P1",
+            "room_id": "room-process",
+            "x_m": 1,
+            "y_m": 4,
+            "z_m": 0.3
+          },
+          {
+            "id": "door-process-gowning",
+            "type": "door",
+            "name": "Door Process/Gowning",
+            "room_id": "room-process",
+            "x_m": 6,
+            "y_m": 2.5,
+            "z_m": 0,
+            "width_m": 1,
+            "height_m": 2.1,
+            "orientation_deg": 90
+          },
+          {
+            "id": "window-process",
+            "type": "window",
+            "name": "Observation Window",
+            "room_id": "room-process",
+            "x_m": 3,
+            "y_m": 0,
+            "z_m": 1,
+            "width_m": 1.2,
+            "height_m": 1,
+            "orientation_deg": 0
+          },
+          {
+            "id": "sensor-process",
+            "type": "sensor",
+            "name": "Pressure Point P",
+            "room_id": "room-process",
+            "x_m": 5,
+            "y_m": 4,
+            "z_m": 1.5
+          },
+          {
+            "id": "supply-prep",
+            "type": "supply",
+            "name": "Supply-G1",
+            "room_id": "room-preparation",
+            "x_m": 9,
+            "y_m": 2,
+            "z_m": 3
+          },
+          {
+            "id": "exhaust-support",
+            "type": "exhaust",
+            "name": "Exhaust-S1",
+            "room_id": "room-support",
+            "x_m": 2.5,
+            "y_m": 10.5,
+            "z_m": 3.2
+          },
+          {
+            "id": "equipment-support",
+            "type": "equipment",
+            "name": "Process Utility Skid",
+            "room_id": "room-support",
+            "x_m": 3.5,
+            "y_m": 10.5,
+            "z_m": 0
+          }
+        ],
+        "view": {
+          "zoom_2d": 1,
+          "pan_x": 0,
+          "pan_y": 0,
+          "azimuth_deg": 35,
+          "elevation_deg": 28,
+          "zoom_3d": 1,
+          "pan_3d_x": 0,
+          "pan_3d_y": 0
+        }
+      }
     }
   },
   "analyses": [

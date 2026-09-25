@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .hvac_models import AirState
 from .psychrometric_uncertainty_models import UncertainAirState
 from .thermal_uncertainty_models import UncertainThermalDesign
@@ -50,6 +51,20 @@ def _air_state_from_dict(data: dict, name: str) -> AirState | UncertainAirState:
     return AirState(dry_bulb, relative_humidity, pressure)
 
 
+@strict_input_fields(
+    "name",
+    "room_air",
+    "outdoor_air",
+    "cleanroom_airflow_m3_h",
+    "internal_sensible_kw",
+    "internal_latent_kw",
+    "makeup_airflow_m3_h",
+    "supply_air_temp_c",
+    "capacity_margin_percent",
+    "available_cooling_capacity_kw",
+    "available_heating_capacity_kw",
+    context="thermal-uncertainty input",
+)
 def thermal_uncertainty_from_dict(data: dict) -> UncertainThermalDesign:
     outdoor = data.get("outdoor_air")
     supply_temp = data.get("supply_air_temp_c")

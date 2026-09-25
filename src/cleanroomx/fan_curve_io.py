@@ -3,9 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint, FanOperatingPointStudy, SystemCurve
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "system_curve",
+    context="fan operating-point input",
+)
 def fan_operating_point_study_from_dict(data: dict) -> FanOperatingPointStudy:
     fan_data = data["fan_curve"]
     system_data = data["system_curve"]

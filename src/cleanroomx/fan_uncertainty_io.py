@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_uncertainty_models import FanSystemUncertaintyStudy
 from .uncertainty_models import Provenance, UncertainValue
@@ -23,6 +24,12 @@ def _uncertain_value(data: float | int | dict, unit: str) -> UncertainValue:
     )
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "system_curve",
+    context="fan-system uncertainty input",
+)
 def fan_system_uncertainty_from_dict(data: dict) -> FanSystemUncertaintyStudy:
     fan_data = data["fan_curve"]
     system_data = data["system_curve"]

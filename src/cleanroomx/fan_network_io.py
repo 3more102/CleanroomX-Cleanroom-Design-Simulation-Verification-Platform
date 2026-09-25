@@ -3,11 +3,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .duct_flow import ParallelFlowPath, ParallelFlowSection
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_network import FanDrivenParallelNetworkStudy
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "fixed_pressure_pa",
+    "paths",
+    context="fan/parallel-network input",
+)
 def fan_driven_parallel_network_study_from_dict(
     data: dict,
 ) -> FanDrivenParallelNetworkStudy:

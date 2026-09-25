@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .psychrometric_uncertainty_models import UncertainAirState
 from .uncertainty_models import Provenance, UncertainValue
 
@@ -20,6 +21,13 @@ def _value_from_dict(data: dict, unit: str) -> UncertainValue:
     )
 
 
+@strict_input_fields(
+    "name",
+    "dry_bulb_c",
+    "relative_humidity_percent",
+    "pressure_kpa",
+    context="psychrometric-uncertainty input",
+)
 def psychrometric_uncertainty_from_dict(data: dict) -> UncertainAirState:
     pressure = data.get(
         "pressure_kpa",

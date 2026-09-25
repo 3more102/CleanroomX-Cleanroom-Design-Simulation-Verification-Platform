@@ -8,7 +8,7 @@ import json
 from typing import Any
 
 from . import __version__
-from .application import AnalysisRun, analysis_run_matches_input
+from .application import AnalysisRun, analysis_run_is_current
 
 
 ENGINEERING_REPORT_SCHEMA = "cleanroomx.engineering-report"
@@ -50,6 +50,7 @@ def build_engineering_report_payload(
     analysis_name: str,
     analysis_kind: str,
     input_payload: dict,
+    base_dir=None,
 ) -> dict[str, Any]:
     """Build deterministic report evidence from one exact completed analysis run.
 
@@ -69,8 +70,8 @@ def build_engineering_report_payload(
         raise TypeError("project_description must be a string")
     if not isinstance(input_payload, dict):
         raise TypeError("input_payload must be a JSON object")
-    if run.kind != analysis_kind or not analysis_run_matches_input(
-        run, analysis_kind, input_payload
+    if run.kind != analysis_kind or not analysis_run_is_current(
+        run, analysis_kind, input_payload, base_dir=base_dir
     ):
         raise EngineeringReportFreshnessError(
             "analysis result no longer matches the requested analysis input; "
@@ -304,6 +305,7 @@ def engineering_report_html(
     analysis_name: str,
     analysis_kind: str,
     input_payload: dict,
+    base_dir=None,
 ) -> str:
     """Build and render one verified portable engineering report."""
     payload = build_engineering_report_payload(
@@ -314,5 +316,6 @@ def engineering_report_html(
         analysis_name=analysis_name,
         analysis_kind=analysis_kind,
         input_payload=input_payload,
+        base_dir=base_dir,
     )
     return render_engineering_report_html(payload)

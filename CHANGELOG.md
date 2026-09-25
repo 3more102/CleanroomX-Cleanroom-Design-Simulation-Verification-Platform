@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased portable project bundles — 2026-09-25
+
+- Added deterministic self-contained `.cleanroomx.zip` project bundles that reuse the existing application dependency-reference registry.
+- Rewrites only the packaged project copy to bundle-relative dependency paths; existing schema-v1 project files and live editor state remain unchanged.
+- Adds SHA-256/byte-size verification, duplicate/unmanifested-member rejection, path-traversal protection, changing-input detection, source-input collision protection, and transactional staged extraction into new or empty directories.
+- Adds desktop File-menu export/open workflows and the `cleanroomx-project-bundle export|verify|extract` CLI.
+- Added round-trip, deterministic-output, deduplication, corruption, traversal, revision-race, no-overwrite, CLI, desktop-integration, and scale-benchmark coverage.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

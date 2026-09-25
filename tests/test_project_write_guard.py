@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -33,17 +34,18 @@ class Value:
 def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
+    original_read_bytes = Path.read_bytes
     calls = {"count": 0}
+    resolved = path.resolve(strict=False)
 
-    def changing_load(source):
-        project = original_load(source)
-        if calls["count"] == 0:
+    def changing_read(source):
+        data = original_read_bytes(source)
+        if source.resolve(strict=False) == resolved and calls["count"] == 0:
             save_project_document(path, ProjectDocument(name="Second"))
         calls["count"] += 1
-        return project
+        return data
 
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+    monkeypatch.setattr(Path, "read_bytes", changing_read)
 
     project, revision = load_project_document_with_revision(path)
 
@@ -208,3 +210,54 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+
+def test_guarded_save_detects_post_replace_mutation(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    expected = capture_project_file_revision(path)
+    original_atomic_write = project_module._atomic_write_text
+
+    def mutate_after_replace(destination, text, *, before_replace=None):
+        saved_path = original_atomic_write(
+            destination,
+            text,
+            before_replace=before_replace,
+        )
+        Path(saved_path).write_text("external writer after replace", encoding="utf-8")
+        return saved_path
+
+    monkeypatch.setattr(project_module, "_atomic_write_text", mutate_after_replace)
+
+    with pytest.raises(ProjectWriteConflictError) as exc_info:
+        save_project_document_guarded(
+            path,
+            ProjectDocument(name="Window edit"),
+            expected_revision=expected,
+        )
+
+    assert exc_info.value.phase == "post_write"
+    assert exc_info.value.expected.sha256 != exc_info.value.current.sha256
+    assert path.read_text(encoding="utf-8") == "external writer after replace"
+
+
+def test_loaded_revision_is_derived_from_the_parsed_bytes(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Bound"))
+    original_read_bytes = Path.read_bytes
+    observed = []
+
+    def recording_read(source):
+        data = original_read_bytes(source)
+        observed.append(data)
+        return data
+
+    monkeypatch.setattr(Path, "read_bytes", recording_read)
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert project.name == "Bound"
+    assert len(observed) == 1
+    assert revision.sha256 == project_module.sha256(observed[0]).hexdigest()
+    assert revision.size == len(observed[0])

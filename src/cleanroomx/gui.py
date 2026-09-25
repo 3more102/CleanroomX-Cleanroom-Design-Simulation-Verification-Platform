@@ -565,7 +565,7 @@ class CleanroomXApp:
         return None
 
     def _project_state_signature(self) -> str:
-        data = copy.deepcopy(self.project.to_dict())
+        data = self.project.to_dict()
         name = self.name_var.get().strip()
         if not name:
             raise ValueError("project name cannot be empty")
@@ -605,7 +605,7 @@ class CleanroomXApp:
         self._update_title()
 
     def _build_recovery_snapshot(self) -> dict:
-        project_data = copy.deepcopy(self.project.to_dict())
+        project_data = self.project.to_dict()
         name_text = self.name_var.get()
         description_text = self.description_var.get()
         editor_text = ""

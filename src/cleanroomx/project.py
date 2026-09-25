@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
@@ -52,8 +53,20 @@ class AnalysisDocument:
     kind: str
     input: dict = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Project models are intentionally mutable, but they must own their nested
+        # JSON containers instead of aliasing caller-owned parsing/build data.
+        self.input = copy.deepcopy(self.input)
+
     def to_dict(self) -> dict:
-        return {"id": self.id, "name": self.name, "kind": self.kind, "input": self.input}
+        # Serialization snapshots must not provide a mutation path back into the
+        # authoritative in-memory model.
+        return {
+            "id": self.id,
+            "name": self.name,
+            "kind": self.kind,
+            "input": copy.deepcopy(self.input),
+        }
 
 
 @dataclass
@@ -64,6 +77,12 @@ class ProjectDocument:
     active_analysis_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Detach caller-owned containers while preserving AnalysisDocument object
+        # identity so existing in-model editing semantics stay unchanged.
+        self.analyses = list(self.analyses)
+        self.metadata = copy.deepcopy(self.metadata)
+
     def to_dict(self) -> dict:
         return {
             "schema": PROJECT_SCHEMA,
@@ -72,7 +91,7 @@ class ProjectDocument:
             "project": {
                 "name": self.name,
                 "description": self.description,
-                "metadata": self.metadata,
+                "metadata": copy.deepcopy(self.metadata),
             },
             "analyses": [item.to_dict() for item in self.analyses],
             "active_analysis_id": self.active_analysis_id,

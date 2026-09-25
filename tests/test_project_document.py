@@ -11,6 +11,90 @@ from cleanroomx.project import (
 )
 
 
+def test_project_documents_take_ownership_of_mutable_constructor_containers():
+    source_input = {"nested": {"points": [1, 2]}}
+    source_metadata = {"workspace": {"layers": ["base"]}}
+    analysis = AnalysisDocument(
+        id="a",
+        name="A",
+        kind="room_verification",
+        input=source_input,
+    )
+    source_analyses = [analysis]
+    project = ProjectDocument(
+        name="Owned state",
+        analyses=source_analyses,
+        active_analysis_id="a",
+        metadata=source_metadata,
+    )
+
+    source_input["nested"]["points"].append(3)
+    source_metadata["workspace"]["layers"].append("external")
+    source_analyses.clear()
+
+    assert analysis.input == {"nested": {"points": [1, 2]}}
+    assert project.metadata == {"workspace": {"layers": ["base"]}}
+    assert project.analyses == [analysis]
+
+
+def test_project_to_dict_returns_a_bidirectionally_detached_snapshot():
+    project = ProjectDocument(
+        name="Detached snapshot",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"nested": {"points": [1, 2]}},
+            )
+        ],
+        active_analysis_id="a",
+        metadata={"workspace": {"layers": ["base"]}},
+    )
+
+    snapshot = project.to_dict()
+
+    project.metadata["workspace"]["layers"].append("live")
+    project.analysis_by_id("a").input["nested"]["points"].append(3)
+    assert snapshot["project"]["metadata"] == {"workspace": {"layers": ["base"]}}
+    assert snapshot["analyses"][0]["input"] == {"nested": {"points": [1, 2]}}
+
+    snapshot["project"]["metadata"]["workspace"]["layers"].append("snapshot")
+    snapshot["analyses"][0]["input"]["nested"]["points"].append(4)
+    assert project.metadata == {"workspace": {"layers": ["base", "live"]}}
+    assert project.analysis_by_id("a").input == {"nested": {"points": [1, 2, 3]}}
+
+
+def test_project_from_dict_detaches_from_caller_owned_source_tree():
+    source = {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {
+            "name": "Parsed",
+            "metadata": {"workspace": {"layers": ["base"]}},
+        },
+        "analyses": [
+            {
+                "id": "a",
+                "name": "A",
+                "kind": "room_verification",
+                "input": {"nested": {"points": [1, 2]}},
+            }
+        ],
+        "active_analysis_id": "a",
+    }
+
+    project = project_from_dict(source)
+
+    source["project"]["metadata"]["workspace"]["layers"].append("external")
+    source["analyses"][0]["input"]["nested"]["points"].append(3)
+    source["analyses"].clear()
+
+    assert project.metadata == {"workspace": {"layers": ["base"]}}
+    assert project.analysis_by_id("a").input == {"nested": {"points": [1, 2]}}
+    assert [analysis.id for analysis in project.analyses] == ["a"]
+
+
 def test_project_document_round_trip(tmp_path):
     project = ProjectDocument(
         name="GUI Demo",

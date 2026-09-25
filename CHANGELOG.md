@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased project state ownership isolation — 2026-09-25
+
+- Makes analysis inputs and project metadata detach from caller-owned mutable containers when model objects are constructed, and makes the project own its analyses-list container while preserving analysis object identity.
+- Makes `AnalysisDocument.to_dict()` and `ProjectDocument.to_dict()` return detached nested serialization snapshots, preventing snapshot edits from mutating the authoritative project model.
+- Removes redundant GUI deep copies at dirty-state and recovery-snapshot boundaries now that the model supplies a detached snapshot contract.
+- Adds regressions for constructor aliasing, parsed-source aliasing, and two-way snapshot isolation.
+- Preserves project schema version 1, serialized field shapes, solver behavior, explicit in-model mutability, and existing save/recovery workflows.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

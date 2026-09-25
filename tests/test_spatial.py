@@ -8,6 +8,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    spatial_layout_dxf,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
     spatial_layout_svg,
@@ -310,6 +311,59 @@ def test_spatial_layout_schedule_csv_handles_empty_layout():
 
     assert rows == []
     assert exported.startswith("record_type,id,name,device_type,room_id,room_name,")
+
+
+def test_spatial_layout_dxf_exports_metric_cad_geometry_and_metadata():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process\nISO 7",
+                "x_m": -1,
+                "y_m": 2,
+                "length_m": 6,
+                "width_m": 5,
+                "height_m": 3,
+                "pressure_pa": 25,
+            }
+        ],
+        "devices": [
+            {
+                "id": "sensor-1",
+                "type": "sensor",
+                "name": "DP-1",
+                "room_id": "process",
+                "x_m": 1,
+                "y_m": 4,
+                "z_m": 1.5,
+            }
+        ],
+    }
+
+    dxf = spatial_layout_dxf(layout)
+
+    assert dxf == spatial_layout_dxf(layout)
+    assert dxf.startswith("0\nSECTION\n2\nHEADER\n")
+    assert "\n9\n$ACADVER\n1\nAC1015\n" in dxf
+    assert "\n9\n$INSUNITS\n70\n6\n" in dxf
+    assert dxf.count("\n0\nLINE\n") == 4
+    assert dxf.count("\n0\nCIRCLE\n") == 1
+    assert "CLEANROOMX_ROOM_ID=process" in dxf
+    assert "CLEANROOMX_ROOM_HEIGHT_M=3" in dxf
+    assert "CLEANROOMX_DEVICE_ID=sensor-1" in dxf
+    assert "CLEANROOMX_DEVICE_Z_M=1.5" in dxf
+    assert "Process ISO 7" in dxf
+    assert "6 x 5 m | 25 Pa" in dxf
+    assert dxf.endswith("0\nEOF\n")
+
+
+def test_spatial_layout_dxf_handles_empty_layout():
+    dxf = spatial_layout_dxf({})
+
+    assert "\n2\nENTITIES\n" in dxf
+    assert "\n0\nLINE\n" not in dxf
+    assert "\n0\nCIRCLE\n" not in dxf
+    assert dxf.endswith("0\nEOF\n")
 
 
 def test_spatial_layout_svg_exports_valid_deterministic_vector_plan():

@@ -348,6 +348,98 @@ def next_room_overlap_conflict(
     return conflict
 
 
+def room_overlap_focus_bounds(
+    conflict: dict,
+    rooms: list[dict],
+    *,
+    padding_m: float = 0.5,
+) -> tuple[float, float, float, float] | None:
+    """Return padded 2D bounds that frame both rooms in an overlap conflict.
+
+    When the referenced rooms are unavailable, fall back to the conflict
+    intersection rectangle so review navigation can still focus a valid area.
+    """
+
+    room_by_id = {
+        str(room.get("id") or ""): room
+        for room in rooms
+        if isinstance(room, dict)
+    }
+    pair = [
+        room_by_id.get(str(conflict.get("room_a_id") or "")),
+        room_by_id.get(str(conflict.get("room_b_id") or "")),
+    ]
+    matched = [room for room in pair if room is not None]
+
+    if matched:
+        min_x = min(_finite_number(room.get("x_m"), 0.0) for room in matched)
+        min_y = min(_finite_number(room.get("y_m"), 0.0) for room in matched)
+        max_x = max(
+            _finite_number(room.get("x_m"), 0.0)
+            + _positive(room.get("length_m"), 0.0)
+            for room in matched
+        )
+        max_y = max(
+            _finite_number(room.get("y_m"), 0.0)
+            + _positive(room.get("width_m"), 0.0)
+            for room in matched
+        )
+    else:
+        x0 = _finite_number(conflict.get("x_m"), 0.0)
+        y0 = _finite_number(conflict.get("y_m"), 0.0)
+        length_m = _positive(conflict.get("length_m"), 0.0)
+        width_m = _positive(conflict.get("width_m"), 0.0)
+        if length_m <= 0.0 or width_m <= 0.0:
+            return None
+        min_x, min_y = x0, y0
+        max_x, max_y = x0 + length_m, y0 + width_m
+
+    padding = max(0.0, _finite_number(padding_m, 0.5))
+    return (
+        min_x - padding,
+        min_y - padding,
+        max_x + padding,
+        max_y + padding,
+    )
+
+
+def fit_2d_view_to_bounds(
+    bounds: tuple[float, float, float, float],
+    canvas_width_px: float,
+    canvas_height_px: float,
+    *,
+    base_scale_px_per_m: float = 55.0,
+    margin: float = 0.78,
+    min_zoom: float = 0.2,
+    max_zoom: float = 5.0,
+) -> dict:
+    """Return a deterministic 2D zoom/pan transform that frames world bounds."""
+
+    min_x, min_y, max_x, max_y = bounds
+    width_m = max(1e-9, _finite_number(max_x, 0.0) - _finite_number(min_x, 0.0))
+    height_m = max(1e-9, _finite_number(max_y, 0.0) - _finite_number(min_y, 0.0))
+    canvas_width = max(1.0, _positive(canvas_width_px, 1.0))
+    canvas_height = max(1.0, _positive(canvas_height_px, 1.0))
+    base_scale = max(1e-9, _positive(base_scale_px_per_m, 55.0))
+    fit_margin = max(0.05, min(1.0, _positive(margin, 0.78)))
+    zoom_min = max(0.01, _positive(min_zoom, 0.2))
+    zoom_max = max(zoom_min, _positive(max_zoom, 5.0))
+
+    zoom = fit_margin * min(
+        canvas_width / (base_scale * width_m),
+        canvas_height / (base_scale * height_m),
+    )
+    zoom = max(zoom_min, min(zoom_max, zoom))
+    scale = base_scale * zoom
+    center_x = (_finite_number(min_x, 0.0) + _finite_number(max_x, 0.0)) / 2.0
+    center_y = (_finite_number(min_y, 0.0) + _finite_number(max_y, 0.0)) / 2.0
+    return {
+        "zoom_2d": zoom,
+        "pan_x": -center_x * scale,
+        "pan_y": -center_y * scale,
+    }
+
+
 def spatial_layout_summary(value: Any) -> dict:
     """Return operator-facing spatial metrics without changing the stored model."""
     layout = normalize_layout(value)
@@ -1046,6 +1138,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_clearances = tk.BooleanVar(value=True)
         self._show_conflicts = tk.BooleanVar(value=True)
         self._conflict_cursor = -1
+        self._active_conflict_pair: tuple[str, str] | None = None
 
         self._build()
         self.refresh()
@@ -1265,6 +1358,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
         self._alignment_guides = []
+        self._conflict_cursor = -1
+        self._active_conflict_pair = None
         self._history.clear()
         self._update_history_controls()
         if self.selected and not self._selected_object():
@@ -1285,6 +1380,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         project = self._project_getter()
         project.metadata[SPATIAL_METADATA_KEY] = normalize_layout(self.layout)
         self._conflict_cursor = -1
+        self._active_conflict_pair = None
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
         if self.selected and not self._selected_object():
             self.selected = None
@@ -1520,6 +1616,20 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._load_property_panel()
         self._persist("Nudged spatial item", history_before=before)
 
+    def _fit_2d_bounds(
+        self,
+        bounds: tuple[float, float, float, float],
+        *,
+        margin: float = 0.78,
+    ) -> None:
+        transform = fit_2d_view_to_bounds(
+            bounds,
+            max(200, self.canvas_2d.winfo_width()),
+            max(200, self.canvas_2d.winfo_height()),
+            margin=margin,
+        )
+        self.layout["view"].update(transform)
+
     def _select_overlap_conflict(self, direction: int) -> None:
         conflict = next_room_overlap_conflict(
             self.layout["rooms"],
@@ -1528,10 +1638,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         if conflict is None:
             self._conflict_cursor = -1
+            self._active_conflict_pair = None
             self._status_setter("No room overlap conflicts to review")
+            self.redraw()
             return
 
         self._conflict_cursor = conflict["index"]
+        self._active_conflict_pair = (
+            conflict["room_a_id"],
+            conflict["room_b_id"],
+        )
+        focus_bounds = room_overlap_focus_bounds(conflict, self.layout["rooms"])
+        if focus_bounds is not None:
+            self._fit_2d_bounds(focus_bounds, margin=0.82)
         target_room_id = conflict["room_b_id"] or conflict["room_a_id"]
         if target_room_id:
             self.selected = _Hit("room", target_room_id)
@@ -1634,17 +1753,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def fit_views(self) -> None:
-        min_x, min_y, max_x, max_y = self._bounds()
-        width_m = max(1.0, max_x - min_x)
-        height_m = max(1.0, max_y - min_y)
-        cw = max(200, self.canvas_2d.winfo_width())
-        ch = max(200, self.canvas_2d.winfo_height())
-        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (55 * width_m), ch / (55 * height_m))))
-        scale = self._scale_2d()
-        cx = (min_x + max_x) / 2
-        cy = (min_y + max_y) / 2
-        self.layout["view"]["pan_x"] = -cx * scale
-        self.layout["view"]["pan_y"] = -cy * scale
+        self._fit_2d_bounds(self._bounds())
         self.layout["view"]["zoom_3d"] = 1.0
         self._persist("Fit spatial views")
 
@@ -1835,6 +1944,9 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _draw_room_overlap_conflicts(self) -> None:
         canvas = self.canvas_2d
         for conflict in room_overlap_conflicts(self.layout["rooms"]):
+            pair = (conflict["room_a_id"], conflict["room_b_id"])
+            active = pair == self._active_conflict_pair
+            conflict_color = "#ea580c" if active else "#b91c1c"
             x0, y0 = self._world_to_canvas(conflict["x_m"], conflict["y_m"])
             x1, y1 = self._world_to_canvas(
                 conflict["x_m"] + conflict["length_m"],
@@ -1849,19 +1961,25 @@ class SpatialDesignWorkspace(ttk.Frame):
                 y0,
                 x1,
                 y1,
-                outline="#b91c1c",
-                width=3,
-                dash=(6, 3),
+                outline=conflict_color,
+                width=5 if active else 3,
+                dash=(3, 2) if active else (6, 3),
                 tags=tag,
             )
-            canvas.create_line(x0, y0, x1, y1, fill="#b91c1c", width=2, tags=tag)
-            canvas.create_line(x0, y1, x1, y0, fill="#b91c1c", width=2, tags=tag)
+            canvas.create_line(
+                x0, y0, x1, y1,
+                fill=conflict_color, width=3 if active else 2, tags=tag
+            )
+            canvas.create_line(
+                x0, y1, x1, y0,
+                fill=conflict_color, width=3 if active else 2, tags=tag
+            )
             if abs(x1 - x0) >= 40 and abs(y1 - y0) >= 24:
                 canvas.create_text(
                     (x0 + x1) / 2.0,
                     (y0 + y1) / 2.0,
                     text=f"OVERLAP\n{conflict['area_m2']:.3g} m²",
-                    fill="#991b1b",
+                    fill="#c2410c" if active else "#991b1b",
                     font=("TkDefaultFont", 8, "bold"),
                     justify="center",
                     tags=tag,

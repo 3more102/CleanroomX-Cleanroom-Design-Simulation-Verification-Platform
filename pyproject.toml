@@ -18,6 +18,7 @@ dev = ["pytest>=8"]
 cleanroomx = "cleanroomx.cli:main"
 cleanroomx-gui = "cleanroomx.gui:main"
 cleanroomx-project-bundle = "cleanroomx.project_bundle_cli:main"
+cleanroomx-project-run = "cleanroomx.project_batch:main"
 cleanroomx-hvac = "cleanroomx.hvac_cli:main"
 cleanroomx-recovery-test = "cleanroomx.recovery_cli:main"
 cleanroomx-uncertainty = "cleanroomx.uncertainty_cli:main"

@@ -30,7 +30,11 @@ from .project import (
     new_project,
     save_project_document,
 )
-from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .spatial import (
+    SpatialDesignWorkspace,
+    spatial_sync_blockers,
+    sync_layout_to_analysis,
+)
 
 
 _UNIT_SUFFIXES = (
@@ -645,6 +649,16 @@ class CleanroomXApp:
                 "Geometry synchronization currently targets room-verification and "
                 "multi-room project-verification inputs. The spatial layout remains "
                 "available for all projects.",
+                parent=self.root,
+            )
+            return
+        blockers = spatial_sync_blockers(self.spatial_workspace.layout, analysis)
+        if blockers:
+            self.status_var.set("Spatial synchronization blocked by geometry mapping issues")
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                "Resolve these spatial mapping issues first:\n\n"
+                + "\n".join(f"• {item}" for item in blockers),
                 parent=self.root,
             )
             return

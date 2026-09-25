@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import pytest
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
+    RECOVERY_SCHEMA_VERSION,
+    RecoveryFormatError,
     load_recovery_artifact,
     scan_recovery_artifacts,
 )
@@ -65,6 +68,9 @@ def test_autosave_writes_separate_artifact_and_preserves_source(tmp_path):
 
         artifact = load_recovery_artifact(status.artifact_path)
         assert artifact["schema"] == RECOVERY_SCHEMA
+        assert artifact["schema_version"] == RECOVERY_SCHEMA_VERSION
+        assert artifact["integrity"]["algorithm"] == "sha256"
+        assert len(artifact["integrity"]["payload_sha256"]) == 64
         assert artifact["source"]["path"] == str(source.resolve())
         assert artifact["source"]["sha256"]
         assert artifact["snapshot"]["project"]["project"]["name"] == "Autosave Demo"
@@ -170,6 +176,65 @@ def test_recovery_scan_detects_newer_changed_source(tmp_path):
     assert candidate.source_path == source.resolve()
     assert candidate.source_relation == "source_newer"
     assert candidate.source_is_newer is True
+    assert candidate.integrity_status == "verified"
+
+
+def test_recovery_integrity_rejects_parseable_tampering(tmp_path):
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(None)
+        manager.request_autosave(_snapshot(_project()), source_path=None)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["snapshot"]["project"]["project"]["name"] = "Silently altered"
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecoveryFormatError, match="integrity check failed"):
+        load_recovery_artifact(artifact_path)
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.candidates == ()
+    assert len(scan.issues) == 1
+    assert scan.issues[0].path == artifact_path
+    assert "integrity check failed" in scan.issues[0].error
+
+
+def test_legacy_schema_v1_recovery_remains_readable_but_unverified(tmp_path):
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="legacy-source")
+    try:
+        manager.begin_project(None)
+        manager.request_autosave(_snapshot(_project()), source_path=None)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+    finally:
+        manager.shutdown(wait=True)
+
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = 1
+    payload.pop("integrity")
+    artifact_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_recovery_artifact(artifact_path)
+    assert loaded["schema_version"] == 1
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.issues == ()
+    assert len(scan.candidates) == 1
+    assert scan.candidates[0].integrity_status == "legacy_unverified"
 
 
 def test_recovery_scan_reports_malformed_artifacts_without_hiding_valid_ones(tmp_path):

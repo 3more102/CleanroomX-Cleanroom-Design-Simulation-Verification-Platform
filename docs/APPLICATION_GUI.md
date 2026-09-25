@@ -56,6 +56,16 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+## Project edit history
+
+The **Edit** menu exposes bounded **Undo Project Edit** and **Redo Project Edit** operations for non-spatial project changes. Analysis input commits, project name/description edits, analysis add/rename/remove, imported analysis input, and explicit spatial-to-analysis synchronization are recorded as project edit transactions.
+
+Each transaction captures an isolated before-state, applies the mutation, validates the complete resulting project through the ordinary project validator, and records the edit only after validation succeeds. An exception or invalid post-edit state restores the pre-edit model and does not create a history entry. Undo and redo reconstruct the project through the same validator and invalidate cached engineering results so restored input revisions cannot reuse stale evidence.
+
+Project history deliberately excludes the persisted spatial-layout metadata. The spatial workspace already owns its own bounded transactional history, so project undo/redo cannot rewind unrelated geometry or camera state. Conversely, spatial undo/redo does not rewrite analysis history. The explicit **Sync dimensions to active analysis** operation records the analysis-input change in project history while the source geometry remains under spatial history.
+
+Undo/redo is blocked while an analysis worker is active. If the JSON editor or project fields contain pending edits, CleanroomX commits and validates those edits first; malformed drafts block the history action rather than being discarded. Opening, creating, or restoring a different project clears project history. Saving As into a different directory also clears project history because relative file references are rebased to a new path context and older snapshots would contain path strings interpreted against the previous base directory.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.

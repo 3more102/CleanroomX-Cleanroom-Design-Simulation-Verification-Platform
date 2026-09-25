@@ -14,6 +14,7 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 6. **Desktop UI** — `src/cleanroomx/gui.py` provides project lifecycle, JSON editing, validation, non-blocking execution, per-analysis result ownership, diagnostics, reporting, export, plotting, dirty-state tracking, unsaved-change protection, recovery-autosave status, protected recovery restoration, and active-run mutation guards.
 7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
 8. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
+9. **Portable engineering reporting** — `src/cleanroomx/engineering_report.py` composes one exact completed application run into deterministic self-contained HTML after independently rechecking run/input provenance. It embeds strict machine-readable evidence plus a canonical SHA-256 and never invokes or reimplements engineering solvers.
 
 ## Desktop data flow
 

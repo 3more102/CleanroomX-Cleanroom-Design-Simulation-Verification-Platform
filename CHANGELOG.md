@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased autosave transaction integrity — 2026-09-25
+
+- Keeps each submitted autosave Future coordinator-owned until its completion callback finalizes active/pending state, closing the `Future.done()` callback window that could otherwise lose tracking of a newer snapshot.
+- Moves recovery-history rotation behind project-epoch revalidation so an explicitly invalidated in-flight write cannot evict an older accepted recovery generation before being discarded.
+- Keeps a successfully written recovery artifact when retention cleanup fails, and reports both retention-cleanup and stale-artifact deletion failures instead of silently masking filesystem errors.
+- Strengthens `wait_for_idle()` to require no tracked Future, active request, or pending request, and adds deterministic concurrency/failure-injection coverage for these invariants.
+- Preserves project/recovery schemas, artifact naming, accepted-history limits, solver behavior, numerical tolerances, units, and engineering acceptance semantics.
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

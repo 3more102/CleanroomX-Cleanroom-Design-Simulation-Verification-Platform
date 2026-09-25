@@ -94,7 +94,7 @@ class PressurePath:
     exponent: float | None = None
     discharge_coefficient: float | None = None
     area_m2: float | None = None
-    air_density_kg_m3: float = 1.2
+    air_density_kg_m3: float | None = None
     pressure_offset_pa: float = 0.0
     linearization_pressure_pa: float = 0.01
 
@@ -151,10 +151,14 @@ class PressurePath:
                 raise ValueError(
                     f"{self.name} exponent must be in [0.5, 1.0]"
                 )
-            if self.discharge_coefficient is not None or self.area_m2 is not None:
+            if (
+                self.discharge_coefficient is not None
+                or self.area_m2 is not None
+                or self.air_density_kg_m3 is not None
+            ):
                 raise ValueError(
-                    "power_law path cannot also define "
-                    "discharge_coefficient or area_m2"
+                    "power_law path cannot also define discharge_coefficient, "
+                    "area_m2, or air_density_kg_m3"
                 )
             object.__setattr__(
                 self,
@@ -163,9 +167,14 @@ class PressurePath:
             )
             object.__setattr__(self, "exponent", exponent)
         else:
-            if self.discharge_coefficient is None or self.area_m2 is None:
+            if (
+                self.discharge_coefficient is None
+                or self.area_m2 is None
+                or self.air_density_kg_m3 is None
+            ):
                 raise ValueError(
-                    "orifice path requires discharge_coefficient and area_m2"
+                    "orifice path requires discharge_coefficient, area_m2, "
+                    "and air_density_kg_m3"
                 )
             if self.coefficient_m3_s_pa_n is not None or self.exponent is not None:
                 raise ValueError(

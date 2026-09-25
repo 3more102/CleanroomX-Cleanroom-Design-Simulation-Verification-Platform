@@ -22,7 +22,7 @@ records may carry width, height, wall side, orientation, and swing metadata.
 
 Open **Design 2D + 3D** in the desktop application. The 2D side supports:
 
-- room creation, selection, drag movement, corner-handle resizing, deletion, and property editing;
+- room creation, selection, deterministic gesture-origin drag movement, corner-handle resizing, deletion, and property editing;
 - placed doors, windows, generic openings, supply, return, exhaust, FFU, equipment, sensor, and transfer objects;
 - configurable metric grid spacing through **Floor…** and independently switchable snap-to-grid;
 - zoom, pan, fit-to-view, explicit 2D reset, coordinate feedback, selection highlighting, and project-wide undo/redo;

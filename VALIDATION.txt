@@ -1,82 +1,64 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.101.0
+Release: CleanroomX v0.102.0
 Validation date: 2026-09-25
 
-VERIFIED RELEASE 2 CODE BASELINE
+VERIFIED SYNCHRONIZED 2D / 3D SPATIAL BASELINE
 main commit:
-0f487a7e11ad81c8bcd54eb91b6420a1d46523ea
+d4b8f6294dd7deed207935423a52cf5f19a035eb
 
-Final consolidation pull request:
-#431 — Release 2 final v0.101.0 consolidation
-Exact tested PR head:
-993a2803e1af6a37af05ac0036948cc9f7fb3fce
-Exact tested Git tree:
-a6900bc9525721d964498b70c5da68950d7d6fba
+Merged pull request:
+#436 — Finish synchronized CleanroomX 2D/3D spatial design
 
-GITHUB ACTIONS
-PR run #1463
-run id 36162913321
+POST-MERGE GITHUB ACTIONS
+CI run #1493
+run id 36167376732
 conclusion SUCCESS
 
-Post-merge main run #1464
-run id 36163451603
-conclusion SUCCESS
+SUPPORTED PYTHON MATRIX
+Python 3.11: 973 passed
+Python 3.12: 973 passed
+Python 3.13: 973 passed
 
-
-FINAL WINDOWS / 2D+3D CHECKOUT LAUNCHER CLOSURE
-PR #434 — Add PATH-independent Windows launcher for CleanroomX 2D/3D
-Exact PR head:
-9f5d0f654c2016096fb1fb2cbdb5d4395e91d645
-Merged main commit:
-1acbaa1b67f624ae495590f78d5bccfc038fbd82
-PR CI run #1472
-run id 36164491604
-conclusion SUCCESS
-Python 3.11: 961 passed
-Python 3.12: 961 passed
-Python 3.13: 961 passed
+VERIFIED GATES
 PASS - windows-latest PowerShell checkout launcher smoke
 PASS - windows-latest CMD checkout launcher smoke
-PASS - Python 3.13 installed Tk/Xvfb CleanroomX GUI smoke
-
-RELEASE 2 CONSOLIDATION BASELINE MATRIX
-Python 3.11: 960 passed
-Python 3.12: 960 passed
-Python 3.13: 960 passed
-
-ADDITIONAL VERIFIED GATES
-PASS - v0.91 compatibility regressions
-PASS - v0.92 compatibility regressions
-PASS - v0.93 supplied-point replay regressions
-PASS - v0.94 canonical solver-provenance regressions
-PASS - v0.95 solver-result-integrity compatibility regressions
+PASS - v0.91 through v0.95 compatibility regressions
 PASS - application/desktop/input-contract/strict-ingestion/project-batch gate: 291 passed
-PASS - Release 2 consolidation gate: 128 passed
-PASS - clean wheel build/install on Python 3.11
-PASS - clean wheel build/install on Python 3.12
-PASS - clean wheel build/install on Python 3.13
+PASS - Release 2 consolidation gate: 130 passed
+PASS - complete suite: 973 passed on Python 3.11 / 3.12 / 3.13
+PASS - clean wheel build/install on Python 3.11 / 3.12 / 3.13
 PASS - installed cleanroomx-gui --check
 PASS - installed cleanroomx-project-bundle entry point
 PASS - installed cleanroomx-project-run demo batch smoke
-PASS - packaged demo resource validation
-PASS - Python 3.13 installed Tk/Xvfb cleanroomx-gui --demo --smoke
 PASS - representative CLI JSON/Markdown smoke checks
-PASS - Release 2 spatial-validation and project-bundle performance evidence
+PASS - Release 2 spatial-validation and project-bundle performance evidence on Python 3.13
+PASS - installed Tk/Xvfb cleanroomx-gui --demo --smoke on Python 3.13
 
-V0.101 RELEASE INTEGRITY
-PASS - package/runtime/source-demo/packaged-demo/test/CI version synchronization at 0.101.0
-PASS - strict engineering JSON boundary rejects duplicate keys and non-finite constants
-PASS - deterministic project-level batch execution and exact source-revision checks
-PASS - durable project persistence/recovery/history and immutable run evidence
-PASS - portable project bundle verification/extraction and self-contained reports
-PASS - precision-safe HVAC/duct/branch/fan/thermal composition
-PASS - explicit verification aggregate status/completeness
-PASS - Markdown/report presentation-boundary hardening
+V0.102 SPATIAL CLOSURE
+PASS - one canonical spatial_layout model shared by 2D and 3D
+PASS - floor metadata, room elevations, classifications, and stable analysis-room links
+PASS - room resize / drag / keyboard nudge with bounded project history
+PASS - doors and transfer openings with dimensions, wall association, orientation, and swing metadata
+PASS - optional grid snap plus pressure / label / device / relationship view toggles
+PASS - pressure relationships derive only from explicit active-analysis pressure_cascade data
+PASS - deterministic room-area / room-volume / device-count metrics
+PASS - explicit geometry-to-analysis synchronization rejects ambiguous or missing explicit links
+PASS - legacy spatial layouts default deterministically without a project-schema bump
+PASS - source and packaged demo contain representative 2D/3D geometry and cleanroom objects
 PASS - no intentional solver-equation, tolerance, root-selection, uncertainty-semantic, project-schema, unit-convention, or engineering-acceptance changes
 
+RELEASE IDENTITY
+The already-published v0.101.0 tag remains immutable at commit
+1ca79b66c2e87c7ab45745ee98a5f60efa444cf5.
+
+v0.102.0 is a new release identity for the verified spatial-closure tree.
+Publication is permitted only after the v0.102.0 metadata commit itself passes the normal
+pull-request and post-merge main CI gates; the publisher additionally requires the successful
+CI commit to still be current main before creating the tag/release.
+
 RELEASE BOUNDARY
-CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence.
-It does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance,
-manufacturer approval, or regulatory compliance.
+CleanroomX provides engineering screening, simulation, verification, spatial design, and
+software/provenance evidence. It does not by itself establish cleanroom certification, CFD
+validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance.

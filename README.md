@@ -4,7 +4,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current release line is **CleanroomX v0.101.0 (Release 2)**, built from the consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding durable project lifecycle, recovery/history, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, precision hardening, deterministic project batch automation, and strict engineering JSON ingestion. The published `v0.100.0` tag remains immutable at its original validated commit.
+The current release line is **CleanroomX v0.102.0**, closing the synchronized 2D/3D spatial-design workspace on top of the verified Release 2 engineering baseline. It adds one canonical spatial model shared by the 2D editor and 3D viewer, floor/opening metadata, explicit pressure-cascade overlays, safe geometry-to-analysis synchronization, spatial integrity checks, and deterministic layout metrics while preserving the validated solver/provenance backend. Published `v0.100.0` and `v0.101.0` tags remain immutable at their original validated commits.
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, strict engineering-ingestion and project-batch regressions, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
 
@@ -735,7 +735,7 @@ Always use the applicable purchased standard, local regulations, client URS/spec
 
 v0.37 adds deterministic bounded corner uncertainty around the nonlinear fan/variable-friction loop solver for explicit fixed-pressure and selected automatic-friction local-loss bounds. Every corner rebuilds the affected geometry evidence and re-runs the full Darcy-friction fan/network solve. Complete operating-point and internal edge-flow envelopes are reported only when the nominal case and every evaluated corner solve inside the supplied fan-curve range; no-intersection or numerical non-convergence remains indeterminate. The analysis is deterministic corner evidence, not statistical uncertainty propagation, and does not infer K-factor uncertainty, covariance, geometry manufacturing tolerances, fan-curve uncertainty, controls, leakage, commissioning acceptance, or certification.
 
-## Release 2 integration (v0.101.0)
+## Release 2 integration + spatial closure (v0.102.0)
 
 The Release 2 integration branch consolidates the previously overlapping persistence, recovery, project-history, run-evidence, reporting, plugin, and portable-bundle work into one architecture. The current integration includes:
 

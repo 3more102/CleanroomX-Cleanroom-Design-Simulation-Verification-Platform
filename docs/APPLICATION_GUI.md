@@ -81,6 +81,8 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
+
+Each worker run independently deep-copies and hash-binds the submitted JSON before backend execution. Standard workflows parse that isolated copy once and execute the exact parsed model. If parsing, execution, or plot construction mutates the submitted-input snapshot, the run fails closed and no result is published; the project/editor input remains unchanged.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
 

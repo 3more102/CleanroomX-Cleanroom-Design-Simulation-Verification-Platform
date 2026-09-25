@@ -14,7 +14,10 @@ import uuid
 
 from . import __version__
 from .application import ANALYSIS_SPECS
-from .persistence import atomic_write_text as _shared_atomic_write_text
+from .persistence import (
+    AtomicWriteDurabilityError,
+    atomic_write_text as _shared_atomic_write_text,
+)
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
@@ -93,6 +96,22 @@ class ProjectWriteConflictError(RuntimeError):
         self.current = current
         super().__init__(
             f"project file changed on disk since it was opened or last saved: {self.path}"
+        )
+
+
+class ProjectSaveDurabilityError(RuntimeError):
+    """Raised when committed project bytes cannot be confirmed crash-durable."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        committed_revision: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.committed_revision = committed_revision
+        super().__init__(
+            "project bytes were written and verified, but filesystem directory "
+            f"durability could not be confirmed: {self.path}"
         )
 
 
@@ -649,7 +668,7 @@ def save_project_document_guarded(
     *,
     expected_revision: ProjectFileRevision,
 ) -> tuple[Path, ProjectFileRevision]:
-    """Save only while the destination still matches the expected content revision."""
+    """Save one verified project revision under the cooperative process lock."""
     destination = _normalized_project_path(path)
 
     def assert_unchanged() -> None:
@@ -660,9 +679,25 @@ def save_project_document_guarded(
     with project_save_lock(destination):
         assert_unchanged()
         text = _project_document_text(project)
-        saved_path = _atomic_write_text(
-            destination,
-            text,
-            before_replace=assert_unchanged,
-        )
+        payload = text.encode("utf-8")
+        expected_sha256 = sha256(payload).hexdigest()
+        try:
+            saved_path = _atomic_write_text(
+                destination,
+                text,
+                before_replace=assert_unchanged,
+            )
+        except AtomicWriteDurabilityError as exc:
+            committed_revision = capture_project_file_revision(destination)
+            if (
+                committed_revision.exists
+                and committed_revision.size == len(payload)
+                and committed_revision.sha256 == expected_sha256
+            ):
+                raise ProjectSaveDurabilityError(
+                    destination,
+                    committed_revision,
+                ) from exc
+            raise
         return saved_path, capture_project_file_revision(saved_path)
+

@@ -15,6 +15,13 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_transforms import (
+    BASE_2D_PIXELS_PER_M,
+    model_to_screen_2d,
+    project_3d,
+    screen_to_model_2d,
+    zoom_2d_at,
+)
 
 
 class SpatialSyncError(ValueError):
@@ -1650,20 +1657,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         return min_x, min_y, max_x, max_y
 
     def _scale_2d(self) -> float:
-        return 55.0 * self.layout["view"]["zoom_2d"]
+        return BASE_2D_PIXELS_PER_M * self.layout["view"]["zoom_2d"]
 
     def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            self.canvas_2d.winfo_width() / 2 + self.layout["view"]["pan_x"] + x * scale,
-            self.canvas_2d.winfo_height() / 2 + self.layout["view"]["pan_y"] + y * scale,
+        return model_to_screen_2d(
+            x,
+            y,
+            width_px=self.canvas_2d.winfo_width(),
+            height_px=self.canvas_2d.winfo_height(),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
         )
 
     def _canvas_to_world(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            (x - self.canvas_2d.winfo_width() / 2 - self.layout["view"]["pan_x"]) / scale,
-            (y - self.canvas_2d.winfo_height() / 2 - self.layout["view"]["pan_y"]) / scale,
+        return screen_to_model_2d(
+            x,
+            y,
+            width_px=self.canvas_2d.winfo_width(),
+            height_px=self.canvas_2d.winfo_height(),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
         )
 
     def fit_views(self) -> None:
@@ -1672,7 +1687,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         height_m = max(1.0, max_y - min_y)
         cw = max(200, self.canvas_2d.winfo_width())
         ch = max(200, self.canvas_2d.winfo_height())
-        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (55 * width_m), ch / (55 * height_m))))
+        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (BASE_2D_PIXELS_PER_M * width_m), ch / (BASE_2D_PIXELS_PER_M * height_m))))
         scale = self._scale_2d()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
@@ -1910,15 +1925,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
-        az = math.radians(self.layout["view"]["azimuth_deg"])
-        el = math.radians(self.layout["view"]["elevation_deg"])
-        xr = x * math.cos(az) - y * math.sin(az)
-        yr = x * math.sin(az) + y * math.cos(az)
-        sy = yr * math.sin(el) - z * math.cos(el)
-        scale = 34.0 * self.layout["view"]["zoom_3d"]
-        return (
-            self.canvas_3d.winfo_width() / 2 + self.layout["view"]["pan_3d_x"] + xr * scale,
-            self.canvas_3d.winfo_height() * 0.66 + self.layout["view"]["pan_3d_y"] + sy * scale,
+        return project_3d(
+            x,
+            y,
+            z,
+            width_px=self.canvas_3d.winfo_width(),
+            height_px=self.canvas_3d.winfo_height(),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            zoom=self.layout["view"]["zoom_3d"],
+            pan_x_px=self.layout["view"]["pan_3d_x"],
+            pan_y_px=self.layout["view"]["pan_3d_y"],
         )
 
     def _draw_3d(self) -> None:
@@ -2206,11 +2223,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
-        before = self._canvas_to_world(x, y)
-        self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
-        after = self._world_to_canvas(*before)
-        self.layout["view"]["pan_x"] += x - after[0]
-        self.layout["view"]["pan_y"] += y - after[1]
+        zoom, pan_x, pan_y = zoom_2d_at(
+            factor,
+            x,
+            y,
+            width_px=self.canvas_2d.winfo_width(),
+            height_px=self.canvas_2d.winfo_height(),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
+        )
+        self.layout["view"]["zoom_2d"] = zoom
+        self.layout["view"]["pan_x"] = pan_x
+        self.layout["view"]["pan_y"] = pan_y
         self.redraw()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:

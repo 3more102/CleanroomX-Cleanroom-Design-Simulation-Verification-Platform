@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .json_integrity import load_json_file
 
 from .duct_flow import ParallelFlowPath, ParallelFlowSection
 from .fan_curve import FanCurve, FanCurvePoint
@@ -35,5 +36,5 @@ def load_fan_driven_parallel_network_study(
     path: str | Path,
 ) -> FanDrivenParallelNetworkStudy:
     return fan_driven_parallel_network_study_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_json_file(path)
     )

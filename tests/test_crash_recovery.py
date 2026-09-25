@@ -13,6 +13,7 @@ from cleanroomx.autosave import (
     restore_recovery_artifact,
     scan_recovery_artifacts,
 )
+from cleanroomx.persistence_integrity import attach_persistence_integrity
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.recovery_ui import (
     inspect_recovery,
@@ -86,6 +87,7 @@ def test_restore_failure_preserves_artifact_and_source(tmp_path):
     source_before = source.read_bytes()
     payload = load_recovery_artifact(artifact)
     payload["snapshot"]["project"]["schema_version"] = 999
+    payload = attach_persistence_integrity(payload)
     artifact.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

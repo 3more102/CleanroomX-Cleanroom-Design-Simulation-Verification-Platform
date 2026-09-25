@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,10 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectWriteConflictError(OSError):
+    """Raised when guarded persistence detects an external file change."""
 
 
 @dataclass
@@ -204,8 +209,22 @@ def load_project_document(path: str | Path) -> ProjectDocument:
     return project_from_dict(data)
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def project_file_sha256(path: str | Path) -> str:
+    """Return the SHA-256 digest of the exact project-file bytes on disk."""
+    digest = sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    expected_sha256: str | None = None,
+) -> Path:
+    """Atomically replace UTF-8 text, optionally guarding against external edits."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +239,18 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if expected_sha256 is not None:
+            try:
+                current_sha256 = project_file_sha256(destination)
+            except FileNotFoundError as exc:
+                raise ProjectWriteConflictError(
+                    f"{destination.name} was removed or moved after it was opened"
+                ) from exc
+            if current_sha256 != expected_sha256:
+                raise ProjectWriteConflictError(
+                    f"{destination.name} changed on disk after it was opened or last saved"
+                )
+
         temp_path.replace(destination)
     except Exception:
         if temp_path is not None:
@@ -228,11 +259,16 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+def save_project_document(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_sha256: str | None = None,
+) -> Path:
     destination = Path(path)
     data = project.to_dict()
     project_from_dict(data)
     text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+    return atomic_write_text(destination, text, expected_sha256=expected_sha256)

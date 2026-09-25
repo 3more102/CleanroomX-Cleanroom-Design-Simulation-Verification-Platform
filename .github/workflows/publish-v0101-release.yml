@@ -32,6 +32,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Immutable release tag ${TAG} already exists at ${existing_sha}; no publication work is required."
+            exit 0
+          fi
+
           current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
           if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
             echo "publish=false" >> "${GITHUB_OUTPUT}"

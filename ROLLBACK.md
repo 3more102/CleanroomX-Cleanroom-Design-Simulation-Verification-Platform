@@ -1,11 +1,5 @@
 # Rollback Procedure
 
-## v0.102.0 synchronized spatial closure anchor
-
-The v0.102.0 line packages the synchronized 2D/3D spatial tree merged at `d4b8f6294dd7deed207935423a52cf5f19a035eb`. That baseline passed CI run #1493 / `36167376732` with 973 tests on Python 3.11, 3.12, and 3.13, Windows checkout-launcher smoke, clean-wheel verification, performance checks, CLI smoke, and the Python 3.13 Tk/Xvfb desktop demo smoke. The v0.102 publisher creates a new tag only from a successful current-main CI commit and never moves the published `v0.101.0` tag.
-
-To return to the prior published release line, check out `v0.101.0`; do not retarget either release tag. Project schema version remains 1, and v0.102 adds only backward-compatible spatial metadata fields/defaults.
-
 ## Code rollback
 
 For the shared repository, prefer a Git revert of the release-changing commit or merge rather than rewriting shared history.
@@ -53,3 +47,14 @@ revert/CI flow for any rollback from Release 2.
 ## v0.101.0 final launcher integration
 
 The final repository-checkout launcher integration is PR #434, merged as `1acbaa1b67f624ae495590f78d5bccfc038fbd82` after CI run #1472 / `36164491604` passed on Python 3.11, 3.12, and 3.13 with **961 passed** per interpreter plus the Windows PowerShell/CMD launcher smoke. Treat this commit as part of the v0.101.0 release closure; roll back through normal revert and CI rather than moving the release tag.
+
+## v0.102.0 synchronized spatial closure anchor
+
+The final synchronized spatial baseline is merged at `2c8d0696170080d5c333ff1fc809f671aec1ac1d`.
+Its exact tested PR #442 head `db9169555127b1799f261f31113d18cdaf2518ed` and
+the merged commit share Git tree `af3c534599ee0921f8f21c8a14bd7b6b3e209258`.
+PR CI run #1503 / `36168565655` passed 985 tests on Python 3.11, 3.12, and
+3.13 plus Windows launcher, clean-wheel, CLI, and Tk/Xvfb GUI smoke gates.
+Preserve published v0.100.0, v0.101.0, and v0.102.0 tags; rollback through normal
+revert and CI rather than moving release history.
+

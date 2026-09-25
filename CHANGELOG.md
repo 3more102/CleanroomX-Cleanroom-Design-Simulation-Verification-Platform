@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased deterministic project batch automation — 2026-09-25
+
+- Adds `cleanroomx-project-run` and `cleanroomx.project_batch.run_project_file()` for headless execution of complete or selected `.cleanroomx.json` analyses through the existing application service.
+- Loads one stable project revision, preserves its SHA-256/size identity, executes in deterministic persisted project order, and rechecks the source before and after each attempted analysis.
+- Stops scheduling new analyses if the project changes during the batch; ordinary analysis exceptions are isolated into explicit outcomes and may continue unless fail-fast is requested.
+- Preserves each completed `AnalysisRun`, including canonical input and external-dependency provenance, and emits strict JSON or concise Markdown with atomic file output.
+- Keeps engineering PASS/FAIL/indeterminate states as domain results rather than process exit semantics; exit codes represent orchestration success, execution errors, or source-revision instability.
+- Adds deterministic ordering, failure isolation, source-change, CLI-output, provenance, and packaging regressions without changing project schema version or engineering solver semantics.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

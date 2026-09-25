@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased protected legacy migration saves — 2026-09-25
+
+- Adds explicit migration provenance for both supported legacy project shapes without changing existing loader return contracts.
+- Opens migrated legacy files as visibly unsaved converted copies while preserving the original file as path context.
+- Routes the first normal Save through Save As and refuses the original legacy source as that first destination, preventing destructive one-way replacement.
+- Keeps the original source protected after cancelled or failed saves; protection clears only after a validated schema-v1 copy is committed elsewhere.
+- Preserves project schema version 1, additive-field migration behavior, solver equations, tolerances, and engineering acceptance semantics.
+
+
 ## Unreleased lossless project extension round trips — 2026-09-25
 
 - Preserves unrecognized additive strict-JSON fields at the project-document top level, nested project block, and individual analysis records across load/edit/save cycles.

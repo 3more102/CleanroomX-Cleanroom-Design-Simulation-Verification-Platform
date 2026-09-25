@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,8 @@ from cleanroomx.application import (
     ANALYSIS_SPECS,
     ExternalDependencyChangedError,
     analysis_catalog,
+    analysis_run_external_dependencies_current,
+    analysis_run_is_current,
     analysis_run_matches_input,
     application_info,
     rebase_analysis_file_references,
@@ -395,6 +398,84 @@ def test_application_end_to_end_matrix_covers_entire_catalog():
 
 def _copy_example(tmp_path: Path, name: str) -> None:
     (tmp_path / name).write_bytes((ROOT / "examples" / name).read_bytes())
+
+
+def test_completed_file_backed_run_becomes_stale_when_dependency_changes(tmp_path):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    assert analysis_run_external_dependencies_current(
+        run, base_dir=tmp_path
+    ) is True
+    assert analysis_run_is_current(
+        run, "consistency", payload, base_dir=tmp_path
+    ) is True
+
+    dependency = tmp_path / "consistency_hvac_demo.json"
+    dependency.write_text(
+        dependency.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+    )
+
+    assert analysis_run_external_dependencies_current(
+        run, base_dir=tmp_path
+    ) is False
+    assert analysis_run_is_current(
+        run, "consistency", payload, base_dir=tmp_path
+    ) is False
+
+
+def test_completed_file_backed_run_becomes_stale_when_dependency_disappears(tmp_path):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    (tmp_path / "facility_project.json").unlink()
+
+    assert analysis_run_is_current(
+        run, "consistency", payload, base_dir=tmp_path
+    ) is False
+
+
+def test_completed_file_backed_run_accepts_metadata_only_timestamp_change(tmp_path):
+    _copy_example(tmp_path, "facility_project.json")
+    _copy_example(tmp_path, "consistency_hvac_demo.json")
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    run = run_analysis("consistency", payload, base_dir=tmp_path)
+
+    dependency = tmp_path / "facility_project.json"
+    before = dependency.stat()
+    os.utime(
+        dependency,
+        ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000),
+    )
+
+    assert analysis_run_external_dependencies_current(
+        run, base_dir=tmp_path
+    ) is True
+    assert analysis_run_is_current(
+        run, "consistency", payload, base_dir=tmp_path
+    ) is True
+
+
+def test_completed_inline_run_has_no_external_freshness_cost():
+    payload = _example("basic_room.json")
+    run = run_analysis("room_verification", payload)
+
+    assert analysis_run_external_dependencies_current(run) is True
+    assert analysis_run_is_current(run, "room_verification", payload) is True
 
 
 def test_file_backed_analysis_discards_result_when_dependency_changes_during_run(

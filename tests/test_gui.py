@@ -660,6 +660,68 @@ def test_gui_check_mode_needs_no_display(capsys):
     assert set(payload["registry_validation"]["custom_adapters"]) == {"consistency", "dossier"}
 
 
+def test_file_backed_cached_result_is_invalidated_before_export_after_source_change(
+    tmp_path, monkeypatch
+):
+    source_dir = tmp_path / "project"
+    source_dir.mkdir()
+    for name in ("facility_project.json", "consistency_hvac_demo.json"):
+        (source_dir / name).write_bytes((ROOT / "examples" / name).read_bytes())
+    payload = {
+        "verification_project": "facility_project.json",
+        "hvac_project": "consistency_hvac_demo.json",
+    }
+    run = run_analysis("consistency", payload, base_dir=source_dir)
+    analysis = AnalysisDocument(
+        id="consistency-a",
+        name="Consistency",
+        kind="consistency",
+        input=payload,
+    )
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project_path = source_dir / "project.cleanroomx.json"
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[analysis],
+        active_analysis_id=analysis.id,
+    )
+    app._runs_by_analysis = {analysis.id: run}
+    app.last_run = run
+    app.last_run_analysis_id = analysis.id
+    app.status_var = Status()
+    app.result_text = object()
+    app.report_text = object()
+    app.diagnostics_text = object()
+    app._set_text = lambda widget, value: None
+    app._draw_plot = lambda: None
+
+    dependency = source_dir / "consistency_hvac_demo.json"
+    dependency.write_text(
+        dependency.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+    )
+    chooser_calls = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: chooser_calls.append(kwargs) or str(tmp_path / "stale.json"),
+    )
+
+    app.export_result_json()
+
+    assert chooser_calls == []
+    assert app.last_run is None
+    assert app.last_run_analysis_id is None
+    assert app._runs_by_analysis == {}
+    assert "out of date" in app.status_var.value.lower()
+
+
 def test_export_run_bundle_json_preserves_execution_provenance(tmp_path, monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()

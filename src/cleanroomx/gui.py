@@ -23,7 +23,7 @@ from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
     analysis_catalog,
-    analysis_run_matches_input,
+    analysis_run_is_current,
     application_info,
     rebase_analysis_file_references,
     run_analysis,
@@ -475,7 +475,12 @@ class CleanroomXApp:
         except KeyError:
             self._invalidate_last_run_for(analysis_id)
             return False
-        if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+        if not analysis_run_is_current(
+            run,
+            analysis.kind,
+            analysis.input,
+            base_dir=self._base_dir(),
+        ):
             self._invalidate_last_run_for(analysis_id)
             self.status_var.set(
                 f"{analysis.name} — cached result is out of date; run the analysis again."
@@ -496,7 +501,12 @@ class CleanroomXApp:
         except KeyError:
             self._invalidate_last_run_for(analysis_id)
             return None
-        if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+        if not analysis_run_is_current(
+            run,
+            analysis.kind,
+            analysis.input,
+            base_dir=self._base_dir(),
+        ):
             self._invalidate_last_run_for(analysis_id)
             self.status_var.set(
                 f"{analysis.name} — result is out of date; run the analysis again."
@@ -542,8 +552,11 @@ class CleanroomXApp:
             raise ValueError("analysis input must be a JSON object")
         analysis.input = payload
         cached_run = getattr(self, "_runs_by_analysis", {}).get(analysis.id)
-        if cached_run is not None and not analysis_run_matches_input(
-            cached_run, analysis.kind, payload
+        if cached_run is not None and not analysis_run_is_current(
+            cached_run,
+            analysis.kind,
+            payload,
+            base_dir=self._base_dir(),
         ):
             self._invalidate_last_run_for(analysis.id)
         self._sync_metadata()
@@ -557,8 +570,9 @@ class CleanroomXApp:
         self.project.description = self.description_var.get()
 
     def _base_dir(self) -> Path | None:
-        if self.project_path is not None:
-            return self.project_path.parent
+        project_path = getattr(self, "project_path", None)
+        if project_path is not None:
+            return Path(project_path).parent
         recovery_source = getattr(self, "_recovery_source_path", None)
         if recovery_source is not None:
             return recovery_source.parent
@@ -1458,8 +1472,11 @@ class CleanroomXApp:
                             "Completed result discarded — the analysis no longer exists."
                         )
                         continue
-                    if not analysis_run_matches_input(
-                        payload, analysis.kind, analysis.input
+                    if not analysis_run_is_current(
+                        payload,
+                        analysis.kind,
+                        analysis.input,
+                        base_dir=self._base_dir(),
                     ):
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(

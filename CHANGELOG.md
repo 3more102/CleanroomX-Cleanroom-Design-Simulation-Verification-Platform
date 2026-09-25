@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased external result freshness guard — 2026-09-25
+
+- Extends the centralized cached-result freshness invariant to file-backed `consistency` and `dossier` dependencies after a run completes.
+- Reuses stable SHA-256 fingerprinting before cache restore, worker acceptance, editor commit, and result/report/run-bundle export so changed, missing, or unstable source files invalidate stale engineering evidence.
+- Compares content identity rather than timestamp alone, so metadata-only timestamp changes with identical bytes do not create false stale results.
+- Preserves project schema version 1, run-bundle/provenance schemas, solver equations, numerical tolerances, acceptance semantics, and ordinary inline-analysis behavior.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

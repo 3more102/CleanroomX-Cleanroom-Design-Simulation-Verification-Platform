@@ -563,15 +563,23 @@ class AutosaveManager:
             ensure_ascii=False,
             allow_nan=False,
         ) + "\n"
-        atomic_write_text(destination, text)
-        persisted = load_recovery_artifact(destination)
-        if (
-            persisted.get("recovery_id") != recovery_id
-            or persisted.get("project_identity") != request.project_identity
-        ):
-            raise RecoveryFormatError(
-                "persisted recovery artifact identity does not match the write request"
-            )
+        try:
+            atomic_write_text(destination, text)
+            persisted = load_recovery_artifact(destination)
+            if (
+                persisted.get("recovery_id") != recovery_id
+                or persisted.get("project_identity") != request.project_identity
+            ):
+                raise RecoveryFormatError(
+                    "persisted recovery artifact identity does not match the write request"
+                )
+        except (OSError, RecoveryFormatError):
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass  # Scanner will report a surviving invalid artifact on next startup.
+            raise
+
         self._rotate_history(request.project_identity)
         return destination
 

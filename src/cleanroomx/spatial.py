@@ -1755,7 +1755,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 state = "unavailable"
             elif minimum is None:
                 state = "available"
-            elif observed_delta + SPATIAL_GEOMETRY_EPSILON_M >= minimum:
+            elif observed_delta >= minimum:
                 state = "pass"
             else:
                 state = "fail"

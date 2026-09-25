@@ -946,6 +946,16 @@ def validate_layout(value: Any) -> list[dict]:
 
     return issues
 
+def _optional_finite_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -961,29 +971,89 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def _engineering_pressure_by_room(layout: dict, analysis: Any) -> dict[str, float]:
+    """Resolve current active-analysis pressure by stable spatial room id.
+
+    Only the analysis's explicit observed_pressure_pa input is considered. No
+    pressure is inferred from geometry, classification, airflow, or adjacency.
+    """
+
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return {}
+    rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
+    result: dict[str, float] = {}
+    if getattr(analysis, "kind", "") == "room_verification":
+        if rooms:
+            pressure = _optional_finite_number(analysis.input.get("observed_pressure_pa"))
+            if pressure is not None:
+                result[str(rooms[0]["id"])] = pressure
+        return result
+    if getattr(analysis, "kind", "") != "project_verification":
+        return result
+
+    targets = analysis.input.get("rooms")
+    if not isinstance(targets, list):
+        return result
+    by_name = {
+        str(target.get("name") or "").strip().casefold(): target
+        for target in targets
+        if isinstance(target, dict) and str(target.get("name") or "").strip()
+    }
+    for room in rooms:
+        link = str(room.get("analysis_room_name") or room.get("name") or "").strip().casefold()
+        target = by_name.get(link)
+        if target is None:
+            continue
+        pressure = _optional_finite_number(target.get("observed_pressure_pa"))
+        if pressure is not None:
+            result[str(room["id"])] = pressure
+    return result
+
+
 def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
+    """Describe pressure rendering without inventing unavailable engineering data.
+
+    Current active-analysis observed pressure takes precedence over a persisted
+    spatial pressure copy. The spatial value remains a valid fallback when the
+    engineering input does not expose an observed pressure.
+    """
+
     normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+    engineering_pressure = _engineering_pressure_by_room(normalized, analysis)
+    pressure_by_room: dict[str, tuple[float | None, str]] = {}
+    for room in normalized["rooms"]:
+        room_id = str(room["id"])
+        if room_id in engineering_pressure:
+            pressure_by_room[room_id] = (engineering_pressure[room_id], "engineering")
+            continue
+        spatial_pressure = _optional_finite_number(room.get("pressure_pa"))
+        if spatial_pressure is not None:
+            pressure_by_room[room_id] = (spatial_pressure, "spatial")
+        else:
+            pressure_by_room[room_id] = (None, "unavailable")
+
+    available_pressures = [
+        pressure
+        for pressure, _source in pressure_by_room.values()
+        if pressure is not None
     ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
+    minimum = min(available_pressures) if available_pressures else None
+    maximum = max(available_pressures) if available_pressures else None
     sync = engineering_sync_status(normalized, analysis)
     mapping_by_room = {
         record["room_id"]: record["state"] for record in sync["rooms"]
     }
     rooms = []
     for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
+        pressure, source = pressure_by_room[str(room["id"])]
+        available = pressure is not None
         rooms.append(
             {
                 "room_id": room["id"],
                 "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "pressure_pa": pressure,
+                "pressure_source": source,
+                "fill": _pressure_fill(pressure, minimum, maximum),
                 "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
             }
         )
@@ -992,6 +1062,69 @@ def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
         "maximum_pressure_pa": maximum,
         "rooms": rooms,
     }
+
+
+def pressure_relationship_state(layout: dict, analysis: Any = None) -> list[dict]:
+    """Project explicit pressure-cascade requirements onto spatial rooms.
+
+    Relationship status is evaluated only when both mapped room pressures and
+    the configured minimum delta are available.
+    """
+
+    normalized = normalize_layout(layout)
+    if (
+        analysis is None
+        or getattr(analysis, "kind", "") != "project_verification"
+        or not isinstance(getattr(analysis, "input", None), dict)
+    ):
+        return []
+    raw = analysis.input.get("pressure_cascade")
+    if not isinstance(raw, list):
+        return []
+
+    rooms_by_name: dict[str, dict] = {}
+    for room in normalized["rooms"]:
+        for name in (room.get("analysis_room_name"), room.get("name")):
+            key = str(name or "").strip().casefold()
+            if key and key not in rooms_by_name:
+                rooms_by_name[key] = room
+    overlay = pressure_overlay_state(normalized, analysis)
+    pressure_by_id = {
+        item["room_id"]: item["pressure_pa"] for item in overlay["rooms"]
+    }
+
+    relationships: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        high_name = str(item.get("higher_pressure_room") or "").strip()
+        low_name = str(item.get("lower_pressure_room") or "").strip()
+        high = rooms_by_name.get(high_name.casefold())
+        low = rooms_by_name.get(low_name.casefold())
+        if high is None or low is None:
+            continue
+        minimum = _optional_finite_number(item.get("min_delta_pa"))
+        high_pressure = pressure_by_id.get(high["id"])
+        low_pressure = pressure_by_id.get(low["id"])
+        delta = None
+        status = "unavailable"
+        if high_pressure is not None and low_pressure is not None and minimum is not None:
+            delta = high_pressure - low_pressure
+            status = "pass" if delta + SPATIAL_GEOMETRY_EPSILON_M >= minimum else "warning"
+        relationships.append(
+            {
+                "higher_room_id": high["id"],
+                "lower_room_id": low["id"],
+                "higher_room_name": high_name,
+                "lower_room_name": low_name,
+                "higher_pressure_pa": high_pressure,
+                "lower_pressure_pa": low_pressure,
+                "delta_pa": delta,
+                "min_delta_pa": minimum,
+                "status": status,
+            }
+        )
+    return relationships
 
 
 @dataclass

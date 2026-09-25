@@ -291,7 +291,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_labels = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
+        self._show_dimensions = tk.BooleanVar(value=True)
+        self._snap_enabled = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
+        self._interaction_var = tk.StringVar(value="SNAP · 0.5 m")
         self._summary_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
         self._view_mode_var = tk.StringVar(value="split")
@@ -362,11 +365,23 @@ class SpatialDesignWorkspace(ttk.Frame):
             side="left", padx=2
         )
         ttk.Checkbutton(displaybar, text="Devices", variable=self._show_devices, command=self.redraw).pack(
-            side="left", padx=(2, 6)
+            side="left", padx=2
         )
+        ttk.Checkbutton(
+            displaybar,
+            text="Dimensions",
+            variable=self._show_dimensions,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            displaybar,
+            text="Snap",
+            variable=self._snap_enabled,
+            command=self._on_snap_changed,
+        ).pack(side="left", padx=(2, 6))
         ttk.Label(
             displaybar,
-            text="Wheel zoom · drag pan · Shift+drag 3D orbit · arrows nudge · F center",
+            text="Wheel zoom · drag pan · Shift+drag 3D orbit · D dimensions · G snap · F center",
         ).pack(side="left", padx=(8, 2))
         ttk.Button(
             displaybar,
@@ -433,6 +448,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         footer2d = ttk.Frame(two_d)
         footer2d.pack(fill="x", padx=4, pady=2)
         ttk.Label(footer2d, textvariable=self._coord_var, anchor="w").pack(side="left")
+        ttk.Label(footer2d, textvariable=self._interaction_var, anchor="center").pack(
+            side="left", padx=(18, 0)
+        )
         ttk.Label(footer2d, textvariable=self._summary_var, anchor="e").pack(side="right")
 
         right = ttk.Panedwindow(body, orient="vertical")
@@ -581,6 +599,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Delete>", lambda event: self.delete_selected())
             canvas.bind("<Key-f>", lambda event: self.center_selected())
             canvas.bind("<Key-F>", lambda event: self.center_selected())
+            canvas.bind("<Key-d>", lambda event: self._toggle_dimensions())
+            canvas.bind("<Key-D>", lambda event: self._toggle_dimensions())
+            canvas.bind("<Key-g>", lambda event: self._toggle_snap())
+            canvas.bind("<Key-G>", lambda event: self._toggle_snap())
             canvas.bind("<Home>", lambda event: self.fit_views())
             canvas.bind("<Control-d>", lambda event: self.duplicate_selected())
             canvas.bind("<Control-D>", lambda event: self.duplicate_selected())
@@ -623,6 +645,28 @@ class SpatialDesignWorkspace(ttk.Frame):
             label = {"2d": "2D floor plan", "split": "2D + 3D split", "3d": "3D digital twin"}[mode]
             self._status_setter(f"Spatial workspace: {label}")
 
+    def _update_interaction_state(self) -> None:
+        if self._snap_enabled.get():
+            self._interaction_var.set(f"SNAP · {self.layout['grid_m']:g} m")
+        else:
+            self._interaction_var.set("FREE · 0.10 m nudge")
+
+    def _on_snap_changed(self) -> None:
+        self._update_interaction_state()
+        state = "enabled" if self._snap_enabled.get() else "disabled"
+        self._status_setter(f"2D snap {state}")
+        self.redraw()
+
+    def _toggle_snap(self) -> None:
+        self._snap_enabled.set(not self._snap_enabled.get())
+        self._on_snap_changed()
+
+    def _toggle_dimensions(self) -> None:
+        self._show_dimensions.set(not self._show_dimensions.get())
+        state = "shown" if self._show_dimensions.get() else "hidden"
+        self._status_setter(f"2D dimensions {state}")
+        self.redraw()
+
     def set_grid_spacing(self) -> None:
         try:
             spacing = float(self._grid_var.get())
@@ -631,6 +675,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         if not math.isfinite(spacing) or spacing <= 0:
             return
         self.layout["grid_m"] = spacing
+        self._update_interaction_state()
         self._persist(f"Snap grid set to {spacing:g} m")
 
     def refresh(self) -> None:
@@ -638,6 +683,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         analysis = self._analysis_getter()
         self.layout = ensure_project_layout(project, analysis)
         self._grid_var.set(f"{self.layout['grid_m']:g}")
+        self._update_interaction_state()
         if self.selected and not self._selected_object():
             self.selected = None
         self._undo_stack.clear()
@@ -678,6 +724,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout = project.metadata[SPATIAL_METADATA_KEY]
         self._persisted_layout_snapshot = copy.deepcopy(self.layout)
         self._grid_var.set(f"{self.layout['grid_m']:g}")
+        self._update_interaction_state()
         if self.selected and not self._selected_object():
             self.selected = None
         self._on_change()
@@ -1023,9 +1070,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None or self.selected is None:
             return
-        grid = max(0.05, self.layout["grid_m"])
-        dx = x_steps * grid
-        dy = y_steps * grid
+        step = max(0.05, self.layout["grid_m"]) if self._snap_enabled.get() else 0.1
+        dx = x_steps * step
+        dy = y_steps * step
         item["x_m"] = item.get("x_m", 0.0) + dx
         item["y_m"] = item.get("y_m", 0.0) + dy
         if self.selected.kind == "room":
@@ -1200,6 +1247,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                         width=2,
                         tags=(f"resize:{room['id']}:{handle}", "resize"),
                     )
+            if self._show_dimensions.get():
+                self._draw_room_dimensions(canvas, room, selected=selected)
 
         symbols = {
             "door": "D",
@@ -1255,16 +1304,73 @@ class SpatialDesignWorkspace(ttk.Frame):
                 fill="#667788",
             )
 
+    def _draw_room_dimensions(
+        self,
+        canvas: tk.Canvas,
+        room: dict,
+        *,
+        selected: bool,
+    ) -> None:
+        """Draw CAD-style plan dimensions around a room footprint."""
+        x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
+        x1, y1 = self._world_to_canvas(
+            room["x_m"] + room["length_m"],
+            room["y_m"] + room["width_m"],
+        )
+        color = "#1d4ed8" if selected else "#64748b"
+        offset = 18 if selected else 14
+        top = min(y0, y1)
+        right = max(x0, x1)
+        y_dim = top - offset
+        x_dim = right + offset
+
+        canvas.create_line(x0, top, x0, y_dim, fill=color, dash=(2, 2), tags=("dimension",))
+        canvas.create_line(x1, top, x1, y_dim, fill=color, dash=(2, 2), tags=("dimension",))
+        canvas.create_line(
+            x0, y_dim, x1, y_dim,
+            fill=color,
+            arrow="both",
+            arrowshape=(6, 7, 2),
+            tags=("dimension",),
+        )
+        canvas.create_text(
+            (x0 + x1) / 2,
+            y_dim - 8,
+            text=f"{room['length_m']:g} m",
+            fill=color,
+            font=("TkDefaultFont", 8, "bold" if selected else "normal"),
+            tags=("dimension",),
+        )
+
+        canvas.create_line(right, y0, x_dim, y0, fill=color, dash=(2, 2), tags=("dimension",))
+        canvas.create_line(right, y1, x_dim, y1, fill=color, dash=(2, 2), tags=("dimension",))
+        canvas.create_line(
+            x_dim, y0, x_dim, y1,
+            fill=color,
+            arrow="both",
+            arrowshape=(6, 7, 2),
+            tags=("dimension",),
+        )
+        canvas.create_text(
+            x_dim + 20,
+            (y0 + y1) / 2,
+            text=f"{room['width_m']:g} m",
+            fill=color,
+            font=("TkDefaultFont", 8, "bold" if selected else "normal"),
+            tags=("dimension",),
+        )
+
     def _draw_2d_hud(self, canvas: tk.Canvas) -> None:
         """Draw compact CAD-style view state and a scale bar."""
         zoom = self.layout["view"]["zoom_2d"]
         grid = self.layout["grid_m"]
-        canvas.create_rectangle(10, 10, 178, 36, fill="#ffffff", outline="#cbd5e1", tags=("hud",))
+        mode = f"SNAP {grid:g} m" if self._snap_enabled.get() else "FREE"
+        canvas.create_rectangle(10, 10, 210, 36, fill="#ffffff", outline="#cbd5e1", tags=("hud",))
         canvas.create_text(
             18,
             23,
             anchor="w",
-            text=f"2D  ·  {zoom * 100:.0f}%  ·  grid {grid:g} m",
+            text=f"2D  ·  {zoom * 100:.0f}%  ·  {mode}",
             fill="#334155",
             font=("TkDefaultFont", 8, "bold"),
             tags=("hud",),
@@ -1551,9 +1657,13 @@ class SpatialDesignWorkspace(ttk.Frame):
             y0 = start["y_m"]
             x1 = x0 + start["length_m"]
             y1 = y0 + start["width_m"]
-            px = round(world[0] / grid) * grid
-            py = round(world[1] / grid) * grid
-            min_size = grid
+            if self._snap_enabled.get():
+                px = round(world[0] / grid) * grid
+                py = round(world[1] / grid) * grid
+                min_size = grid
+            else:
+                px, py = world
+                min_size = 0.1
             if "w" in self._resize_handle:
                 nx0 = min(px, x1 - min_size)
                 item["x_m"] = nx0
@@ -1580,8 +1690,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         dy = world[1] - self._drag_anchor[1]
         old_x = item["x_m"]
         old_y = item["y_m"]
-        item["x_m"] = round((old_x + dx) / grid) * grid
-        item["y_m"] = round((old_y + dy) / grid) * grid
+        next_x = old_x + dx
+        next_y = old_y + dy
+        if self._snap_enabled.get():
+            next_x = round(next_x / grid) * grid
+            next_y = round(next_y / grid) * grid
+        item["x_m"] = next_x
+        item["y_m"] = next_y
         if self.selected and self.selected.kind == "room":
             self._translate_room_devices(
                 self.selected.item_id,

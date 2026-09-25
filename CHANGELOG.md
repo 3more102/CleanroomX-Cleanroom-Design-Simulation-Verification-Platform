@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — room pressure network
+
+- Adds a first-class steady-state multizone room pressure/leakage network with explicit fixed-pressure boundaries and mechanical supply/return/exhaust inputs.
+- Supports user-parameterized power-law and orifice pressure paths for doors, windows, undercuts, transfer grilles, pass boxes, penetrations, cracks, intentional leakage, and generic openings.
+- Solves unknown room pressures simultaneously with damped Newton iteration, reported convergence tolerance/iterations, fail-closed non-convergence, deterministic path flows, local dQ/dP sensitivity, dominant leakage-path evidence, and fixed-boundary balance flow.
+- Adds explicit minimum/optional-maximum pressure-differential targets; target failures remain visible as `solved_with_target_violations` rather than being collapsed into a pass.
+- Registers the workflow in the shared desktop application catalog and adds `cleanroomx-pressure-network`, strict JSON input parsing, Markdown reporting, a demonstration case, and focused deterministic regression coverage.
+- Documents the NIST CONTAM / EnergyPlus multizone pressure-flow model basis while keeping every project-specific coefficient, opening area, discharge coefficient, pressure offset, airflow, and acceptance target as explicit user input.
+- Does not modify the validated v0.102.1 room-verification, HVAC, duct, fan/network, uncertainty, persistence, spatial, or provenance equations.
+
 ## v0.102.1 final spatial production closure — 2026-09-25
 
 - Makes snapped 2D drag translation deterministic from immutable gesture-start coordinates and suppresses no-op drag persistence/history/autosave churn.

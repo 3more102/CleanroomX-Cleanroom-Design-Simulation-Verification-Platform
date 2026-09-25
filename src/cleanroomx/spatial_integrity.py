@@ -7,7 +7,7 @@ from typing import Any
 SPATIAL_METADATA_KEY = "spatial_layout"
 SPATIAL_LAYOUT_VERSION = 1
 SPATIAL_GEOMETRY_EPSILON_M = 1e-9
-DEVICE_TYPES = ("door", "supply", "return", "exhaust", "ffu", "equipment", "sensor", "transfer")
+DEVICE_TYPES = ("door", "window", "supply", "return", "exhaust", "ffu", "equipment", "sensor", "transfer")
 
 
 class SpatialLayoutFormatError(ValueError):
@@ -155,11 +155,58 @@ def validate_spatial_layout_document(value: Any) -> None:
             _require_finite_number(
                 room.get("floor_elevation_m"), f"{prefix}.floor_elevation_m"
             )
-        if room.get("pressure_pa") is not None:
-            _require_finite_number(room.get("pressure_pa"), f"{prefix}.pressure_pa")
-        for field in ("classification", "analysis_room_name"):
+        for field in (
+            "pressure_pa",
+            "pressure_target_pa",
+            "temperature_target_c",
+        ):
+            if room.get(field) is not None:
+                _require_finite_number(room.get(field), f"{prefix}.{field}")
+        if room.get("humidity_target_percent") is not None:
+            humidity = _require_finite_number(
+                room.get("humidity_target_percent"),
+                f"{prefix}.humidity_target_percent",
+            )
+            if humidity < 0 or humidity > 100:
+                raise SpatialLayoutFormatError(
+                    f"{prefix}.humidity_target_percent must be between 0 and 100"
+                )
+        for field in (
+            "classification",
+            "analysis_room_name",
+            "analysis_id",
+            "airflow_ref",
+        ):
             if room.get(field) is not None:
                 _require_non_empty_string(room.get(field), f"{prefix}.{field}")
+        if "notes" in room and not isinstance(room.get("notes"), str):
+            raise SpatialLayoutFormatError(f"{prefix}.notes must be a string")
+        if "metadata" in room and not isinstance(room.get("metadata"), dict):
+            raise SpatialLayoutFormatError(f"{prefix}.metadata must be an object")
+        if room.get("engineering_snapshot") is not None:
+            snapshot = room.get("engineering_snapshot")
+            if not isinstance(snapshot, dict):
+                raise SpatialLayoutFormatError(
+                    f"{prefix}.engineering_snapshot must be an object"
+                )
+            _require_non_empty_string(
+                snapshot.get("analysis_id"),
+                f"{prefix}.engineering_snapshot.analysis_id",
+            )
+            _require_non_empty_string(
+                snapshot.get("room_ref"),
+                f"{prefix}.engineering_snapshot.room_ref",
+            )
+            for field in ("length_m", "width_m", "height_m"):
+                _require_positive_number(
+                    snapshot.get(field),
+                    f"{prefix}.engineering_snapshot.{field}",
+                )
+            if snapshot.get("observed_pressure_pa") is not None:
+                _require_finite_number(
+                    snapshot.get("observed_pressure_pa"),
+                    f"{prefix}.engineering_snapshot.observed_pressure_pa",
+                )
 
     devices = value.get("devices", [])
     if not isinstance(devices, list):
@@ -213,6 +260,8 @@ def validate_spatial_layout_document(value: Any) -> None:
                 )
         if device.get("swing") is not None:
             _require_non_empty_string(device.get("swing"), f"{prefix}.swing")
+        if "metadata" in device and not isinstance(device.get("metadata"), dict):
+            raise SpatialLayoutFormatError(f"{prefix}.metadata must be an object")
 
     _validate_view(value.get("view"))
 

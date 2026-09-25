@@ -92,6 +92,7 @@ PASS - PR #487 deterministic spatial drag regression and full Python 3.11/3.12/3
 PASS - PR #487 focused spatial gate: 63 passed; Release 2 consolidation gate: 132 passed
 PASS - PR #487 full suite: 1008 passed on Python 3.11, 3.12, and 3.13
 PASS - deterministic spatial drag uses immutable gesture-start origins and suppresses no-op persistence/history/autosave churn
+PASS - deterministic gesture-origin drag translation is independent of intermediate mouse-motion event sampling
 PASS - persisted window and generic-opening object types
 PASS - immutable v0.102.1 publisher tags only a successful CI SHA that still equals current main
 

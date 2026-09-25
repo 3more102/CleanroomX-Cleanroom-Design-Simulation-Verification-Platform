@@ -17,7 +17,7 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 
 ## Engineering JSON ingestion
 
-External analysis files and dossier manifests pass through `src/cleanroomx/input_json.py` before workflow-specific model construction. The shared parser keeps standard JSON syntax behavior but rejects non-standard `NaN`/`Infinity` constants at the I/O boundary, so every file-backed workflow receives only standards-compliant JSON numeric literals or fails before engineering execution.
+External analysis files and dossier manifests pass through `src/cleanroomx/input_json.py` before workflow-specific model construction. The shared parser keeps standard JSON syntax-error behavior but rejects non-standard `NaN`/`Infinity` constants and floating-point literals that would decode to infinity. File-backed workflows therefore fail at the I/O boundary before non-finite numeric values can reach engineering execution.
 
 ## Desktop data flow
 

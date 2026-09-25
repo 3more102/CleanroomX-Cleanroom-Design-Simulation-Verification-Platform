@@ -310,6 +310,18 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _sync_directory(directory: Path) -> None:
+    """Flush directory metadata after an atomic rename on POSIX filesystems."""
+    if os.name != "posix":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(directory, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -333,6 +345,19 @@ def _atomic_write_text(
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        temp_path = None
+        _sync_directory(destination.parent)
+
+        try:
+            committed_text = destination.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise OSError(
+                f"atomic write verification could not read committed file: {destination}"
+            ) from exc
+        if committed_text != text:
+            raise OSError(
+                f"atomic write verification failed; committed contents differ: {destination}"
+            )
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -341,7 +366,7 @@ def _atomic_write_text(
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    """Atomically replace UTF-8 text and verify the committed contents."""
     return _atomic_write_text(path, text)
 
 

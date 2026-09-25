@@ -511,13 +511,19 @@ class AutosaveManager:
         atomic_write_text(destination, text)
         try:
             expected_sha256 = sha256(text.encode("utf-8")).hexdigest()
-            actual_sha256 = sha256(destination.read_bytes()).hexdigest()
+            _, actual_sha256 = _file_sha256(destination)
             if actual_sha256 != expected_sha256:
                 raise RecoveryFormatError(
                     "recovery write verification failed: bytes on disk do not match "
                     "the committed recovery artifact"
                 )
             load_recovery_artifact(destination)
+            _, verified_sha256 = _file_sha256(destination)
+            if verified_sha256 != expected_sha256:
+                raise RecoveryFormatError(
+                    "recovery write verification failed: artifact changed during "
+                    "post-write verification"
+                )
         except (OSError, RecoveryFormatError):
             try:
                 destination.unlink(missing_ok=True)

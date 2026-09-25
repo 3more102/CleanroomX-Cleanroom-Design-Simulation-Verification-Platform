@@ -318,3 +318,34 @@ def test_project_validation_handles_large_analysis_collection_deterministically(
     assert first.valid_analyses == 250
     assert first.invalid_analyses == 0
     assert first.to_dict() == second.to_dict()
+
+def test_project_validation_isolates_unexpected_parser_exception_as_finding():
+    project = ProjectDocument(
+        name="Malformed type",
+        analyses=[
+            _analysis(
+                "bad-name-type",
+                {
+                    "name": 123,
+                    "length_m": 5.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                    "supply_airflow_m3_h": 1200.0,
+                },
+            )
+        ],
+        active_analysis_id="bad-name-type",
+    )
+
+    report = validate_project(project)
+
+    assert report.status == "fail"
+    assert report.analyses_checked == 1
+    assert report.invalid_analyses == 1
+    assert report.valid_analyses == 0
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.code == "analysis_input_invalid"
+    assert finding.analysis_id == "bad-name-type"
+    assert finding.message.startswith("AttributeError:")
+

@@ -15,9 +15,14 @@ from cleanroomx.run_history import RunHistory
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _room_payload():
+    return json.loads(
+        (ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8")
+    )
+
+
 def _room_run():
-    payload = json.loads((ROOT / "examples" / "basic_room.json").read_text(encoding="utf-8"))
-    return run_analysis("room_verification", payload)
+    return run_analysis("room_verification", _room_payload())
 
 
 def test_run_history_is_bounded_and_sequences_are_deterministic():
@@ -59,6 +64,45 @@ def test_run_history_detaches_nested_run_data_on_ingress_and_egress():
 def test_run_history_rejects_invalid_limits(limit):
     with pytest.raises(ValueError, match="positive integer"):
         RunHistory(limit=limit)
+
+
+def test_run_history_rejects_invalid_entry_ownership():
+    history = RunHistory()
+    run = _room_run()
+
+    with pytest.raises(ValueError, match="analysis_id"):
+        history.append("", "Room", run)
+    with pytest.raises(ValueError, match="analysis_name"):
+        history.append("a", "   ", run)
+    with pytest.raises(TypeError, match="AnalysisRun"):
+        history.append("a", "Room", object())
+
+
+def test_run_history_lightweight_summary_and_input_match_do_not_expose_payload():
+    payload = _room_payload()
+    run = run_analysis("room_verification", payload)
+    history = RunHistory()
+    summary = history.append("a", "Room", run)
+
+    assert not hasattr(summary, "run")
+    assert summary.input_sha256
+    reordered = dict(reversed(list(payload.items())))
+    assert history.matches_input(summary.sequence, "room_verification", reordered) is True
+
+    changed = dict(payload)
+    changed["_history_probe"] = True
+    assert history.matches_input(summary.sequence, "room_verification", changed) is False
+
+
+def test_run_history_pruning_makes_evicted_sequence_unavailable():
+    run = _room_run()
+    history = RunHistory(limit=1)
+    first = history.append("a", "Room", run)
+    second = history.append("a", "Room", run)
+
+    assert second.sequence > first.sequence
+    with pytest.raises(KeyError):
+        history.get(first.sequence)
 
 
 def test_gui_records_each_accepted_run_without_replacing_history():

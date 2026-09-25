@@ -58,3 +58,58 @@ def test_release2_project_rejects_future_spatial_schema():
     future["version"] = 2
     with pytest.raises(ProjectFormatError):
         project_from_dict(_project(future))
+
+
+def test_release2_spatial_optional_floor_opening_and_view_fields_are_validated():
+    layout = _layout()
+    layout["floor"] = {
+        "id": "floor-1",
+        "name": "Production Floor",
+        "elevation_m": 1.5,
+        "default_ceiling_height_m": 3.2,
+        "units": "m",
+    }
+    layout["rooms"][0]["floor_elevation_m"] = 1.5
+    layout["rooms"][0]["classification"] = "project-defined"
+    layout["rooms"][0]["analysis_room_name"] = "Room 1"
+    layout["devices"][0].update(
+        {
+            "width_m": 0.1,
+            "height_m": 0.1,
+            "orientation_deg": 90.0,
+        }
+    )
+    layout["view"].update(
+        {
+            "snap_to_grid": True,
+            "show_pressure": True,
+            "show_labels": True,
+            "show_devices": True,
+            "show_relationships": False,
+        }
+    )
+
+    validate_spatial_layout_document(layout)
+
+
+def test_release2_spatial_rejects_invalid_floor_units_view_toggles_and_openings():
+    bad_units = _layout()
+    bad_units["floor"] = {
+        "id": "floor-1",
+        "name": "Floor",
+        "elevation_m": 0.0,
+        "default_ceiling_height_m": 3.0,
+        "units": "ft",
+    }
+    with pytest.raises(Exception, match="floor.units"):
+        validate_spatial_layout_document(bad_units)
+
+    bad_toggle = _layout()
+    bad_toggle["view"]["show_pressure"] = "yes"
+    with pytest.raises(Exception, match="show_pressure"):
+        validate_spatial_layout_document(bad_toggle)
+
+    bad_opening = _layout()
+    bad_opening["devices"][0]["width_m"] = 0
+    with pytest.raises(Exception, match="width_m"):
+        validate_spatial_layout_document(bad_opening)

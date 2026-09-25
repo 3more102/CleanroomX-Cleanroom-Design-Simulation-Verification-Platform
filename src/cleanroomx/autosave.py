@@ -14,6 +14,11 @@ import uuid
 from typing import Any
 
 from . import __version__
+from .persistence_integrity import (
+    PersistenceIntegrityError,
+    attach_persistence_integrity,
+    verify_persistence_integrity,
+)
 from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 
@@ -210,6 +215,11 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
             f"unsupported recovery schema version {version!r}; "
             f"expected {RECOVERY_SCHEMA_VERSION}"
         )
+    try:
+        verify_persistence_integrity(data)
+    except PersistenceIntegrityError as exc:
+        raise RecoveryFormatError(f"recovery integrity check failed: {exc}") from exc
+
     identity = data.get("project_identity")
     if not isinstance(identity, str) or not identity:
         raise RecoveryFormatError("project_identity must be a non-empty string")
@@ -485,6 +495,7 @@ class AutosaveManager:
             "source": source_fingerprint(request.source_path),
             "snapshot": snapshot,
         }
+        payload = attach_persistence_integrity(payload)
         _validate_recovery_payload(payload)
         directory = _ensure_recovery_dir(self.recovery_dir)
         destination = directory / _artifact_filename(

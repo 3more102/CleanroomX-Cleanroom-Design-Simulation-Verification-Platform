@@ -1130,33 +1130,121 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
-        pmin = min(pressures) if pressures else None
-        pmax = max(pressures) if pressures else None
+        analysis = self._analysis_getter()
+        pressure_by_id = {
+            room["id"]: room_pressure_value(room, analysis)[0]
+            for room in self.layout["rooms"]
+        }
+        pressure_values = [
+            value for value in pressure_by_id.values() if value is not None
+        ]
+        pmin = min(pressure_values) if pressure_values else None
+        pmax = max(pressure_values) if pressure_values else None
         warning_ids = self._warning_item_ids()
+        mapping_by_id = {
+            entry["room_id"]: entry
+            for entry in engineering_mapping_diagnostics(self.layout, analysis)
+        }
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
-            x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
-            selected = self.selected == _Hit("room", room["id"])
-            outline = (
-                "#1d4ed8"
-                if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+            x1, y1 = self._world_to_canvas(
+                room["x_m"] + room["length_m"],
+                room["y_m"] + room["width_m"],
             )
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            selected = self.selected == _Hit("room", room["id"])
+            mapping_state = mapping_by_id.get(room["id"], {}).get("state")
+            if selected:
+                outline = "#1d4ed8"
+            elif mapping_state == "conflicting":
+                outline = "#dc2626"
+            elif mapping_state in {"ambiguous", "missing_target", "different_analysis"}:
+                outline = "#d97706"
+            elif room["id"] in warning_ids:
+                outline = "#b45309"
+            else:
+                outline = "#34495e"
+            pressure = pressure_by_id[room["id"]]
+            fill = _pressure_fill(pressure, pmin, pmax)
             canvas.create_rectangle(
-                x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                x0,
+                y0,
+                x1,
+                y1,
+                fill=fill,
+                outline=outline,
+                width=3 if selected or mapping_state == "conflicting" else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
-            pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
+            pressure_text = (
+                "\nPressure unavailable"
+                if pressure is None
+                else f"\n{pressure:g} Pa"
+            )
+            mapping_text = (
+                "\nENG CONFLICT" if mapping_state == "conflicting" else ""
+            )
+            elevation_text = (
+                f"  @ {room.get('elevation_m', 0.0):g} m"
+                if abs(room.get("elevation_m", 0.0)) > SPATIAL_GEOMETRY_EPSILON_M
+                else ""
+            )
             canvas.create_text(
                 (x0 + x1) / 2,
                 (y0 + y1) / 2,
-                text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
+                text=(
+                    f"{room['name']}\n"
+                    f"{room['length_m']:g} × {room['width_m']:g} m{elevation_text}"
+                    f"{pressure_text}{mapping_text}"
+                ),
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
+            )
+
+        for relationship in pressure_relationships(self.layout, analysis):
+            high_id = relationship.get("higher_room_id")
+            low_id = relationship.get("lower_room_id")
+            high = next((room for room in self.layout["rooms"] if room["id"] == high_id), None)
+            low = next((room for room in self.layout["rooms"] if room["id"] == low_id), None)
+            if high is None or low is None:
+                continue
+            hx, hy = self._world_to_canvas(
+                high["x_m"] + high["length_m"] / 2.0,
+                high["y_m"] + high["width_m"] / 2.0,
+            )
+            lx, ly = self._world_to_canvas(
+                low["x_m"] + low["length_m"] / 2.0,
+                low["y_m"] + low["width_m"] / 2.0,
+            )
+            status = relationship["status"]
+            color = "#15803d" if status == "pass" else ("#dc2626" if status == "fail" else "#6b7280")
+            dash = () if status in {"pass", "fail"} else (5, 4)
+            canvas.create_line(
+                hx,
+                hy,
+                lx,
+                ly,
+                fill=color,
+                width=3,
+                arrow=tk.LAST,
+                arrowshape=(10, 12, 4),
+                dash=dash,
+                tags=("pressure_relationship",),
+            )
+            minimum = relationship.get("min_delta_pa")
+            actual = relationship.get("actual_delta_pa")
+            if actual is None:
+                label = "Δp unavailable"
+            else:
+                label = f"Δp {actual:g} Pa"
+            if minimum is not None:
+                label += f" / min {minimum:g}"
+            canvas.create_text(
+                (hx + lx) / 2.0,
+                (hy + ly) / 2.0 - 10,
+                text=label,
+                fill=color,
+                tags=("pressure_relationship",),
             )
 
         for issue in self._validation_issues:
@@ -1168,12 +1256,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             x0, y0 = self._world_to_canvas(bounds[0], bounds[1])
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
-                x0, y0, x1, y1,
-                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+                x0,
+                y0,
+                x1,
+                y1,
+                outline="#dc2626",
+                width=2,
+                dash=(5, 3),
+                tags=("validation",),
             )
             canvas.create_text(
-                (x0 + x1) / 2, (y0 + y1) / 2,
-                text="OVERLAP", fill="#991b1b", tags=("validation",)
+                (x0 + x1) / 2,
+                (y0 + y1) / 2,
+                text="OVERLAP",
+                fill="#991b1b",
+                tags=("validation",),
             )
 
         symbols = {
@@ -1195,13 +1292,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
             )
             canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline=device_outline,
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+                fill="#ffffff",
+                outline=device_outline,
                 width=3 if selected else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
             canvas.create_text(
-                x, y, text=symbols.get(device["type"], "?"),
+                x,
+                y,
+                text=symbols.get(device["type"], "?"),
                 tags=(f"device:{device['id']}", "device"),
             )
 
@@ -1209,7 +1312,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.create_text(
                 w / 2,
                 h / 2,
-                text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
+                text=(
+                    "No spatial layout yet\n"
+                    "Use + Room or open a verification project with room geometry."
+                ),
                 justify="center",
                 fill="#667788",
             )
@@ -1241,61 +1347,143 @@ class SpatialDesignWorkspace(ttk.Frame):
         min_x, min_y, max_x, max_y = self._bounds()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
-        pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
-        pmin = min(pressures) if pressures else None
-        pmax = max(pressures) if pressures else None
+        analysis = self._analysis_getter()
+        pressure_by_id = {
+            room["id"]: room_pressure_value(room, analysis)[0]
+            for room in self.layout["rooms"]
+        }
+        pressure_values = [
+            value for value in pressure_by_id.values() if value is not None
+        ]
+        pmin = min(pressure_values) if pressure_values else None
+        pmax = max(pressure_values) if pressure_values else None
         warning_ids = self._warning_item_ids()
+        mapping_by_id = {
+            entry["room_id"]: entry
+            for entry in engineering_mapping_diagnostics(self.layout, analysis)
+        }
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
 
         # Draw farther rooms first to improve visual depth.
         az = math.radians(self.layout["view"]["azimuth_deg"])
         ordered = sorted(
             self.layout["rooms"],
-            key=lambda room: (room["x_m"] - cx) * math.sin(az) + (room["y_m"] - cy) * math.cos(az),
+            key=lambda room: (
+                (room["x_m"] - cx) * math.sin(az)
+                + (room["y_m"] - cy) * math.cos(az)
+            ),
         )
         for room in ordered:
             x0 = room["x_m"] - cx
             y0 = room["y_m"] - cy
             x1 = x0 + room["length_m"]
             y1 = y0 + room["width_m"]
-            z = room["height_m"]
+            base_z = room.get("elevation_m", 0.0)
+            top_z = base_z + room["height_m"]
             base = [
-                self._project_3d(x0, y0, 0),
-                self._project_3d(x1, y0, 0),
-                self._project_3d(x1, y1, 0),
-                self._project_3d(x0, y1, 0),
+                self._project_3d(x0, y0, base_z),
+                self._project_3d(x1, y0, base_z),
+                self._project_3d(x1, y1, base_z),
+                self._project_3d(x0, y1, base_z),
             ]
             top = [
-                self._project_3d(x0, y0, z),
-                self._project_3d(x1, y0, z),
-                self._project_3d(x1, y1, z),
-                self._project_3d(x0, y1, z),
+                self._project_3d(x0, y0, top_z),
+                self._project_3d(x1, y0, top_z),
+                self._project_3d(x1, y1, top_z),
+                self._project_3d(x0, y1, top_z),
             ]
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = _pressure_fill(pressure_by_id[room["id"]], pmin, pmax)
             selected = self.selected == _Hit("room", room["id"])
-            outline = (
-                "#7dd3fc"
-                if selected
-                else ("#fb7185" if room["id"] in warning_ids else "#c8d5e3")
-            )
+            mapping_state = mapping_by_id.get(room["id"], {}).get("state")
+            if selected:
+                outline = "#7dd3fc"
+            elif mapping_state == "conflicting":
+                outline = "#fb7185"
+            elif mapping_state in {"ambiguous", "missing_target", "different_analysis"}:
+                outline = "#fbbf24"
+            elif room["id"] in warning_ids:
+                outline = "#fb923c"
+            else:
+                outline = "#c8d5e3"
             tag = f"room:{room['id']}"
-            canvas.create_polygon(*sum(top, ()), fill=fill, outline=outline, width=2, tags=(tag, "room3d"))
+
             canvas.create_polygon(
-                *sum((base[1], base[2], top[2], top[1]), ()),
-                fill="#6c7f92", outline=outline, tags=(tag, "room3d")
+                *sum(base, ()),
+                fill="#243241",
+                outline=outline,
+                tags=(tag, "room3d"),
             )
+            for face, face_fill in (
+                ((base[0], base[1], top[1], top[0]), "#60758a"),
+                ((base[1], base[2], top[2], top[1]), "#6c7f92"),
+                ((base[2], base[3], top[3], top[2]), "#53687c"),
+                ((base[3], base[0], top[0], top[3]), "#465b6f"),
+            ):
+                canvas.create_polygon(
+                    *sum(face, ()),
+                    fill=face_fill,
+                    outline=outline,
+                    tags=(tag, "room3d"),
+                )
             canvas.create_polygon(
-                *sum((base[2], base[3], top[3], top[2]), ()),
-                fill="#53687c", outline=outline, tags=(tag, "room3d")
+                *sum(top, ()),
+                fill=fill,
+                outline=outline,
+                width=3 if selected or mapping_state == "conflicting" else 2,
+                tags=(tag, "room3d"),
             )
+            pressure = pressure_by_id[room["id"]]
+            pressure_label = " — pressure unavailable" if pressure is None else f" — {pressure:g} Pa"
             canvas.create_text(
-                *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z + 0.2),
-                text=room["name"],
+                *self._project_3d(
+                    (x0 + x1) / 2,
+                    (y0 + y1) / 2,
+                    top_z + 0.2,
+                ),
+                text=f"{room['name']}{pressure_label}",
                 fill="#f0f6fc",
                 tags=(tag, "room3d"),
             )
 
+        for relationship in pressure_relationships(self.layout, analysis):
+            high = room_by_id.get(relationship.get("higher_room_id"))
+            low = room_by_id.get(relationship.get("lower_room_id"))
+            if high is None or low is None:
+                continue
+            high_z = high.get("elevation_m", 0.0) + high["height_m"] + 0.35
+            low_z = low.get("elevation_m", 0.0) + low["height_m"] + 0.35
+            hp = self._project_3d(
+                high["x_m"] - cx + high["length_m"] / 2.0,
+                high["y_m"] - cy + high["width_m"] / 2.0,
+                high_z,
+            )
+            lp = self._project_3d(
+                low["x_m"] - cx + low["length_m"] / 2.0,
+                low["y_m"] - cy + low["width_m"] / 2.0,
+                low_z,
+            )
+            status = relationship["status"]
+            color = "#4ade80" if status == "pass" else ("#fb7185" if status == "fail" else "#94a3b8")
+            dash = () if status in {"pass", "fail"} else (5, 4)
+            canvas.create_line(
+                *hp,
+                *lp,
+                fill=color,
+                width=3,
+                arrow=tk.LAST,
+                arrowshape=(10, 12, 4),
+                dash=dash,
+                tags=("pressure_relationship_3d",),
+            )
+
         for device in self.layout["devices"]:
-            x, y = self._project_3d(device["x_m"] - cx, device["y_m"] - cy, device["z_m"])
+            room = room_by_id.get(device.get("room_id"))
+            room_elevation = room.get("elevation_m", 0.0) if room is not None else 0.0
+            x, y = self._project_3d(
+                device["x_m"] - cx,
+                device["y_m"] - cy,
+                room_elevation + device["z_m"],
+            )
             tag = f"device:{device['id']}"
             selected = self.selected == _Hit("device", device["id"])
             radius = 5 if selected else 4
@@ -1305,9 +1493,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else ("#fb7185" if device["id"] in warning_ids else "#d6a20f")
             )
             canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#fbbf24", outline=device_outline,
-                width=2, tags=(tag, "device3d"),
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+                fill="#fbbf24",
+                outline=device_outline,
+                width=2,
+                tags=(tag, "device3d"),
             )
 
     def _parse_hit(self, tags: tuple[str, ...]) -> _Hit | None:

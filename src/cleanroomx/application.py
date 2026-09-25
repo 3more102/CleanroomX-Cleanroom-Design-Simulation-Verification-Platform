@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
+from functools import lru_cache
 from importlib import import_module
 import copy
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 from typing import Any, Callable
 
@@ -290,6 +293,20 @@ class ExternalDependencySnapshotError(RuntimeError):
             "Could not create a verified private execution snapshot for external "
             f"engineering input {field} ({declared_path}); analysis was not started. "
             f"{detail}"
+        )
+
+
+class RuntimeCodeChangedError(RuntimeError):
+    """Raised when CleanroomX Python source changes during one analysis run."""
+
+    def __init__(self, before: dict, after: dict) -> None:
+        self.before = copy.deepcopy(before)
+        self.after = copy.deepcopy(after)
+        super().__init__(
+            "CleanroomX runtime code changed during analysis execution; the result "
+            "was discarded. Restart the application from one stable installation and "
+            "run again "
+            f"({before['sha256'][:12]} -> {after['sha256'][:12]})."
         )
 
 
@@ -874,6 +891,148 @@ def _canonical_input_sha256(payload: dict) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+_RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
+_RUNTIME_CODE_FINGERPRINT_ATTEMPTS = 3
+
+
+def _python_tree_manifest(root: Path) -> tuple[tuple[str, int, int, int, int, int], ...]:
+    """Return deterministic file identity/size/time evidence for Python source."""
+
+    try:
+        sources = sorted(
+            (
+                path
+                for path in root.rglob("*.py")
+                if path.is_file()
+                and "__pycache__" not in path.relative_to(root).parts
+            ),
+            key=lambda path: path.relative_to(root).as_posix(),
+        )
+        manifest = []
+        for source in sources:
+            metadata = source.stat()
+            manifest.append(
+                (
+                    source.relative_to(root).as_posix(),
+                    metadata.st_dev,
+                    metadata.st_ino,
+                    metadata.st_size,
+                    metadata.st_mtime_ns,
+                    metadata.st_ctime_ns,
+                )
+            )
+    except OSError as exc:
+        raise RuntimeError(f"cannot inspect CleanroomX source tree: {root}") from exc
+    return tuple(manifest)
+
+
+@lru_cache(maxsize=8)
+def _hash_python_tree_manifest(
+    root_text: str,
+    manifest: tuple[tuple[str, int, int, int, int, int], ...],
+) -> dict:
+    """Hash exact source bytes for one already-observed source-tree manifest."""
+
+    root = Path(root_text)
+    digest = hashlib.sha256()
+    source: Path | None = None
+    try:
+        for relative_text, *_metadata in manifest:
+            source = root / relative_text
+            relative = relative_text.encode("utf-8")
+            content = source.read_bytes()
+            digest.update(len(relative).to_bytes(4, "big"))
+            digest.update(relative)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+    except OSError as exc:
+        raise RuntimeError(f"cannot read CleanroomX source file: {source}") from exc
+
+    if _python_tree_manifest(root) != manifest:
+        raise RuntimeError("CleanroomX source tree changed while it was being fingerprinted")
+
+    return {
+        "algorithm": _RUNTIME_CODE_FINGERPRINT_ALGORITHM,
+        "sha256": digest.hexdigest(),
+        "source_file_count": len(manifest),
+    }
+
+
+def _fingerprint_python_tree(root: Path) -> dict:
+    """Fingerprint Python source while avoiding repeated unchanged-tree reads."""
+
+    root = Path(root).resolve()
+    if not root.is_dir():
+        raise RuntimeError(f"CleanroomX source root is unavailable: {root}")
+
+    for _attempt in range(_RUNTIME_CODE_FINGERPRINT_ATTEMPTS):
+        manifest = _python_tree_manifest(root)
+        if not manifest:
+            raise RuntimeError(f"no Python source files found under CleanroomX root: {root}")
+        try:
+            return copy.deepcopy(_hash_python_tree_manifest(str(root), manifest))
+        except RuntimeError as exc:
+            if "changed while it was being fingerprinted" not in str(exc):
+                raise
+
+    raise RuntimeError(
+        "CleanroomX source tree changed repeatedly while capturing runtime provenance"
+    )
+
+
+def _capture_runtime_code_fingerprint() -> dict:
+    return _fingerprint_python_tree(Path(__file__).resolve().parent)
+
+
+def _runtime_environment_provenance() -> dict:
+    return {
+        "python_implementation": platform.python_implementation(),
+        "python_version": platform.python_version(),
+        "python_cache_tag": getattr(sys.implementation, "cache_tag", None),
+        "platform_system": platform.system(),
+        "platform_release": platform.release(),
+        "platform_machine": platform.machine(),
+        "byteorder": sys.byteorder,
+        "float_radix": sys.float_info.radix,
+        "float_mant_dig": sys.float_info.mant_dig,
+    }
+
+
+def _binding_label(target: BindingTarget | None) -> str | None:
+    if target is None:
+        return None
+    if callable(target):
+        module_name = getattr(target, "__module__", None)
+        qualified_name = getattr(
+            target, "__qualname__", getattr(target, "__name__", type(target).__name__)
+        )
+        return (
+            f"{module_name}:{qualified_name}"
+            if isinstance(module_name, str) and module_name
+            else str(qualified_name)
+        )
+    module_name, function_name = target
+    return f"cleanroomx.{module_name}:{function_name}"
+
+
+def _analysis_binding_provenance(kind: str) -> dict:
+    spec = ANALYSIS_SPECS[kind]
+    return {
+        "parser": _binding_label(spec.parser),
+        "runner": _binding_label(spec.runner),
+        "reporter": (
+            _binding_label(spec.reporter)
+            if spec.reporter is not None
+            else "cleanroomx.application:_fallback_markdown"
+        ),
+        "custom_adapter": (
+            f"cleanroomx.application:_run_{kind}"
+            if kind in _CUSTOM_APPLICATION_ADAPTERS
+            else None
+        ),
+    }
+
+
 def _assert_input_snapshot_unchanged(
     kind: str,
     payload: dict,
@@ -1177,6 +1336,8 @@ def _application_execution_provenance(
     input_sha256: str,
     dependencies_before: list[dict],
     dependencies_after: list[dict],
+    code_before: dict,
+    code_after: dict,
 ) -> dict:
     if len(dependencies_before) != len(dependencies_after):
         raise RuntimeError("external dependency set changed during analysis execution")
@@ -1221,12 +1382,28 @@ def _application_execution_provenance(
             **spec.plugin_origin.to_dict(),
         }
 
+    code_stable = (
+        code_before["algorithm"] == code_after["algorithm"]
+        and code_before["sha256"] == code_after["sha256"]
+        and code_before["source_file_count"] == code_after["source_file_count"]
+    )
+
     return {
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
         "implementation": implementation,
+        "execution_binding": _analysis_binding_provenance(kind),
+        "runtime_environment": _runtime_environment_provenance(),
+        "code_revision": {
+            "algorithm": code_before["algorithm"],
+            "sha256_before": code_before["sha256"],
+            "sha256_after": code_after["sha256"],
+            "source_file_count_before": code_before["source_file_count"],
+            "source_file_count_after": code_after["source_file_count"],
+            "stable_during_run": code_stable,
+        },
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
         "input_execution_policy": _APPLICATION_INPUT_EXECUTION_POLICY,
         "input_sha256": input_sha256,
@@ -1400,6 +1577,7 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
+    code_before = _capture_runtime_code_fingerprint()
     prepared = _prepare_analysis_input(kind, payload, base_dir=base_dir)
     spec = ANALYSIS_SPECS[kind]
     references = _external_dependency_references(kind, prepared.payload)
@@ -1461,12 +1639,17 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         prepared.base_dir,
     )
     diagnostics = diagnostic_summary(normalized)
+    code_after = _capture_runtime_code_fingerprint()
     provenance = _application_execution_provenance(
         kind,
         prepared.input_sha256,
         dependencies_before,
         dependencies_after,
+        code_before,
+        code_after,
     )
+    if not provenance["code_revision"]["stable_during_run"]:
+        raise RuntimeCodeChangedError(code_before, code_after)
     if not provenance["external_dependencies_stable"]:
         raise ExternalDependencyChangedError(
             [
@@ -1512,5 +1695,7 @@ def application_info() -> dict:
         "analysis_count": len(_ANALYSES),
         "bindings_valid": registry_validation["status"] == "ok",
         "registry_validation": registry_validation,
+        "implementation_revision": _capture_runtime_code_fingerprint(),
+        "runtime_environment": _runtime_environment_provenance(),
         "analyses": analysis_catalog(),
     }

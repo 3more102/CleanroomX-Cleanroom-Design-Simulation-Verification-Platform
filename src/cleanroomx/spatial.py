@@ -806,7 +806,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def report_validation(self) -> None:
-        self._validation_issues = validate_layout(self.layout)
+        self._validation_issues = [
+            *self._normalization_issues,
+            *validate_layout(self.layout),
+        ]
         self._update_validation_summary()
         if not self._validation_issues:
             self._status_setter("Spatial checks: PASS")

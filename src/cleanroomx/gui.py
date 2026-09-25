@@ -543,6 +543,12 @@ class CleanroomXApp:
                 project,
                 expected_fingerprint=expected,
             )
+        if not destination.exists():
+            return save_project_document_with_fingerprint(
+                destination,
+                project,
+                expected_fingerprint=None,
+            )
         return save_project_document_with_fingerprint(destination, project)
 
     def _project_state_signature(self) -> str:

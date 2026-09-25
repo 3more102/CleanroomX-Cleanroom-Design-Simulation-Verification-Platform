@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased cooperative project save locking — 2026-09-25
+
+- Serializes guarded project saves across cooperating CleanroomX processes with a non-blocking OS advisory lock on a stable adjacent hashed sidecar.
+- Holds the lock across revision validation, serialization, the final pre-replace check, atomic replacement, and saved-revision capture, closing the simultaneous-save window where two CleanroomX sessions could both pass the optimistic guard before either rename.
+- Surfaces lock contention immediately in the desktop as **Project save in progress** instead of blocking the Tk event loop or silently allowing a last-writer-wins race.
+- Leaves the sidecar in place while relying on descriptor lifetime for lock ownership, so process crashes release locks without stale-lock cleanup and writers cannot split across recreated lock-file inodes.
+- Preserves project schema v1, engineering calculations, existing SHA-256 protection against non-cooperating external writers, and the unguarded compatibility save helper.
+
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

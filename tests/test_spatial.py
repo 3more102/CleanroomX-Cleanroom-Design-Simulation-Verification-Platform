@@ -1073,3 +1073,41 @@ def test_v0100_project_without_spatial_metadata_opens_without_fabricated_geometr
     assert project.metadata == {"legacy_note": "preserve"}
     assert SPATIAL_METADATA_KEY not in project.metadata
 
+def test_room_verification_dimension_sync_preserves_engineering_room_identity():
+    analysis = AnalysisDocument(
+        id="room-check",
+        name="Room verification",
+        kind="room_verification",
+        input={
+            "name": "Engineering Room A",
+            "length_m": 4.0,
+            "width_m": 4.0,
+            "height_m": 3.0,
+            "observed_pressure_pa": 15.0,
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "room-a",
+                "name": "Spatial display name",
+                "analysis_room_name": "Engineering Room A",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 5.0,
+                "width_m": 4.5,
+                "height_m": 3.2,
+                "pressure_pa": 18.0,
+            }
+        ]
+    }
+
+    assert sync_layout_to_analysis(layout, analysis) is True
+
+    assert analysis.input["name"] == "Engineering Room A"
+    assert analysis.input["length_m"] == 5.0
+    assert analysis.input["width_m"] == 4.5
+    assert analysis.input["height_m"] == 3.2
+    assert analysis.input["observed_pressure_pa"] == 18.0
+    assert layout["engineering_sync"]["rooms"][0]["analysis_room_name"] == "Engineering Room A"
+

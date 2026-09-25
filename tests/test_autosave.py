@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.autosave as autosave_module
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
@@ -255,3 +256,30 @@ def test_unsigned_recovery_artifact_remains_backward_compatible(tmp_path):
 
     loaded = load_recovery_artifact(artifact_path)
     assert loaded["snapshot"]["project"]["project"]["name"] == "Autosave Demo"
+
+
+def test_autosave_reports_failure_when_committed_bytes_change(tmp_path, monkeypatch):
+    original_atomic_write = autosave_module.atomic_write_text
+
+    def write_then_mutate(path, text):
+        saved = original_atomic_write(path, text)
+        saved.write_text(
+            saved.read_text(encoding="utf-8") + " ",
+            encoding="utf-8",
+        )
+        return saved
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", write_then_mutate)
+
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    try:
+        manager.begin_project(None)
+        assert manager.request_autosave(_snapshot(_project()), source_path=None) is True
+
+        with pytest.raises(RuntimeError, match="recovery write verification failed"):
+            manager.wait_for_idle()
+
+        assert manager.status().state == "failed"
+        assert "write verification failed" in manager.status().message
+    finally:
+        manager.shutdown(wait=True)

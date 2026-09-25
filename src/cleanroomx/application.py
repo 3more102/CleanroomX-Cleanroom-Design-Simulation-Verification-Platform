@@ -7,7 +7,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import tempfile
 from typing import Any, Callable
 
 from . import __version__
@@ -792,27 +791,13 @@ def _run_consistency(payload: dict, base_dir: Path | None) -> dict:
 
 
 def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
-    from .dossier import build_dossier
+    from .dossier import _build_dossier_from_dict
 
-    # Validation rejects relative references when no base directory is available.
-    # Absolute references are location-independent, so an unsaved desktop project
-    # can execute them using a temporary manifest outside the project tree.
-    temp_dir = None
-    if base_dir is not None:
-        base_dir.mkdir(parents=True, exist_ok=True)
-        temp_dir = base_dir
-
-    handle = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", suffix=".json",
-        prefix=".cleanroomx-dossier-", dir=temp_dir, delete=False,
-    )
-    temp_path = Path(handle.name)
-    try:
-        with handle:
-            json.dump(payload, handle, indent=2, allow_nan=False)
-        return build_dossier(temp_path)
-    finally:
-        temp_path.unlink(missing_ok=True)
+    # Validation rejects relative references when no base directory is available,
+    # so direct payload execution preserves the original path context without
+    # requiring a writable source/project directory for a temporary manifest.
+    manifest_dir = base_dir if base_dir is not None else Path.cwd()
+    return _build_dossier_from_dict(payload, manifest_dir)
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:

@@ -1403,7 +1403,7 @@ class CleanroomXApp:
         try:
             message = self._analysis_worker.poll()
         except Exception as exc:
-            self._analysis_worker.shutdown(wait=False)
+            self._analysis_worker.shutdown(wait=True)
             message = ("error", f"Analysis worker monitoring failed: {exc}")
 
         if message is not None:

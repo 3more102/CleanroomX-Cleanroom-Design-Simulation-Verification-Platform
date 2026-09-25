@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased exact implementation execution provenance — 2026-09-25
+
+- Adds deterministic SHA-256 identity for the installed CleanroomX Python source tree, canonicalized by relative POSIX path and newline-normalized source bytes so the identity does not depend on installation directory or checkout line endings.
+- Records before/after source-tree identity, source-file counts, Python/platform runtime identity, and configured validation/execution/reporting entry points in every completed application run.
+- Fails closed with `ImplementationChangedError` when CleanroomX source changes during an analysis, preventing a result from being published with ambiguous software provenance.
+- Exposes the current implementation revision through `cleanroomx-gui --check` without changing project schema, solver equations, numerical tolerances, engineering acceptance semantics, or existing application API return types.
+- Adds deterministic, change-localization, custom-adapter, runtime-evidence, and fail-closed regression coverage.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

@@ -11,6 +11,11 @@ import tempfile
 from typing import Any, Callable
 
 from . import __version__
+from .runtime_provenance import (
+    ImplementationChangedError,
+    capture_implementation_revision,
+    compare_implementation_revisions,
+)
 
 
 @dataclass(frozen=True)
@@ -194,6 +199,32 @@ def _load_callable(target: tuple[str, str]) -> Callable[..., Any]:
 
 
 _CUSTOM_APPLICATION_ADAPTERS = frozenset({"consistency", "dossier"})
+
+
+def _binding_identifier(target: tuple[str, str]) -> str:
+    module_name, function_name = target
+    return f"cleanroomx.{module_name}:{function_name}"
+
+
+def _analysis_execution_entrypoints(spec: AnalysisSpec) -> dict[str, str]:
+    """Return stable, human-readable workflow bindings for execution evidence."""
+    if spec.key in _CUSTOM_APPLICATION_ADAPTERS:
+        validation = f"cleanroomx.application:_validate_{spec.key}"
+        execution = f"cleanroomx.application:_run_{spec.key}"
+    else:
+        assert spec.parser is not None and spec.runner is not None
+        validation = _binding_identifier(spec.parser)
+        execution = _binding_identifier(spec.runner)
+    reporting = (
+        "cleanroomx.application:_fallback_markdown"
+        if spec.reporter is None
+        else _binding_identifier(spec.reporter)
+    )
+    return {
+        "validation": validation,
+        "execution": execution,
+        "reporting": reporting,
+    }
 
 
 def validate_application_registry() -> dict:
@@ -644,6 +675,7 @@ def _application_execution_provenance(
     input_sha256: str,
     dependencies_before: list[dict],
     dependencies_after: list[dict],
+    implementation: dict,
 ) -> dict:
     if len(dependencies_before) != len(dependencies_after):
         raise RuntimeError("external dependency set changed during analysis execution")
@@ -681,6 +713,7 @@ def _application_execution_provenance(
         "analysis_kind": kind,
         "input_canonicalization": _APPLICATION_INPUT_CANONICALIZATION,
         "input_sha256": input_sha256,
+        "implementation": implementation,
         "external_dependency_count": len(dependencies),
         "external_dependencies_stable": all(
             item["stable_during_run"] for item in dependencies
@@ -816,6 +849,7 @@ def _run_dossier(payload: dict, base_dir: Path | None) -> dict:
 
 
 def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
+    implementation_before = capture_implementation_revision()
     validate_analysis_input(kind, payload, base_dir=base_dir)
     input_sha256 = _canonical_input_sha256(payload)
     spec = ANALYSIS_SPECS[kind]
@@ -836,13 +870,24 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         if spec.reporter is None
         else _load_callable(spec.reporter)(normalized)
     )
-    dependencies_after = _capture_external_dependencies(kind, payload, base)
+    plot = build_plot_model(payload, normalized)
     diagnostics = diagnostic_summary(normalized)
+    dependencies_after = _capture_external_dependencies(kind, payload, base)
+    implementation_after = capture_implementation_revision()
+    implementation = compare_implementation_revisions(
+        implementation_before,
+        implementation_after,
+        entrypoints=_analysis_execution_entrypoints(spec),
+    )
+    if not implementation["stable_during_run"]:
+        raise ImplementationChangedError(implementation)
+
     provenance = _application_execution_provenance(
         kind,
         input_sha256,
         dependencies_before,
         dependencies_after,
+        implementation,
     )
     if not provenance["external_dependencies_stable"]:
         raise ExternalDependencyChangedError(
@@ -870,17 +915,19 @@ def run_analysis(kind: str, payload: dict, *, base_dir=None) -> AnalysisRun:
         result=normalized,
         markdown=markdown,
         diagnostics=diagnostics,
-        plot=build_plot_model(payload, normalized),
+        plot=plot,
     )
 
 
 def application_info() -> dict:
     registry_validation = validate_application_registry()
+    implementation = capture_implementation_revision()
     return {
         "name": "CleanroomX",
         "version": __version__,
         "analysis_count": len(_ANALYSES),
         "bindings_valid": registry_validation["status"] == "ok",
         "registry_validation": registry_validation,
+        "implementation": implementation.to_dict(),
         "analyses": analysis_catalog(),
     }

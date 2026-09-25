@@ -84,6 +84,7 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
         for raw in raw_devices:
@@ -92,13 +93,24 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}").strip()
+            if not device_id:
+                device_id = f"device-{uuid.uuid4().hex[:8]}"
+            if device_id in used_device_ids:
+                base_id = device_id
+                suffix = 2
+                while f"{base_id}-{suffix}" in used_device_ids:
+                    suffix += 1
+                device_id = f"{base_id}-{suffix}"
+            used_device_ids.add(device_id)
+            raw_room_id = raw.get("room_id")
+            room_id = None if raw_room_id is None else str(raw_room_id).strip() or None
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "room_id": room_id,
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -650,6 +662,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("name", "Name"),
             ("x_m", "X (m)"),
             ("y_m", "Y (m)"),
+            ("z_m", "Z (m)"),
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
@@ -835,6 +848,9 @@ class SpatialDesignWorkspace(ttk.Frame):
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
         elif self.selected and self.selected.kind == "device":
+            z_text = self._property_vars["z_m"].get().strip()
+            if z_text:
+                item["z_m"] = _finite_number(z_text, item.get("z_m", 0.0))
             reassociate_device(self.layout, item)
         self._load_property_panel()
         self._persist("Spatial properties updated")

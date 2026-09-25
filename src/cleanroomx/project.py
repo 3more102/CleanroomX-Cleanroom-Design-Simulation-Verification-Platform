@@ -45,6 +45,17 @@ class ProjectFileRevision:
     sha256: str | None
 
 
+@dataclass(frozen=True)
+class ProjectMigrationInfo:
+    """Describes a validated in-memory migration into the current project schema."""
+
+    source_format: str
+    source_schema_version: int | None
+    target_schema_version: int
+    migrated: bool
+    steps: tuple[str, ...] = ()
+
+
 @dataclass
 class AnalysisDocument:
     id: str
@@ -109,13 +120,13 @@ def _analysis_from_dict(data: dict) -> AnalysisDocument:
     return AnalysisDocument(id=analysis_id, name=name, kind=kind, input=payload)
 
 
-def _migrate_legacy(data: dict) -> dict:
+def _migrate_legacy(data: dict) -> tuple[dict, ProjectMigrationInfo]:
     if data.get("schema") == PROJECT_SCHEMA and data.get("schema_version") == 0:
         analysis = data.get("analysis", {})
         if not isinstance(analysis, dict):
             raise ProjectFormatError("legacy v0 analysis must be an object")
         analysis_id = analysis.get("id", "analysis-1")
-        return {
+        migrated = {
             "schema": PROJECT_SCHEMA,
             "schema_version": PROJECT_SCHEMA_VERSION,
             "application_version": data.get("application_version", "legacy"),
@@ -132,9 +143,16 @@ def _migrate_legacy(data: dict) -> dict:
             }],
             "active_analysis_id": analysis_id,
         }
+        return migrated, ProjectMigrationInfo(
+            source_format="cleanroomx.project",
+            source_schema_version=0,
+            target_schema_version=PROJECT_SCHEMA_VERSION,
+            migrated=True,
+            steps=("schema-v0-single-analysis-to-v1",),
+        )
 
     if "schema" not in data and "analysis_type" in data and "input" in data:
-        return {
+        migrated = {
             "schema": PROJECT_SCHEMA,
             "schema_version": PROJECT_SCHEMA_VERSION,
             "application_version": "legacy",
@@ -151,17 +169,40 @@ def _migrate_legacy(data: dict) -> dict:
             }],
             "active_analysis_id": "analysis-1",
         }
-    return data
+        return migrated, ProjectMigrationInfo(
+            source_format="legacy-single-analysis",
+            source_schema_version=None,
+            target_schema_version=PROJECT_SCHEMA_VERSION,
+            migrated=True,
+            steps=("legacy-single-analysis-to-v1",),
+        )
+
+    source_version = data.get("schema_version")
+    if isinstance(source_version, bool) or not isinstance(source_version, int):
+        source_version = None
+    return data, ProjectMigrationInfo(
+        source_format=(
+            "cleanroomx.project"
+            if data.get("schema") == PROJECT_SCHEMA
+            else "unrecognized"
+        ),
+        source_schema_version=source_version,
+        target_schema_version=PROJECT_SCHEMA_VERSION,
+        migrated=False,
+        steps=(),
+    )
 
 
-def project_from_dict(data: dict) -> ProjectDocument:
+def project_from_dict_with_migration_info(
+    data: dict,
+) -> tuple[ProjectDocument, ProjectMigrationInfo]:
     if not isinstance(data, dict):
         raise ProjectFormatError("project file must contain a JSON object")
     try:
         json.dumps(data, allow_nan=False)
     except (TypeError, ValueError) as exc:
         raise ProjectFormatError("project must contain only strict JSON values") from exc
-    data = _migrate_legacy(data)
+    data, migration_info = _migrate_legacy(data)
 
     if data.get("schema") != PROJECT_SCHEMA:
         raise ProjectFormatError(f"project schema must be {PROJECT_SCHEMA!r}")
@@ -204,20 +245,32 @@ def project_from_dict(data: dict) -> ProjectDocument:
                 "active_analysis_id must reference an analysis present in the project"
             )
 
-    return ProjectDocument(
-        name=name,
-        description=description,
-        analyses=analyses,
-        active_analysis_id=active,
-        metadata=metadata,
+    return (
+        ProjectDocument(
+            name=name,
+            description=description,
+            analyses=analyses,
+            active_analysis_id=active,
+            metadata=metadata,
+        ),
+        migration_info,
     )
+
+
+def project_from_dict(data: dict) -> ProjectDocument:
+    """Parse a project while preserving the historical public return type."""
+    project, _migration_info = project_from_dict_with_migration_info(data)
+    return project
 
 
 def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
+def load_project_document_with_migration_info(
+    path: str | Path,
+) -> tuple[ProjectDocument, ProjectMigrationInfo]:
+    """Load and validate a project while reporting any supported legacy migration."""
     source = Path(path)
     try:
         data = json.loads(
@@ -228,7 +281,13 @@ def load_project_document(path: str | Path) -> ProjectDocument:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    return project_from_dict_with_migration_info(data)
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    """Load a project while preserving the historical public return type."""
+    project, _migration_info = load_project_document_with_migration_info(path)
+    return project
 
 
 def _normalized_project_path(path: str | Path) -> Path:
@@ -284,22 +343,35 @@ def project_file_revision_matches(
     return expected.size == current.size and expected.sha256 == current.sha256
 
 
+def load_project_document_with_revision_info(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+) -> tuple[ProjectDocument, ProjectFileRevision, ProjectMigrationInfo]:
+    """Load a project, exact stable file revision, and migration provenance together."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    source = _normalized_project_path(path)
+    for _attempt in range(attempts):
+        before = capture_project_file_revision(source)
+        project, migration_info = load_project_document_with_migration_info(source)
+        after = capture_project_file_revision(source)
+        if project_file_revision_matches(before, after):
+            return project, after, migration_info
+    raise OSError(f"project file changed repeatedly while opening: {source}")
+
+
 def load_project_document_with_revision(
     path: str | Path,
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
     """Load a project together with the exact stable content revision that was read."""
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
-    source = _normalized_project_path(path)
-    for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        project = load_project_document(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return project, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
+    project, revision, _migration_info = load_project_document_with_revision_info(
+        path,
+        attempts=attempts,
+    )
+    return project, revision
 
 
 def _project_document_text(project: ProjectDocument) -> str:

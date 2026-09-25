@@ -12,6 +12,7 @@ RUN_HISTORY_SCHEMA = "cleanroomx.analysis-run-history"
 RUN_HISTORY_SCHEMA_VERSION = 1
 RUN_RECORD_CANONICALIZATION = "json-sort-keys-compact-utf8-v1"
 DEFAULT_RUN_HISTORY_LIMIT = 50
+DEFAULT_RUN_HISTORY_MAX_BYTES = 16 * 1024 * 1024
 
 
 class RunHistoryIntegrityError(ValueError):
@@ -39,6 +40,11 @@ def _canonical_bytes(value: Any) -> bytes:
 
 def _sha256_json(value: Any) -> str:
     return sha256(_canonical_bytes(value)).hexdigest()
+
+
+def _strict_json_clone(value: Any) -> Any:
+    """Return an ordinary-container strict-JSON snapshot detached from callers."""
+    return json.loads(_canonical_bytes(value).decode("utf-8"))
 
 
 def _sha256_text(value: str) -> str:
@@ -197,6 +203,50 @@ def _validate_record(record: Any, *, expected_previous: str | None) -> None:
         raise RunHistoryIntegrityError(
             "plot_sha256 must be null or a SHA-256 digest"
         )
+
+    # Release 2 records retain complete reopenable evidence. Digest-only records
+    # produced by the short-lived pre-release implementation remain readable so
+    # projects created during development are not made unrecoverable.
+    full_fields = ("result", "diagnostics", "report_markdown", "plot")
+    full_present = [field in record for field in full_fields]
+    if any(full_present) and not all(full_present):
+        raise RunHistoryIntegrityError(
+            "run history full evidence must contain result, diagnostics, report_markdown, and plot"
+        )
+    if all(full_present):
+        result = record["result"]
+        diagnostics = record["diagnostics"]
+        report_markdown = record["report_markdown"]
+        plot = record["plot"]
+        if not isinstance(result, dict) or not isinstance(diagnostics, dict):
+            raise RunHistoryIntegrityError(
+                "run history result and diagnostics evidence must be objects"
+            )
+        if not isinstance(report_markdown, str):
+            raise RunHistoryIntegrityError(
+                "run history report_markdown evidence must be text"
+            )
+        if plot is not None and not isinstance(plot, dict):
+            raise RunHistoryIntegrityError(
+                "run history plot evidence must be an object or null"
+            )
+        if record["result_sha256"] != _sha256_json(result):
+            raise RunHistoryIntegrityError(
+                f"analysis run history record {sequence} result digest does not match evidence"
+            )
+        if record["diagnostics_sha256"] != _sha256_json(diagnostics):
+            raise RunHistoryIntegrityError(
+                f"analysis run history record {sequence} diagnostics digest does not match evidence"
+            )
+        if record["report_sha256"] != _sha256_text(report_markdown):
+            raise RunHistoryIntegrityError(
+                f"analysis run history record {sequence} report digest does not match evidence"
+            )
+        expected_plot_sha256 = None if plot is None else _sha256_json(plot)
+        if plot_sha256 != expected_plot_sha256:
+            raise RunHistoryIntegrityError(
+                f"analysis run history record {sequence} plot digest does not match evidence"
+            )
 
     # Reject NaN/Infinity and any value that cannot be persisted as strict JSON.
     _canonical_bytes(record)
@@ -359,7 +409,11 @@ def build_run_history_evidence(
         ),
         "input_sha256": input_sha256,
         "input_snapshot": input_snapshot,
-        "execution_provenance": copy.deepcopy(provenance),
+        "execution_provenance": _strict_json_clone(provenance),
+        "result": _strict_json_clone(result),
+        "diagnostics": _strict_json_clone(diagnostics),
+        "report_markdown": markdown,
+        "plot": None if plot is None else _strict_json_clone(plot),
         "result_sha256": _sha256_json(result),
         "diagnostics_sha256": _sha256_json(diagnostics),
         "report_sha256": _sha256_text(markdown),
@@ -378,12 +432,15 @@ def append_run_history_evidence(
     evidence: dict[str, Any],
     completed_at_utc: str | None = None,
     limit: int = DEFAULT_RUN_HISTORY_LIMIT,
+    max_bytes: int = DEFAULT_RUN_HISTORY_MAX_BYTES,
 ) -> dict[str, Any]:
     """Append already-prepared run evidence transactionally to project metadata."""
     if not isinstance(metadata, dict):
         raise RunHistoryIntegrityError("project metadata must be an object")
     if type(limit) is not int or limit < 1:
         raise ValueError("run history limit must be a positive integer")
+    if type(max_bytes) is not int or max_bytes < 1:
+        raise ValueError("run history max_bytes must be a positive integer")
 
     _require_non_empty_string(analysis_id, "analysis_id")
     _require_non_empty_string(analysis_name, "analysis_name")
@@ -448,8 +505,16 @@ def append_run_history_evidence(
         "cleanroomx_version": evidence.get("cleanroomx_version"),
         "input_canonicalization": evidence.get("input_canonicalization"),
         "input_sha256": evidence.get("input_sha256"),
-        "input_snapshot": copy.deepcopy(input_snapshot),
-        "execution_provenance": copy.deepcopy(provenance),
+        "input_snapshot": _strict_json_clone(input_snapshot),
+        "execution_provenance": _strict_json_clone(provenance),
+        "result": _strict_json_clone(evidence.get("result")),
+        "diagnostics": _strict_json_clone(evidence.get("diagnostics")),
+        "report_markdown": evidence.get("report_markdown"),
+        "plot": (
+            None
+            if evidence.get("plot") is None
+            else _strict_json_clone(evidence.get("plot"))
+        ),
         "result_sha256": evidence.get("result_sha256"),
         "diagnostics_sha256": evidence.get("diagnostics_sha256"),
         "report_sha256": evidence.get("report_sha256"),
@@ -465,6 +530,13 @@ def append_run_history_evidence(
         removed = records[:remove_count]
         history["anchor_record_sha256"] = removed[-1]["record_sha256"]
         history["records"] = records[remove_count:]
+        records = history["records"]
+
+    # Bound persisted evidence by bytes as well as count. Always retain the newest
+    # accepted run even when one unusually large run exceeds the soft byte budget.
+    while len(records) > 1 and len(_canonical_bytes(history)) > max_bytes:
+        removed = records.pop(0)
+        history["anchor_record_sha256"] = removed["record_sha256"]
 
     candidate_metadata = copy.deepcopy(metadata)
     candidate_metadata[RUN_HISTORY_METADATA_KEY] = history
@@ -485,6 +557,7 @@ def append_run_history_record(
     run: Any,
     completed_at_utc: str | None = None,
     limit: int = DEFAULT_RUN_HISTORY_LIMIT,
+    max_bytes: int = DEFAULT_RUN_HISTORY_MAX_BYTES,
 ) -> dict[str, Any]:
     """Prepare and append one completed run in a single non-GUI convenience call."""
     evidence = build_run_history_evidence(
@@ -500,4 +573,5 @@ def append_run_history_record(
         evidence=evidence,
         completed_at_utc=completed_at_utc,
         limit=limit,
+        max_bytes=max_bytes,
     )

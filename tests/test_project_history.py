@@ -216,6 +216,7 @@ def test_project_history_restore_preserves_separate_spatial_history_state():
         )
     )
 
+    spatial_object = app.project.metadata[SPATIAL_METADATA_KEY]
     app._perform_project_edit(
         "Remove B",
         lambda: (
@@ -223,7 +224,7 @@ def test_project_history_restore_preserves_separate_spatial_history_state():
             setattr(app.project, "active_analysis_id", analysis_a.id),
         ),
     )
-    app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] = 9.0
+    spatial_object["rooms"][0]["x_m"] = 9.0
 
     restored_state, description = app._project_history.undo()
     assert description == "Remove B"
@@ -232,6 +233,7 @@ def test_project_history_restore_preserves_separate_spatial_history_state():
     assert [item.id for item in app.project.analyses] == ["analysis-a", "analysis-b"]
     assert app.project.active_analysis_id == "analysis-b"
     assert app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] == 9.0
+    assert app.project.metadata[SPATIAL_METADATA_KEY] is spatial_object
 
     replay_state, description = app._project_history.redo()
     assert description == "Remove B"
@@ -240,6 +242,7 @@ def test_project_history_restore_preserves_separate_spatial_history_state():
     assert [item.id for item in app.project.analyses] == ["analysis-a"]
     assert app.project.active_analysis_id == "analysis-a"
     assert app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] == 9.0
+    assert app.project.metadata[SPATIAL_METADATA_KEY] is spatial_object
 
 
 def test_project_history_restore_invalidates_cached_engineering_results():

@@ -1032,8 +1032,9 @@ class CleanroomXApp:
         self._perform_project_edit("Edit project fields", mutate)
 
     def _base_dir(self) -> Path | None:
-        if self.project_path is not None:
-            return self.project_path.parent
+        project_path = getattr(self, "project_path", None)
+        if project_path is not None:
+            return project_path.parent
         recovery_source = getattr(self, "_recovery_source_path", None)
         if recovery_source is not None:
             return recovery_source.parent

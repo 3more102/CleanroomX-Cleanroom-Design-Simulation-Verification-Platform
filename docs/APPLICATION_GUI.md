@@ -48,6 +48,8 @@ Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stor
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
+Spatial metadata under `project.metadata.spatial_layout` has an independent version-1 contract while the outer project schema remains version 1. Project load/save rejects unsupported future spatial versions, malformed persisted room/device/view collection shapes, and duplicate explicit room/device ids because those identities are ambiguous. Missing ids are canonicalized deterministically, explicit ids are reserved before generated ids are assigned, and unknown extension fields are retained rather than discarded.
+
 ### External-change write protection
 
 When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
@@ -104,7 +106,7 @@ The 3D view is generated from the same canonical spatial model as the 2D layout.
 
 For room-verification and multi-room project-verification analyses, **Sync dimensions to active analysis** explicitly copies room dimensions (and an existing observed-pressure field when present) from the spatial model into the analysis JSON. Other engineering fields such as airflow, ACH requirements, particle requirements, and pressure-cascade criteria are preserved. Results for a synchronized analysis are invalidated and must be validated/run again.
 
-Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
+Existing projects remain schema-version-1 compatible because the spatial document is stored under the existing project metadata block. Layout identity is deterministic: repeated normalization of the same supported layout produces the same room/device ids, colliding derived room names receive stable suffixes, and new GUI-created rooms/devices use the same deterministic allocator. If no spatial metadata exists, CleanroomX can seed a layout from real room geometry found in a verification analysis. Projects with no such geometry remain empty until the operator adds rooms.
 
 ## Results and plots
 

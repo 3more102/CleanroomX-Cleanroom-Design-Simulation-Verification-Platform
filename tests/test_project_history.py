@@ -188,7 +188,7 @@ def _history_restore_app(project: ProjectDocument) -> CleanroomXApp:
     return app
 
 
-def test_project_history_restore_preserves_separate_spatial_history_state():
+def test_project_history_restores_spatial_design_in_same_global_transaction():
     layout = empty_layout()
     layout["rooms"] = [
         {
@@ -201,49 +201,58 @@ def test_project_history_restore_preserves_separate_spatial_history_state():
             "height_m": 3.0,
         }
     ]
-    analysis_a = AnalysisDocument(
+    analysis = AnalysisDocument(
         id="analysis-a", name="A", kind="room_verification", input={"value": 1}
-    )
-    analysis_b = AnalysisDocument(
-        id="analysis-b", name="B", kind="room_verification", input={"value": 2}
     )
     app = _history_restore_app(
         ProjectDocument(
             name="History",
-            analyses=[analysis_a, analysis_b],
-            active_analysis_id=analysis_b.id,
+            analyses=[analysis],
+            active_analysis_id=analysis.id,
             metadata={SPATIAL_METADATA_KEY: layout},
         )
     )
 
-    spatial_object = app.project.metadata[SPATIAL_METADATA_KEY]
-    app._perform_project_edit(
-        "Remove B",
-        lambda: (
-            setattr(app.project, "analyses", [analysis_a]),
-            setattr(app.project, "active_analysis_id", analysis_a.id),
-        ),
-    )
-    spatial_object["rooms"][0]["x_m"] = 9.0
+    class Workspace:
+        def __init__(self):
+            self.selection = ("room", "room-a")
+            self.refresh_count = 0
+
+        def history_selection(self):
+            return self.selection
+
+        def set_history_availability(self, can_undo, can_redo):
+            self.availability = (can_undo, can_redo)
+
+        def refresh(self):
+            self.refresh_count += 1
+
+        def restore_history_selection(self, selection):
+            self.selection = selection
+
+    workspace = Workspace()
+    app.spatial_workspace = workspace
+
+    before = app._capture_project_history_state()
+    app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] = 9.0
+    app._record_project_edit(before, "Move room")
+    app.project.metadata[SPATIAL_METADATA_KEY]["view"]["azimuth_deg"] = 123.0
 
     restored_state, description = app._project_history.undo()
-    assert description == "Remove B"
+    assert description == "Move room"
     app._restore_project_history_state(restored_state)
 
-    assert [item.id for item in app.project.analyses] == ["analysis-a", "analysis-b"]
-    assert app.project.active_analysis_id == "analysis-b"
-    assert app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] == 9.0
-    assert app.project.metadata[SPATIAL_METADATA_KEY] is spatial_object
+    assert app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] == 1.0
+    assert app.project.metadata[SPATIAL_METADATA_KEY]["view"]["azimuth_deg"] == 123.0
+    assert workspace.selection == ("room", "room-a")
 
     replay_state, description = app._project_history.redo()
-    assert description == "Remove B"
+    assert description == "Move room"
     app._restore_project_history_state(replay_state)
 
-    assert [item.id for item in app.project.analyses] == ["analysis-a"]
-    assert app.project.active_analysis_id == "analysis-a"
     assert app.project.metadata[SPATIAL_METADATA_KEY]["rooms"][0]["x_m"] == 9.0
-    assert app.project.metadata[SPATIAL_METADATA_KEY] is spatial_object
-
+    assert app.project.metadata[SPATIAL_METADATA_KEY]["view"]["azimuth_deg"] == 123.0
+    assert workspace.selection == ("room", "room-a")
 
 def test_project_history_restore_invalidates_cached_engineering_results():
     analysis = AnalysisDocument(

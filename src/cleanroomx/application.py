@@ -561,7 +561,11 @@ def _assert_input_snapshot_unchanged(
     *,
     phase: str,
 ) -> None:
-    if _canonical_input_sha256(payload) != input_sha256:
+    try:
+        current_sha256 = _canonical_input_sha256(payload)
+    except (TypeError, ValueError) as exc:
+        raise AnalysisInputMutationError(kind, phase) from exc
+    if current_sha256 != input_sha256:
         raise AnalysisInputMutationError(kind, phase)
 
 
@@ -807,7 +811,12 @@ def _prepare_analysis_input(
         raise ValueError("analysis input must be a JSON object")
 
     snapshot = copy.deepcopy(payload)
-    input_sha256 = _canonical_input_sha256(snapshot)
+    try:
+        input_sha256 = _canonical_input_sha256(snapshot)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "analysis input must contain only strict JSON values"
+        ) from exc
     base = Path(base_dir) if base_dir is not None else None
     parsed: Any | None = None
 

@@ -46,6 +46,13 @@ from .project import (
 )
 from .project_history import ProjectEditHistory, ProjectHistoryState
 from .recovery_ui import RecoveryCenter
+from .run_history import (
+    RunHistoryIntegrityError,
+    append_run_history_evidence,
+    build_run_history_evidence,
+    run_history_records,
+    validate_run_history,
+)
 from .spatial import SPATIAL_METADATA_KEY, SpatialDesignWorkspace, SpatialSyncError, sync_layout_to_analysis
 
 
@@ -187,6 +194,108 @@ class AnalysisPicker(tk.Toplevel):
         self.destroy()
 
 
+class RunHistoryDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc, metadata: dict):
+        super().__init__(parent)
+        self.title("Analysis Run History")
+        self.geometry("1180x680")
+        self.minsize(900, 520)
+        self.transient(parent)
+
+        summary = validate_run_history(metadata)
+        self.records = run_history_records(metadata)
+        ttk.Label(
+            self,
+            text=(
+                f"Verified retained digest chain — {summary['record_count']} record(s). "
+                "Digests detect accidental corruption; they are not authenticity signatures."
+            ),
+        ).pack(fill="x", padx=10, pady=(10, 6))
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        list_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(list_frame, weight=1)
+        body.add(detail_frame, weight=2)
+
+        self.tree = ttk.Treeview(
+            list_frame,
+            columns=("time", "analysis", "kind", "status", "input"),
+            show="tree headings",
+            height=10,
+        )
+        self.tree.heading("#0", text="#")
+        self.tree.heading("time", text="Completed UTC")
+        self.tree.heading("analysis", text="Analysis")
+        self.tree.heading("kind", text="Kind")
+        self.tree.heading("status", text="Status")
+        self.tree.heading("input", text="Input SHA-256")
+        self.tree.column("#0", width=55, stretch=False)
+        self.tree.column("time", width=185, stretch=False)
+        self.tree.column("analysis", width=230)
+        self.tree.column("kind", width=190)
+        self.tree.column("status", width=120, stretch=False)
+        self.tree.column("input", width=165, stretch=False)
+        list_scroll = ttk.Scrollbar(
+            list_frame, orient="vertical", command=self.tree.yview
+        )
+        self.tree.configure(yscrollcommand=list_scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        list_scroll.pack(side="right", fill="y")
+
+        self.detail = tk.Text(detail_frame, wrap="none")
+        detail_scroll = ttk.Scrollbar(
+            detail_frame, orient="vertical", command=self.detail.yview
+        )
+        self.detail.configure(yscrollcommand=detail_scroll.set)
+        self.detail.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+
+        for record in reversed(self.records):
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(record["sequence"]),
+                text=str(record["sequence"]),
+                values=(
+                    record["completed_at_utc"],
+                    record["analysis_name"],
+                    record["analysis_kind"],
+                    record["status"],
+                    record["input_sha256"][:16] + "…",
+                ),
+            )
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children[0])
+            self.tree.focus(children[0])
+            self._show_selected()
+
+    def _show_selected(self, event=None) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        sequence = int(selection[0])
+        record = next(
+            item for item in self.records if item["sequence"] == sequence
+        )
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        self.detail.insert(
+            "1.0",
+            json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
+        )
+        self.detail.configure(state="disabled")
+
+
 class CleanroomXApp:
     def __init__(
         self,
@@ -281,6 +390,8 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Validate Input", command=self.validate_current)
         analysis_menu.add_command(label="Run Analysis", accelerator="F5", command=self.run_current)
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
+        analysis_menu.add_separator()
+        analysis_menu.add_command(label="Run History...", command=self.show_run_history)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
 
         self.edit_menu = tk.Menu(menubar, tearoff=False)
@@ -696,6 +807,52 @@ class CleanroomXApp:
             )
             return None
         return run
+
+    def _record_completed_run(
+        self,
+        analysis: AnalysisDocument,
+        run: AnalysisRun,
+        evidence: dict | None = None,
+    ) -> dict:
+        prepared = (
+            evidence
+            if evidence is not None
+            else build_run_history_evidence(analysis.input, run)
+        )
+        record = append_run_history_evidence(
+            self.project.metadata,
+            analysis_id=analysis.id,
+            analysis_name=analysis.name,
+            analysis_kind=analysis.kind,
+            evidence=prepared,
+        )
+        self._update_title()
+        return record
+
+    def show_run_history(self) -> bool:
+        try:
+            summary = validate_run_history(self.project.metadata)
+        except RunHistoryIntegrityError as exc:
+            self.status_var.set("Run history integrity check failed")
+            messagebox.showerror(
+                "Run history integrity failure",
+                (
+                    "CleanroomX found invalid or modified run-history evidence and "
+                    "did not rewrite it.\n\n"
+                    f"{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+        if summary["record_count"] == 0:
+            messagebox.showinfo(
+                "Analysis Run History",
+                "No completed analysis runs have been recorded in this project yet.",
+                parent=self.root,
+            )
+            return False
+        RunHistoryDialog(self.root, self.project.metadata)
+        return True
 
     def _on_input_modified(self, event=None) -> None:
         if not self.input_text.edit_modified():
@@ -1709,9 +1866,24 @@ class CleanroomXApp:
         def worker() -> None:
             try:
                 result = run_analysis(kind, payload, base_dir=base_dir)
-                self._queue.put(("success", generation, analysis_id, result))
             except Exception as exc:
                 self._queue.put(("error", generation, analysis_id, str(exc)))
+                return
+
+            history_evidence = None
+            history_error = None
+            try:
+                history_evidence = build_run_history_evidence(payload, result)
+            except Exception as exc:  # audit preparation must not hide a valid result
+                history_error = str(exc)
+            self._queue.put(
+                (
+                    "success",
+                    generation,
+                    analysis_id,
+                    (result, history_evidence, history_error),
+                )
+            )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1746,6 +1918,16 @@ class CleanroomXApp:
                     self.status_var.set("Analysis failed")
                     messagebox.showerror("Analysis failed", str(payload), parent=self.root)
                 else:
+                    history_evidence = None
+                    history_error = None
+                    run = payload
+                    if (
+                        isinstance(payload, tuple)
+                        and len(payload) == 3
+                        and isinstance(payload[0], AnalysisRun)
+                    ):
+                        run, history_evidence, history_error = payload
+
                     try:
                         analysis = self.project.analysis_by_id(analysis_id)
                     except KeyError:
@@ -1755,7 +1937,7 @@ class CleanroomXApp:
                         )
                         continue
                     if not analysis_run_matches_input(
-                        payload, analysis.kind, analysis.input
+                        run, analysis.kind, analysis.input
                     ):
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(
@@ -1763,13 +1945,39 @@ class CleanroomXApp:
                             "run the analysis again."
                         )
                         continue
-                    self._runs_by_analysis[analysis_id] = payload
-                    self.last_run = payload
+
+                    if history_error is None:
+                        try:
+                            self._record_completed_run(
+                                analysis, run, history_evidence
+                            )
+                        except RunHistoryIntegrityError as exc:
+                            history_error = str(exc)
+
+                    self._runs_by_analysis[analysis_id] = run
+                    self.last_run = run
                     self.last_run_analysis_id = analysis_id
-                    self._render_run(payload)
-                    self.status_var.set(
-                        f"Completed — {payload.title} — status: {payload.status}"
-                    )
+                    self._render_run(run)
+                    if history_error is None:
+                        self.status_var.set(
+                            f"Completed — {run.title} — status: {run.status}"
+                        )
+                    else:
+                        self.status_var.set(
+                            f"Completed — {run.title}; run history was not updated."
+                        )
+                        messagebox.showwarning(
+                            "Run history not updated",
+                            (
+                                "The analysis completed and its result is available, but "
+                                "CleanroomX did not append an audit record because run-history "
+                                "evidence could not be prepared or the existing history failed "
+                                "integrity validation. Existing history was left unchanged. "
+                                "Export the run bundle if this result must be retained.\n\n"
+                                f"{history_error}"
+                            ),
+                            parent=self.root,
+                        )
         except queue.Empty:
             pass
         self.root.after(100, self._poll_worker)

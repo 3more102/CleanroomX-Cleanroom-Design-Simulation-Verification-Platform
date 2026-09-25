@@ -129,6 +129,54 @@ def normalize_layout(value: Any) -> dict:
     return result
 
 
+def room_overlap_conflicts(rooms: list[dict]) -> list[dict]:
+    """Return deterministic positive-area intersections between room footprints.
+
+    Edge/corner touching is not an overlap. Each room pair appears at most once,
+    in input order, with the exact intersection rectangle and area.
+    """
+
+    conflicts: list[dict] = []
+    epsilon = 1e-9
+    for index, room_a in enumerate(rooms):
+        if not isinstance(room_a, dict):
+            continue
+        ax0 = _finite_number(room_a.get("x_m"), 0.0)
+        ay0 = _finite_number(room_a.get("y_m"), 0.0)
+        ax1 = ax0 + _positive(room_a.get("length_m"), 0.0)
+        ay1 = ay0 + _positive(room_a.get("width_m"), 0.0)
+
+        for room_b in rooms[index + 1 :]:
+            if not isinstance(room_b, dict):
+                continue
+            bx0 = _finite_number(room_b.get("x_m"), 0.0)
+            by0 = _finite_number(room_b.get("y_m"), 0.0)
+            bx1 = bx0 + _positive(room_b.get("length_m"), 0.0)
+            by1 = by0 + _positive(room_b.get("width_m"), 0.0)
+
+            x0 = max(ax0, bx0)
+            y0 = max(ay0, by0)
+            x1 = min(ax1, bx1)
+            y1 = min(ay1, by1)
+            length_m = x1 - x0
+            width_m = y1 - y0
+            if length_m <= epsilon or width_m <= epsilon:
+                continue
+
+            conflicts.append(
+                {
+                    "room_a_id": str(room_a.get("id") or ""),
+                    "room_b_id": str(room_b.get("id") or ""),
+                    "x_m": x0,
+                    "y_m": y0,
+                    "length_m": length_m,
+                    "width_m": width_m,
+                    "area_m2": length_m * width_m,
+                }
+            )
+    return conflicts
+
+
 def spatial_layout_summary(value: Any) -> dict:
     """Return operator-facing spatial metrics without changing the stored model."""
     layout = normalize_layout(value)
@@ -149,6 +197,7 @@ def spatial_layout_summary(value: Any) -> dict:
     unassigned_devices = sum(
         1 for device in devices if device.get("room_id") not in room_ids
     )
+    overlap_conflicts = room_overlap_conflicts(rooms)
     if rooms:
         min_x = min(room["x_m"] for room in rooms)
         min_y = min(room["y_m"] for room in rooms)
@@ -167,6 +216,8 @@ def spatial_layout_summary(value: Any) -> dict:
         "pressure_max_pa": max(pressures) if pressures else None,
         "device_counts": device_counts,
         "unassigned_device_count": unassigned_devices,
+        "room_overlap_count": len(overlap_conflicts),
+        "room_overlap_area_m2": sum(item["area_m2"] for item in overlap_conflicts),
         "extents_m": extents_m,
     }
 
@@ -822,6 +873,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._smart_align = tk.BooleanVar(value=True)
         self._alignment_guides: list[dict] = []
         self._show_clearances = tk.BooleanVar(value=True)
+        self._show_conflicts = tk.BooleanVar(value=True)
 
         self._build()
         self.refresh()
@@ -876,6 +928,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             variable=self._show_clearances,
             command=self.redraw,
         ).pack(side="left", padx=2)
+        ttk.Checkbutton(
+            toolbar,
+            text="Conflicts",
+            variable=self._show_conflicts,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
             text="Sync dimensions to active analysis",
@@ -891,7 +949,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left")
         ttk.Label(
             scene_bar,
-            text="2D: drag to move • smart align • live room gaps • wheel to zoom • middle/right drag to pan    "
+            text="2D: drag to move • smart align • live gaps/conflicts • wheel to zoom • middle/right drag to pan    "
                  "3D: click to select • wheel to zoom",
         ).pack(side="right")
 
@@ -1316,11 +1374,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             if summary["unassigned_device_count"]
             else ""
         )
+        overlap_text = (
+            f" • {summary['room_overlap_count']} overlap"
+            f"{'s' if summary['room_overlap_count'] != 1 else ''}"
+            if summary["room_overlap_count"]
+            else ""
+        )
         self._summary_var.set(
             f"{summary['room_count']} rooms • {summary['device_count']} devices"
             f" • {summary['footprint_m2']:.1f} m² footprint"
             f" • {summary['volume_m3']:.1f} m³ volume"
-            f"{pressure_text}{unassigned_text}"
+            f"{pressure_text}{unassigned_text}{overlap_text}"
         )
         self._view_2d_var.set(
             f"2D • {self.layout['view']['zoom_2d'] * 100:.0f}%"
@@ -1435,6 +1499,9 @@ class SpatialDesignWorkspace(ttk.Frame):
                         tags=(f"resize:{handle}", f"room:{room['id']}", "resize"),
                     )
 
+        if self._show_conflicts.get():
+            self._draw_room_overlap_conflicts()
+
         if (
             self._show_clearances.get()
             and self.selected is not None
@@ -1476,6 +1543,41 @@ class SpatialDesignWorkspace(ttk.Frame):
                 justify="center",
                 fill="#667788",
             )
+
+    def _draw_room_overlap_conflicts(self) -> None:
+        canvas = self.canvas_2d
+        for conflict in room_overlap_conflicts(self.layout["rooms"]):
+            x0, y0 = self._world_to_canvas(conflict["x_m"], conflict["y_m"])
+            x1, y1 = self._world_to_canvas(
+                conflict["x_m"] + conflict["length_m"],
+                conflict["y_m"] + conflict["width_m"],
+            )
+            tag = (
+                "room-overlap",
+                f"overlap:{conflict['room_a_id']}:{conflict['room_b_id']}",
+            )
+            canvas.create_rectangle(
+                x0,
+                y0,
+                x1,
+                y1,
+                outline="#b91c1c",
+                width=3,
+                dash=(6, 3),
+                tags=tag,
+            )
+            canvas.create_line(x0, y0, x1, y1, fill="#b91c1c", width=2, tags=tag)
+            canvas.create_line(x0, y1, x1, y0, fill="#b91c1c", width=2, tags=tag)
+            if abs(x1 - x0) >= 40 and abs(y1 - y0) >= 24:
+                canvas.create_text(
+                    (x0 + x1) / 2.0,
+                    (y0 + y1) / 2.0,
+                    text=f"OVERLAP\n{conflict['area_m2']:.3g} m²",
+                    fill="#991b1b",
+                    font=("TkDefaultFont", 8, "bold"),
+                    justify="center",
+                    tags=tag,
+                )
 
     def _draw_room_clearances(self, room: dict) -> None:
         canvas = self.canvas_2d

@@ -41,8 +41,9 @@ def _validate_view(view: Any) -> None:
     if not isinstance(view, dict):
         raise SpatialLayoutFormatError("spatial_layout.view must be an object")
 
-    positive_fields = {"zoom_2d", "zoom_3d"}
     bounded_fields = {
+        "zoom_2d": (0.2, 8.0),
+        "zoom_3d": (0.2, 8.0),
         "elevation_deg": (5.0, 75.0),
     }
     finite_fields = {
@@ -53,9 +54,6 @@ def _validate_view(view: Any) -> None:
         "pan_3d_y",
     }
 
-    for field in positive_fields:
-        if field in view:
-            _require_positive_number(view[field], f"spatial_layout.view.{field}")
     for field, (minimum, maximum) in bounded_fields.items():
         if field in view:
             number = _require_finite_number(view[field], f"spatial_layout.view.{field}")

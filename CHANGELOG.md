@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased exact-byte project revision hardening — 2026-09-25
+
+- Loads a project and computes its write-protection revision from the same stable byte snapshot instead of separate fingerprint/load/fingerprint passes.
+- Detects file identity replacement during a read in addition to size/timestamp changes, then retries before accepting a project snapshot.
+- Writes atomic UTF-8 text as explicit bytes, eliminating platform newline translation from persisted project/export/recovery content.
+- Returns a successful guarded save revision from the exact bytes CleanroomX committed rather than re-reading the destination after replacement, so an immediate external post-save change cannot become the window's trusted baseline.
+- Adds failure-injection regressions for mid-read replacement, exact parsed-byte identity, invalid UTF-8, byte-stable atomic output, and post-commit external replacement.
+- Preserves project schema version 1, external-change guard semantics, recovery ownership, solver equations, numerical tolerances, and engineering acceptance behavior.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

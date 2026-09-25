@@ -62,7 +62,13 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
-from .spatial import SPATIAL_METADATA_KEY, SpatialDesignWorkspace, SpatialSyncError, sync_layout_to_analysis
+from .spatial import (
+    SPATIAL_METADATA_KEY,
+    SpatialDesignWorkspace,
+    SpatialSyncError,
+    sync_analysis_to_layout,
+    sync_layout_to_analysis,
+)
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
@@ -506,6 +512,7 @@ class CleanroomXApp:
             analysis_getter=self._editor_analysis,
             on_change=self._on_spatial_changed,
             on_sync_requested=self._sync_spatial_to_current_analysis,
+            on_pull_sync_requested=self._sync_current_analysis_to_spatial,
             status_setter=self.status_var.set,
             on_history_record=self._record_spatial_project_edit,
             on_undo_requested=self.undo_project_edit,
@@ -1387,8 +1394,72 @@ class CleanroomXApp:
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
         self._update_title()
+        self.spatial_workspace.refresh()
         self.status_var.set(
-            f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
+            f"Pushed mapped spatial room dimensions to {analysis.name}; validate before running."
+        )
+
+    def _sync_current_analysis_to_spatial(self) -> None:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before synchronizing spatial geometry.",
+                parent=self.root,
+            )
+            return
+        analysis = self._editor_analysis() or self._current_analysis()
+        if analysis is None:
+            messagebox.showinfo(
+                "No active analysis",
+                "Select a room-verification or multi-room verification analysis first.",
+                parent=self.root,
+            )
+            return
+        try:
+            self._commit_editor(analysis)
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot synchronize geometry",
+                f"Fix the current analysis input before synchronizing.\n\n{exc}",
+                parent=self.root,
+            )
+            return
+        if analysis.kind not in {"room_verification", "project_verification"}:
+            messagebox.showinfo(
+                "Spatial synchronization",
+                "Geometry synchronization currently targets room-verification and "
+                "multi-room project-verification inputs. The spatial layout remains "
+                "available for all projects.",
+                parent=self.root,
+            )
+            return
+        try:
+            changed = self._perform_project_edit(
+                f"Synchronize {analysis.name} to spatial geometry",
+                lambda: sync_analysis_to_layout(
+                    self.spatial_workspace.layout, analysis
+                ),
+            )
+        except SpatialSyncError as exc:
+            self.status_var.set(
+                "Spatial synchronization blocked by ambiguous room mappings"
+            )
+            messagebox.showwarning(
+                "Cannot synchronize geometry",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        self.spatial_workspace.refresh()
+        if not changed:
+            self.status_var.set(
+                "Active engineering geometry already matches the spatial layout"
+            )
+            return
+        self._update_title()
+        self.status_var.set(
+            f"Pulled room dimensions and configured pressure from {analysis.name}; "
+            "spatial mapping baseline updated."
         )
 
     def refresh_structure(self, silent: bool = False) -> None:

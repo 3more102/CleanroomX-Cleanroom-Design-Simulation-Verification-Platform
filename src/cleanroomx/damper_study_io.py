@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .json_integrity import load_json_file
 
 from .damper_study import DamperResistanceCase, LoopDamperStudy
 from .loop_network_io import looped_flow_network_from_dict
@@ -25,5 +26,5 @@ def loop_damper_study_from_dict(data: dict) -> LoopDamperStudy:
 
 def load_loop_damper_study(path: str | Path) -> LoopDamperStudy:
     return loop_damper_study_from_dict(
-        json.loads(Path(path).read_text(encoding="utf-8"))
+        load_json_file(path)
     )

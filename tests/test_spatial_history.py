@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import pytest
+
 from cleanroomx.project import ProjectDocument
-from cleanroomx.spatial import SpatialDesignWorkspace, _Hit, empty_layout, normalize_layout
+from cleanroomx.spatial import (
+    SpatialDesignWorkspace,
+    _Hit,
+    _drag_target_coordinate,
+    empty_layout,
+    normalize_layout,
+)
 
 
 def _workspace_project() -> ProjectDocument:
@@ -39,6 +47,10 @@ def _workspace(project: ProjectDocument) -> SpatialDesignWorkspace:
     workspace._on_history_record = None
     workspace._on_undo_requested = None
     workspace._on_redo_requested = None
+    workspace._drag_anchor = None
+    workspace._drag_item_origin = None
+    workspace._drag_history_before = None
+    workspace._resize_room_id = None
     return workspace
 
 
@@ -131,6 +143,7 @@ def test_room_drag_uses_snap_and_translates_assigned_devices():
     workspace._snap_to_grid = _Flag(True)
     workspace._resize_room_id = None
     workspace._drag_anchor = (2.0, 0.0)
+    workspace._drag_item_origin = (2.0, 0.0)
     workspace._canvas_to_world = lambda x, y: (float(x), float(y))
 
     workspace._on_left_drag(_Event(2.6, 0.6))
@@ -139,6 +152,115 @@ def test_room_drag_uses_snap_and_translates_assigned_devices():
     device = workspace.layout["devices"][0]
     assert (room["x_m"], room["y_m"]) == (2.5, 0.5)
     assert (device["x_m"], device["y_m"]) == (3.5, 1.5)
+
+
+def test_drag_target_coordinate_uses_gesture_origin_and_validates_grid():
+    assert _drag_target_coordinate(
+        item_origin=2.0,
+        pointer_origin=2.0,
+        pointer_current=2.76,
+        grid_m=0.5,
+        snap_to_grid=True,
+    ) == 3.0
+    assert _drag_target_coordinate(
+        item_origin=2.0,
+        pointer_origin=2.0,
+        pointer_current=2.76,
+        grid_m=0.5,
+        snap_to_grid=False,
+    ) == pytest.approx(2.76)
+
+    with pytest.raises(ValueError, match="positive"):
+        _drag_target_coordinate(
+            item_origin=2.0,
+            pointer_origin=2.0,
+            pointer_current=2.76,
+            grid_m=0.0,
+            snap_to_grid=True,
+        )
+
+
+def _drag_result(samples: list[tuple[float, float]]) -> tuple[float, float]:
+    project = _workspace_project()
+    workspace = _workspace(project)
+    workspace._snap_to_grid = _Flag(True)
+    workspace._drag_anchor = (2.0, 0.0)
+    workspace._drag_item_origin = (2.0, 0.0)
+    workspace._canvas_to_world = lambda x, y: (float(x), float(y))
+
+    for x, y in samples:
+        workspace._on_left_drag(_Event(x, y))
+
+    room = workspace.layout["rooms"][0]
+    return room["x_m"], room["y_m"]
+
+
+def test_room_drag_final_geometry_is_independent_of_motion_event_count():
+    single_event = _drag_result([(2.76, 0.76)])
+    many_events = _drag_result(
+        [
+            (2.11, 0.11),
+            (2.24, 0.24),
+            (2.49, 0.49),
+            (2.63, 0.63),
+            (2.76, 0.76),
+        ]
+    )
+
+    assert single_event == (3.0, 1.0)
+    assert many_events == single_event
+
+
+def test_noop_drag_release_does_not_dirty_project_or_record_history():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    changes: list[str] = []
+    statuses: list[str] = []
+    history_records: list[tuple] = []
+    workspace._on_change = lambda: changes.append("changed")
+    workspace._status_setter = statuses.append
+    workspace._on_history_record = lambda *args: history_records.append(args) or True
+    workspace._drag_anchor = (2.0, 0.0)
+    workspace._drag_item_origin = (2.0, 0.0)
+    workspace._drag_history_before = (
+        workspace._history_layout(),
+        workspace._selection_state(),
+    )
+
+    workspace._on_left_up(_Event(2.0, 0.0))
+
+    assert changes == []
+    assert history_records == []
+    assert statuses[-1] == "Spatial edit unchanged"
+    assert workspace._drag_anchor is None
+    assert workspace._drag_item_origin is None
+    assert workspace._drag_history_before is None
+
+
+def test_drag_release_records_one_history_transaction():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    changes: list[str] = []
+    history_records: list[tuple] = []
+    workspace._on_change = lambda: changes.append("changed")
+    workspace._on_history_record = lambda *args: history_records.append(args) or True
+    workspace._snap_to_grid = _Flag(True)
+    workspace._drag_anchor = (2.0, 0.0)
+    workspace._drag_item_origin = (2.0, 0.0)
+    workspace._drag_history_before = (
+        workspace._history_layout(),
+        workspace._selection_state(),
+    )
+    workspace._canvas_to_world = lambda x, y: (float(x), float(y))
+
+    for point in ((2.24, 0.0), (2.63, 0.0), (2.76, 0.0)):
+        workspace._on_left_drag(_Event(*point))
+    workspace._on_left_up(_Event(2.76, 0.0))
+
+    assert project.metadata["spatial_layout"]["rooms"][0]["x_m"] == 3.0
+    assert changes == ["changed"]
+    assert len(history_records) == 1
+    assert history_records[0][-1] == "Spatial item moved"
 
 
 def test_room_resize_handle_obeys_grid_snap():

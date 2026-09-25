@@ -188,7 +188,6 @@ class CleanroomXApp:
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self._migration_source_path: Path | None = None
-        self._project_migration_info = None
         self.last_run: AnalysisRun | None = None
         self.last_run_analysis_id: str | None = None
         self._runs_by_analysis: dict[str, AnalysisRun] = {}
@@ -937,7 +936,6 @@ class CleanroomXApp:
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._migration_source_path = None
-        self._project_migration_info = None
         self._begin_autosave_project(recovered.source_path)
 
         ui_state = recovered.ui_state
@@ -1032,7 +1030,6 @@ class CleanroomXApp:
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._migration_source_path = None
-        self._project_migration_info = None
         self._begin_autosave_project(None)
         self.name_var.set(self.project.name)
         self.description_var.set("")
@@ -1076,7 +1073,6 @@ class CleanroomXApp:
         self._project_file_revision = project_revision
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
-        self._project_migration_info = migration_info
         self._migration_source_path = (
             project_path.resolve(strict=False) if migration_info.migrated else None
         )
@@ -1273,7 +1269,6 @@ class CleanroomXApp:
         self._project_file_revision = saved_revision
         self._recovery_source_path = None
         self._migration_source_path = None
-        self._project_migration_info = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()
         if editor_id is not None:

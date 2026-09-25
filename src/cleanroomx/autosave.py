@@ -111,6 +111,10 @@ def _ensure_recovery_dir(path: Path) -> Path:
     return path
 
 
+def _reject_json_constant(value: str):
+    raise RecoveryFormatError(f"non-finite JSON constant is not allowed: {value}")
+
+
 def _canonical_json(value: Any) -> str:
     return json.dumps(
         value,
@@ -215,7 +219,10 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
 def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
     source = Path(path)
     try:
-        data = json.loads(source.read_text(encoding="utf-8"))
+        data = json.loads(
+            source.read_text(encoding="utf-8"),
+            parse_constant=_reject_json_constant,
+        )
     except json.JSONDecodeError as exc:
         raise RecoveryFormatError(
             f"invalid recovery JSON at line {exc.lineno}, column {exc.colno}"

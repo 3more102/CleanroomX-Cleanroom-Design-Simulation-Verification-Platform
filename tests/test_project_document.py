@@ -117,3 +117,173 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+def test_project_round_trip_preserves_additive_fields_at_all_schema_levels(tmp_path):
+    raw = {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "application_version": "future-compatible-writer",
+        "vendor_extension": {
+            "revision": 7,
+            "nested": {"preserve": [1, 2, {"exact": True}]},
+        },
+        "project": {
+            "name": "Extensible",
+            "description": "before edit",
+            "metadata": {"owner": "test"},
+            "discipline_extension": {"facility_code": "FAB-01"},
+        },
+        "analyses": [
+            {
+                "id": "hvac-1",
+                "name": "HVAC",
+                "kind": "hvac",
+                "input": {"name": "Demo", "rooms": []},
+                "analysis_extension": {
+                    "locked_by": "external-tool",
+                    "revision": 3,
+                },
+            }
+        ],
+        "active_analysis_id": "hvac-1",
+    }
+    path = tmp_path / "extension.cleanroomx.json"
+    path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+
+    project = load_project_document(path)
+    assert project.top_level_extra_fields == {
+        "vendor_extension": raw["vendor_extension"],
+    }
+    assert project.project_extra_fields == {
+        "discipline_extension": raw["project"]["discipline_extension"],
+    }
+    assert project.analyses[0].extra_fields == {
+        "analysis_extension": raw["analyses"][0]["analysis_extension"],
+    }
+
+    project.description = "after edit"
+    project.analyses[0].name = "Renamed HVAC"
+    save_project_document(path, project)
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["vendor_extension"] == raw["vendor_extension"]
+    assert saved["project"]["discipline_extension"] == raw["project"]["discipline_extension"]
+    assert saved["analyses"][0]["analysis_extension"] == raw["analyses"][0]["analysis_extension"]
+    assert saved["project"]["description"] == "after edit"
+    assert saved["analyses"][0]["name"] == "Renamed HVAC"
+
+    reloaded = load_project_document(path)
+    assert reloaded.top_level_extra_fields == project.top_level_extra_fields
+    assert reloaded.project_extra_fields == project.project_extra_fields
+    assert reloaded.analyses[0].extra_fields == project.analyses[0].extra_fields
+
+
+def test_known_project_fields_override_programmatic_extra_field_collisions():
+    analysis = AnalysisDocument(
+        id="analysis-1",
+        name="Canonical",
+        kind="hvac",
+        input={"name": "Demo", "rooms": []},
+        extra_fields={
+            "id": "wrong-id",
+            "name": "Wrong",
+            "kind": "room_verification",
+            "input": {"wrong": True},
+            "vendor_analysis": 1,
+        },
+    )
+    project = ProjectDocument(
+        name="Canonical Project",
+        description="Canonical description",
+        analyses=[analysis],
+        active_analysis_id="analysis-1",
+        metadata={"canonical": True},
+        project_extra_fields={
+            "name": "Wrong Project",
+            "description": "Wrong description",
+            "metadata": {"wrong": True},
+            "vendor_project": 2,
+        },
+        top_level_extra_fields={
+            "schema": "wrong.schema",
+            "schema_version": 999,
+            "application_version": "wrong",
+            "project": {"name": "Wrong"},
+            "analyses": [],
+            "active_analysis_id": None,
+            "vendor_top": 3,
+        },
+    )
+
+    data = project.to_dict()
+
+    assert data["schema"] == PROJECT_SCHEMA
+    assert data["schema_version"] == PROJECT_SCHEMA_VERSION
+    assert data["project"]["name"] == "Canonical Project"
+    assert data["project"]["description"] == "Canonical description"
+    assert data["project"]["metadata"] == {"canonical": True}
+    assert data["project"]["vendor_project"] == 2
+    assert data["analyses"][0]["id"] == "analysis-1"
+    assert data["analyses"][0]["name"] == "Canonical"
+    assert data["analyses"][0]["kind"] == "hvac"
+    assert data["analyses"][0]["input"] == {"name": "Demo", "rooms": []}
+    assert data["analyses"][0]["vendor_analysis"] == 1
+    assert data["active_analysis_id"] == "analysis-1"
+    assert data["vendor_top"] == 3
+
+
+def test_explicit_v0_migration_preserves_additive_fields():
+    project = project_from_dict(
+        {
+            "schema": PROJECT_SCHEMA,
+            "schema_version": 0,
+            "name": "Legacy",
+            "vendor_top": {"keep": True},
+            "analysis": {
+                "id": "legacy-a",
+                "name": "Legacy analysis",
+                "kind": "hvac",
+                "input": {"name": "Legacy HVAC", "rooms": []},
+                "vendor_analysis": {"keep": "also"},
+            },
+        }
+    )
+
+    migrated = project.to_dict()
+
+    assert migrated["vendor_top"] == {"keep": True}
+    assert migrated["analyses"][0]["vendor_analysis"] == {"keep": "also"}
+    assert migrated["analyses"][0]["id"] == "legacy-a"
+
+
+def test_pre_schema_migration_preserves_unconsumed_fields_without_reinterpretation():
+    project = project_from_dict(
+        {
+            "name": "Legacy",
+            "analysis_type": "fan_operating_point",
+            "input": {"study": "legacy"},
+            "metadata": {"opaque_legacy_value": True},
+            "vendor_top": {"source_revision": 12},
+        }
+    )
+
+    migrated = project.to_dict()
+
+    assert migrated["metadata"] == {"opaque_legacy_value": True}
+    assert migrated["vendor_top"] == {"source_revision": 12}
+    assert migrated["project"]["metadata"] == {}
+    assert migrated["analyses"][0]["kind"] == "fan_operating_point"
+
+
+def test_non_finite_additive_field_is_rejected_before_save(tmp_path):
+    project = ProjectDocument(
+        name="Unsafe extension",
+        top_level_extra_fields={"vendor_extension": {"value": float("nan")}},
+    )
+    path = tmp_path / "unsafe.cleanroomx.json"
+
+    with pytest.raises(ProjectFormatError, match="strict JSON"):
+        save_project_document(path, project)
+
+    assert not path.exists()
+

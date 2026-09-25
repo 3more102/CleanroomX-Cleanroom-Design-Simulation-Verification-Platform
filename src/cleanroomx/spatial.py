@@ -405,9 +405,6 @@ def spatial_pressure_overlay(
 
 
 def _room_overlap_records(
-
-
-def _room_overlap_records(
     rooms: list[dict],
 ) -> list[tuple[int, int, list[float]]]:
     """Return deterministic room-overlap records using an adaptive broad phase.
@@ -720,9 +717,6 @@ def validate_layout(value: Any, analysis: Any = None) -> list[dict]:
             )
 
     return issues
-
-
-def _pressure_fill(
 
 
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:

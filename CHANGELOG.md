@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased durable persistence hardening — 2026-09-25
+
+- Hardens the shared persistence primitive used by project saves, recovery artifacts, and GUI exports: text is encoded to exact UTF-8 bytes, staged in the destination directory, flushed and file-synced, verified by byte length plus SHA-256, and only then atomically replaced.
+- Preserves existing regular-file permission bits across replacement on platforms that expose POSIX-style file modes.
+- Opens the containing directory before commit and synchronizes its directory entry after replacement where the platform/filesystem supports directory `fsync`, closing the crash window in which file data was durable but the rename itself was not confirmed durable.
+- Introduces explicit post-commit durability failure reporting. If directory synchronization fails after replacement, the GUI refreshes its on-disk revision but does not declare the save durably complete or clear recovery data.
+- Routes all 23 CLI `--output` paths through the same verified atomic writer instead of direct truncating `Path.write_text()` calls, so report/result exports share the same partial-write protection as the desktop application.
+- Adds failure-injection regressions for staged-payload verification and post-replace directory-sync failure, exact UTF-8 byte checks, permission preservation, and GUI recovery-preservation semantics.
+- Preserves project schema version 1, migration behavior, analysis APIs, solver equations, numerical tolerances, engineering acceptance semantics, and existing command-line interfaces.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

@@ -32,10 +32,11 @@ from .application import (
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectSaveConflictError,
     atomic_write_text,
-    load_project_document,
+    load_project_document_with_fingerprint,
     new_project,
-    save_project_document,
+    save_project_document_with_fingerprint,
 )
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
@@ -179,6 +180,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_file_fingerprint = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -523,6 +525,25 @@ class CleanroomXApp:
         if recovery_source is not None:
             return recovery_source.parent
         return None
+
+    def _save_project_candidate(
+        self,
+        destination: Path,
+        project: ProjectDocument,
+    ):
+        current_path = getattr(self, "project_path", None)
+        expected = getattr(self, "_project_file_fingerprint", None)
+        if (
+            current_path is not None
+            and expected is not None
+            and destination.resolve(strict=False) == current_path.resolve(strict=False)
+        ):
+            return save_project_document_with_fingerprint(
+                destination,
+                project,
+                expected_fingerprint=expected,
+            )
+        return save_project_document_with_fingerprint(destination, project)
 
     def _project_state_signature(self) -> str:
         data = copy.deepcopy(self.project.to_dict())
@@ -891,6 +912,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = recovered.project
         self.project_path = None
+        self._project_file_fingerprint = None
         self._recovery_source_path = recovered.source_path
         self._restored_recovery_artifact = recovered.artifact_path
         self._begin_autosave_project(recovered.source_path)
@@ -983,6 +1005,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_file_fingerprint = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -1017,10 +1040,11 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
-        project = load_project_document(project_path)
+        project, fingerprint = load_project_document_with_fingerprint(project_path)
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_file_fingerprint = fingerprint
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1062,10 +1086,14 @@ class CleanroomXApp:
             self.save_project_as()
             return
         try:
-            save_project_document(self.project_path, self.project)
+            saved = self._save_project_candidate(self.project_path, self.project)
+        except ProjectSaveConflictError as exc:
+            messagebox.showerror("Save conflict", str(exc), parent=self.root)
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._project_file_fingerprint = saved.fingerprint
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
@@ -1124,13 +1152,17 @@ class CleanroomXApp:
                 )
 
         try:
-            saved_path = save_project_document(destination, candidate)
+            saved = self._save_project_candidate(destination, candidate)
+        except ProjectSaveConflictError as exc:
+            messagebox.showerror("Save conflict", str(exc), parent=self.root)
+            return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
         self.project = candidate
-        self.project_path = saved_path
+        self.project_path = saved.path
+        self._project_file_fingerprint = saved.fingerprint
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

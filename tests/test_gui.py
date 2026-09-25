@@ -874,6 +874,9 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app._running = False
     app.root = object()
+    app._event_journal = RuntimeEventJournal(
+        clock=lambda: "2026-09-25T10:00:00.000Z"
+    )
     app._confirm_project_replacement = lambda: True
 
     def fail_load(path):
@@ -899,6 +902,38 @@ def test_open_project_reports_invalid_project_instead_of_raising(monkeypatch):
     assert captured["title"] == "Open failed"
     assert captured["message"] == "invalid project"
     assert captured["parent"] is app.root
+    event = app._event_journal.snapshot()[-1]
+    assert event["event"] == "project.open_failed"
+    assert event["context"]["file_name"] == "broken.cleanroomx.json"
+    assert event["context"]["error_type"] == "ValueError"
+
+
+def test_run_current_records_validation_rejection_before_worker_start(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app._editor_analysis_id = "analysis-a"
+    app._run_generation = 4
+    app.status_var = Status()
+    app._event_journal = RuntimeEventJournal(
+        clock=lambda: "2026-09-25T10:00:00.000Z"
+    )
+    app._commit_editor = lambda: (_ for _ in ()).throw(ValueError("broken input"))
+    monkeypatch.setattr(gui_module.messagebox, "showerror", lambda *args, **kwargs: None)
+
+    app.run_current()
+
+    assert app._run_generation == 4
+    assert app.status_var.value == "Cannot run — invalid input"
+    event = app._event_journal.snapshot()[-1]
+    assert event["event"] == "analysis.run_rejected"
+    assert event["level"] == "warning"
+    assert event["context"]["editor_analysis_id"] == "analysis-a"
+    assert event["context"]["error_type"] == "ValueError"
 
 
 def test_per_analysis_run_cache_restores_without_forcing_result_tab():

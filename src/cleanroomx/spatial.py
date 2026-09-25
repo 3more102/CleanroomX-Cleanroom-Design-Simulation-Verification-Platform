@@ -620,12 +620,7 @@ def snap_room_translation(
                 distance = abs(delta)
                 if distance > tolerance + 1e-12:
                     continue
-                key = (
-                    round(distance, 12),
-                    reference_room_id,
-                    reference_anchor,
-                    moving_anchor,
-                )
+                key = (round(distance, 12),)
                 guide = {
                     "axis": axis,
                     "value_m": reference_value,
@@ -1620,11 +1615,12 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_left_up(self, event: tk.Event) -> None:
         had_guides = bool(self._alignment_guides)
+        drag_changed = self._drag_changed
         self._alignment_guides = []
         if (
             self._drag_anchor is not None
             and self.selected is not None
-            and self._drag_changed
+            and drag_changed
         ):
             if self._resize_handle:
                 message = "Spatial room resized"
@@ -1637,7 +1633,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_before = None
         self._drag_changed = False
         self._resize_handle = None
-        if had_guides and not self._drag_changed:
+        if had_guides and not drag_changed:
             self.redraw()
 
     def _on_motion(self, event: tk.Event) -> None:

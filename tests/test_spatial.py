@@ -1337,6 +1337,12 @@ def test_pressure_overlay_prefers_supplied_result_then_configured_observation():
         }
     )
 
+    spatial = pressure_overlay_state(layout, analysis)
+    assert spatial["rooms"][0]["pressure_pa"] == 5.0
+    assert spatial["rooms"][0]["source"] == "spatial"
+    assert spatial["rooms"][0]["pressure_target_pa"] == 20.0
+
+    layout["rooms"][0].pop("pressure_pa")
     configured = pressure_overlay_state(layout, analysis)
     assert configured["rooms"][0]["pressure_pa"] == 30.0
     assert configured["rooms"][0]["source"] == "configured"

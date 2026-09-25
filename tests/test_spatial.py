@@ -1343,10 +1343,10 @@ def test_pressure_overlay_prefers_supplied_result_then_configured_observation():
     assert spatial["rooms"][0]["pressure_target_pa"] == 20.0
 
     layout["rooms"][0].pop("pressure_pa")
-    configured = pressure_overlay_state(layout, analysis)
-    assert configured["rooms"][0]["pressure_pa"] == 30.0
-    assert configured["rooms"][0]["source"] == "configured"
-    assert configured["rooms"][0]["pressure_target_pa"] == 20.0
+    unavailable = pressure_overlay_state(layout, analysis)
+    assert unavailable["rooms"][0]["pressure_pa"] is None
+    assert unavailable["rooms"][0]["source"] == "unavailable"
+    assert unavailable["rooms"][0]["pressure_target_pa"] == 20.0
 
     result = {
         "rooms": [

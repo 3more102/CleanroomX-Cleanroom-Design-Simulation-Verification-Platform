@@ -17,7 +17,7 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 
 ## Desktop data flow
 
-A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available.
+Desktop project files are loaded through `load_project_document_with_revision()`, which retries unstable reads and computes the file revision from the exact byte snapshot passed to strict JSON parsing; `load_project_document()` remains the compatible unguarded loader for non-GUI callers. Supported legacy shapes are migrated only after parsing. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available.
 
 Result ownership remains tied to the analysis id so stale results are not silently reassigned after edits, deletion, or analysis switching. Project saves serialize schema version 1, validate the resulting document, and use an atomic replacement.
 

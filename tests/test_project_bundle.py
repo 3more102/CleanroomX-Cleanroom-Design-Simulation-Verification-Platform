@@ -8,6 +8,7 @@ import zipfile
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.persistence as persistence_module
 import cleanroomx.project_bundle as bundle_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp
@@ -693,3 +694,31 @@ def test_bundle_extraction_reports_post_publish_directory_fsync_failure(
     assert error.value.path == destination
     assert (destination / "project.cleanroomx.json").is_file()
     assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
+
+def test_bundle_extraction_durably_creates_nested_destination_parents(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    synced: list[Path] = []
+    monkeypatch.setattr(
+        persistence_module,
+        "_fsync_directory",
+        lambda directory: synced.append(Path(directory)),
+    )
+    destination = tmp_path / "handoff" / "nested" / "extracted"
+
+    extracted = extract_project_bundle(bundle, destination)
+
+    assert extracted.is_file()
+    assert synced == [
+        tmp_path,
+        tmp_path / "handoff",
+    ]

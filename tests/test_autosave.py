@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.autosave as autosave_module
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
@@ -132,6 +133,60 @@ def test_recovery_loader_rejects_well_formed_tampered_v2_artifact(tmp_path):
 
     with pytest.raises(RecoveryFormatError, match="integrity check failed"):
         load_recovery_artifact(artifact_path)
+
+
+def test_recovery_scan_reports_tampered_artifact_without_hiding_valid_one(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    manager = AutosaveManager(recovery_dir, session_id="session-a")
+    try:
+        manager.begin_project(source)
+        manager.request_autosave(_snapshot(_project()), source_path=source)
+        manager.wait_for_idle()
+        artifact_path = manager.status().artifact_path
+        assert artifact_path is not None
+        payload = load_recovery_artifact(artifact_path)
+    finally:
+        manager.shutdown(wait=True)
+
+    payload["snapshot"]["ui_state"]["marker"] = 999
+    tampered = recovery_dir / "tampered.recovery.json"
+    tampered.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    scan = scan_recovery_artifacts(recovery_dir)
+
+    assert len(scan.candidates) == 1
+    assert scan.candidates[0].path == artifact_path
+    assert len(scan.issues) == 1
+    assert scan.issues[0].path == tampered
+    assert "integrity check failed" in scan.issues[0].error
+
+
+def test_autosave_surfaces_background_persistence_failure(tmp_path, monkeypatch):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+
+    def fail_write(_path, _text):
+        raise OSError("simulated disk full")
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", fail_write)
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project()),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+
+        status = manager.status()
+        assert status.state == "failed"
+        assert "simulated disk full" in status.message
+        assert list((tmp_path / "recovery").glob("*.recovery.json")) == []
+    finally:
+        manager.shutdown(wait=True)
 
 
 def test_autosave_skips_identical_snapshot(tmp_path):

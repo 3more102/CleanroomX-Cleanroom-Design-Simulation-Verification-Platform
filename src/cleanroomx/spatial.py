@@ -1123,9 +1123,24 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
-        validation_key = _spatial_validation_key(self.layout)
+        analysis = self._analysis_getter()
+        mapping_records = engineering_sync_states(self.layout, analysis)
+        mapping_key = tuple(
+            (
+                record["room_id"],
+                record["state"],
+                record.get("analysis_id"),
+                record.get("engineering_room_name"),
+                tuple(record.get("differences", {})),
+            )
+            for record in mapping_records
+        )
+        validation_key = (_spatial_validation_key(self.layout), mapping_key)
         if force or validation_key != self._last_validation_key:
-            self._validation_issues = validate_layout(self.layout)
+            self._validation_issues = (
+                validate_layout(self.layout)
+                + engineering_mapping_issues(self.layout, analysis)
+            )
             self._last_validation_key = validation_key
             self._update_validation_summary()
 
@@ -1148,6 +1163,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._engineering_var.set("Engineering mapping: no selection")
             for var in self._property_vars.values():
                 var.set("")
             return
@@ -1156,6 +1172,27 @@ class SpatialDesignWorkspace(ttk.Frame):
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+        if self.selected and self.selected.kind == "room":
+            analysis = self._analysis_getter()
+            states = {
+                record["room_id"]: record
+                for record in engineering_sync_states(self.layout, analysis)
+            }
+            record = states.get(item["id"], {"state": "unmapped", "differences": {}})
+            state_text = str(record["state"]).replace("_", " ")
+            fields = engineering_fields_for_room(self.layout, analysis, item["id"])
+            detail = ", ".join(f"{key}={value}" for key, value in fields.items())
+            differences = ", ".join(record.get("differences", {}))
+            message = f"Engineering mapping: {state_text}"
+            if record.get("analysis_id"):
+                message += f" | analysis={record['analysis_id']}"
+            if differences:
+                message += f" | differs: {differences}"
+            if detail:
+                message += f" | engineering: {detail}"
+            self._engineering_var.set(message)
+        else:
+            self._engineering_var.set("Engineering mapping: spatial device")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -1185,12 +1222,21 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
-            for key in ("classification", "analysis_room_name"):
+            for key in ("classification", "analysis_room_name", "notes"):
                 text = self._property_vars[key].get().strip()
                 if text:
                     item[key] = text
                 else:
                     item.pop(key, None)
+            ref = item.get("engineering_ref")
+            if isinstance(ref, dict):
+                current_link = str(item.get("analysis_room_name") or "").strip()
+                if (
+                    current_link
+                    and current_link.casefold()
+                    != str(ref.get("room_name") or "").strip().casefold()
+                ):
+                    item.pop("engineering_ref", None)
         elif self.selected and self.selected.kind == "device":
             z_text = self._property_vars["z_m"].get().strip()
             if z_text:
@@ -1297,6 +1343,14 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def delete_selected(self) -> None:
         if self.selected is None:
+            return
+        item = self._selected_object()
+        item_name = item.get("name", "selected item") if isinstance(item, dict) else "selected item"
+        if not messagebox.askyesno(
+            "Delete spatial item",
+            f"Delete {item_name!r}? This can be undone with project Undo.",
+            parent=self.winfo_toplevel(),
+        ):
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()

@@ -310,9 +310,8 @@ def _lock_descriptor_nonblocking(descriptor: int) -> None:
     if os.name == "nt":
         import msvcrt
 
-        if os.fstat(descriptor).st_size == 0:
-            os.write(descriptor, b"\0")
-            os.fsync(descriptor)
+        # msvcrt permits the locked region to extend beyond EOF, so the
+        # coordination sidecar never needs payload bytes.
         os.lseek(descriptor, 0, os.SEEK_SET)
         try:
             msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)

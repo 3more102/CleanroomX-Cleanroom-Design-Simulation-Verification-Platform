@@ -5,9 +5,10 @@ import json
 import pytest
 
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectConflictError,
+    ProjectDocument, ProjectFormatError, atomic_write_text, load_project_document,
+    load_project_document_with_revision, project_file_revision, project_from_dict,
+    save_project_document, save_project_document_with_revision,
 )
 
 
@@ -116,3 +117,113 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+def test_guarded_save_rejects_external_change_without_overwrite(tmp_path):
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    loaded, revision = load_project_document_with_revision(path)
+    loaded.description = "local edit"
+
+    save_project_document(path, ProjectDocument(name="External"))
+
+    with pytest.raises(ProjectConflictError, match="changed on disk"):
+        save_project_document_with_revision(
+            path,
+            loaded,
+            expected_revision=revision,
+        )
+
+    assert load_project_document(path).name == "External"
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+    assert not (tmp_path / f".{path.name}.cleanroomx-save.lock").exists()
+
+
+def test_guarded_save_prevents_stale_second_session(tmp_path):
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(name="Initial"),
+    )
+    first, first_revision = load_project_document_with_revision(path)
+    second, second_revision = load_project_document_with_revision(path)
+    assert first_revision == second_revision
+
+    first.name = "First session"
+    _path, committed_revision = save_project_document_with_revision(
+        path,
+        first,
+        expected_revision=first_revision,
+    )
+    assert committed_revision.sha256 == project_file_revision(path).sha256
+
+    second.name = "Second session"
+    with pytest.raises(ProjectConflictError, match="changed on disk"):
+        save_project_document_with_revision(
+            path,
+            second,
+            expected_revision=second_revision,
+        )
+
+    assert load_project_document(path).name == "First session"
+
+
+def test_guarded_save_rejects_file_created_after_absent_revision(tmp_path):
+    path = tmp_path / "new.cleanroomx.json"
+    absent_revision = project_file_revision(path)
+    assert absent_revision.exists is False
+
+    save_project_document(path, ProjectDocument(name="Other writer"))
+
+    with pytest.raises(ProjectConflictError, match="changed on disk"):
+        save_project_document_with_revision(
+            path,
+            ProjectDocument(name="Local"),
+            expected_revision=absent_revision,
+        )
+
+    assert load_project_document(path).name == "Other writer"
+
+
+def test_guarded_save_uses_content_identity_not_timestamp_only(tmp_path):
+    path = save_project_document(
+        tmp_path / "demo.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    project, revision = load_project_document_with_revision(path)
+
+    path.touch()
+    current = project_file_revision(path)
+    assert current.sha256 == revision.sha256
+
+    project.description = "safe edit"
+    _path, saved_revision = save_project_document_with_revision(
+        path,
+        project,
+        expected_revision=revision,
+    )
+
+    assert saved_revision.sha256 == project_file_revision(path).sha256
+    assert load_project_document(path).description == "safe edit"
+
+
+def test_guarded_save_rejects_active_cleanroomx_writer_lock(tmp_path):
+    path = save_project_document(
+        tmp_path / "busy.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    project, revision = load_project_document_with_revision(path)
+    lock_path = tmp_path / f".{path.name}.cleanroomx-save.lock"
+    lock_path.write_text('{"pid":999999}\n', encoding="utf-8")
+
+    try:
+        with pytest.raises(ProjectConflictError, match="currently being saved"):
+            save_project_document_with_revision(
+                path,
+                project,
+                expected_revision=revision,
+            )
+        assert load_project_document(path).name == "Original"
+    finally:
+        lock_path.unlink(missing_ok=True)

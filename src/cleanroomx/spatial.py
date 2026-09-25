@@ -7,7 +7,7 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -1289,6 +1289,96 @@ def pressure_overlay_state(
     }
 
 
+def pressure_cascade_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> list[dict]:
+    """Return pressure-cascade evidence, preferring a fresh solver result.
+
+    Without solver evidence, retain the configured spatial-pressure fallback used
+    by the v0.102 workspace. No pressure values are calculated beyond the direct
+    room-to-room difference already represented by the configured relationship.
+    """
+    normalized = normalize_layout(layout)
+    payload = getattr(analysis, "input", None)
+    if not isinstance(payload, dict) or getattr(analysis, "kind", "") != "project_verification":
+        return []
+    requirements = payload.get("pressure_cascade")
+    if not isinstance(requirements, list):
+        return []
+
+    rooms_by_name: dict[str, dict] = {}
+    for room in normalized["rooms"]:
+        for name in (room.get("name"), room.get("analysis_room_name")):
+            key = str(name or "").strip().casefold()
+            if key and key not in rooms_by_name:
+                rooms_by_name[key] = room
+
+    result_findings = (
+        result.get("pressure_cascade", [])
+        if isinstance(result, dict) and isinstance(result.get("pressure_cascade"), list)
+        else []
+    )
+    states: list[dict] = []
+    for requirement in requirements:
+        if not isinstance(requirement, dict):
+            continue
+        high_name = str(requirement.get("higher_pressure_room") or "").strip()
+        low_name = str(requirement.get("lower_pressure_room") or "").strip()
+        high = rooms_by_name.get(high_name.casefold())
+        low = rooms_by_name.get(low_name.casefold())
+        if high is None or low is None:
+            continue
+
+        limit = _finite_optional(requirement.get("min_delta_pa"))
+        matching_result = next(
+            (
+                item
+                for item in result_findings
+                if isinstance(item, dict)
+                and item.get("higher_pressure_room") == high_name
+                and item.get("lower_pressure_room") == low_name
+            ),
+            None,
+        )
+        if isinstance(matching_result, dict):
+            actual = _finite_optional(matching_result.get("actual_delta_pa"))
+            status = str(matching_result.get("status") or "unavailable")
+            source = "result"
+        else:
+            high_pressure = _finite_optional(high.get("pressure_pa"))
+            low_pressure = _finite_optional(low.get("pressure_pa"))
+            actual = (
+                high_pressure - low_pressure
+                if high_pressure is not None and low_pressure is not None
+                else None
+            )
+            if actual is None:
+                status = "unavailable"
+            elif limit is None:
+                status = "available"
+            elif actual + SPATIAL_GEOMETRY_EPSILON_M >= limit:
+                status = "pass"
+            else:
+                status = "fail"
+            source = "spatial"
+
+        states.append(
+            {
+                "higher_room_id": high["id"],
+                "lower_room_id": low["id"],
+                "higher_pressure_room": high_name,
+                "lower_pressure_room": low_name,
+                "limit_pa": limit,
+                "actual_delta_pa": actual,
+                "status": status,
+                "source": source,
+            }
+        )
+    return states
+
+
 @dataclass
 class _Hit:
     kind: str
@@ -1307,6 +1397,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        result_getter: Callable[[], Any] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -1320,6 +1411,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
         self._status_setter = status_setter
+        self._result_getter = result_getter or (lambda: None)
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
         self._on_redo_requested = on_redo_requested
@@ -1337,6 +1429,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._pressure_evidence_var = tk.StringVar(value="Pressure evidence: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1382,8 +1475,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
-            text="Sync dimensions to active analysis",
-            command=self._on_sync_requested,
+            text="Push geometry → analysis",
+            command=self.request_push_to_analysis,
+        ).pack(side="right", padx=2)
+        ttk.Button(
+            toolbar,
+            text="Pull geometry ← analysis",
+            command=self.pull_from_active_analysis,
         ).pack(side="right", padx=2)
 
         viewbar = ttk.Frame(self, padding=(6, 0, 6, 3))
@@ -1454,7 +1552,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
+        )
+        ttk.Label(inspector, textvariable=self._pressure_evidence_var).grid(
+            row=2, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         fields = (
             ("name", "Name"),
@@ -1474,7 +1575,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -1482,7 +1583,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )

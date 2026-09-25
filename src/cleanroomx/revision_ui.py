@@ -75,12 +75,20 @@ class ProjectRevisionCenter(tk.Toplevel):
                 ),
             )
 
-        message = (
-            f"{len(scan.issues)} unreadable/corrupted revision artifact(s) were "
-            "preserved and excluded from restore."
-            if scan.issues
-            else "All listed revision artifacts passed schema, SHA-256, and project validation."
-        )
+        if scan.issues:
+            issue_preview = "; ".join(
+                f"{issue.path.name}: {issue.error}"
+                for issue in scan.issues[:3]
+            )
+            message = (
+                f"{len(scan.issues)} unreadable/corrupted revision artifact(s) were "
+                f"preserved and excluded from restore. {issue_preview}"
+            )
+        else:
+            message = (
+                "All listed revision artifacts passed schema, SHA-256, "
+                "and project validation."
+            )
         ttk.Label(
             self,
             text=message,

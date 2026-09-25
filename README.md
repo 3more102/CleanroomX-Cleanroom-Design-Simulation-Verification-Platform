@@ -91,7 +91,7 @@ For automated installation checks without a display:
 cleanroomx-gui --check
 ```
 
-The CI smoke path starts the real Tk application under a virtual display and runs the active demo analysis before exiting. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the desktop/project workflow and [docs/LAYOUT_2D_3D.md](docs/LAYOUT_2D_3D.md) for the synchronized spatial editor/viewer, pressure overlays, floor metadata, geometry validation, and analysis synchronization.
+The CI smoke path starts the real Tk application under a virtual display, runs the active verification demo, and fails unless the packaged 2D rooms, 3D room geometry, and pressure-cascade relationship graphics are actually rendered. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the desktop/project workflow and [docs/LAYOUT_2D_3D.md](docs/LAYOUT_2D_3D.md) for the synchronized spatial editor/viewer, pressure overlays, floor metadata, geometry validation, and analysis synchronization.
 
 ### Project batch automation
 

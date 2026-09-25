@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,10 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectSaveConflictError(RuntimeError):
+    """Raised when a checked save would overwrite a different on-disk revision."""
 
 
 @dataclass
@@ -190,22 +195,79 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
+def _read_stable_bytes(path: Path) -> bytes:
+    """Read a file without accepting a revision that changes during the read."""
+    last_error: OSError | None = None
+    for _attempt in range(2):
+        try:
+            before = path.stat()
+            payload = path.read_bytes()
+            after = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+            return payload
+        last_error = OSError(f"project file changed while reading: {path}")
+    assert last_error is not None
+    raise last_error
+
+
+def project_file_revision(path: str | Path) -> str | None:
+    """Return the SHA-256 revision of the exact on-disk bytes, or None if missing."""
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        payload = _read_stable_bytes(source)
+    except FileNotFoundError:
+        return None
+    return sha256(payload).hexdigest()
+
+
+def load_project_document_with_revision(
+    path: str | Path,
+) -> tuple[ProjectDocument, str]:
+    """Load a project and return the SHA-256 revision of the exact parsed bytes."""
+    source = Path(path)
+    payload = _read_stable_bytes(source)
+    revision = sha256(payload).hexdigest()
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    return project_from_dict(data), revision
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _revision = load_project_document_with_revision(path)
+    return project
+
+
+def _serialized_project_text(project: ProjectDocument) -> str:
+    data = project.to_dict()
+    project_from_dict(data)
+    return json.dumps(
+        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+    ) + "\n"
+
+
+def project_document_revision(project: ProjectDocument) -> str:
+    """Return the SHA-256 revision produced by the canonical project serializer."""
+    return sha256(_serialized_project_text(project).encode("utf-8")).hexdigest()
+
+
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    expected_revision: str | None = None,
+) -> Path:
+    """Atomically replace UTF-8 text, optionally rejecting a stale destination."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +282,14 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if expected_revision is not None:
+            current_revision = project_file_revision(destination)
+            if current_revision != expected_revision:
+                raise ProjectSaveConflictError(
+                    "project changed on disk after it was opened or last saved; "
+                    f"refusing to overwrite {destination}"
+                )
+
         temp_path.replace(destination)
     except Exception:
         if temp_path is not None:
@@ -228,11 +298,16 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+def save_project_document(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_revision: str | None = None,
+) -> Path:
     destination = Path(path)
-    data = project.to_dict()
-    project_from_dict(data)
-    text = json.dumps(
-        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-    ) + "\n"
-    return atomic_write_text(destination, text)
+    text = _serialized_project_text(project)
+    return atomic_write_text(
+        destination,
+        text,
+        expected_revision=expected_revision,
+    )

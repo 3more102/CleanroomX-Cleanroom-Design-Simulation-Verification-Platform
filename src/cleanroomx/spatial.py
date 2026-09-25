@@ -946,6 +946,16 @@ def validate_layout(value: Any) -> list[dict]:
 
     return issues
 
+def _optional_finite_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -961,13 +971,66 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def _engineering_pressure_by_room(layout: dict, analysis: Any) -> dict[str, float]:
+    """Resolve current observed pressure from the active analysis by spatial room id."""
+    if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
+        return {}
+    rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
+    result: dict[str, float] = {}
+    if getattr(analysis, "kind", "") == "room_verification":
+        if rooms:
+            pressure = _optional_finite_number(analysis.input.get("observed_pressure_pa"))
+            if pressure is not None:
+                result[str(rooms[0]["id"])] = pressure
+        return result
+    if getattr(analysis, "kind", "") != "project_verification":
+        return result
+    targets = analysis.input.get("rooms")
+    if not isinstance(targets, list):
+        return result
+    by_name = {
+        str(target.get("name") or "").strip().casefold(): target
+        for target in targets
+        if isinstance(target, dict) and str(target.get("name") or "").strip()
+    }
+    for room in rooms:
+        link = str(
+            room.get("analysis_room_name") or room.get("name") or ""
+        ).strip().casefold()
+        target = by_name.get(link)
+        if target is None:
+            continue
+        pressure = _optional_finite_number(target.get("observed_pressure_pa"))
+        if pressure is not None:
+            result[str(room["id"])] = pressure
+    return result
+
+
 def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
+    """Describe pressure rendering without inventing unavailable engineering data.
+
+    Current active-analysis observed pressure takes precedence over a persisted
+    spatial pressure copy. A spatial pressure remains an explicit fallback only
+    when the mapped engineering input does not provide an observed pressure.
+    """
     normalized = normalize_layout(layout)
+    engineering_pressure = _engineering_pressure_by_room(normalized, analysis)
+    resolved: dict[str, tuple[float | None, str]] = {}
+    for room in normalized["rooms"]:
+        room_id = str(room["id"])
+        if room_id in engineering_pressure:
+            resolved[room_id] = (engineering_pressure[room_id], "engineering")
+            continue
+        spatial_pressure = _optional_finite_number(room.get("pressure_pa"))
+        resolved[room_id] = (
+            (spatial_pressure, "spatial")
+            if spatial_pressure is not None
+            else (None, "unavailable")
+        )
     pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+        pressure
+        for pressure, _source in resolved.values()
+        if pressure is not None
     ]
     minimum = min(pressures) if pressures else None
     maximum = max(pressures) if pressures else None
@@ -977,13 +1040,15 @@ def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
     }
     rooms = []
     for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
+        pressure, source = resolved[str(room["id"])]
+        available = pressure is not None
         rooms.append(
             {
                 "room_id": room["id"],
                 "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "pressure_pa": pressure,
+                "pressure_source": source,
+                "fill": _pressure_fill(pressure, minimum, maximum),
                 "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
             }
         )

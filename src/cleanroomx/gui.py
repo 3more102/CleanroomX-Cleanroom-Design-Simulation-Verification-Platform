@@ -43,6 +43,7 @@ from .project import (
 )
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .strict_json import strict_json_loads as _strict_json_loads
 
 
 RECOVERY_CHECKPOINT_DEBOUNCE_MS = 1500
@@ -64,14 +65,6 @@ _UNIT_SUFFIXES = (
     ("_um", "µm"),
     ("_m", "m"),
 )
-
-
-def _reject_json_constant(value: str):
-    raise ValueError(f"non-finite JSON constant is not allowed: {value}")
-
-
-def _strict_json_loads(text: str):
-    return json.loads(text, parse_constant=_reject_json_constant)
 
 
 def unit_hint(path: str) -> str:

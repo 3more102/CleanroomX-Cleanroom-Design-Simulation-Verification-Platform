@@ -1001,7 +1001,7 @@ def test_dossier_builds_whole_fan_curve_scenarios_end_to_end(tmp_path) -> None:
     report = markdown_dossier_report(result)
     assert "fan_curve_scenarios=2" in report
     assert "Whole fan-curve scenarios" in report
-    assert "lower_envelope, upper_envelope" in report
+    assert "lower\\_envelope, upper\\_envelope" in report
 
 
 def test_dossier_escapes_whole_fan_curve_scenario_names(tmp_path) -> None:

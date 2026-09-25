@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -57,6 +56,7 @@ def recovery_safety_message(candidate: RecoveryCandidate) -> str:
 @dataclass(frozen=True)
 class RecoveryInspection:
     project_name: str
+    project_identity: str
     saved_at_utc: str
     source_path: str
     source_status: str
@@ -106,6 +106,7 @@ def inspect_recovery(candidate: RecoveryCandidate) -> RecoveryInspection:
     source_path = str(candidate.source_path) if candidate.source_path else "Not yet saved"
     return RecoveryInspection(
         project_name=project_name,
+        project_identity=candidate.project_identity,
         saved_at_utc=candidate.saved_at_utc,
         source_path=source_path,
         source_status=recovery_relation_label(candidate),
@@ -145,6 +146,7 @@ class RecoveryInspectDialog(tk.Toplevel):
         details = ttk.LabelFrame(self, text="Recovery evidence", padding=10)
         details.pack(fill="x", padx=12, pady=(0, 10))
         rows = (
+            ("Project identity", inspection.project_identity),
             ("Recovered at", inspection.saved_at_utc),
             ("Source status", inspection.source_status),
             ("Original project", inspection.source_path),
@@ -286,7 +288,6 @@ class RecoveryCenter(tk.Toplevel):
                     f"were preserved: {issue_lines}{suffix}"
                 ),
                 wraplength=940,
-                foreground="#8a4b08",
                 padding=(12, 6, 12, 0),
             ).pack(fill="x")
 

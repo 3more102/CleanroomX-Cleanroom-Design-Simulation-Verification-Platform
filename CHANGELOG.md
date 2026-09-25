@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased precision-safe duct/HVAC composition — 2026-09-25
+
+- Separates full-precision duct-section/path and branch-flow calculations from rounded presentation dictionaries.
+- Uses full-precision pressure losses with `math.fsum` for path accumulation and exact values for critical-path/critical-terminal selection, eliminating display-rounding ties from engineering decisions.
+- Feeds the full-precision critical-path pressure into HVAC fan sizing while preserving the existing rounded public result fields and project schema.
+- Adds regressions for near-tie critical paths, accumulated per-section rounding error, branch trees, and downstream HVAC fan-duty composition.
+- Does not change Darcy-Weisbach equations, local-loss equations, friction-factor methods, topology semantics, fan efficiencies, engineering tolerances, or project-file compatibility.
+
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

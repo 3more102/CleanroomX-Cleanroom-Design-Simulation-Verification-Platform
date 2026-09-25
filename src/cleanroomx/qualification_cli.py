@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .project import atomic_write_text
 from .qualification import analyze_qualification_uncertainty
 from .qualification_io import load_qualification_uncertainty
 from .qualification_report import markdown_qualification_report
@@ -30,7 +31,7 @@ def main() -> int:
     )
 
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
 

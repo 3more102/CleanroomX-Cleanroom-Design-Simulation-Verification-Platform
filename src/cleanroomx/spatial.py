@@ -37,6 +37,24 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
+def _nice_ruler_step(scale_px_per_m: float, target_px: float = 72.0) -> float:
+    """Return a stable CAD-style metric ruler interval for the current 2D scale."""
+    scale = max(_positive(scale_px_per_m, 1.0), 1e-9)
+    target_m = max(target_px / scale, 1e-9)
+    exponent = math.floor(math.log10(target_m))
+    base = 10.0 ** exponent
+    fraction = target_m / base
+    if fraction <= 1.0:
+        multiplier = 1.0
+    elif fraction <= 2.0:
+        multiplier = 2.0
+    elif fraction <= 5.0:
+        multiplier = 5.0
+    else:
+        multiplier = 10.0
+    return multiplier * base
+
+
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
     return slug or f"room-{uuid.uuid4().hex[:8]}"
@@ -291,9 +309,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_labels = tk.BooleanVar(value=True)
         self._show_dimensions = tk.BooleanVar(value=True)
+        self._show_rulers = tk.BooleanVar(value=True)
+        self._show_crosshair = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
         self._show_devices = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
+        self._cursor_world: tuple[float, float] | None = None
         self._summary_var = tk.StringVar(value="0 rooms · 0 devices")
         self._selection_var = tk.StringVar(value="No selection")
         self._view_mode_var = tk.StringVar(value="split")
@@ -364,6 +385,15 @@ class SpatialDesignWorkspace(ttk.Frame):
             displaybar,
             text="Dimensions",
             variable=self._show_dimensions,
+            command=self.redraw,
+        ).pack(side="left", padx=2)
+        ttk.Checkbutton(displaybar, text="Rulers", variable=self._show_rulers, command=self.redraw).pack(
+            side="left", padx=2
+        )
+        ttk.Checkbutton(
+            displaybar,
+            text="Crosshair",
+            variable=self._show_crosshair,
             command=self.redraw,
         ).pack(side="left", padx=2)
         ttk.Checkbutton(displaybar, text="Pressure", variable=self._show_pressure, command=self.redraw).pack(
@@ -567,6 +597,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
         self.canvas_2d.bind("<Motion>", self._on_motion)
+        self.canvas_2d.bind("<Leave>", self._on_leave_2d)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
         self.canvas_2d.bind("<B1-Motion>", self._on_left_drag)
         self.canvas_2d.bind("<ButtonRelease-1>", self._on_left_up)
@@ -1185,10 +1216,20 @@ class SpatialDesignWorkspace(ttk.Frame):
                     if room.get("pressure_pa") is None or not self._show_pressure.get()
                     else f"\n{room['pressure_pa']:g} Pa"
                 )
+                area_m2 = room["length_m"] * room["width_m"]
+                selected_metrics = (
+                    f"\n{area_m2:.1f} m² · H {room['height_m']:g} m"
+                    if selected
+                    else ""
+                )
                 canvas.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2,
-                    text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
+                    text=(
+                        f"{room['name']}\n"
+                        f"{room['length_m']:g} × {room['width_m']:g} m"
+                        f"{selected_metrics}{pressure_text}"
+                    ),
                     justify="center",
                     fill="#0f172a",
                     tags=(f"room:{room['id']}", "room"),
@@ -1257,7 +1298,11 @@ class SpatialDesignWorkspace(ttk.Frame):
             self._draw_pressure_legend(canvas, pmin, pmax, dark=False)
         if self.layout["devices"] and self._show_devices.get():
             self._draw_device_legend(canvas, dark=False)
+        if self._show_rulers.get():
+            self._draw_2d_rulers(canvas)
         self._draw_2d_hud(canvas)
+        if self._show_crosshair.get() and self._cursor_world is not None:
+            self._draw_cursor_overlay(canvas, *self._cursor_world)
 
         if not self.layout["rooms"] and not self.layout["devices"]:
             canvas.create_text(
@@ -1358,6 +1403,112 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#334155",
             font=("TkDefaultFont", 8),
             tags=("hud",),
+        )
+
+    def _draw_2d_rulers(self, canvas: tk.Canvas) -> None:
+        """Overlay compact top/left metric rulers that follow pan and zoom."""
+        w = max(1, canvas.winfo_width())
+        h = max(1, canvas.winfo_height())
+        ruler = 22
+        bg = "#ffffff"
+        edge = "#cbd5e1"
+        fg = "#475569"
+        canvas.create_rectangle(0, 0, w, ruler, fill=bg, outline="", tags=("ruler",))
+        canvas.create_rectangle(0, 0, ruler, h, fill=bg, outline="", tags=("ruler",))
+        canvas.create_line(0, ruler, w, ruler, fill=edge, tags=("ruler",))
+        canvas.create_line(ruler, 0, ruler, h, fill=edge, tags=("ruler",))
+
+        scale = self._scale_2d()
+        major = _nice_ruler_step(scale)
+        minor = major / 5.0
+        x0, y0 = self._canvas_to_world(0, 0)
+        x1, y1 = self._canvas_to_world(w, h)
+
+        start_x = math.floor(min(x0, x1) / minor) * minor
+        end_x = math.ceil(max(x0, x1) / minor) * minor
+        x = start_x
+        guard = 0
+        while x <= end_x + minor * 0.5 and guard < 500:
+            cx, _ = self._world_to_canvas(x, 0)
+            major_tick = math.isclose(x / major, round(x / major), abs_tol=1e-6)
+            tick = 10 if major_tick else 5
+            canvas.create_line(cx, ruler, cx, ruler - tick, fill=fg, tags=("ruler",))
+            if major_tick and ruler + 2 <= cx <= w - 2:
+                canvas.create_text(
+                    cx + 2,
+                    2,
+                    anchor="nw",
+                    text=f"{x:g}",
+                    fill=fg,
+                    font=("TkDefaultFont", 7),
+                    tags=("ruler",),
+                )
+            x += minor
+            guard += 1
+
+        start_y = math.floor(min(y0, y1) / minor) * minor
+        end_y = math.ceil(max(y0, y1) / minor) * minor
+        y = start_y
+        guard = 0
+        while y <= end_y + minor * 0.5 and guard < 500:
+            _, cy = self._world_to_canvas(0, y)
+            major_tick = math.isclose(y / major, round(y / major), abs_tol=1e-6)
+            tick = 10 if major_tick else 5
+            canvas.create_line(ruler, cy, ruler - tick, cy, fill=fg, tags=("ruler",))
+            if major_tick and ruler + 2 <= cy <= h - 2:
+                canvas.create_text(
+                    2,
+                    cy + 2,
+                    anchor="nw",
+                    text=f"{y:g}",
+                    fill=fg,
+                    font=("TkDefaultFont", 7),
+                    tags=("ruler",),
+                )
+            y += minor
+            guard += 1
+
+        canvas.create_rectangle(0, 0, ruler, ruler, fill="#f8fafc", outline=edge, tags=("ruler",))
+        canvas.create_text(
+            ruler / 2,
+            ruler / 2,
+            text="m",
+            fill=fg,
+            font=("TkDefaultFont", 7, "bold"),
+            tags=("ruler",),
+        )
+
+    def _draw_cursor_overlay(self, canvas: tk.Canvas, x_m: float, y_m: float) -> None:
+        """Draw a CAD crosshair without mutating the spatial model."""
+        canvas.delete("cursor")
+        x, y = self._world_to_canvas(x_m, y_m)
+        w = max(1, canvas.winfo_width())
+        h = max(1, canvas.winfo_height())
+        if not (0 <= x <= w and 0 <= y <= h):
+            return
+        fill = "#64748b"
+        canvas.create_line(x, 0, x, h, fill=fill, dash=(3, 4), tags=("cursor",))
+        canvas.create_line(0, y, w, y, fill=fill, dash=(3, 4), tags=("cursor",))
+        label = f"{x_m:.2f}, {y_m:.2f} m"
+        tx = min(max(x + 10, 28), max(28, w - 112))
+        ty = min(max(y + 10, 28), max(28, h - 26))
+        canvas.create_rectangle(
+            tx - 4,
+            ty - 2,
+            tx + 104,
+            ty + 16,
+            fill="#ffffff",
+            outline="#cbd5e1",
+            tags=("cursor",),
+        )
+        canvas.create_text(
+            tx,
+            ty,
+            anchor="nw",
+            text=label,
+            fill="#334155",
+            font=("TkDefaultFont", 7, "bold"),
+            tags=("cursor",),
         )
 
     def _draw_device_legend(self, canvas: tk.Canvas, *, dark: bool) -> None:
@@ -1682,7 +1833,16 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
+        self._cursor_world = (x, y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        if self._show_crosshair.get():
+            self._draw_cursor_overlay(self.canvas_2d, x, y)
+        else:
+            self.canvas_2d.delete("cursor")
+
+    def _on_leave_2d(self, event: tk.Event) -> None:
+        self._cursor_world = None
+        self.canvas_2d.delete("cursor")
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

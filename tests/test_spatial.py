@@ -102,6 +102,60 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["view"]["elevation_deg"] == 5
 
 
+def test_normalize_layout_makes_device_ids_unique_and_room_links_canonical_strings():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "101",
+                    "name": "Process",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                }
+            ],
+            "devices": [
+                {
+                    "id": "sensor",
+                    "type": "sensor",
+                    "name": "S1",
+                    "room_id": 101,
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 1,
+                },
+                {
+                    "id": "sensor",
+                    "type": "sensor",
+                    "name": "S2",
+                    "room_id": " 101 ",
+                    "x_m": 2,
+                    "y_m": 2,
+                    "z_m": 1,
+                },
+                {
+                    "id": "sensor-2",
+                    "type": "sensor",
+                    "name": "S3",
+                    "room_id": "",
+                    "x_m": 3,
+                    "y_m": 3,
+                    "z_m": 1,
+                },
+            ],
+        }
+    )
+
+    assert [device["id"] for device in layout["devices"]] == [
+        "sensor",
+        "sensor-3",
+        "sensor-2",
+    ]
+    assert [device["room_id"] for device in layout["devices"]] == ["101", "101", None]
+
+
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():
     analysis = AnalysisDocument(
         id="verification",
@@ -318,6 +372,64 @@ def test_spatial_issues_reports_overlaps_and_bad_device_placement_but_not_touchi
         issue.get("room_ids") == ["process", "touching"]
         for issue in issues
     )
+
+
+def test_spatial_issues_reports_device_vertical_bounds():
+    layout = {
+        "rooms": [
+            {
+                "id": "room",
+                "name": "Room",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            }
+        ],
+        "devices": [
+            {
+                "id": "below",
+                "type": "sensor",
+                "name": "Below",
+                "room_id": "room",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": -0.2,
+            },
+            {
+                "id": "above",
+                "type": "ffu",
+                "name": "Above",
+                "room_id": "room",
+                "x_m": 2,
+                "y_m": 2,
+                "z_m": 3.2,
+            },
+            {
+                "id": "ceiling",
+                "type": "supply",
+                "name": "Ceiling",
+                "room_id": "room",
+                "x_m": 3,
+                "y_m": 3,
+                "z_m": 3.0,
+            },
+        ],
+    }
+
+    issues = spatial_issues(layout)
+    by_device = {
+        issue["device_id"]: issue["code"]
+        for issue in issues
+        if issue.get("device_id") in {"below", "above"}
+    }
+
+    assert by_device == {
+        "below": "DEVICE_BELOW_FLOOR",
+        "above": "DEVICE_ABOVE_CEILING",
+    }
+    assert not any(issue.get("device_id") == "ceiling" for issue in issues)
 
 
 def test_repair_device_assignments_repairs_only_room_links():

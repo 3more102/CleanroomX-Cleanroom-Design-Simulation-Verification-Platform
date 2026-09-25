@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_loop_uncertainty_models import FanLoopNetworkUncertaintyStudy
 from .loop_network_io import looped_flow_network_from_dict
@@ -27,6 +28,17 @@ def _uncertain_value(
     )
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "loop_network",
+    "fan_discharge_node",
+    "fan_suction_node",
+    "fixed_pressure_pa",
+    "edge_resistance_uncertainty",
+    "max_corner_cases",
+    context="fan/loop uncertainty input",
+)
 def fan_loop_network_uncertainty_from_dict(
     data: dict,
 ) -> FanLoopNetworkUncertaintyStudy:

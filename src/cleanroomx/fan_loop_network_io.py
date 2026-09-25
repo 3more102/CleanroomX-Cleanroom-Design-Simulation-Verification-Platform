@@ -3,11 +3,21 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_loop_network import FanLoopNetworkStudy
 from .loop_network_io import looped_flow_network_from_dict
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "loop_network",
+    "fan_discharge_node",
+    "fan_suction_node",
+    "fixed_pressure_pa",
+    context="fan/loop-network input",
+)
 def fan_loop_network_study_from_dict(data: dict) -> FanLoopNetworkStudy:
     fan_data = data["fan_curve"]
     return FanLoopNetworkStudy(

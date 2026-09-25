@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_variable_friction_uncertainty import (
     FanCurveScenario,
@@ -225,6 +226,30 @@ def _edge_parameter_uncertainty(
     return result
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "loop_network",
+    "fan_discharge_node",
+    "fan_suction_node",
+    "fixed_pressure_pa",
+    "edge_local_loss_uncertainty",
+    "edge_absolute_roughness_uncertainty",
+    "edge_kinematic_viscosity_uncertainty",
+    "edge_air_density_uncertainty",
+    "edge_length_uncertainty",
+    "edge_circular_diameter_uncertainty",
+    "edge_rectangular_width_uncertainty",
+    "edge_rectangular_height_uncertainty",
+    "fan_curve_pressure_uncertainty",
+    "fan_curve_airflow_uncertainty",
+    "fan_curve_scenarios",
+    "fan_speed_ratio",
+    "max_corner_cases",
+    "power_efficiencies",
+    "solver",
+    context="fan/variable-friction uncertainty input",
+)
 def fan_variable_friction_loop_uncertainty_from_dict(
     data: dict,
 ) -> FanVariableFrictionLoopUncertaintyStudy:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_variable_friction_loop import FanVariableFrictionLoopStudy
 from .loop_network_io import looped_flow_network_from_dict
@@ -21,6 +22,17 @@ _SOLVER_KEYS = {
 }
 
 
+@strict_input_fields(
+    "name",
+    "fan_curve",
+    "loop_network",
+    "fan_discharge_node",
+    "fan_suction_node",
+    "fixed_pressure_pa",
+    "power_efficiencies",
+    "solver",
+    context="fan/variable-friction input",
+)
 def fan_variable_friction_loop_study_from_dict(
     data: dict,
 ) -> FanVariableFrictionLoopStudy:

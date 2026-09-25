@@ -3,10 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .damper_study import DamperResistanceCase, LoopDamperStudy
 from .loop_network_io import looped_flow_network_from_dict
 
 
+@strict_input_fields(
+    "name",
+    "loop_network",
+    "cases",
+    context="loop-damper study input",
+)
 def loop_damper_study_from_dict(data: dict) -> LoopDamperStudy:
     return LoopDamperStudy(
         name=data["name"],

@@ -3,11 +3,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .input_contracts import strict_input_fields
 from .fan_curve import FanCurve, FanCurvePoint
 from .fan_loop_speed import FanLoopSpeedStudy
 from .loop_network_io import looped_flow_network_from_dict
 
 
+@strict_input_fields(
+    "name",
+    "reference_fan_curve",
+    "loop_network",
+    "fan_discharge_node",
+    "fan_suction_node",
+    "speed_ratios",
+    "fixed_pressure_pa",
+    "reference_speed_rpm",
+    context="fan/loop speed input",
+)
 def fan_loop_speed_study_from_dict(data: dict) -> FanLoopSpeedStudy:
     fan_data = data["reference_fan_curve"]
     return FanLoopSpeedStudy(

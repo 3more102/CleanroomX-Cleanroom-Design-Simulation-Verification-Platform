@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased portable engineering HTML report — 2026-09-25
+
+- Adds a deterministic, self-contained HTML engineering report for completed desktop analyses without introducing a web/runtime dependency.
+- Revalidates the completed run against the exact current analysis kind and canonical input SHA-256 inside the report builder itself, so stale evidence fails closed even outside the GUI.
+- Bundles project/analysis identity, exact submitted input, normalized result, diagnostics/execution provenance, backend Markdown, and a machine-readable versioned report payload.
+- Adds a canonical SHA-256 over the report evidence payload, excluding only its integrity object; the digest is integrity evidence rather than a digital signature or certification claim.
+- Escapes all presentation text and safely encodes embedded JSON so engineering/user data cannot inject executable HTML; the report has no external scripts, stylesheets, fonts, images, or network resources.
+- Integrates **File → Export Portable HTML Report…** through the existing atomic export path while preserving project schema version 1 and prior JSON/Markdown exports.
+- Adds deterministic rendering, freshness rejection, tamper detection, HTML-injection, and desktop export regressions plus operator/developer documentation.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

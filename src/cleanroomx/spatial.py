@@ -36,26 +36,7 @@ def _positive(value: Any, default: float) -> float:
 
 def _room_id(name: str) -> str:
     slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or "room"
-
-
-def _allocate_unique_id(
-    preferred: Any,
-    *,
-    fallback: str,
-    used_ids: set[str],
-) -> str:
-    """Return a deterministic unique id without rewriting an already unique id."""
-    base = str(preferred).strip() if preferred is not None else ""
-    if not base:
-        base = fallback
-    candidate = base
-    suffix = 2
-    while candidate in used_ids:
-        candidate = f"{base}-{suffix}"
-        suffix += 1
-    used_ids.add(candidate)
-    return candidate
+    return slug or f"room-{uuid.uuid4().hex[:8]}"
 
 
 def _unique_room_name_index(rooms: list[dict], *, source: str) -> dict[str, dict]:
@@ -117,11 +98,10 @@ def normalize_layout(value: Any) -> dict:
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = _allocate_unique_id(
-                raw.get("id"),
-                fallback=_room_id(name),
-                used_ids=used_ids,
-            )
+            room_id = str(raw.get("id") or _room_id(name)).strip()
+            if not room_id or room_id in used_ids:
+                room_id = f"room-{uuid.uuid4().hex[:8]}"
+            used_ids.add(room_id)
             room = {
                 "id": room_id,
                 "name": name,
@@ -137,7 +117,6 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
-    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
     if isinstance(raw_devices, list):
         for raw in raw_devices:
@@ -146,23 +125,13 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = _allocate_unique_id(
-                raw.get("id"),
-                fallback=f"device-{device_type}",
-                used_ids=used_device_ids,
-            )
-            raw_room_id = raw.get("room_id")
-            room_id = (
-                str(raw_room_id).strip()
-                if raw_room_id is not None and str(raw_room_id).strip()
-                else None
-            )
+            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
                     "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": room_id,
+                    "room_id": raw.get("room_id"),
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),
@@ -202,7 +171,6 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         raw_rooms = []
 
     x_cursor = 0.0
-    used_ids: set[str] = set()
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -211,11 +179,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
         width = _positive(raw.get("width_m"), 4.0)
         height = _positive(raw.get("height_m"), 3.0)
         room = {
-            "id": _allocate_unique_id(
-                _room_id(name),
-                fallback="room",
-                used_ids=used_ids,
-            ),
+            "id": _room_id(name),
             "name": name,
             "x_m": x_cursor,
             "y_m": 0.0,
@@ -259,8 +223,8 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     """Synchronize room geometry only when room identity is unambiguous.
 
-    The operation validates the complete source/target mapping before mutating the
-    analysis so a failed synchronization cannot leave a partially updated input.
+    The complete mapping is validated before mutation so a failed synchronization
+    cannot leave a partially updated engineering input.
     """
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
@@ -815,11 +779,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
         index = len(self.layout["rooms"]) + 1
         room = {
-            "id": _allocate_unique_id(
-                f"room-{uuid.uuid4().hex[:8]}",
-                fallback=f"room-{index}",
-                used_ids={str(item["id"]) for item in self.layout["rooms"]},
-            ),
+            "id": f"room-{uuid.uuid4().hex[:8]}",
             "name": f"Room {index}",
             "x_m": x + (1.0 if self.layout["rooms"] else 0.0),
             "y_m": 0.0,
@@ -852,11 +812,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             x = y = z = 0.0
             room_id = None
         device = {
-            "id": _allocate_unique_id(
-                f"device-{uuid.uuid4().hex[:8]}",
-                fallback=f"device-{device_type}",
-                used_ids={str(item["id"]) for item in self.layout["devices"]},
-            ),
+            "id": f"device-{uuid.uuid4().hex[:8]}",
             "type": device_type,
             "name": device_type.upper(),
             "room_id": room_id,

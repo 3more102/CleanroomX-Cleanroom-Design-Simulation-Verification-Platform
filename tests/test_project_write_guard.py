@@ -5,12 +5,14 @@ from dataclasses import replace
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
     ProjectDocument,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
+    load_project_document_with_revision,
     project_file_revision_matches,
     save_project_document,
     save_project_document_guarded,
@@ -26,6 +28,28 @@ class Value:
 
     def set(self, value):
         self.value = value
+
+
+def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="First"))
+    original_load = project_module.load_project_document
+    calls = {"count": 0}
+
+    def changing_load(source):
+        project = original_load(source)
+        if calls["count"] == 0:
+            save_project_document(path, ProjectDocument(name="Second"))
+        calls["count"] += 1
+        return project
+
+    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+
+    project, revision = load_project_document_with_revision(path)
+
+    assert calls["count"] == 2
+    assert project.name == "Second"
+    assert revision == capture_project_file_revision(path)
 
 
 def test_guarded_save_rejects_external_content_change(tmp_path):

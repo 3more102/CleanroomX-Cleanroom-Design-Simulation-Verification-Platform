@@ -733,6 +733,9 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._drag_anchor: tuple[float, float] | None = None
         self._pan_anchor: tuple[int, int] | None = None
         self._pan_origin: tuple[float, float] | None = None
+        self._orbit_anchor: tuple[int, int] | None = None
+        self._orbit_origin: tuple[float, float] | None = None
+        self._hovered: _Hit | None = None
         self._show_grid = tk.BooleanVar(value=True)
         self._snap_to_grid = tk.BooleanVar(value=True)
         self._show_pressure = tk.BooleanVar(value=True)
@@ -742,6 +745,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
+        self._engineering_var = tk.StringVar(value="Engineering mapping: no selection")
         self._metrics_var = tk.StringVar(value="0 rooms")
         self._zoom_var = tk.StringVar(value="Zoom 100%")
         self._validation_issues: list[dict] = []
@@ -782,6 +786,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._redo_button.pack(side="left", padx=2)
         ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Reset 2D", command=self.reset_2d).pack(side="left", padx=2)
         ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
@@ -868,6 +873,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("floor_elevation_m", "Floor elev. (m)"),
             ("classification", "Classification"),
             ("analysis_room_name", "Analysis room"),
+            ("notes", "Notes"),
             ("room_id", "Room ID"),
             ("orientation_deg", "Orientation (deg)"),
             ("wall_side", "Wall side"),
@@ -883,6 +889,12 @@ class SpatialDesignWorkspace(ttk.Frame):
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
         button_row = 2 + (len(fields) + 1) // 2
+        ttk.Label(
+            inspector,
+            textvariable=self._engineering_var,
+            justify="left",
+            wraplength=560,
+        ).grid(row=button_row, column=0, columnspan=3, sticky="w", pady=(8, 0))
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -892,6 +904,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_2d.bind("<Configure>", lambda event: self.redraw())
         self.canvas_3d.bind("<Configure>", lambda event: self._draw_3d())
         self.canvas_2d.bind("<Motion>", self._on_motion)
+        self.canvas_2d.bind("<Leave>", self._on_leave_2d)
         self.canvas_2d.bind("<Button-1>", self._on_left_down)
         self.canvas_2d.bind("<B1-Motion>", self._on_left_drag)
         self.canvas_2d.bind("<ButtonRelease-1>", self._on_left_up)
@@ -906,6 +919,8 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.canvas_3d.bind("<Button-4>", lambda event: self._zoom_3d(1.1))
         self.canvas_3d.bind("<Button-5>", lambda event: self._zoom_3d(1 / 1.1))
         self.canvas_3d.bind("<Button-1>", self._on_3d_click)
+        self.canvas_3d.bind("<Shift-Button-1>", self._on_orbit_3d_down)
+        self.canvas_3d.bind("<Shift-B1-Motion>", self._on_orbit_3d_drag)
         self.canvas_3d.bind("<Button-2>", self._on_pan_3d_down)
         self.canvas_3d.bind("<B2-Motion>", self._on_pan_3d_drag)
         self.canvas_3d.bind("<Button-3>", self._on_pan_3d_down)

@@ -121,6 +121,7 @@ def _make_recovery(tmp_path, editor_text):
 
 def _app_for_restore(recovery_dir):
     app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
     app.project = new_project()
     app.project_path = None
     app._recovery_source_path = None

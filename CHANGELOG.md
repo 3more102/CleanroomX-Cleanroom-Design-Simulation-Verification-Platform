@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased recovery semantic comparison — 2026-09-25
+
+- Adds a deterministic semantic comparison to **Recovery Center → Inspect…** so operators can review exact recovered project changes before restoring.
+- Reports added, removed, and changed paths across project metadata, active-analysis selection, analysis definitions, and nested analysis inputs.
+- Matches analysis-list entries by stable analysis ID to avoid noisy order-only diffs.
+- Ignores file-only serialization differences such as whitespace and runtime application-version text; a changed source fingerprint can therefore be identified as semantically unchanged.
+- Treats missing, unreadable, or invalid original project files as unavailable comparison evidence without guessing or blocking protected recovery.
+- Caps displayed differences and marks truncated previews so very large projects cannot flood the recovery dialog.
+- Adds regression coverage for exact nested change paths, serialization-only changes, and missing-source behavior.
+
 ## Unreleased startup crash recovery — 2026-09-25
 
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.

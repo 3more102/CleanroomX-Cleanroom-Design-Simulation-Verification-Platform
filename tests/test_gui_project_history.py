@@ -191,3 +191,16 @@ def test_project_undo_is_blocked_while_backend_run_is_active(monkeypatch):
 
     assert app.undo_project_edit() is False
     assert warnings
+
+
+def test_local_editor_or_spatial_edit_invalidates_stale_project_history():
+    project = ProjectDocument(name="Boundary")
+    app = _app(project, editor_id=None, editor_text="")
+    before = app._capture_project_history_state()
+    app.name_var.value = "Boundary 2"
+    assert app._record_project_edit(before, "Rename project") is True
+    assert app._project_history.can_undo is True
+
+    app._invalidate_project_history_for_local_edit()
+    assert app._project_history.can_undo is False
+    assert app._project_history.can_redo is False

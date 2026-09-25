@@ -1055,3 +1055,72 @@ def test_explicit_save_cancels_pending_recovery_checkpoint():
     assert app._autosave_manager.saved == [target]
     assert app.autosave_status_var.value == "Autosave: clean"
 
+
+
+def test_spatial_sync_ambiguity_is_reported_without_mutating_analysis(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "Ante", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    original = json.loads(json.dumps(analysis.input))
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = False
+    app.root = object()
+    app.status_var = Status()
+    app._editor_analysis = lambda: analysis
+    app._current_analysis = lambda: analysis
+    app._commit_editor = lambda selected: selected
+    app.spatial_workspace = type(
+        "Workspace",
+        (),
+        {
+            "layout": {
+                "rooms": [
+                    {
+                        "id": "process-a",
+                        "name": "Process",
+                        "x_m": 0,
+                        "y_m": 0,
+                        "length_m": 7,
+                        "width_m": 5,
+                        "height_m": 3,
+                    },
+                    {
+                        "id": "process-b",
+                        "name": "process",
+                        "x_m": 8,
+                        "y_m": 0,
+                        "length_m": 8,
+                        "width_m": 5,
+                        "height_m": 3,
+                    },
+                ]
+            }
+        },
+    )()
+
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    app._sync_spatial_to_current_analysis()
+
+    assert analysis.input == original
+    assert warnings
+    assert warnings[0][0] == "Cannot synchronize geometry"
+    assert "duplicate room name" in warnings[0][1]
+    assert "blocked" in app.status_var.value.lower()

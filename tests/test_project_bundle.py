@@ -13,6 +13,7 @@ from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
 from cleanroomx.project_bundle import (
     PROJECT_BUNDLE_MANIFEST,
+    ProjectBundleDurabilityError,
     ProjectBundleError,
     export_project_bundle,
     export_project_bundle_from_path,
@@ -556,4 +557,88 @@ def test_bundle_extraction_does_not_publish_if_archive_changes_during_copy(
         extract_project_bundle(bundle, destination)
 
     assert not destination.exists()
+    assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
+def test_bundle_extraction_fsyncs_staged_tree_and_publish_parent(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "durable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        bundle_module,
+        "fsync_directory",
+        lambda directory: calls.append(Path(directory)),
+    )
+    destination = tmp_path / "extracted"
+
+    extracted_project = extract_project_bundle(bundle, destination)
+
+    assert extracted_project.is_file()
+    assert calls[-1] == tmp_path
+    staged_calls = calls[:-1]
+    assert any(path.name == "dependencies" for path in staged_calls)
+    assert any(
+        path.parent == tmp_path
+        and path.name.startswith(".extracted.")
+        and path.name.endswith(".tmp")
+        for path in staged_calls
+    )
+
+
+def test_bundle_extraction_stage_directory_sync_failure_does_not_publish(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "stage-failure.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    def fail_stage_sync(directory):
+        if Path(directory).name == "dependencies":
+            raise OSError("injected staged-directory sync failure")
+
+    monkeypatch.setattr(bundle_module, "fsync_directory", fail_stage_sync)
+    destination = tmp_path / "extracted"
+
+    with pytest.raises(ProjectBundleError, match="durably stage bundle extraction"):
+        extract_project_bundle(bundle, destination)
+
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".extracted.*.tmp"))
+
+
+def test_bundle_extraction_publish_sync_failure_is_marked_committed(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "publish-failure.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    destination = tmp_path / "extracted"
+
+    def fail_publish_sync(directory):
+        if Path(directory) == tmp_path:
+            raise OSError("injected publish-directory sync failure")
+
+    monkeypatch.setattr(bundle_module, "fsync_directory", fail_publish_sync)
+
+    with pytest.raises(ProjectBundleDurabilityError) as exc_info:
+        extract_project_bundle(bundle, destination)
+
+    assert exc_info.value.committed is True
+    assert exc_info.value.destination == destination
+    assert isinstance(exc_info.value.__cause__, OSError)
+    assert (destination / "project.cleanroomx.json").is_file()
     assert not list(tmp_path.glob(".extracted.*.tmp"))

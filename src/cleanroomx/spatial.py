@@ -448,6 +448,41 @@ def _classify_sync_state(
     return "conflicting"
 
 
+def _room_verification_mapping(
+    rooms: list[dict],
+    target: dict,
+) -> tuple[dict | None, str]:
+    """Resolve a single-room analysis by stable room link instead of list order."""
+    target_name = str(target.get("name") or "").strip()
+    if target_name:
+        matches = [
+            room
+            for room in rooms
+            if str(room.get("analysis_room_name") or room.get("name") or "")
+            .strip()
+            .casefold()
+            == target_name.casefold()
+        ]
+        if len(matches) == 1:
+            return matches[0], "mapped"
+        if len(matches) > 1:
+            return None, "ambiguous"
+        return None, "unmapped"
+    if len(rooms) == 1:
+        return rooms[0], "mapped"
+    if len(rooms) > 1:
+        return None, "ambiguous"
+    return None, "unmapped"
+
+
+def _optional_finite_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def engineering_sync_status(layout: dict, analysis: Any) -> dict:
     """Return deterministic room-level geometry/engineering synchronization state.
 
@@ -465,33 +500,56 @@ def engineering_sync_status(layout: dict, analysis: Any) -> dict:
     payload = payload if isinstance(payload, dict) else {}
 
     if kind == "room_verification":
-        for index, room in enumerate(rooms):
-            target = payload if index == 0 else None
-            if target is None:
-                statuses.append(
-                    {
-                        "room_id": room["id"],
-                        "analysis_room_name": str(
-                            room.get("analysis_room_name") or room["name"]
-                        ),
-                        "state": "unmapped",
-                        "differences": [],
-                        "message": "Only the first spatial room maps to a room-verification analysis.",
-                    }
+        mapped_room, mapping_state = _room_verification_mapping(rooms, payload)
+        target_name = str(payload.get("name") or "").strip()
+        for room in rooms:
+            link = str(
+                room.get("analysis_room_name") or room.get("name") or ""
+            ).strip()
+            if mapped_room is room:
+                baseline_room = baseline_by_room.get(room["id"])
+                baseline_link = (
+                    str(baseline_room.get("analysis_room_name") or "")
+                    .strip()
+                    .casefold()
+                    if baseline_room is not None
+                    else ""
                 )
-                continue
-            state = _classify_sync_state(
-                room, target, baseline_by_room.get(room["id"])
-            )
+                current_link = str(target_name or link).strip().casefold()
+                if baseline_link and current_link and baseline_link != current_link:
+                    state = "conflicting"
+                    message = (
+                        "The engineering-room mapping changed since the last explicit "
+                        "synchronization."
+                    )
+                else:
+                    state = _classify_sync_state(room, payload, baseline_room)
+                    message = ""
+                differences = _geometry_differences(room, payload)
+            elif mapping_state == "ambiguous" and (
+                not target_name or link.casefold() == target_name.casefold()
+            ):
+                state = "conflicting"
+                differences = []
+                message = (
+                    "Multiple spatial rooms map to the active room-verification "
+                    "engineering room."
+                )
+            else:
+                state = "unmapped"
+                differences = []
+                message = (
+                    f"Spatial room does not map to engineering room {target_name!r}."
+                    if target_name
+                    else "The active room-verification analysis has no unique spatial mapping."
+                )
             statuses.append(
                 {
                     "room_id": room["id"],
-                    "analysis_room_name": str(
-                        room.get("analysis_room_name") or target.get("name") or room["name"]
-                    ),
+                    "analysis_room_name": link or target_name,
                     "state": state,
-                    "differences": _geometry_differences(room, target),
-                    "message": "",
+                    "differences": differences,
+                    "message": message,
                 }
             )
     elif kind == "project_verification":
@@ -633,8 +691,19 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
     changed = False
     if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
         target = analysis.input
+        source, mapping_state = _room_verification_mapping(rooms, target)
+        target_name = str(target.get("name") or "").strip()
+        if source is None:
+            if mapping_state == "ambiguous":
+                raise SpatialSyncError(
+                    "Cannot synchronize room verification because multiple spatial "
+                    "rooms map to the active engineering room."
+                )
+            raise SpatialSyncError(
+                "Cannot synchronize room verification because no spatial room maps "
+                f"to engineering room {target_name!r}."
+            )
         for key in ("length_m", "width_m", "height_m"):
             value = source[key]
             if target.get(key) != value:
@@ -962,36 +1031,159 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
 
 
 def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
+    """Describe pressure rendering using mapped engineering pressure when available."""
     normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
+    rooms = normalized["rooms"]
+    mapped_pressure: dict[str, tuple[float | None, str]] = {
+        room["id"]: (None, "unavailable") for room in rooms
+    }
+    kind = getattr(analysis, "kind", "")
+    payload = getattr(analysis, "input", None)
+    payload = payload if isinstance(payload, dict) else {}
+
+    if kind == "room_verification":
+        mapped_room, mapping_state = _room_verification_mapping(rooms, payload)
+        if mapped_room is not None and mapping_state == "mapped":
+            value = _optional_finite_number(payload.get("observed_pressure_pa"))
+            if value is not None:
+                mapped_pressure[mapped_room["id"]] = (
+                    value,
+                    "engineering_observed",
+                )
+    elif kind == "project_verification":
+        raw_rooms = payload.get("rooms", [])
+        raw_rooms = raw_rooms if isinstance(raw_rooms, list) else []
+        target_groups: dict[str, list[dict]] = {}
+        for target in raw_rooms:
+            if not isinstance(target, dict):
+                continue
+            name = str(target.get("name") or "").strip()
+            if name:
+                target_groups.setdefault(name.casefold(), []).append(target)
+        for room in rooms:
+            link = str(
+                room.get("analysis_room_name") or room.get("name") or ""
+            ).strip()
+            targets = target_groups.get(link.casefold(), [])
+            if len(targets) != 1:
+                continue
+            value = _optional_finite_number(
+                targets[0].get("observed_pressure_pa")
+            )
+            if value is not None:
+                mapped_pressure[room["id"]] = (
+                    value,
+                    "engineering_observed",
+                )
+
+    resolved_pressure: dict[str, tuple[float | None, str]] = {}
+    for room in rooms:
+        value, source = mapped_pressure[room["id"]]
+        if value is None:
+            configured = _optional_finite_number(room.get("pressure_pa"))
+            if configured is not None:
+                value, source = configured, "spatial_configured"
+        resolved_pressure[room["id"]] = (value, source)
+
+    available_values = [
+        value for value, _source in resolved_pressure.values() if value is not None
     ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
+    minimum = min(available_values) if available_values else None
+    maximum = max(available_values) if available_values else None
     sync = engineering_sync_status(normalized, analysis)
     mapping_by_room = {
         record["room_id"]: record["state"] for record in sync["rooms"]
     }
-    rooms = []
-    for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
-        rooms.append(
+    room_records = []
+    for room in rooms:
+        pressure, source = resolved_pressure[room["id"]]
+        available = pressure is not None
+        room_records.append(
             {
                 "room_id": room["id"],
                 "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
+                "pressure_pa": pressure,
+                "source": source,
+                "fill": _pressure_fill(pressure, minimum, maximum),
                 "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
             }
         )
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,
-        "rooms": rooms,
+        "rooms": room_records,
     }
+
+
+def pressure_relationship_state(layout: dict, analysis: Any = None) -> list[dict]:
+    """Return real pressure-cascade status without inventing missing values."""
+    normalized = normalize_layout(layout)
+    payload = getattr(analysis, "input", None)
+    if (
+        getattr(analysis, "kind", "") != "project_verification"
+        or not isinstance(payload, dict)
+    ):
+        return []
+    cascade = payload.get("pressure_cascade", [])
+    if not isinstance(cascade, list):
+        return []
+
+    room_groups: dict[str, list[dict]] = {}
+    for room in normalized["rooms"]:
+        link = str(
+            room.get("analysis_room_name") or room.get("name") or ""
+        ).strip()
+        if link:
+            room_groups.setdefault(link.casefold(), []).append(room)
+
+    overlay = pressure_overlay_state(normalized, analysis)
+    pressure_by_room = {
+        item["room_id"]: item for item in overlay["rooms"]
+    }
+    relationships: list[dict] = []
+    for index, item in enumerate(cascade):
+        if not isinstance(item, dict):
+            continue
+        high_name = str(item.get("higher_pressure_room") or "").strip()
+        low_name = str(item.get("lower_pressure_room") or "").strip()
+        high_matches = room_groups.get(high_name.casefold(), [])
+        low_matches = room_groups.get(low_name.casefold(), [])
+        high = high_matches[0] if len(high_matches) == 1 else None
+        low = low_matches[0] if len(low_matches) == 1 else None
+        minimum_delta = _optional_finite_number(item.get("min_delta_pa"))
+        record = {
+            "index": index,
+            "higher_pressure_room": high_name,
+            "lower_pressure_room": low_name,
+            "higher_room_id": high.get("id") if high is not None else None,
+            "lower_room_id": low.get("id") if low is not None else None,
+            "min_delta_pa": minimum_delta,
+            "actual_delta_pa": None,
+            "status": "unavailable",
+        }
+        if high is not None and low is not None and minimum_delta is not None:
+            high_state = pressure_by_room[high["id"]]
+            low_state = pressure_by_room[low["id"]]
+            high_pressure = high_state["pressure_pa"]
+            low_pressure = low_state["pressure_pa"]
+            record.update(
+                {
+                    "higher_pressure_pa": high_pressure,
+                    "lower_pressure_pa": low_pressure,
+                    "higher_pressure_source": high_state["source"],
+                    "lower_pressure_source": low_state["source"],
+                }
+            )
+            if high_pressure is not None and low_pressure is not None:
+                delta = high_pressure - low_pressure
+                record["actual_delta_pa"] = delta
+                record["status"] = (
+                    "pass"
+                    if delta + SPATIAL_GEOMETRY_EPSILON_M >= minimum_delta
+                    else "fail"
+                )
+        relationships.append(record)
+    return relationships
 
 
 @dataclass
@@ -1688,64 +1880,101 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(self) -> list[tuple[dict, dict, float | None]]:
+    def _pressure_relationships(self) -> list[dict]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
-        relationships: list[tuple[dict, dict, float | None]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
-            if high is None or low is None:
-                continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            relationships.append((high, low, delta_value))
-        return relationships
+        return pressure_relationship_state(self.layout, self._analysis_getter())
+
+    @staticmethod
+    def _relationship_style(status: str) -> tuple[str, tuple[int, ...]]:
+        if status == "pass":
+            return "#15803d", ()
+        if status == "fail":
+            return "#dc2626", ()
+        return "#6b7280", (5, 4)
 
     def _draw_relationships_2d(self) -> None:
-        for high, low, min_delta in self._pressure_relationships():
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for relationship in self._pressure_relationships():
+            high = room_by_id.get(relationship.get("higher_room_id"))
+            low = room_by_id.get(relationship.get("lower_room_id"))
+            if high is None or low is None:
+                continue
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
+            color, dash = self._relationship_style(relationship["status"])
             self.canvas_2d.create_line(
-                x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill="#7c3aed",
+                x0,
+                y0,
+                x1,
+                y1,
+                arrow="last",
+                width=3,
+                dash=dash,
+                fill=color,
                 tags=("pressure_relationship",),
             )
-            if self._show_labels.get() and min_delta is not None:
+            if self._show_labels.get():
+                actual = relationship.get("actual_delta_pa")
+                minimum = relationship.get("min_delta_pa")
+                label = "Δp unavailable" if actual is None else f"Δp {actual:g} Pa"
+                if minimum is not None:
+                    label += f" / min {minimum:g}"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
-                    text=f"≥ {min_delta:g} Pa",
-                    fill="#6d28d9",
+                    text=label,
+                    fill=color,
                     tags=("pressure_relationship",),
                 )
+
+    def _draw_relationships_3d(
+        self,
+        *,
+        center_x_m: float,
+        center_y_m: float,
+        floor_z_m: float,
+    ) -> None:
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        for relationship in self._pressure_relationships():
+            high = room_by_id.get(relationship.get("higher_room_id"))
+            low = room_by_id.get(relationship.get("lower_room_id"))
+            if high is None or low is None:
+                continue
+            high_z = (
+                high.get("floor_elevation_m", floor_z_m)
+                + high["height_m"]
+                + 0.35
+            )
+            low_z = (
+                low.get("floor_elevation_m", floor_z_m)
+                + low["height_m"]
+                + 0.35
+            )
+            start = self._project_3d(
+                high["x_m"] - center_x_m + high["length_m"] / 2.0,
+                high["y_m"] - center_y_m + high["width_m"] / 2.0,
+                high_z,
+            )
+            end = self._project_3d(
+                low["x_m"] - center_x_m + low["length_m"] / 2.0,
+                low["y_m"] - center_y_m + low["width_m"] / 2.0,
+                low_z,
+            )
+            color, dash = self._relationship_style(relationship["status"])
+            self.canvas_3d.create_line(
+                *start,
+                *end,
+                arrow="last",
+                width=3,
+                dash=dash,
+                fill=color,
+                tags=("pressure_relationship_3d",),
+            )
 
     def _draw_2d(self) -> None:
         canvas = self.canvas_2d
@@ -1800,11 +2029,14 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
-                pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
-                )
+                pressure_text = ""
+                if self._show_pressure.get():
+                    pressure_value = overlay_by_room[room["id"]]["pressure_pa"]
+                    pressure_text = (
+                        "\nPressure unavailable"
+                        if pressure_value is None
+                        else f"\n{pressure_value:g} Pa"
+                    )
                 canvas.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2,
@@ -2009,12 +2241,28 @@ class SpatialDesignWorkspace(ttk.Frame):
                     *start, *end, fill=outline, width=1, tags=(tag, "room3d")
                 )
             if self._show_labels.get():
+                pressure_value = overlay_by_room[room["id"]]["pressure_pa"]
+                pressure_text = (
+                    " — pressure unavailable"
+                    if self._show_pressure.get() and pressure_value is None
+                    else (
+                        f" — {pressure_value:g} Pa"
+                        if self._show_pressure.get()
+                        else ""
+                    )
+                )
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=f"{room['name']}{pressure_text}",
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )
+
+        self._draw_relationships_3d(
+            center_x_m=cx,
+            center_y_m=cy,
+            floor_z_m=floor_z,
+        )
 
         if self._show_devices.get():
             room_by_id = {room["id"]: room for room in self.layout["rooms"]}

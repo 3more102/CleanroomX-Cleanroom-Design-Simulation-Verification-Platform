@@ -288,14 +288,12 @@ def _rotate_history(
 ) -> None:
     if history_limit < 1:
         raise ValueError("history_limit must be at least 1")
-    identity = saved_revision_identity(source_path)
-    artifacts = sorted(
-        revision_dir.glob(f"{identity}-*.saved-revision.json"),
-        key=lambda path: path.name,
-        reverse=True,
-    )
-    for stale in artifacts[history_limit:]:
-        stale.unlink(missing_ok=True)
+    scan = scan_saved_revisions(source_path, revision_dir)
+    # Rotate only artifacts that passed schema, checksum, and embedded-project
+    # validation. Unreadable/corrupt artifacts are evidence and are never silently
+    # deleted by ordinary save rotation.
+    for stale in scan.candidates[history_limit:]:
+        stale.path.unlink(missing_ok=True)
 
 
 def archive_project_revision(

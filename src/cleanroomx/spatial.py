@@ -10,8 +10,6 @@ import tkinter as tk
 from tkinter import ttk
 
 from .spatial_history import SpatialEditHistory, SpatialHistoryState
-
-
 from .spatial_schema import (
     DEVICE_TYPES,
     SPATIAL_LAYOUT_VERSION,
@@ -68,7 +66,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
             room["pressure_pa"] = _finite_number(raw.get("observed_pressure_pa"), 0.0)
         layout["rooms"].append(room)
         x_cursor += length + 1.0
-    return layout
+    return normalize_layout(layout)
 
 
 def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
@@ -77,8 +75,8 @@ def ensure_project_layout(project: Any, analysis: Any = None) -> dict:
         project.metadata = {}
         metadata = project.metadata
 
-    raw = metadata.get(SPATIAL_METADATA_KEY)
-    if raw is not None:
+    if SPATIAL_METADATA_KEY in metadata:
+        raw = metadata[SPATIAL_METADATA_KEY]
         validate_persisted_spatial_layout(raw)
         normalized = normalize_layout(raw)
         validate_persisted_spatial_layout(normalized)

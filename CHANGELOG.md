@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial production finish — 2026-09-25
+
+- Adds explicit engineering-to-layout pull alongside the existing layout-to-engineering push, with complete mapping preflight and persisted synchronization provenance.
+- Makes 2D and 3D pressure visualization consume only fresh completed verification evidence when available, otherwise falling back to configured/spatial observations without inventing results.
+- Adds pressure-cascade pass/fail/unavailable evidence to both 2D and 3D relationship rendering.
+- Adds windows and generic wall openings as first-class persisted spatial object types.
+- Preserves spatial X/Y placement during engineering pulls, project schema version 1, solver equations, numerical tolerances, and engineering acceptance criteria.
+
 ## v0.102.0 synchronized 2D/3D spatial closure — 2026-09-25
 
 - Ships the completed synchronized **Design 2D + 3D** workspace from one canonical spatial model: floor metadata, room elevations/classification/stable analysis links, doors and transfer openings, device placement, resize/drag/nudge, view toggles, deterministic metrics, and explicit pressure-cascade relationships.

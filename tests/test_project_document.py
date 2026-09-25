@@ -228,3 +228,33 @@ def test_guarded_save_returns_revision_for_followup_save(tmp_path):
     assert load_project_document(path).name == "Third"
     assert third_revision == file_revision(path)
     assert len({first_revision.sha256, second_revision.sha256, third_revision.sha256}) == 3
+
+
+
+def test_project_loader_rejects_invalid_utf8(tmp_path):
+    path = tmp_path / "invalid-utf8.cleanroomx.json"
+    path.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(ProjectFormatError, match="UTF-8"):
+        load_project_document(path)
+
+
+def test_save_verification_detects_immediate_post_replace_mutation(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "raced.cleanroomx.json"
+    original_replace = type(path).replace
+
+    def replace_then_mutate(self, destination):
+        result = original_replace(self, destination)
+        destination_path = type(path)(destination)
+        destination_path.write_bytes(b"external writer won after replace")
+        return result
+
+    monkeypatch.setattr(type(path), "replace", replace_then_mutate)
+
+    with pytest.raises(ProjectSaveConflictError, match="post-save verification"):
+        save_project_document(path, ProjectDocument(name="Local"))
+
+    assert path.read_bytes() == b"external writer won after replace"
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []

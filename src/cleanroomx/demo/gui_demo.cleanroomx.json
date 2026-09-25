@@ -4,9 +4,160 @@
   "application_version": "0.101.0",
   "project": {
     "name": "CleanroomX GUI Demonstration",
-    "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",
+    "description": "End-to-end CleanroomX design, simulation, verification, spatial layout, pressure-cascade, HVAC, fan, uncertainty, consistency, and dossier demonstration.",
     "metadata": {
-      "purpose": "GUI and application-service demonstration"
+      "purpose": "GUI, spatial-design, and application-service demonstration",
+      "spatial_layout": {
+        "version": 1,
+        "grid_m": 0.5,
+        "rooms": [
+          {
+            "id": "cleanroom",
+            "name": "Cleanroom",
+            "x_m": 6,
+            "y_m": 0,
+            "length_m": 6,
+            "width_m": 5,
+            "height_m": 3,
+            "elevation_m": 0,
+            "pressure_pa": 30,
+            "classification": "Clean process area",
+            "temperature_target_c": 22,
+            "humidity_target_percent": 45,
+            "engineering_ref": {
+              "analysis_id": "verification",
+              "room_name": "Cleanroom"
+            },
+            "notes": "Primary clean process room"
+          },
+          {
+            "id": "gowning",
+            "name": "Gowning",
+            "x_m": 2,
+            "y_m": 0,
+            "length_m": 4,
+            "width_m": 3,
+            "height_m": 3,
+            "elevation_m": 0,
+            "pressure_pa": 20,
+            "engineering_ref": {
+              "analysis_id": "verification",
+              "room_name": "Gowning"
+            }
+          },
+          {
+            "id": "airlock",
+            "name": "Airlock",
+            "x_m": 0,
+            "y_m": 0,
+            "length_m": 2,
+            "width_m": 3,
+            "height_m": 3,
+            "elevation_m": 0,
+            "pressure_pa": 10,
+            "engineering_ref": {
+              "analysis_id": "verification",
+              "room_name": "Airlock"
+            }
+          },
+          {
+            "id": "corridor",
+            "name": "Corridor",
+            "x_m": 0,
+            "y_m": 3,
+            "length_m": 6,
+            "width_m": 2,
+            "height_m": 3,
+            "elevation_m": 0,
+            "pressure_pa": 0,
+            "engineering_ref": {
+              "analysis_id": "verification",
+              "room_name": "Corridor"
+            }
+          },
+          {
+            "id": "support",
+            "name": "Support",
+            "x_m": 0,
+            "y_m": 5,
+            "length_m": 5,
+            "width_m": 4,
+            "height_m": 3,
+            "elevation_m": 0,
+            "pressure_pa": 5,
+            "engineering_ref": {
+              "analysis_id": "verification",
+              "room_name": "Support"
+            }
+          }
+        ],
+        "devices": [
+          {
+            "id": "door-airlock",
+            "type": "door",
+            "name": "Airlock Door",
+            "room_id": "airlock",
+            "x_m": 2,
+            "y_m": 1.5,
+            "z_m": 0
+          },
+          {
+            "id": "ffu-cleanroom",
+            "type": "ffu",
+            "name": "FFU-01",
+            "room_id": "cleanroom",
+            "x_m": 8.5,
+            "y_m": 2.5,
+            "z_m": 3
+          },
+          {
+            "id": "supply-gowning",
+            "type": "supply",
+            "name": "SUP-01",
+            "room_id": "gowning",
+            "x_m": 4,
+            "y_m": 1.5,
+            "z_m": 3
+          },
+          {
+            "id": "return-corridor",
+            "type": "return",
+            "name": "RET-01",
+            "room_id": "corridor",
+            "x_m": 3,
+            "y_m": 4,
+            "z_m": 3
+          },
+          {
+            "id": "sensor-cleanroom",
+            "type": "sensor",
+            "name": "DP-01",
+            "room_id": "cleanroom",
+            "x_m": 9,
+            "y_m": 2.5,
+            "z_m": 1.5
+          },
+          {
+            "id": "equipment-support",
+            "type": "equipment",
+            "name": "Support Equipment",
+            "room_id": "support",
+            "x_m": 2.5,
+            "y_m": 7,
+            "z_m": 0
+          }
+        ],
+        "view": {
+          "zoom_2d": 1,
+          "pan_x": 0,
+          "pan_y": 0,
+          "azimuth_deg": 35,
+          "elevation_deg": 28,
+          "zoom_3d": 1,
+          "pan_3d_x": 0,
+          "pan_3d_y": 0
+        }
+      }
     }
   },
   "analyses": [
@@ -15,10 +166,10 @@
       "name": "Facility verification",
       "kind": "project_verification",
       "input": {
-        "name": "Pilot cleanroom suite",
+        "name": "Integrated cleanroom spatial demonstration",
         "rooms": [
           {
-            "name": "Process",
+            "name": "Cleanroom",
             "length_m": 6,
             "width_m": 5,
             "height_m": 3,
@@ -34,33 +185,61 @@
             ]
           },
           {
-            "name": "Preparation",
-            "length_m": 5,
-            "width_m": 4,
+            "name": "Gowning",
+            "length_m": 4,
+            "width_m": 3,
             "height_m": 3,
             "supply_airflow_m3_h": 1200,
             "min_ach": 20,
-            "observed_pressure_pa": 16
+            "observed_pressure_pa": 20
           },
           {
-            "name": "Ante",
-            "length_m": 4,
+            "name": "Airlock",
+            "length_m": 2,
             "width_m": 3,
             "height_m": 3,
             "supply_airflow_m3_h": 720,
             "min_ach": 20,
-            "observed_pressure_pa": 8
+            "observed_pressure_pa": 10
+          },
+          {
+            "name": "Corridor",
+            "length_m": 6,
+            "width_m": 2,
+            "height_m": 3,
+            "supply_airflow_m3_h": 900,
+            "min_ach": 10,
+            "observed_pressure_pa": 0
+          },
+          {
+            "name": "Support",
+            "length_m": 5,
+            "width_m": 4,
+            "height_m": 3,
+            "supply_airflow_m3_h": 600,
+            "min_ach": 10,
+            "observed_pressure_pa": 5
           }
         ],
         "pressure_cascade": [
           {
-            "higher_pressure_room": "Process",
-            "lower_pressure_room": "Preparation",
+            "higher_pressure_room": "Cleanroom",
+            "lower_pressure_room": "Gowning",
             "min_delta_pa": 10
           },
           {
-            "higher_pressure_room": "Preparation",
-            "lower_pressure_room": "Ante",
+            "higher_pressure_room": "Gowning",
+            "lower_pressure_room": "Airlock",
+            "min_delta_pa": 5
+          },
+          {
+            "higher_pressure_room": "Airlock",
+            "lower_pressure_room": "Corridor",
+            "min_delta_pa": 5
+          },
+          {
+            "higher_pressure_room": "Support",
+            "lower_pressure_room": "Corridor",
             "min_delta_pa": 5
           }
         ]
@@ -424,5 +603,5 @@
       }
     }
   ],
-  "active_analysis_id": "hvac"
+  "active_analysis_id": "verification"
 }

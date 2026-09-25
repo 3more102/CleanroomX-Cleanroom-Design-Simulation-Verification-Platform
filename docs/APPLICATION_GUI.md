@@ -129,3 +129,17 @@ CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the co
 ## Engineering boundary
 
 The desktop application does not change CleanroomX acceptance semantics or convert screening calculations into certification evidence. CleanroomX does not by itself establish ISO cleanroom certification, CFD validation, commissioning or TAB acceptance, manufacturer approval, stall/surge safety, physical uncertainty or statistical confidence, or regulatory compliance. Source data, assumptions, boundary conditions, and applicable engineering standards remain the operator's responsibility.
+
+## Release 2 desktop workflows
+
+The Release 2 integration adds durable project-state and evidence workflows around the existing engineering backends:
+
+- **Project-wide Undo/Redo** uses one bounded transaction history across project fields, analysis edits, and spatial edits. Persistent run-history evidence and the current camera/view are not rewound as design edits.
+- **Saved revisions** preserve validated prior project bytes before guarded overwrites and restore only to a separate destination, keeping the currently opened project binding explicit.
+- **Recovery integrity** verifies current recovery artifacts with SHA-256 evidence before they are offered for restoration. Legacy v1 recovery artifacts remain readable but are labeled unverified.
+- **Run history** records accepted completed runs as a bounded integrity-checked audit ledger tied to the exact analysis input and execution provenance.
+- **Portable HTML reports** export the current fresh completed run as a self-contained verified engineering report. See [Portable Engineering HTML Report](PORTABLE_ENGINEERING_REPORT.md).
+- **Portable project bundles** collect a project and referenced external dependencies into an integrity-checked handoff artifact. See [Project Bundles](PROJECT_BUNDLES.md).
+- **Analysis plugins** use the versioned plugin API and are isolated from built-in registry keys. See [Plugins](PLUGINS.md).
+
+Stale cached results are rejected when the active analysis input or recorded external dependency revision no longer matches the completed run.

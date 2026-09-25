@@ -1110,7 +1110,7 @@ def pressure_relationship_state(layout: dict, analysis: Any = None) -> list[dict
         status = "unavailable"
         if high_pressure is not None and low_pressure is not None and minimum is not None:
             delta = high_pressure - low_pressure
-            status = "pass" if delta + SPATIAL_GEOMETRY_EPSILON_M >= minimum else "warning"
+            status = "pass" if delta >= minimum else "fail"
         relationships.append(
             {
                 "higher_room_id": high["id"],
@@ -1868,7 +1868,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             color = (
                 "#15803d"
                 if status == "pass"
-                else ("#dc2626" if status == "warning" else "#64748b")
+                else ("#dc2626" if status == "fail" else "#64748b")
             )
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,

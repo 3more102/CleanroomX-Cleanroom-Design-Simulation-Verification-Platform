@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    file_fingerprint,
+    load_project_document,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -245,6 +251,100 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
     saved = load_project_document(app.project_path)
     assert saved.analysis_by_id("a").input == {"value": 2}
     assert "Saved" in app.status_var.value
+
+
+def test_save_project_blocks_external_file_change(tmp_path, monkeypatch):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "demo.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    opened_fingerprint = file_fingerprint(path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="My edit")
+    app.project_path = path
+    app._project_file_fingerprint = opened_fingerprint
+    app._editor_analysis_id = None
+    app.name_var = Value("My edit")
+    app.description_var = Value("")
+    app.status_var = Value("Editing")
+    app.root = object()
+
+    save_project_document(path, ProjectDocument(name="External edit"))
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "External edit"
+    assert errors and errors[0][0] == "Save conflict"
+    assert "changed on disk" in errors[0][1]
+    assert app.status_var.value == "Editing"
+
+
+def test_save_as_same_open_path_cannot_bypass_external_change_guard(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "demo.cleanroomx.json",
+        ProjectDocument(name="Original"),
+    )
+    opened_fingerprint = file_fingerprint(path)
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="My edit")
+    app.project_path = path
+    app._project_file_fingerprint = opened_fingerprint
+    app._editor_analysis_id = None
+    app.name_var = Value("My edit")
+    app.description_var = Value("")
+    app.status_var = Value("Editing")
+    app.root = object()
+    app._recovery_source_path = None
+    app._restored_recovery_artifact = None
+
+    save_project_document(path, ProjectDocument(name="External edit"))
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(path),
+    )
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.save_project_as()
+
+    assert load_project_document(path).name == "External edit"
+    assert errors and errors[0][0] == "Save conflict"
+    assert "changed on disk" in errors[0][1]
 
 
 def test_save_project_as_invalidates_results_when_base_directory_changes(

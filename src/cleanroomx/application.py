@@ -1067,6 +1067,72 @@ def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bo
     return recorded_sha256 == current_sha256
 
 
+def analysis_run_external_dependencies_current(
+    run: AnalysisRun,
+    *,
+    base_dir=None,
+) -> bool:
+    """Return whether every file-backed run dependency still matches by content."""
+    if not isinstance(run, AnalysisRun) or not isinstance(run.diagnostics, dict):
+        return False
+    provenance = run.diagnostics.get("application_execution_provenance")
+    if not isinstance(provenance, dict):
+        return False
+    if provenance.get("schema") != "cleanroomx.application-execution-provenance":
+        return False
+    dependencies = provenance.get("external_dependencies")
+    if not isinstance(dependencies, list):
+        return False
+    if provenance.get("external_dependency_count") != len(dependencies):
+        return False
+    if provenance.get("external_dependencies_stable") is not True:
+        return False
+
+    base = Path(base_dir) if base_dir is not None else None
+    for dependency in dependencies:
+        if not isinstance(dependency, dict):
+            return False
+        declared_path = dependency.get("declared_path")
+        expected_sha256 = dependency.get("sha256_after")
+        expected_size = dependency.get("size_bytes_after")
+        if (
+            not isinstance(dependency.get("field"), str)
+            or not dependency["field"]
+            or not isinstance(declared_path, str)
+            or not declared_path
+            or not isinstance(expected_sha256, str)
+            or len(expected_sha256) != 64
+            or type(expected_size) is not int
+            or expected_size < 0
+            or dependency.get("stable_during_run") is not True
+        ):
+            return False
+        try:
+            current = _stable_file_fingerprint(_resolve_relative(base, declared_path))
+        except (OSError, RuntimeError, ValueError):
+            return False
+        if (
+            current["sha256"] != expected_sha256
+            or current["size_bytes"] != expected_size
+        ):
+            return False
+    return True
+
+
+def analysis_run_is_current(
+    run: AnalysisRun,
+    kind: str,
+    payload: dict,
+    *,
+    base_dir=None,
+) -> bool:
+    """Fail closed unless submitted JSON and every external dependency are current."""
+    return (
+        analysis_run_matches_input(run, kind, payload)
+        and analysis_run_external_dependencies_current(run, base_dir=base_dir)
+    )
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:

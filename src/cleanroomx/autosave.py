@@ -157,10 +157,13 @@ def _recovery_integrity_block(data: dict[str, Any]) -> dict[str, str]:
 def recovery_integrity_status(data: dict[str, Any]) -> str:
     """Validate embedded recovery integrity and report its verification status."""
     version = data.get("schema_version")
+    if version in RECOVERY_LEGACY_SCHEMA_VERSIONS:
+        # v1 predates the integrity contract and allowed unknown top-level fields.
+        # Never reinterpret a legacy field named "integrity" as v2 evidence.
+        return "legacy_unverified"
+
     integrity = data.get("integrity")
     if integrity is None:
-        if version in RECOVERY_LEGACY_SCHEMA_VERSIONS:
-            return "legacy_unverified"
         raise RecoveryFormatError(
             "recovery artifact is missing required integrity evidence"
         )

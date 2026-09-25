@@ -380,7 +380,7 @@ def test_failed_post_write_integrity_verification_preserves_previous_history(
         scan = scan_recovery_artifacts(recovery_dir)
         assert len(scan.candidates) == 1
         assert scan.candidates[0].path == previous
-        assert len(scan.issues) == 1
-        assert "integrity check failed" in scan.issues[0].error
+        assert scan.issues == ()
+        assert list(recovery_dir.glob("*.recovery.json")) == [previous]
     finally:
         manager.shutdown(wait=True)

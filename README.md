@@ -65,6 +65,16 @@ For automated installation checks without a display:
 cleanroomx-gui --check
 ```
 
+### Project batch automation
+
+Run every analysis in a saved CleanroomX project headlessly, using the same application-service execution path as the desktop:
+
+```bash
+cleanroomx-project-run project.cleanroomx.json
+```
+
+Use repeated `--analysis ID` options for a deterministic subset, `--fail-fast` to stop after the first execution exception, and `--format json|markdown --output PATH` for an atomic report. The runner records the parsed project SHA-256, retains each analysis run's existing execution provenance, and stops scheduling if the source project changes during execution. Engineering PASS/FAIL-style statuses remain analysis results; batch exit codes describe orchestration/execution integrity. See [docs/PROJECT_BATCH_AUTOMATION.md](docs/PROJECT_BATCH_AUTOMATION.md).
+
 The CI smoke path starts the real Tk application under a virtual display and runs the active demo analysis before exiting. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the project format, operator workflow, supported analysis catalog, validation/run/export behavior, and engineering boundaries.
 
 ### v0.95 solver-result integrity linkage

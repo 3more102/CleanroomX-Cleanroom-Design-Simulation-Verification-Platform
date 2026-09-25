@@ -44,6 +44,7 @@ Python 3.13 additionally passed:
 - application registry/catalog parity and fail-fast startup validation;
 - canonical input SHA-256 execution provenance;
 - before/after hash and byte-size evidence for external consistency/dossier dependencies;
+- CLI-level failure injection proving consistency/dossier outputs are discarded when referenced inputs change during execution;
 - run-bundle provenance export;
 - portable consistency/dossier references across import and Save Project As;
 - path-context cache invalidation;

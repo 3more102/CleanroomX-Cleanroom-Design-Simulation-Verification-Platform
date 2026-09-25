@@ -130,6 +130,63 @@ def test_cancel_terminates_worker_before_reenabling_ui():
     assert "cancelled" in app.status_var.value.lower()
     assert app.root.delay == 100
 
+
+def test_worker_monitoring_failure_cleans_up_before_reenabling_ui(monkeypatch):
+    class Widget:
+        def __init__(self):
+            self.state = None
+
+        def configure(self, **kwargs):
+            if "state" in kwargs:
+                self.state = kwargs["state"]
+
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Root:
+        def after(self, delay, callback):
+            self.delay = delay
+            self.callback = callback
+
+    class Worker:
+        def __init__(self):
+            self.shutdown_calls = []
+
+        def poll(self):
+            raise OSError("worker pipe failed")
+
+        def shutdown(self, *, wait):
+            self.shutdown_calls.append(wait)
+
+    shown = []
+    monkeypatch.setattr(
+        "cleanroomx.gui.messagebox.showerror",
+        lambda title, message, **kwargs: shown.append((title, message)),
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._running = True
+    app._cancel_requested = False
+    app._running_analysis_id = "analysis-a"
+    app._analysis_worker = Worker()
+    app.run_button = Widget()
+    app.cancel_button = Widget()
+    app.input_text = Widget()
+    app.status_var = Status()
+    app.root = Root()
+
+    app._poll_worker()
+
+    assert app._analysis_worker.shutdown_calls == [False]
+    assert app._running is False
+    assert app._running_analysis_id is None
+    assert app.run_button.state == "normal"
+    assert app.input_text.state == "normal"
+    assert shown == [("Analysis failed", "Analysis worker monitoring failed: worker pipe failed")]
+    assert app.root.delay == 100
+
+
 def test_running_analysis_prevents_switching_to_another_analysis():
     class Tree:
         def __init__(self):

@@ -7,6 +7,7 @@ from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
     derive_layout_from_analysis,
     ensure_project_layout,
+    is_spatial_item_locked,
     normalize_layout,
     sync_layout_to_analysis,
     validate_layout,
@@ -96,6 +97,50 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["grid_m"] == 0.5
     assert math.isfinite(layout["view"]["zoom_2d"])
     assert layout["view"]["elevation_deg"] == 5
+
+
+def test_normalize_layout_persists_only_explicit_boolean_edit_locks():
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "locked-room",
+                    "name": "Locked",
+                    "length_m": 5,
+                    "width_m": 4,
+                    "height_m": 3,
+                    "locked": True,
+                },
+                {
+                    "id": "string-room",
+                    "name": "String flag",
+                    "length_m": 4,
+                    "width_m": 4,
+                    "height_m": 3,
+                    "locked": "true",
+                },
+            ],
+            "devices": [
+                {
+                    "id": "locked-device",
+                    "type": "sensor",
+                    "name": "S-1",
+                    "room_id": "locked-room",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 2,
+                    "locked": True,
+                }
+            ],
+        }
+    )
+
+    assert is_spatial_item_locked(layout["rooms"][0]) is True
+    assert layout["rooms"][0]["locked"] is True
+    assert is_spatial_item_locked(layout["rooms"][1]) is False
+    assert layout["rooms"][1]["locked"] is False
+    assert is_spatial_item_locked(layout["devices"][0]) is True
+    assert is_spatial_item_locked(None) is False
 
 
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():

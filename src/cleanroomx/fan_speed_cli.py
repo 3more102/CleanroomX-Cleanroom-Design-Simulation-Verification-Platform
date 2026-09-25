@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .fan_speed import analyze_fan_speed_study
 from .fan_speed_io import load_fan_speed_study
 from .fan_speed_report import markdown_fan_speed_report

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .fan_loop_uncertainty import analyze_fan_loop_network_uncertainty
 from .fan_loop_uncertainty_io import load_fan_loop_network_uncertainty
 from .fan_loop_uncertainty_report import (

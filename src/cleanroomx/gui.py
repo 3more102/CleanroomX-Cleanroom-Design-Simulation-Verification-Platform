@@ -30,7 +30,7 @@ from .project import (
     new_project,
     save_project_document,
 )
-from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
+from .spatial import SpatialDesignWorkspace, spatial_sync_preview, sync_layout_to_analysis
 
 
 _UNIT_SUFFIXES = (
@@ -648,15 +648,64 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return
+        preview = spatial_sync_preview(self.spatial_workspace.layout, analysis)
+        if preview["blocked"]:
+            details = "\n".join(f"• {warning}" for warning in preview["warnings"])
+            messagebox.showwarning(
+                "Spatial synchronization blocked",
+                "CleanroomX found an ambiguous or invalid room mapping. "
+                "No analysis input was changed.\n\n" + details,
+                parent=self.root,
+            )
+            self.status_var.set("Spatial synchronization blocked by room-mapping conflicts")
+            return
+
+        if not preview["changes"]:
+            details = "\n".join(f"• {warning}" for warning in preview["warnings"])
+            if details:
+                messagebox.showinfo(
+                    "Spatial synchronization preview",
+                    "No synchronized fields would change.\n\n" + details,
+                    parent=self.root,
+                )
+            self.status_var.set("Spatial geometry already matches the active analysis")
+            return
+
+        lines = []
+        for change in preview["changes"][:12]:
+            lines.append(
+                f"• {change['room']}: {change['field']} "
+                f"{change['analysis_value']!r} → {change['spatial_value']!r}"
+            )
+        if len(preview["changes"]) > 12:
+            lines.append(f"• … {len(preview['changes']) - 12} more field change(s)")
+        if preview["warnings"]:
+            lines.append("")
+            lines.append("Warnings:")
+            lines.extend(f"• {warning}" for warning in preview["warnings"])
+
+        confirmed = messagebox.askyesno(
+            "Synchronize spatial geometry",
+            f"{len(preview['changes'])} field change(s) across "
+            f"{preview['matched_rooms']} matched room(s):\n\n"
+            + "\n".join(lines)
+            + "\n\nApply these changes to the active analysis?",
+            parent=self.root,
+        )
+        if not confirmed:
+            self.status_var.set("Spatial synchronization cancelled")
+            return
+
         changed = sync_layout_to_analysis(self.spatial_workspace.layout, analysis)
         if not changed:
-            self.status_var.set("Spatial geometry already matches the active analysis")
+            self.status_var.set("Spatial synchronization made no changes")
             return
         self._invalidate_last_run_for(analysis.id)
         self._load_analysis_into_editor(analysis)
         self._update_title()
         self.status_var.set(
-            f"Synchronized spatial room dimensions to {analysis.name}; validate before running."
+            f"Synchronized {len(preview['changes'])} spatial field(s) to "
+            f"{analysis.name}; validate before running."
         )
 
     def refresh_structure(self, silent: bool = False) -> None:

@@ -1,8 +1,27 @@
-# CleanroomX v0.102.0 Synchronized Spatial Release Test Evidence
+# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline
 
 Validation date: 2026-09-25
+
+## v0.102.1 final spatial production baseline
+
+The final post-v0.102 spatial code is covered by two sequential, CI-green closures on current main:
+
+- PR **#467 — Close final CleanroomX spatial production gaps**
+  - exact tested head: `4be4fb840480df7a5f1e0313a73830313150d9dd`
+  - PR CI **#1540** / id `36170548238`: **success**
+  - merged main commit: `9a9caedb46b80d376c21f36e3b10f46b05e00764`
+  - post-merge main CI **#1550** / id `36171324227`: **success**
+- PR **#472 — Finish remaining CleanroomX spatial production capabilities**
+  - exact tested head: `8a34c3d649aee54c377b4194a6d619559d219421`
+  - PR CI **#1551** / id `36171758793`: **success**
+  - merged main commit: `f595aaba6e7b8704beb62acc04f0eb4d036d8f09`
+
+Those successful CI jobs exercise the complete Python 3.11/3.12/3.13 suite, clean-wheel installation, representative CLI checks, Windows checkout launchers, and the Python 3.13 performance plus installed Tk/Xvfb GUI smoke defined by the repository CI workflow.
+
+The final closure keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into visualization without persisting solver evidence into geometry; uses the same evidence for 2D/3D cascade state; supports windows and generic wall openings; centralizes deterministic viewport transforms; and strengthens the packaged-demo smoke. No solver equation, numerical tolerance, project schema version, or engineering acceptance criterion is intentionally changed.
+
 
 ## v0.102.0 final synchronized spatial baseline
 

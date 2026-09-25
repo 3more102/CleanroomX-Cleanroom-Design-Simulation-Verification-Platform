@@ -61,6 +61,17 @@ conclusion SUCCESS
 Merged main commit:
 54fc239853cf4a2ab92b7686169e07acab34b8dd
 
+PR #487 — Finalize deterministic spatial drag semantics on current main
+Exact tested PR head:
+3823a4e34d0cf855a374e1a9773dc6d059d644e5
+PR CI run #1585
+run id 36185323572
+conclusion SUCCESS
+Focused spatial gate: 63 passed
+Python 3.11: 1008 passed
+Python 3.12: 1008 passed
+Python 3.13: 1008 passed
+
 PASS - Python 3.11/3.12/3.13 full CI jobs for the final PR closures
 PASS - windows-latest PowerShell/CMD checkout launcher smoke
 PASS - clean wheel build/install and installed application checks
@@ -79,6 +90,10 @@ PASS - explicit 2D viewport reset preserves model geometry
 PASS - Shift+left-drag 3D orbit updates azimuth and clamps elevation to 5–75 degrees
 PASS - autosave completion-callback race fix is merged with deterministic regression coverage
 PASS - PR #479 full suite: 1002 passed on Python 3.11, 3.12, and 3.13
+PASS - PR #487 deterministic drag/no-op regressions and full Python 3.11/3.12/3.13 CI matrix
+PASS - deterministic snapped drag geometry is independent of intermediate motion-event sampling
+PASS - no-op drag release does not dirty the project, record history, or schedule autosave
+PASS - PR #487 full suite: 1008 passed on Python 3.11, 3.12, and 3.13
 PASS - persisted window and generic-opening object types
 PASS - immutable v0.102.1 publisher tags only a successful CI SHA that still equals current main
 

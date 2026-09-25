@@ -5,7 +5,7 @@
 - Detects readable recovery artifacts during normal desktop startup and exposes them in a dedicated Recovery Center; headless checks and automated smoke runs remain non-interactive.
 - Shows project identity, recovery timestamp, original-project comparison state, source path, recovered analyses, and the captured raw editor draft before restoration.
 - Supports explicit inspect, restore, discard, and continue-without-restoring actions. Unreadable recovery artifacts are reported and preserved rather than silently deleted.
-- Restores into a separate dirty **unsaved copy** that requires **Save Project As**. The original project path is retained only as read/context for relative engineering file references and is never rebound as the save destination.
+- Restores into a separate dirty **unsaved copy** that requires **Save Project As**. The original project path is retained only as read/context for relative engineering file references, is never rebound as the save destination, and is rejected as the first recovered Save-As target so both versions remain available.
 - Preserves both versions when the original file changed or is newer; successful Save As writes a new explicit project first and only then removes the recovery artifact.
 - Hardens discard operations so only validated recovery artifacts inside the configured recovery directory can be deleted.
 - Adds focused restore/discard/source-preservation/startup-precedence regressions without changing project schema version, solver equations, tolerances, or engineering acceptance semantics.

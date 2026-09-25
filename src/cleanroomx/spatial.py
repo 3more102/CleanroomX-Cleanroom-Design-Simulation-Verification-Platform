@@ -30,9 +30,65 @@ def _positive(value: Any, default: float) -> float:
     return number if number > 0 else default
 
 
+def _identifier_slug(value: Any, fallback: str) -> str:
+    text = str(value or "").strip()
+    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in text).strip("-")
+    return slug or fallback
+
+
 def _room_id(name: str) -> str:
-    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
-    return slug or f"room-{uuid.uuid4().hex[:8]}"
+    return _identifier_slug(name, "room")
+
+
+def _device_id(name: str, device_type: str) -> str:
+    return f"device-{_identifier_slug(name, device_type)}"
+
+
+def _declared_ids(raw_items: Any) -> set[str]:
+    if not isinstance(raw_items, list):
+        return set()
+    declared: set[str] = set()
+    for raw in raw_items:
+        if not isinstance(raw, dict) or raw.get("id") is None:
+            continue
+        item_id = str(raw["id"]).strip()
+        if item_id:
+            declared.add(item_id)
+    return declared
+
+
+def _normalized_unique_id(
+    raw_value: Any,
+    fallback: str,
+    *,
+    used: set[str],
+    reserved: set[str],
+) -> str:
+    """Preserve valid ids and repair missing/duplicate ids deterministically.
+
+    Explicit ids are reserved before normalization so repairing an earlier malformed
+    item cannot steal an id declared by a later valid item.
+    """
+    explicit = "" if raw_value is None else str(raw_value).strip()
+    if explicit and explicit not in used:
+        used.add(explicit)
+        return explicit
+
+    base = explicit or fallback
+    candidate = base
+    suffix = 2
+    while candidate in used or candidate in reserved:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
+
+
+def _normalized_reference_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
 def empty_layout() -> dict:
@@ -60,17 +116,20 @@ def normalize_layout(value: Any) -> dict:
     result["grid_m"] = _positive(source.get("grid_m"), 0.5)
 
     rooms: list[dict] = []
-    used_ids: set[str] = set()
+    used_room_ids: set[str] = set()
     raw_rooms = source.get("rooms", [])
+    reserved_room_ids = _declared_ids(raw_rooms)
     if isinstance(raw_rooms, list):
         for index, raw in enumerate(raw_rooms):
             if not isinstance(raw, dict):
                 continue
             name = str(raw.get("name") or f"Room {index + 1}").strip() or f"Room {index + 1}"
-            room_id = str(raw.get("id") or _room_id(name)).strip()
-            if not room_id or room_id in used_ids:
-                room_id = f"room-{uuid.uuid4().hex[:8]}"
-            used_ids.add(room_id)
+            room_id = _normalized_unique_id(
+                raw.get("id"),
+                _room_id(name),
+                used=used_room_ids,
+                reserved=reserved_room_ids,
+            )
             room = {
                 "id": room_id,
                 "name": name,
@@ -86,7 +145,9 @@ def normalize_layout(value: Any) -> dict:
     result["rooms"] = rooms
 
     devices: list[dict] = []
+    used_device_ids: set[str] = set()
     raw_devices = source.get("devices", [])
+    reserved_device_ids = _declared_ids(raw_devices)
     if isinstance(raw_devices, list):
         for raw in raw_devices:
             if not isinstance(raw, dict):
@@ -94,13 +155,19 @@ def normalize_layout(value: Any) -> dict:
             device_type = str(raw.get("type") or "equipment").lower()
             if device_type not in DEVICE_TYPES:
                 device_type = "equipment"
-            device_id = str(raw.get("id") or f"device-{uuid.uuid4().hex[:8]}")
+            device_name = str(raw.get("name") or device_type.upper()).strip() or device_type.upper()
+            device_id = _normalized_unique_id(
+                raw.get("id"),
+                _device_id(device_name, device_type),
+                used=used_device_ids,
+                reserved=reserved_device_ids,
+            )
             devices.append(
                 {
                     "id": device_id,
                     "type": device_type,
-                    "name": str(raw.get("name") or device_type.upper()),
-                    "room_id": raw.get("room_id"),
+                    "name": device_name,
+                    "room_id": _normalized_reference_id(raw.get("room_id")),
                     "x_m": _finite_number(raw.get("x_m"), 0.0),
                     "y_m": _finite_number(raw.get("y_m"), 0.0),
                     "z_m": _finite_number(raw.get("z_m"), 0.0),

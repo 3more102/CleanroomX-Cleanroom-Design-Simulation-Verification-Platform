@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased deterministic spatial identity integrity — 2026-09-25
+
+- Replaces random UUID repair during spatial normalization with deterministic, collision-safe room/device identity canonicalization.
+- Preserves every valid unique existing id and reserves all declared ids before repair so malformed earlier objects cannot steal later explicit identities.
+- Makes normalization idempotent and repeatable across validation, undo/redo snapshots, recovery snapshots, and save/reload cycles.
+- Enforces unique normalized device ids as well as room ids, and canonicalizes device-to-room reference whitespace without silently inventing or rebinding unresolved references.
+- Adds regression coverage for duplicate/missing/reserved-id collisions, punctuation-only room names, repeated normalization, unique-device identities, and orphan-reference preservation.
+- Keeps the project schema at version 1 and does not change solver equations, numerical tolerances, engineering acceptance semantics, or valid existing spatial ids.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

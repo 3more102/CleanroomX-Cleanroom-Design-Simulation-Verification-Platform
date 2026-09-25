@@ -98,6 +98,70 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["view"]["elevation_deg"] == 5
 
 
+def test_normalize_layout_repairs_spatial_ids_deterministically_and_idempotently():
+    raw = {
+        "rooms": [
+            {"id": "zone", "name": "Primary"},
+            {"id": "zone", "name": "Duplicate"},
+            {"id": "zone-2", "name": "Reserved"},
+            {"name": "Zone"},
+            {"name": "!!!"},
+            {"name": "???"},
+        ],
+        "devices": [
+            {"id": "sensor", "type": "sensor", "name": "Primary sensor", "room_id": " zone-2 "},
+            {"id": "sensor", "type": "sensor", "name": "Duplicate sensor", "room_id": "zone"},
+            {"id": "sensor-2", "type": "sensor", "name": "Reserved sensor", "room_id": "zone"},
+            {"type": "sensor", "name": "Process probe", "room_id": "missing-room"},
+        ],
+    }
+
+    first = normalize_layout(raw)
+    second = normalize_layout(raw)
+    normalized_again = normalize_layout(first)
+
+    assert first == second == normalized_again
+    assert [room["id"] for room in first["rooms"]] == [
+        "zone",
+        "zone-3",
+        "zone-2",
+        "zone-4",
+        "room",
+        "room-2",
+    ]
+    assert [device["id"] for device in first["devices"]] == [
+        "sensor",
+        "sensor-3",
+        "sensor-2",
+        "device-process-probe",
+    ]
+    assert len({room["id"] for room in first["rooms"]}) == len(first["rooms"])
+    assert len({device["id"] for device in first["devices"]}) == len(first["devices"])
+    assert first["devices"][0]["room_id"] == "zone-2"
+
+
+def test_normalize_layout_preserves_orphan_reference_for_validation():
+    raw = {
+        "rooms": [{"id": "room-a", "name": "Room A"}],
+        "devices": [
+            {
+                "id": "sensor-a",
+                "type": "sensor",
+                "name": "Sensor A",
+                "room_id": " missing-room ",
+            }
+        ],
+    }
+
+    layout = normalize_layout(raw)
+
+    assert layout["rooms"][0]["id"] == "room-a"
+    assert layout["devices"][0]["id"] == "sensor-a"
+    assert layout["devices"][0]["room_id"] == "missing-room"
+    issues = validate_layout(layout)
+    assert [issue["code"] for issue in issues] == ["orphan_device_room"]
+
+
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():
     analysis = AnalysisDocument(
         id="verification",

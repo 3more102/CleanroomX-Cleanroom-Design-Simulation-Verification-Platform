@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .hvac_models import AirBalanceDesign
+from .numeric import positive_float
 
 
 def calculate_air_balance(
@@ -8,8 +9,9 @@ def calculate_air_balance(
     design: AirBalanceDesign,
 ) -> dict:
     """Evaluate a steady-state room airflow balance from explicit flow inputs."""
-    if supply_airflow_m3_h <= 0:
-        raise ValueError("supply_airflow_m3_h must be > 0")
+    supply_airflow_m3_h = positive_float(
+        supply_airflow_m3_h, "supply_airflow_m3_h"
+    )
 
     incoming = supply_airflow_m3_h + design.transfer_in_airflow_m3_h
     mechanically_removed = (

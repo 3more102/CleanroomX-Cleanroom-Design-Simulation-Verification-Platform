@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .hvac_models import ThermalDesign
+from .numeric import positive_float
 from .psychrometrics import (
     air_state_result,
     dry_air_mass_flow_kg_s,
@@ -15,8 +16,9 @@ def calculate_thermal_design(
     cleanroom_airflow_m3_h: float,
 ) -> dict:
     """Return a transparent preliminary thermal/HVAC analysis for one room."""
-    if cleanroom_airflow_m3_h <= 0:
-        raise ValueError("cleanroom_airflow_m3_h must be > 0")
+    cleanroom_airflow_m3_h = positive_float(
+        cleanroom_airflow_m3_h, "cleanroom_airflow_m3_h"
+    )
 
     loads = design.loads
     internal_sensible_kw = loads.sensible_w / 1000.0

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .numeric import finite_float, nonnegative_float, positive_float
+
 
 @dataclass(frozen=True)
 class ParticleRequirement:
@@ -10,12 +12,21 @@ class ParticleRequirement:
     observed_concentration_per_m3: float
 
     def __post_init__(self) -> None:
-        if self.size_um <= 0:
-            raise ValueError("particle size must be positive")
-        if self.max_concentration_per_m3 < 0:
-            raise ValueError("particle concentration limit cannot be negative")
-        if self.observed_concentration_per_m3 < 0:
-            raise ValueError("observed particle concentration cannot be negative")
+        object.__setattr__(self, "size_um", positive_float(self.size_um, "size_um"))
+        object.__setattr__(
+            self,
+            "max_concentration_per_m3",
+            nonnegative_float(
+                self.max_concentration_per_m3, "max_concentration_per_m3"
+            ),
+        )
+        object.__setattr__(
+            self,
+            "observed_concentration_per_m3",
+            nonnegative_float(
+                self.observed_concentration_per_m3, "observed_concentration_per_m3"
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -33,16 +44,31 @@ class RoomSpec:
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("room name cannot be empty")
-        for label, value in (
-            ("length_m", self.length_m),
-            ("width_m", self.width_m),
-            ("height_m", self.height_m),
-            ("supply_airflow_m3_h", self.supply_airflow_m3_h),
+        for label in (
+            "length_m",
+            "width_m",
+            "height_m",
+            "supply_airflow_m3_h",
         ):
-            if value <= 0:
-                raise ValueError(f"{label} must be positive")
-        if self.min_ach is not None and self.min_ach <= 0:
-            raise ValueError("min_ach must be positive when provided")
+            object.__setattr__(
+                self, label, positive_float(getattr(self, label), label)
+            )
+        if self.min_ach is not None:
+            object.__setattr__(
+                self, "min_ach", positive_float(self.min_ach, "min_ach")
+            )
+        if self.min_pressure_pa is not None:
+            object.__setattr__(
+                self,
+                "min_pressure_pa",
+                finite_float(self.min_pressure_pa, "min_pressure_pa"),
+            )
+        if self.observed_pressure_pa is not None:
+            object.__setattr__(
+                self,
+                "observed_pressure_pa",
+                finite_float(self.observed_pressure_pa, "observed_pressure_pa"),
+            )
 
 
 @dataclass(frozen=True)
@@ -56,8 +82,11 @@ class PressureCascadeRequirement:
             raise ValueError("pressure-cascade room names cannot be empty")
         if self.higher_pressure_room == self.lower_pressure_room:
             raise ValueError("pressure-cascade rooms must be different")
-        if self.min_delta_pa <= 0:
-            raise ValueError("min_delta_pa must be positive")
+        object.__setattr__(
+            self,
+            "min_delta_pa",
+            positive_float(self.min_delta_pa, "min_delta_pa"),
+        )
 
 
 @dataclass(frozen=True)

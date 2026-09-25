@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
+    layout_metrics,
     normalize_layout,
     sync_layout_to_analysis,
     validate_layout,
@@ -423,3 +424,197 @@ def test_validate_layout_accepts_clean_room_and_device_geometry():
     }
 
     assert validate_layout(layout) == []
+
+
+def test_legacy_spatial_layout_defaults_floor_metadata_without_breaking_geometry():
+    layout = normalize_layout(
+        {
+            "version": 1,
+            "grid_m": 0.25,
+            "rooms": [
+                {
+                    "id": "r1",
+                    "name": "Legacy Room",
+                    "x_m": 1.0,
+                    "y_m": 2.0,
+                    "length_m": 5.0,
+                    "width_m": 4.0,
+                    "height_m": 3.2,
+                }
+            ],
+            "devices": [],
+        }
+    )
+
+    assert layout["floor"] == {
+        "id": "floor-1",
+        "name": "Floor 1",
+        "elevation_m": 0.0,
+        "default_ceiling_height_m": 3.0,
+        "units": "m",
+    }
+    assert layout["rooms"][0]["height_m"] == 3.2
+    assert layout["rooms"][0]["floor_elevation_m"] == 0.0
+    assert layout["grid_m"] == 0.25
+
+
+def test_layout_metrics_report_geometry_and_device_counts_deterministically():
+    metrics = layout_metrics(
+        {
+            "rooms": [
+                {
+                    "id": "a",
+                    "name": "A",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 6,
+                    "width_m": 5,
+                    "height_m": 3,
+                },
+                {
+                    "id": "b",
+                    "name": "B",
+                    "x_m": 7,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 3,
+                    "height_m": 2.5,
+                },
+            ],
+            "devices": [
+                {
+                    "id": "f1",
+                    "type": "ffu",
+                    "name": "FFU",
+                    "room_id": "a",
+                    "x_m": 1,
+                    "y_m": 1,
+                    "z_m": 3,
+                },
+                {
+                    "id": "d1",
+                    "type": "door",
+                    "name": "Door",
+                    "room_id": "a",
+                    "x_m": 3,
+                    "y_m": 0,
+                    "z_m": 0,
+                },
+                {
+                    "id": "t1",
+                    "type": "transfer",
+                    "name": "Transfer",
+                    "room_id": "b",
+                    "x_m": 8,
+                    "y_m": 0,
+                    "z_m": 1,
+                },
+            ],
+        }
+    )
+
+    assert metrics["room_count"] == 2
+    assert metrics["total_floor_area_m2"] == 42
+    assert metrics["total_volume_m3"] == 120
+    assert metrics["device_counts"]["ffu"] == 1
+    assert metrics["device_counts"]["door"] == 1
+    assert metrics["device_counts"]["transfer"] == 1
+
+
+def test_sync_uses_stable_analysis_room_link_after_layout_room_rename():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6,
+                    "width_m": 5,
+                    "height_m": 3,
+                    "min_ach": 20,
+                }
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process Suite Display Name",
+                "analysis_room_name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 5.5,
+                "height_m": 3.2,
+            }
+        ]
+    }
+
+    assert sync_layout_to_analysis(layout, analysis) is True
+    room = analysis.input["rooms"][0]
+    assert room["name"] == "Process"
+    assert room["length_m"] == 7
+    assert room["width_m"] == 5.5
+    assert room["height_m"] == 3.2
+    assert room["min_ach"] == 20
+
+
+def test_normalize_layout_preserves_opening_geometry_and_view_toggles():
+    layout = normalize_layout(
+        {
+            "floor": {
+                "id": "f2",
+                "name": "Upper Floor",
+                "elevation_m": 4.2,
+                "default_ceiling_height_m": 3.4,
+                "units": "m",
+            },
+            "rooms": [
+                {
+                    "id": "r1",
+                    "name": "Room",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 4,
+                }
+            ],
+            "devices": [
+                {
+                    "id": "door",
+                    "type": "door",
+                    "name": "D1",
+                    "room_id": "r1",
+                    "x_m": 2,
+                    "y_m": 0,
+                    "z_m": 0,
+                    "width_m": 1.1,
+                    "height_m": 2.2,
+                    "orientation_deg": 90,
+                    "wall_side": "south",
+                    "swing": "left",
+                }
+            ],
+            "view": {
+                "snap_to_grid": False,
+                "show_pressure": False,
+                "show_labels": True,
+                "show_devices": True,
+                "show_relationships": False,
+            },
+        }
+    )
+
+    assert layout["floor"]["name"] == "Upper Floor"
+    assert layout["rooms"][0]["height_m"] == 3.4
+    assert layout["rooms"][0]["floor_elevation_m"] == 4.2
+    assert layout["devices"][0]["width_m"] == 1.1
+    assert layout["devices"][0]["height_m"] == 2.2
+    assert layout["devices"][0]["wall_side"] == "south"
+    assert layout["devices"][0]["swing"] == "left"
+    assert layout["view"]["snap_to_grid"] is False
+    assert layout["view"]["show_pressure"] is False
+    assert layout["view"]["show_relationships"] is False

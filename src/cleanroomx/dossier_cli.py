@@ -5,7 +5,11 @@ import json
 from pathlib import Path
 import sys
 
-from .application import (\n    ExternalDependencyChangedError,\n    ExternalDependencySnapshotError,\n    run_analysis,\n)
+from .application import (
+    ExternalDependencyChangedError,
+    ExternalDependencySnapshotError,
+    run_analysis,
+)
 from .project import atomic_write_text
 
 

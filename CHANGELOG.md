@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial persistence integrity — 2026-09-25
+
+- Adds a pure domain-level validator for persisted `spatial_layout` metadata and makes project load/save fail closed on malformed layout versions, duplicate stable IDs, invalid/non-positive geometry, unsupported device types, and orphaned room references.
+- Keeps geometric design advisories such as room overlap or an assigned device outside its room as non-destructive editor warnings rather than file-format failures.
+- Makes transient layout normalization deterministic: duplicate or missing IDs are repaired with stable suffixes/fallbacks instead of random replacement identities, and derived layouts are normalized before persistence.
+- Validates normalized editor state before storing it back into project metadata, while projects without spatial metadata remain fully compatible with project schema version 1.
+- Adds persistence round-trip, corruption rejection, future-layout-version, orphan-reference, and deterministic-normalization regressions.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

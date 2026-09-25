@@ -9,6 +9,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     sync_layout_to_analysis,
+    validate_layout,
 )
 
 
@@ -177,3 +178,120 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
         analysis,
     ) is False
     assert analysis.input == original
+
+
+
+def test_validate_layout_detects_overlap_duplicate_names_and_device_assignment_problems():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "process-duplicate",
+                "name": "process",
+                "x_m": 3,
+                "y_m": 2,
+                "length_m": 4,
+                "width_m": 3,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "outside",
+                "type": "equipment",
+                "name": "Outside tool",
+                "room_id": "process",
+                "x_m": 8,
+                "y_m": 8,
+                "z_m": 0,
+            },
+            {
+                "id": "high",
+                "type": "sensor",
+                "name": "High sensor",
+                "room_id": "process",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 3.5,
+            },
+            {
+                "id": "orphan",
+                "type": "sensor",
+                "name": "Orphan sensor",
+                "room_id": "missing",
+                "x_m": 0,
+                "y_m": 0,
+                "z_m": 0,
+            },
+            {
+                "id": "unassigned",
+                "type": "sensor",
+                "name": "Unassigned sensor",
+                "room_id": None,
+                "x_m": 0,
+                "y_m": 0,
+                "z_m": 0,
+            },
+        ],
+    }
+
+    issues = validate_layout(layout)
+    codes = [issue["code"] for issue in issues]
+
+    assert codes == [
+        "duplicate_room_name",
+        "room_overlap",
+        "device_outside_room",
+        "device_elevation_outside_room",
+        "orphan_device_room",
+        "device_unassigned",
+    ]
+    overlap = next(issue for issue in issues if issue["code"] == "room_overlap")
+    assert overlap["bounds_m"] == [3.0, 2.0, 4.0, 4.0]
+    assert overlap["item_ids"] == ["process", "process-duplicate"]
+
+
+def test_validate_layout_accepts_clean_room_and_device_geometry():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "ante",
+                "name": "Ante",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 3,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ],
+        "devices": [
+            {
+                "id": "ffu",
+                "type": "ffu",
+                "name": "FFU-1",
+                "room_id": "process",
+                "x_m": 2.5,
+                "y_m": 2,
+                "z_m": 3,
+            }
+        ],
+    }
+
+    assert validate_layout(layout) == []

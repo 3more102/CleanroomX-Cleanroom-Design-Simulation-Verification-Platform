@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    AnalysisDocument, AtomicWriteVerificationError, PROJECT_SCHEMA,
+    PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError, atomic_write_text,
+    load_project_document, project_from_dict, save_project_document,
 )
 
 
@@ -52,6 +54,40 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
         atomic_write_text(target, "payload\n")
 
     assert target.read_text(encoding="utf-8") == "existing\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_fsyncs_parent_directory_after_replace(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    calls = []
+
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_directory",
+        lambda directory: calls.append(Path(directory)) or True,
+    )
+
+    atomic_write_text(target, "payload\n")
+
+    assert calls == [tmp_path]
+    assert target.read_text(encoding="utf-8") == "payload\n"
+
+
+def test_atomic_write_text_rejects_post_replace_content_corruption(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    original_replace = type(target).replace
+
+    def replace_then_corrupt(self, destination):
+        result = original_replace(self, destination)
+        Path(destination).write_text("corrupted\n", encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(type(target), "replace", replace_then_corrupt)
+
+    with pytest.raises(AtomicWriteVerificationError, match="verification failed"):
+        atomic_write_text(target, "expected\n")
+
+    assert target.read_text(encoding="utf-8") == "corrupted\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

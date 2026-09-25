@@ -71,7 +71,7 @@ Validate an entire saved desktop project without running analyses:
 cleanroomx-project-validate project.cleanroomx.json --format json
 ```
 
-The project preflight reuses each workflow's existing parser/validation contract, checks persisted spatial structure and references before advisory geometry checks, aggregates all findings, and records a canonical project SHA-256. The same validation is available in the desktop **Analysis → Validate Project** action.
+The project preflight reuses each workflow's existing parser/validation contract, checks persisted spatial structure and references before advisory geometry checks, aggregates all findings, and records a canonical project SHA-256. The same validation is available in the desktop **Analysis → Validate Project** action. JSON reports use the versioned `cleanroomx.project-validation` schema and record the CleanroomX version.
 
 The CI smoke path starts the real Tk application under a virtual display and runs the active demo analysis before exiting. See [docs/APPLICATION_GUI.md](docs/APPLICATION_GUI.md) for the project format, operator workflow, supported analysis catalog, validation/run/export behavior, and engineering boundaries.
 

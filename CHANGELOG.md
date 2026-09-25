@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased external project-save conflict protection — 2026-09-25
+
+- Captures a SHA-256-backed revision token from the exact project bytes parsed on open and refreshes it after every successful explicit save.
+- Blocks in-place saves when the project file was changed, replaced, removed, or moved outside CleanroomX after open/last save; the external file is preserved and the local project remains unsaved.
+- Re-checks the expected revision immediately before atomic replacement, reducing the stale-write window while preserving same-directory temp-file replacement and fsync of written content.
+- Verifies the authoritative file bytes after each project save and keeps deterministic UTF-8/LF serialization across platforms.
+- Reuses the same stable file-revision primitive for recovery source fingerprints, removing duplicate hashing logic.
+- Adds persistence and desktop regressions for changed/deleted source files and successful checked saves without changing project schema, solver equations, numerical tolerances, or engineering acceptance semantics.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

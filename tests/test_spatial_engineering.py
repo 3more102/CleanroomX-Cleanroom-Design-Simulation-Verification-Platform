@@ -58,7 +58,7 @@ def _layout() -> dict:
                 "length_m": 6.0,
                 "width_m": 5.0,
                 "height_m": 3.0,
-                "pressure_pa": 99.0,
+                "pressure_pa": 30.0,
             },
             {
                 "id": "ante",
@@ -77,6 +77,7 @@ def _layout() -> dict:
 def test_stable_analysis_room_link_survives_spatial_rename_and_uses_engineering_pressure():
     analysis = _analysis()
     room = _layout()["rooms"][0]
+    room["pressure_pa"] = 99.0
     target, state = resolve_room_mapping(room, analysis)
     pressure, source = room_pressure_value(room, analysis)
 

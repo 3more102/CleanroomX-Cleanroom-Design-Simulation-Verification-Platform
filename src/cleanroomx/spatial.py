@@ -1656,34 +1656,144 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
+        show_pressure = self._show_pressure.get()
+        pressures = (
+            [
+                room.get("pressure_pa")
+                for room in self.layout["rooms"]
+                if room.get("pressure_pa") is not None
+            ]
+            if show_pressure
+            else []
+        )
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
         warning_ids = self._warning_item_ids()
+        sync_records = {
+            item["room_id"]: item
+            for item in spatial_sync_status(self.layout, self._analysis_getter())
+        }
+        sync_colors = {
+            "synchronized": "#2f6f44",
+            "geometry_newer": "#b45309",
+            "engineering_data_newer": "#7c3aed",
+            "conflicting": "#b91c1c",
+            "unmapped": "#64748b",
+            "missing_target": "#b91c1c",
+        }
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
-            x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
+            x1, y1 = self._world_to_canvas(
+                room["x_m"] + room["length_m"],
+                room["y_m"] + room["width_m"],
+            )
             selected = self.selected == _Hit("room", room["id"])
+            mapping = sync_records.get(room["id"])
+            state = mapping["state"] if mapping else None
             outline = (
                 "#1d4ed8"
                 if selected
-                else ("#b45309" if room["id"] in warning_ids else "#34495e")
+                else sync_colors.get(
+                    state,
+                    "#b45309" if room["id"] in warning_ids else "#34495e",
+                )
             )
-            fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+            fill = (
+                _pressure_fill(room.get("pressure_pa"), pmin, pmax)
+                if show_pressure
+                else "#e8eef4"
+            )
             canvas.create_rectangle(
-                x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                x0,
+                y0,
+                x1,
+                y1,
+                fill=fill,
+                outline=outline,
+                width=3 if selected else 2,
                 tags=(f"room:{room['id']}", "room"),
             )
-            pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
+            if show_pressure:
+                if room.get("pressure_pa") is None:
+                    pressure_text = "\nP: unavailable"
+                else:
+                    pressure_text = f"\nP: {room['pressure_pa']:g} Pa"
+                    if room.get("pressure_target_pa") is not None:
+                        pressure_text += f" / target ≥ {room['pressure_target_pa']:g} Pa"
+            else:
+                pressure_text = ""
             canvas.create_text(
                 (x0 + x1) / 2,
                 (y0 + y1) / 2,
-                text=f"{room['name']}\n{room['length_m']:g} × {room['width_m']:g} m{pressure_text}",
+                text=(
+                    f"{room['name']}\n"
+                    f"{room['length_m']:g} × {room['width_m']:g} × {room['height_m']:g} m"
+                    f"{pressure_text}"
+                ),
                 justify="center",
                 tags=(f"room:{room['id']}", "room"),
             )
+            if state and state != "synchronized":
+                canvas.create_text(
+                    min(x0, x1) + 5,
+                    min(y0, y1) + 5,
+                    text=state.replace("_", " "),
+                    anchor="nw",
+                    fill=outline,
+                    tags=(f"room:{room['id']}", "room", "mapping-state"),
+                )
+
+        if show_pressure:
+            room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+            for relationship in pressure_relationships(
+                self.layout, self._analysis_getter()
+            ):
+                high = room_by_id.get(relationship.get("higher_room_id"))
+                low = room_by_id.get(relationship.get("lower_room_id"))
+                if high is None or low is None:
+                    continue
+                hx, hy = self._world_to_canvas(
+                    high["x_m"] + high["length_m"] / 2.0,
+                    high["y_m"] + high["width_m"] / 2.0,
+                )
+                lx, ly = self._world_to_canvas(
+                    low["x_m"] + low["length_m"] / 2.0,
+                    low["y_m"] + low["width_m"] / 2.0,
+                )
+                state = relationship["state"]
+                color = (
+                    "#15803d"
+                    if state == "pass"
+                    else "#b91c1c" if state == "fail" else "#64748b"
+                )
+                dash = () if state != "unavailable" else (5, 3)
+                canvas.create_line(
+                    hx,
+                    hy,
+                    lx,
+                    ly,
+                    arrow=tk.LAST,
+                    width=3 if state == "fail" else 2,
+                    fill=color,
+                    dash=dash,
+                    tags=("pressure-cascade",),
+                )
+                delta = relationship.get("delta_pa")
+                minimum = relationship.get("min_delta_pa")
+                if delta is None:
+                    label = "ΔP unavailable"
+                elif minimum is None:
+                    label = f"ΔP {delta:g} Pa"
+                else:
+                    label = f"ΔP {delta:g} Pa / ≥ {minimum:g}"
+                canvas.create_text(
+                    (hx + lx) / 2.0,
+                    (hy + ly) / 2.0 - 10,
+                    text=label,
+                    fill=color,
+                    tags=("pressure-cascade",),
+                )
 
         for issue in self._validation_issues:
             if issue.get("code") != "room_overlap":
@@ -1694,12 +1804,21 @@ class SpatialDesignWorkspace(ttk.Frame):
             x0, y0 = self._world_to_canvas(bounds[0], bounds[1])
             x1, y1 = self._world_to_canvas(bounds[2], bounds[3])
             canvas.create_rectangle(
-                x0, y0, x1, y1,
-                outline="#dc2626", width=2, dash=(5, 3), tags=("validation",)
+                x0,
+                y0,
+                x1,
+                y1,
+                outline="#dc2626",
+                width=2,
+                dash=(5, 3),
+                tags=("validation",),
             )
             canvas.create_text(
-                (x0 + x1) / 2, (y0 + y1) / 2,
-                text="OVERLAP", fill="#991b1b", tags=("validation",)
+                (x0 + x1) / 2,
+                (y0 + y1) / 2,
+                text="OVERLAP",
+                fill="#991b1b",
+                tags=("validation",),
             )
 
         symbols = {
@@ -1721,13 +1840,19 @@ class SpatialDesignWorkspace(ttk.Frame):
                 else ("#b45309" if device["id"] in warning_ids else "#2c3e50")
             )
             canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline=device_outline,
+                x - radius,
+                y - radius,
+                x + radius,
+                y + radius,
+                fill="#ffffff",
+                outline=device_outline,
                 width=3 if selected else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
             canvas.create_text(
-                x, y, text=symbols.get(device["type"], "?"),
+                x,
+                y,
+                text=symbols.get(device["type"], "?"),
                 tags=(f"device:{device['id']}", "device"),
             )
 
@@ -1735,7 +1860,10 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.create_text(
                 w / 2,
                 h / 2,
-                text="No spatial layout yet\nUse + Room or open a verification project with room geometry.",
+                text=(
+                    "No spatial layout yet\n"
+                    "Use + Room or open a verification project with room geometry."
+                ),
                 justify="center",
                 fill="#667788",
             )

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_fan_loop_network_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Fan/Loop-Network Report — {result['study']}",
+        f"# CleanroomX Fan/Loop-Network Report — {markdown_text(result['study'])}",
         "",
-        f"- Fan curve: **{result['fan_curve']}**",
+        f"- Fan curve: **{markdown_text(result['fan_curve'])}**",
         f"- Status: **{result['status'].upper()}**",
-        f"- Fan discharge node: **{result['fan_discharge_node']}**",
-        f"- Fan suction node: **{result['fan_suction_node']}**",
+        f"- Fan discharge node: **{markdown_text(result['fan_discharge_node'])}**",
+        f"- Fan suction node: **{markdown_text(result['fan_suction_node'])}**",
         f"- Fixed pressure: **{result['fixed_pressure_pa']} Pa**",
         f"- Reference airflow: **{result['reference_airflow_m3_h']} m³/h**",
         f"- Reference loop pressure: **{result['reference_network_pressure_pa']} Pa**",
@@ -48,7 +50,7 @@ def markdown_fan_loop_network_report(result: dict) -> str:
         )
         for edge in network["edges"]:
             lines.append(
-                f"| {edge['name']} | {edge['resistance_basis']} | "
+                f"| {markdown_text(edge['name'])} | {edge['resistance_basis']} | "
                 f"{edge['airflow_m3_h']} | {edge['flow_direction']} | "
                 f"{edge['pressure_difference_pa']} |"
             )
@@ -64,7 +66,7 @@ def markdown_fan_loop_network_report(result: dict) -> str:
         )
         for node in network["nodes"]:
             lines.append(
-                f"| {node['name']} | {node['relative_pressure_pa']} | "
+                f"| {markdown_text(node['name'])} | {node['relative_pressure_pa']} | "
                 f"{node['specified_injection_m3_h']} | "
                 f"{node['mass_balance_residual_m3_h']} |"
             )

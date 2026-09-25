@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_consistency_report(result: dict) -> str:
     lines = [
         "# CleanroomX Cross-Module Consistency Report",
         "",
-        f"- Verification project: **{result['verification_project']}**",
-        f"- HVAC project: **{result['hvac_project']}**",
+        f"- Verification project: **{markdown_text(result['verification_project'])}**",
+        f"- HVAC project: **{markdown_text(result['hvac_project'])}**",
         f"- Status: **{result['status'].upper()}**",
         (
             "- Room airflow absolute consistency tolerance: "
@@ -30,7 +32,7 @@ def markdown_consistency_report(result: dict) -> str:
         )
         for item in result["room_airflow_checks"]:
             lines.append(
-                f"| {item['room']} | "
+                f"| {markdown_text(item['room'])} | "
                 f"{item['verification_supply_airflow_m3_h']} | "
                 f"{item['hvac_cleanroom_airflow_m3_h']} | "
                 f"{item['difference_m3_h']} | "
@@ -46,7 +48,7 @@ def markdown_consistency_report(result: dict) -> str:
     lines.append(
         "- Verification-only rooms: "
         + (
-            ", ".join(result["verification_only_rooms"])
+            ", ".join(markdown_text(name) for name in result["verification_only_rooms"])
             if result["verification_only_rooms"]
             else "none"
         )
@@ -54,7 +56,7 @@ def markdown_consistency_report(result: dict) -> str:
     lines.append(
         "- HVAC-only rooms: "
         + (
-            ", ".join(result["hvac_only_rooms"])
+            ", ".join(markdown_text(name) for name in result["hvac_only_rooms"])
             if result["hvac_only_rooms"]
             else "none"
         )

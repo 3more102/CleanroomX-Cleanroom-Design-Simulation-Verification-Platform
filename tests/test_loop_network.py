@@ -201,7 +201,7 @@ def test_loader_and_markdown_report() -> None:
     assert network.reference_node == "Supply"
     assert "Looped-Network Flow Report" in report
     assert "Maximum node continuity residual" in report
-    assert "Supply -> Return" in report
+    assert "Supply -&gt; Return" in report
 
 
 def test_reported_reference_residual_respects_requested_tolerance() -> None:
@@ -350,7 +350,7 @@ def test_loader_accepts_geometry_derived_edges_and_preserves_evidence() -> None:
     assert all(edge["resistance_evidence"] is not None for edge in result["edges"])
     assert result["max_abs_mass_balance_residual_m3_h"] <= 1e-6
     assert "Geometry-derived resistance evidence" in report
-    assert "user_input" in report
+    assert "user\\_input" in report
 
 
 @pytest.mark.parametrize(

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_looped_network_report(result: dict) -> str:
     lines = [
-        f"# CleanroomX Looped-Network Flow Report — {result['network']}",
+        f"# CleanroomX Looped-Network Flow Report — {markdown_text(result['network'])}",
         "",
         "## Solver summary",
         "",
         f"- Status: **{result['status'].upper()}**",
-        f"- Reference node: **{result['reference_node']} = 0 Pa**",
+        f"- Reference node: **{markdown_text(result['reference_node'])} = 0 Pa**",
         f"- Newton iterations: **{result['iterations']}**",
         f"- Mass-balance tolerance: **{result['mass_balance_tolerance_m3_h']} m³/h**",
         f"- Maximum node continuity residual: **{result['max_abs_mass_balance_residual_m3_h']} m³/h**",
@@ -27,7 +29,7 @@ def markdown_looped_network_report(result: dict) -> str:
     ]
     for node in result["nodes"]:
         lines.append(
-            f"| {node['name']} | {node['relative_pressure_pa']} | "
+            f"| {markdown_text(node['name'])} | {node['relative_pressure_pa']} | "
             f"{node['specified_injection_m3_h']} | "
             f"{node['net_edge_outflow_m3_h']} | "
             f"{node['mass_balance_residual_m3_h']} | "
@@ -45,11 +47,11 @@ def markdown_looped_network_report(result: dict) -> str:
     )
     for edge in result["edges"]:
         lines.append(
-            f"| {edge['name']} | {edge['start_node']} | {edge['end_node']} | "
-            f"{edge['airflow_m3_h']} | {edge['flow_direction']} | "
+            f"| {markdown_text(edge['name'])} | {markdown_text(edge['start_node'])} | {markdown_text(edge['end_node'])} | "
+            f"{edge['airflow_m3_h']} | {markdown_text(edge['flow_direction'])} | "
             f"{edge['pressure_difference_pa']} | "
             f"{edge['resistance_pa_per_m3_s_squared']} | "
-            f"{edge.get('resistance_basis', 'explicit')} | "
+            f"{markdown_text(edge.get('resistance_basis', 'explicit'))} | "
             f"{edge['pressure_law_residual_pa']} | "
             f"{edge['dissipated_pressure_power_w']} |"
         )
@@ -77,11 +79,11 @@ def markdown_looped_network_report(result: dict) -> str:
                 else evidence["reference_airflow_m3_h"]
             )
             lines.append(
-                f"| {edge['name']} | {evidence['shape']} | "
+                f"| {markdown_text(edge['name'])} | {markdown_text(evidence['shape'])} | "
                 f"{evidence['area_m2']:.9g} | "
                 f"{evidence['hydraulic_diameter_m']:.9g} | "
                 f"{evidence['friction_factor']:.9g} | "
-                f"{evidence['friction_factor_method']} | "
+                f"{markdown_text(evidence['friction_factor_method'])} | "
                 f"{evidence['local_loss_coefficient']:.9g} | "
                 f"{reference_airflow} | "
                 f"{edge['resistance_pa_per_m3_s_squared']} |"

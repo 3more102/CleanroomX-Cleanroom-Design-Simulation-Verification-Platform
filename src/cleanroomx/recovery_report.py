@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from .markdown import markdown_text
+
 
 def markdown_recovery_report(result: dict) -> str:
-    lines = [f"# CleanroomX Recovery Test Report — {result['test']}", ""]
+    lines = [f"# CleanroomX Recovery Test Report — {markdown_text(result['test'])}", ""]
     lines.extend(
         [
             "## Result",

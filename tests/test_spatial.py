@@ -691,13 +691,16 @@ def test_packaged_gui_demo_contains_explicit_spatial_design():
 
     assert layout["floor"]["name"] == "Main Cleanroom Floor"
     assert [room["analysis_room_name"] for room in layout["rooms"]] == [
-        "Process",
-        "Preparation",
-        "Ante",
+        "Corridor",
+        "Gowning",
+        "Airlock",
+        "Process Cleanroom",
+        "Support",
     ]
-    assert [room["pressure_pa"] for room in layout["rooms"]] == [30.0, 16.0, 8.0]
+    assert [room["pressure_pa"] for room in layout["rooms"]] == [5.0, 10.0, 15.0, 30.0, 8.0]
+    assert all(room.get("engineering_baseline") for room in layout["rooms"])
     device_types = {device["type"] for device in layout["devices"]}
-    assert {"door", "supply", "return", "ffu", "equipment", "transfer"} <= device_types
+    assert {"door", "supply", "return", "ffu", "equipment", "sensor", "transfer"} <= device_types
 
 
 

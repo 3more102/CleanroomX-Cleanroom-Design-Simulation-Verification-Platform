@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased saved project version history — 2026-09-25
+
+- Preserves the exact previous valid UTF-8 project bytes before every successful explicit overwrite, including supported legacy project shapes.
+- Couples archival to the existing optimistic save revision: external modification before archival raises the same write-conflict path, and the guarded save still checks again before atomic replacement.
+- Stores saved versions in a separate per-user bounded history with source path, byte size, SHA-256, application version, and UTC archive time; project schema version 1 is unchanged.
+- Refuses an overwrite when the expected existing destination cannot first be validated and archived, preventing destructive Save/Save As behavior when historical preservation fails.
+- Validates revision schema, checksum, byte size, strict JSON, and embedded CleanroomX project integrity before listing or restoring a version.
+- Keeps unreadable/corrupt revision artifacts as diagnostic evidence instead of silently deleting them during history rotation.
+- Adds **File > Saved Versions...** and restores historical versions only as protected unsaved copies; the first save must use a different destination so the current project is never overwritten implicitly.
+- Adds persistence, race, corruption, bounded-history, legacy-byte, discard-boundary, and desktop lifecycle regressions without changing solver equations, tolerances, acceptance criteria, or engineering outputs.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

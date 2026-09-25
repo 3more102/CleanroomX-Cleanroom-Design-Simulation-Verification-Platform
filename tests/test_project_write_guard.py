@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
+import os
+from pathlib import Path
 
 import pytest
 
@@ -100,6 +103,42 @@ def test_guarded_save_rejects_external_creation_for_new_destination(tmp_path):
         )
 
     assert path.read_text(encoding="utf-8") == "foreign content"
+
+
+def test_project_revision_retries_when_path_is_replaced_during_hash(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    old_bytes = b"old-data"
+    new_bytes = b"new-data"
+    path.write_bytes(old_bytes)
+    original_stat = path.stat()
+
+    replacement = tmp_path / "replacement.tmp"
+    replacement.write_bytes(new_bytes)
+    os.utime(
+        replacement,
+        ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns),
+    )
+
+    original_open = Path.open
+    read_count = 0
+
+    def replace_after_open(self, *args, **kwargs):
+        nonlocal read_count
+        handle = original_open(self, *args, **kwargs)
+        mode = args[0] if args else kwargs.get("mode", "r")
+        if Path(self) == path and mode == "rb":
+            read_count += 1
+            if read_count == 1:
+                os.replace(replacement, path)
+        return handle
+
+    monkeypatch.setattr(Path, "open", replace_after_open)
+
+    revision = capture_project_file_revision(path)
+
+    assert read_count == 2
+    assert revision.size == len(new_bytes)
+    assert revision.sha256 == sha256(new_bytes).hexdigest()
 
 
 def test_revision_match_ignores_metadata_only_timestamp_change(tmp_path):

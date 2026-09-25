@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from cleanroomx.project import AnalysisDocument
-from cleanroomx.spatial import derive_layout_from_analysis, pressure_overlay_state
+from cleanroomx.application import run_analysis
+from cleanroomx.gui import bundled_demo_project_path
+from cleanroomx.project import AnalysisDocument, load_project_document
+from cleanroomx.spatial import SPATIAL_METADATA_KEY, derive_layout_from_analysis, pressure_overlay_state
 
 
 def _analysis() -> AnalysisDocument:
@@ -129,3 +131,25 @@ def test_pressure_overlay_surfaces_failed_and_unavailable_solver_evidence() -> N
     unavailable = pressure_overlay_state(layout, analysis, result)
     assert unavailable["rooms"][1]["source"] == "configured"
     assert unavailable["rooms"][1]["pressure_pa"] == 8.0
+
+
+def test_packaged_demo_real_run_projects_solver_pressure_into_spatial_overlay() -> None:
+    path = bundled_demo_project_path()
+    project = load_project_document(path)
+    analysis = project.analysis_by_id(project.active_analysis_id)
+    run = run_analysis(analysis.kind, analysis.input, base_dir=path.parent)
+
+    overlay = pressure_overlay_state(
+        project.metadata[SPATIAL_METADATA_KEY], analysis, run.result
+    )
+
+    assert [room["source"] for room in overlay["rooms"]] == [
+        "result", "result", "result"
+    ]
+    assert [room["pressure_pa"] for room in overlay["rooms"]] == [30.0, 16.0, 8.0]
+    assert [item["source"] for item in overlay["relationships"]] == [
+        "result", "result"
+    ]
+    assert [item["status"] for item in overlay["relationships"]] == [
+        "pass", "pass"
+    ]

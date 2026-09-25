@@ -54,6 +54,20 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 
+def test_atomic_write_text_preserves_existing_destination_when_replace_fails(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    target.write_text("trusted-old\\n", encoding="utf-8")
+
+    def fail_replace(self, destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(type(target), "replace", fail_replace)
+    with pytest.raises(OSError, match="replace failed"):
+        atomic_write_text(target, "new-payload\\n")
+
+    assert target.read_text(encoding="utf-8") == "trusted-old\\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
 def test_project_loader_migrates_legacy_single_analysis_shape():
     project = project_from_dict({
         "name": "Legacy", "analysis_type": "fan_operating_point",

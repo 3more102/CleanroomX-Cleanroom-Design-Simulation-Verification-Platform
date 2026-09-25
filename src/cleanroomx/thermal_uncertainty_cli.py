@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+
+from .project import atomic_write_text
 
 from .thermal_uncertainty import analyze_thermal_uncertainty
 from .thermal_uncertainty_io import load_thermal_uncertainty
@@ -30,7 +31,7 @@ def main() -> int:
     )
 
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
 

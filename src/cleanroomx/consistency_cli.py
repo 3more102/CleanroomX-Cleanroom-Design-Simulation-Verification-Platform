@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+
+from .project import atomic_write_text
 
 from .consistency import analyze_project_consistency
 from .consistency_report import markdown_consistency_report
@@ -63,7 +64,7 @@ def main() -> int:
         else markdown_consistency_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 2 if result["status"] == "fail" else 0

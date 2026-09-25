@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+
+from .project import atomic_write_text
 
 from .duct_flow import solve_parallel_branch_flows
 from .duct_flow_io import load_parallel_flow_network
@@ -29,7 +30,7 @@ def main() -> int:
         else markdown_parallel_flow_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased atomic CLI report exports — 2026-09-25
+
+- Routes every file-producing command-line `--output` path through the existing same-directory temporary-file, flush, `fsync`, and atomic-replace writer already used by protected application persistence.
+- Prevents a failed final replace from truncating an existing engineering report; temporary files are cleaned on failure and the previous destination remains unchanged.
+- Removes duplicated direct `Path.write_text()` export behavior while preserving report content, stdout behavior, CLI exit-status semantics, solver behavior, and project schema version 1.
+- Adds failure-injection coverage for preserving an existing destination and an architecture regression that rejects direct `write_text()` use in CLI output modules.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

@@ -254,3 +254,83 @@ def test_atomic_publish_staged_file_requires_same_directory(tmp_path):
 
     assert staged.read_bytes() == b"bundle"
     assert not target.exists()
+
+
+
+def test_atomic_write_durably_records_each_created_parent_directory(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "level-one" / "level-two" / "result.json"
+    synced: list[Path] = []
+    monkeypatch.setattr(
+        persistence,
+        "_fsync_directory",
+        lambda directory: synced.append(Path(directory)),
+    )
+
+    atomic_write_text(target, "payload\n")
+
+    assert target.read_text(encoding="utf-8") == "payload\n"
+    assert synced == [
+        tmp_path,
+        tmp_path / "level-one",
+        tmp_path / "level-one" / "level-two",
+    ]
+
+
+def test_atomic_write_fails_before_staging_if_created_parent_is_not_durable(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "level-one" / "level-two" / "result.json"
+
+    def fail_first_parent_sync(directory):
+        if Path(directory) == tmp_path:
+            raise OSError(errno.EIO, "injected created-parent sync failure")
+
+    monkeypatch.setattr(
+        persistence,
+        "_fsync_directory",
+        fail_first_parent_sync,
+    )
+
+    with pytest.raises(OSError) as exc_info:
+        atomic_write_text(target, "payload\n")
+
+    assert exc_info.value.errno == errno.EIO
+    assert not target.exists()
+    assert not (tmp_path / "level-one" / "level-two").exists()
+    assert list((tmp_path / "level-one").glob(".*.tmp")) == []
+
+
+def test_durable_parent_creation_syncs_after_concurrent_mkdir_winner(
+    tmp_path, monkeypatch
+):
+    target = tmp_path / "concurrent-parent"
+    original_mkdir = Path.mkdir
+    raced = False
+    synced: list[Path] = []
+
+    def concurrent_mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        nonlocal raced
+        if self == target and not raced:
+            raced = True
+            original_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
+            raise FileExistsError(errno.EEXIST, "simulated concurrent mkdir", str(self))
+        return original_mkdir(
+            self,
+            mode=mode,
+            parents=parents,
+            exist_ok=exist_ok,
+        )
+
+    monkeypatch.setattr(Path, "mkdir", concurrent_mkdir)
+    monkeypatch.setattr(
+        persistence,
+        "_fsync_directory",
+        lambda directory: synced.append(Path(directory)),
+    )
+
+    persistence._ensure_directory_durable(target)
+
+    assert target.is_dir()
+    assert synced == [tmp_path]

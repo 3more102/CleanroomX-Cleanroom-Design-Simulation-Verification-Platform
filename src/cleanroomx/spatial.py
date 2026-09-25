@@ -1359,13 +1359,35 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _update_validation_summary(self) -> None:
         count = len(self._validation_issues)
         self._validation_var.set(
-            "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} warning(s)"
+            "Spatial checks: PASS" if count == 0 else f"Spatial checks: {count} diagnostic(s)"
         )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
-        validation_key = _spatial_validation_key(self.layout)
+        analysis = self._analysis_getter()
+        sync_key: tuple = ()
+        if analysis is not None and getattr(analysis, "kind", "") in {
+            "room_verification",
+            "project_verification",
+        }:
+            report = engineering_sync_report(self.layout, analysis)
+            sync_key = tuple(
+                (
+                    item["room_id"],
+                    item["status"],
+                    tuple(
+                        (
+                            diff["field"],
+                            diff.get("geometry"),
+                            diff.get("engineering"),
+                        )
+                        for diff in item["differences"]
+                    ),
+                )
+                for item in report["rooms"]
+            )
+        validation_key = (_spatial_validation_key(self.layout), sync_key)
         if force or validation_key != self._last_validation_key:
-            self._validation_issues = validate_layout(self.layout)
+            self._validation_issues = validate_layout(self.layout, analysis)
             self._last_validation_key = validation_key
             self._update_validation_summary()
 
@@ -1388,14 +1410,75 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._engineering_var.set("Engineering: unavailable")
+            self._pressure_result_var.set("Pressure evidence: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
-        prefix = "Room" if self.selected and self.selected.kind == "room" else item.get("type", "Device").title()
+        prefix = (
+            "Room"
+            if self.selected and self.selected.kind == "room"
+            else item.get("type", "Device").title()
+        )
         self._selection_var.set(f"{prefix}: {item.get('name', '')}")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
+
+        if self.selected and self.selected.kind == "room":
+            analysis = self._analysis_getter()
+            if analysis is not None and getattr(analysis, "kind", "") in {
+                "room_verification",
+                "project_verification",
+            }:
+                report = engineering_sync_report(self.layout, analysis)
+                entry = next(
+                    (
+                        candidate
+                        for candidate in report["rooms"]
+                        if candidate["room_id"] == item["id"]
+                    ),
+                    None,
+                )
+                if entry is not None:
+                    self._engineering_var.set(
+                        "Engineering: "
+                        + entry["status"].replace("_", " ")
+                        + (
+                            f" → {entry['engineering_room_name']}"
+                            if entry.get("engineering_room_name")
+                            else ""
+                        )
+                    )
+                else:
+                    self._engineering_var.set("Engineering: unmapped")
+            else:
+                self._engineering_var.set("Engineering: no compatible active analysis")
+
+            overlay = self._overlay()
+            pressure = next(
+                (
+                    candidate
+                    for candidate in overlay["rooms"]
+                    if candidate["room_id"] == item["id"]
+                ),
+                None,
+            )
+            if pressure is None or pressure.get("pressure_pa") is None:
+                self._pressure_result_var.set("Pressure evidence: unavailable")
+            else:
+                details = (
+                    f"{pressure['pressure_pa']:g} Pa · {pressure['source']}"
+                    f" · {pressure['status']}"
+                )
+                if pressure.get("pressure_target_pa") is not None:
+                    details += f" · target {pressure['pressure_target_pa']:g} Pa"
+                if pressure.get("ach") is not None:
+                    details += f" · ACH {pressure['ach']:g}"
+                self._pressure_result_var.set("Pressure evidence: " + details)
+        else:
+            self._engineering_var.set("Engineering: spatial object")
+            self._pressure_result_var.set("Pressure evidence: n/a")
 
     def apply_properties(self) -> None:
         item = self._selected_object()
@@ -1411,6 +1494,20 @@ class SpatialDesignWorkspace(ttk.Frame):
             if text:
                 item[key] = _finite_number(text, item.get(key, 0.0))
         if self.selected and self.selected.kind == "room":
+            humidity_text = self._property_vars["humidity_target_rh_pct"].get().strip()
+            if humidity_text:
+                humidity = _optional_finite(humidity_text)
+                if humidity is None or not 0.0 <= humidity <= 100.0:
+                    messagebox.showerror(
+                        "Invalid humidity target",
+                        "Relative humidity target must be a finite value from 0 to 100%.",
+                        parent=self,
+                    )
+                    return
+            else:
+                humidity = None
+
+            old_analysis_room_name = item.get("analysis_room_name")
             for key in ("length_m", "width_m", "height_m"):
                 text = self._property_vars[key].get().strip()
                 if text:
@@ -1420,17 +1517,34 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["floor_elevation_m"] = _finite_number(
                     floor_elevation, item.get("floor_elevation_m", 0.0)
                 )
-            pressure = self._property_vars["pressure_pa"].get().strip()
-            if pressure:
-                item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
-            elif "pressure_pa" in item:
-                item.pop("pressure_pa", None)
-            for key in ("classification", "analysis_room_name"):
+            for key in ("pressure_pa", "pressure_target_pa", "temperature_target_c"):
+                text = self._property_vars[key].get().strip()
+                if text:
+                    item[key] = _finite_number(text, item.get(key, 0.0))
+                else:
+                    item.pop(key, None)
+            if humidity is None:
+                item.pop("humidity_target_rh_pct", None)
+            else:
+                item["humidity_target_rh_pct"] = humidity
+            for key in (
+                "classification",
+                "analysis_room_name",
+                "engineering_zone_id",
+                "airflow_ref",
+            ):
                 text = self._property_vars[key].get().strip()
                 if text:
                     item[key] = text
                 else:
                     item.pop(key, None)
+            notes = self._property_vars["notes"].get()
+            if notes:
+                item["notes"] = notes
+            else:
+                item.pop("notes", None)
+            if item.get("analysis_room_name") != old_analysis_room_name:
+                item.pop("engineering_ref", None)
         elif self.selected and self.selected.kind == "device":
             z_text = self._property_vars["z_m"].get().strip()
             if z_text:
@@ -1522,7 +1636,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             "height_m": default_height,
             "orientation_deg": 0.0,
         }
-        if device_type in {"door", "transfer"}:
+        if device_type in {"door", "window", "opening", "transfer"}:
             device["wall_side"] = "south"
         if device_type == "door":
             device["swing"] = "left"
@@ -1537,6 +1651,25 @@ class SpatialDesignWorkspace(ttk.Frame):
 
     def delete_selected(self) -> None:
         if self.selected is None:
+            return
+        item = self._selected_object()
+        if item is None:
+            return
+        description = str(item.get("name") or self.selected.item_id)
+        suffix = ""
+        if self.selected.kind == "room":
+            dependent = sum(
+                1
+                for device in self.layout["devices"]
+                if device.get("room_id") == self.selected.item_id
+            )
+            if dependent:
+                suffix = f"\n\nThis also removes {dependent} assigned spatial object(s)."
+        if not messagebox.askyesno(
+            "Delete spatial item",
+            f"Delete {description!r}?{suffix}",
+            parent=self,
+        ):
             return
         history_before = self._history_layout()
         selection_before = self._selection_state()

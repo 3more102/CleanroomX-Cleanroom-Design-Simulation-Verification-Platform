@@ -8,6 +8,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    SpatialEditHistory,
     spatial_layout_schedule_csv,
     spatial_layout_summary,
     spatial_layout_svg,
@@ -367,3 +368,76 @@ def test_spatial_layout_svg_handles_empty_layout():
     assert root.tag.endswith("svg")
     assert 'id="rooms"' in svg
     assert 'id="devices"' in svg
+
+
+def test_spatial_edit_history_undo_redo_round_trip_and_noop_filtering():
+    history = SpatialEditHistory()
+    before = {
+        "rooms": [
+            {
+                "id": "r1",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+            }
+        ]
+    }
+    after = normalize_layout(before)
+    after["rooms"][0]["x_m"] = 1.5
+
+    assert history.record(before, before) is False
+    assert history.can_undo is False
+    assert history.record(before, after) is True
+    assert history.can_undo is True
+    assert history.can_redo is False
+
+    restored = history.undo(after)
+    assert restored is not None
+    assert restored["rooms"][0]["x_m"] == 0
+    assert history.can_redo is True
+
+    redone = history.redo(restored)
+    assert redone is not None
+    assert redone["rooms"][0]["x_m"] == 1.5
+    assert history.can_undo is True
+
+
+def test_spatial_edit_history_new_edit_after_undo_clears_redo():
+    history = SpatialEditHistory()
+    base = normalize_layout({})
+    first = normalize_layout({})
+    first["grid_m"] = 1.0
+    second = normalize_layout({})
+    second["grid_m"] = 2.0
+
+    assert history.record(base, first) is True
+    restored = history.undo(first)
+    assert restored is not None
+    assert history.can_redo is True
+
+    assert history.record(restored, second) is True
+    assert history.can_redo is False
+
+
+def test_spatial_edit_history_enforces_bounded_undo_depth():
+    history = SpatialEditHistory(limit=2)
+    state0 = normalize_layout({})
+    state1 = normalize_layout({})
+    state1["grid_m"] = 1.0
+    state2 = normalize_layout({})
+    state2["grid_m"] = 2.0
+    state3 = normalize_layout({})
+    state3["grid_m"] = 3.0
+
+    assert history.record(state0, state1) is True
+    assert history.record(state1, state2) is True
+    assert history.record(state2, state3) is True
+
+    restored2 = history.undo(state3)
+    restored1 = history.undo(restored2)
+    assert restored2 is not None and restored2["grid_m"] == 2.0
+    assert restored1 is not None and restored1["grid_m"] == 1.0
+    assert history.undo(restored1) is None

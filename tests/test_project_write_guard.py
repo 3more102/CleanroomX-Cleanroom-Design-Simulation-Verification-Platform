@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -33,17 +34,17 @@ class Value:
 def test_stable_load_retries_when_file_changes_during_open(tmp_path, monkeypatch):
     path = tmp_path / "project.cleanroomx.json"
     save_project_document(path, ProjectDocument(name="First"))
-    original_load = project_module.load_project_document
+    original_parse = project_module._project_document_from_bytes
     calls = {"count": 0}
 
-    def changing_load(source):
-        project = original_load(source)
+    def changing_parse(payload):
+        project = original_parse(payload)
         if calls["count"] == 0:
             save_project_document(path, ProjectDocument(name="Second"))
         calls["count"] += 1
         return project
 
-    monkeypatch.setattr(project_module, "load_project_document", changing_load)
+    monkeypatch.setattr(project_module, "_project_document_from_bytes", changing_parse)
 
     project, revision = load_project_document_with_revision(path)
 
@@ -208,3 +209,43 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+def test_gui_save_retains_recovery_and_adopts_verified_revision_on_durability_failure(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+
+    captures: list[str] = []
+    explicit_saves: list[Path] = []
+    warnings = []
+    app._capture_saved_state = lambda: captures.append("captured")
+    app._notify_explicit_save = lambda saved: explicit_saves.append(Path(saved))
+
+    def fail_directory_fsync(_directory):
+        raise OSError("simulated durability failure")
+
+    monkeypatch.setattr(project_module, "_fsync_directory", fail_directory_fsync)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("durability uncertainty must not be a generic save error")
+        ),
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "Window edit"
+    assert app._project_file_revision == capture_project_file_revision(path)
+    assert captures == []
+    assert explicit_saves == []
+    assert warnings and warnings[-1][0] == "Save durability uncertain"
+    assert "durability uncertain" in app.status_var.value.lower()

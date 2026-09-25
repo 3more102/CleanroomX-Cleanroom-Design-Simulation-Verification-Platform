@@ -14,6 +14,7 @@ import uuid
 from typing import Any
 
 from . import __version__
+from .json_integrity import JSONIntegrityError, strict_json_loads
 from .project import ProjectDocument, atomic_write_text, project_from_dict
 
 
@@ -121,10 +122,6 @@ def _ensure_recovery_dir(path: Path) -> Path:
     return path
 
 
-def _reject_json_constant(value: str):
-    raise RecoveryFormatError(f"non-finite JSON constant is not allowed: {value}")
-
-
 def _canonical_json(value: Any) -> str:
     return json.dumps(
         value,
@@ -229,14 +226,13 @@ def _validate_recovery_payload(data: Any) -> dict[str, Any]:
 def load_recovery_artifact(path: str | Path) -> dict[str, Any]:
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        data = strict_json_loads(source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise RecoveryFormatError(
             f"invalid recovery JSON at line {exc.lineno}, column {exc.colno}"
         ) from exc
+    except JSONIntegrityError as exc:
+        raise RecoveryFormatError(str(exc)) from exc
     return _validate_recovery_payload(data)
 
 
@@ -472,7 +468,7 @@ class AutosaveManager:
         )
 
     def _write_recovery(self, request: _AutosaveRequest) -> Path:
-        snapshot = json.loads(request.snapshot_text)
+        snapshot = strict_json_loads(request.snapshot_text)
         recovery_id = uuid.uuid4().hex
         payload = {
             "schema": RECOVERY_SCHEMA,

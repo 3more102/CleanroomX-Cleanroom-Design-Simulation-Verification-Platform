@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased verified durable persistence — 2026-09-25
+
+- Hardens the existing same-directory atomic-write primitive with exact SHA-256/byte-count readback verification of the flushed staging file before replacement.
+- Synchronizes the containing directory after replacement on POSIX so a reported successful save includes directory-entry durability, not only temporary-file data flush.
+- Verifies committed bytes and performs a final project-save revision check, failing explicitly if the destination is immediately rewritten or differs from the serialized project instead of accepting a false successful save.
+- Reports directory-sync failure as a committed-but-durability-unconfirmed error so the desktop does not tell the operator the save is safely durable when that guarantee could not be established.
+- Strengthens project revision capture to require stable device/inode identity in addition to size and nanosecond mtime while hashing, closing same-size/same-timestamp replacement races.
+- Preserves project schema version 1, migration behavior, optimistic external-write guards, recovery-autosave separation, solver equations, tolerances, and engineering acceptance semantics.
+- Adds failure-injection regressions for staged corruption, post-commit rewrite, directory-sync failure, final save verification, and file-identity swaps.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

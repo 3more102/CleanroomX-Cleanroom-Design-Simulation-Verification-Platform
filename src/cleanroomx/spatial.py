@@ -521,7 +521,6 @@ def spatial_layout_schedule_csv(value: Any) -> str:
     return stream.getvalue()
 
 
-
 def resize_room(
     room: dict,
     handle: str,

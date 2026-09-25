@@ -12,14 +12,17 @@ CleanroomX v0.100.0 is a Python 3.11+ engineering screening, simulation, verific
 4. **Recovery persistence** — `src/cleanroomx/autosave.py` owns separate versioned recovery artifacts, source-file fingerprints, bounded rotation, asynchronous write/coalescing, validated restore/discard operations, and recovery scanning. It never writes the explicit project path.
 5. **Recovery UI** — `src/cleanroomx/recovery_ui.py` provides startup recovery discovery, evidence inspection, explicit discard, and restore selection without owning project-save semantics.
 6. **Desktop UI** — `src/cleanroomx/gui.py` provides project lifecycle, JSON editing, validation, non-blocking execution, per-analysis result ownership, diagnostics, reporting, export, plotting, dirty-state tracking, unsaved-change protection, recovery-autosave status, protected recovery restoration, and active-run mutation guards.
-7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, and the desktop GUI.
-8. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
+7. **CLI entry points** — `pyproject.toml` exposes CleanroomX commands for verification, HVAC, recovery, uncertainty, qualification, networks, fan studies, dossier/consistency, project batch automation, and the desktop GUI.
+8. **Project automation** — `src/cleanroomx/project_batch.py` loads one stable project revision, schedules selected analyses deterministically in persisted project order, delegates execution to the shared application service, preserves per-run provenance, and stops scheduling if the source project changes during the batch.
+9. **Verification/provenance** — solver-specific modules retain compatibility, replay, integrity, residual, convergence, coverage, and deterministic reporting evidence. CI preserves explicit v0.91-v0.95 compatibility gates before the complete suite.
 
 ## Desktop data flow
 
 A project file is loaded through `load_project_document()` and migrated only when it matches a supported legacy shape. The selected analysis kind maps to a fixed application-registry entry. Ordinary workflows pass through declared parser and runner functions; consistency and dossier use explicit custom application adapters. Results are normalized to strict JSON and rendered through the backend reporter when available.
 
 Result ownership remains tied to the analysis id so stale results are not silently reassigned after edits, deletion, or analysis switching. Project saves serialize schema version 1, validate the resulting document, and use an atomic replacement.
+
+Headless project automation uses the same application boundary rather than a second execution stack. `run_project_file()` loads the exact project bytes together with their SHA-256 revision, takes one in-memory project snapshot, deep-copies each selected analysis input, and calls `run_analysis()` sequentially. The source revision is checked before and after every attempted analysis; a change stops further scheduling and is reported explicitly. Engineering PASS/FAIL-style statuses remain workflow results rather than process exit semantics.
 
 Recovery autosave is deliberately outside the project schema. The UI captures a model snapshot plus raw draft state on the Tk thread and submits it to a single background writer. Recovery artifacts are atomically written in a user-specific recovery directory, retain source-project fingerprint evidence, and are bounded by project identity. Explicit saves remain authoritative; recovery artifacts are never substituted for or written over the project file.
 

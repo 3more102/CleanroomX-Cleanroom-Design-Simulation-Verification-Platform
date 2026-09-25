@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased conflict-safe verified project persistence — 2026-09-25
+
+- Records an exact content fingerprint when a desktop project is loaded and refreshes it only after a verified successful save.
+- Refuses normal **Save** when the destination was externally modified, replaced, or deleted since the file was opened or last saved, preserving both the in-memory work and the external version.
+- Keeps **Save As** protected against destination changes that occur after the operator chooses a file, and prevents Save As to the current project path from bypassing the original conflict guard.
+- Strictly reloads the same-directory temporary project before replacement and verifies the final file SHA-256 and byte size after replacement.
+- Centralizes source-file fingerprinting so crash recovery and explicit persistence use one content-identity contract.
+- Preserves project schema version 1 and all solver equations, tolerances, engineering acceptance semantics, CLI project APIs, and existing atomic-write callers.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.

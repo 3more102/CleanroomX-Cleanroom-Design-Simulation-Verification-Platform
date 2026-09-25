@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 from typing import Any
 
 
@@ -114,3 +115,8 @@ def strict_json_loads(text: str) -> Any:
         object_pairs_hook=_object_without_duplicate_keys,
     )
     return clone_strict_json(value)
+
+
+def load_strict_json(path: str | Path) -> Any:
+    """Read UTF-8 JSON through the canonical strict parser."""
+    return strict_json_loads(Path(path).read_text(encoding="utf-8"))

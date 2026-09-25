@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased strict engineering JSON ingestion — 2026-09-25
+
+- Routes all public file-backed engineering JSON loaders and dossier manifests through the shared strict JSON parser.
+- Rejects non-standard `NaN`, `Infinity`, and `-Infinity` constants before model construction or solver execution.
+- Rejects duplicate JSON object keys at the same ingestion boundary instead of silently accepting the last occurrence.
+- Preserves UTF-8 file reading, ordinary JSON syntax errors, solver equations, numerical tolerances, engineering acceptance semantics, project schema version 1, and existing finite standards-compliant inputs.
+- Adds focused regression coverage across every migrated engineering loader plus dossier library/CLI ingestion.
+
 ## Unreleased deterministic project batch automation — 2026-09-25
 
 - Adds `cleanroomx-project-run` and `cleanroomx.project_batch.run_project_file()` for headless execution of complete or selected saved-project analyses through the existing application service.

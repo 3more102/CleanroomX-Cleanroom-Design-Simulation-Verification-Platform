@@ -247,6 +247,170 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
     assert "Saved" in app.status_var.value
 
 
+
+def test_save_project_preserves_external_changes_and_cancels_normal_overwrite(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = tmp_path / "shared.cleanroomx.json"
+    gui_module.save_project_document(path, ProjectDocument(name="Original"))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Local edits")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app.name_var = Value("Local edits")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+
+    gui_module.save_project_document(path, ProjectDocument(name="External edits"))
+
+    prompts = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda title, message, parent=None: prompts.append((title, message, parent)) or False,
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "External edits"
+    assert app.project.name == "Local edits"
+    assert prompts and prompts[0][0] == "Project changed on disk"
+    assert "changed on disk" in app.status_var.value.lower()
+
+
+def test_save_project_redirects_external_conflict_to_save_as(tmp_path, monkeypatch):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = tmp_path / "shared.cleanroomx.json"
+    gui_module.save_project_document(path, ProjectDocument(name="Original"))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Local edits")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app.name_var = Value("Local edits")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+
+    gui_module.save_project_document(path, ProjectDocument(name="External edits"))
+    redirected = []
+    app.save_project_as = lambda: redirected.append(True)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda title, message, parent=None: True,
+    )
+
+    app.save_project()
+
+    assert redirected == [True]
+    assert load_project_document(path).name == "External edits"
+
+
+def test_save_project_as_requires_confirmation_for_changed_current_path(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = tmp_path / "shared.cleanroomx.json"
+    gui_module.save_project_document(path, ProjectDocument(name="Original"))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Local edits")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app.name_var = Value("Local edits")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+    app._recovery_source_path = None
+    app._restored_recovery_artifact = None
+
+    gui_module.save_project_document(path, ProjectDocument(name="External edits"))
+    prompts = []
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(path),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda title, message, parent=None: prompts.append((title, message, parent)) or False,
+    )
+
+    app.save_project_as()
+
+    assert load_project_document(path).name == "External edits"
+    assert prompts and prompts[0][0] == "Overwrite external changes?"
+    assert "external changes preserved" in app.status_var.value.lower()
+
+
+def test_successful_save_refreshes_project_source_fingerprint(tmp_path):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = tmp_path / "tracked.cleanroomx.json"
+    gui_module.save_project_document(path, ProjectDocument(name="Original"))
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Updated")
+    app.project_path = path
+    app._project_source_fingerprint = gui_module.source_fingerprint(path)
+    app._editor_analysis_id = None
+    app.name_var = Value("Updated")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+    app._capture_saved_state = lambda: None
+
+    app.save_project()
+
+    current = gui_module.source_fingerprint(path)
+    assert load_project_document(path).name == "Updated"
+    assert app._project_source_fingerprint["sha256"] == current["sha256"]
+    assert "Saved" in app.status_var.value
+
+
 def test_save_project_as_invalidates_results_when_base_directory_changes(
     tmp_path, monkeypatch
 ):

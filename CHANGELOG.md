@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased lossless project extension round trips — 2026-09-25
+
+- Preserves unrecognized additive strict-JSON fields at the project-document top level, nested project block, and individual analysis records across load/edit/save cycles.
+- Keeps CleanroomX-owned schema/model fields authoritative when extension maps contain colliding reserved keys.
+- Carries unconsumed additive fields through supported legacy migrations where their source scope has a lossless schema-v1 destination, without inventing semantics for pre-schema fields.
+- Retains strict-JSON validation, so non-finite or non-serializable extension values cannot bypass project-save validation.
+- Preserves project schema version 1, existing constructor compatibility, solver equations, numerical tolerances, and analysis semantics.
+
+
 ## Unreleased atomic CLI output persistence — 2026-09-25
 
 - Routes all 23 file-producing CLI/report commands through the existing shared `atomic_write_text()` persistence primitive instead of truncating destinations in place with `Path.write_text()`.

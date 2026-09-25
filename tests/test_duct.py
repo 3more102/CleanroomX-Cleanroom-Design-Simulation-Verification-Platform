@@ -6,6 +6,7 @@ from cleanroomx.duct import (
     DuctSection,
     analyze_duct_network,
     analyze_duct_section,
+    calculate_duct_network,
 )
 from cleanroomx.hvac import analyze_hvac_project
 from cleanroomx.hvac_io import hvac_project_from_dict
@@ -146,3 +147,111 @@ def test_hvac_uses_critical_path_as_fan_duct_loss() -> None:
     assert result["supply_fan"]["pressure_components_pa"]["duct"] == 6.24
     assert result["supply_fan"]["duct_pressure_drop_source"] == "computed_duct_network"
     assert result["supply_fan"]["total_static_pressure_pa"] == 156.24
+
+
+
+def _rounding_sensitive_section(name: str, local_loss_coefficient: float) -> DuctSection:
+    return DuctSection(
+        name=name,
+        length_m=0.0,
+        airflow_m3_h=3600.0,
+        friction_factor=0.0,
+        air_density_kg_m3=1.2,
+        local_loss_coefficient=local_loss_coefficient,
+        width_m=1.0,
+        height_m=1.0,
+    )
+
+
+def test_critical_path_selection_uses_unrounded_pressure_loss() -> None:
+    network = DuctNetwork(
+        paths=(
+            DuctPath(
+                name="Lower exact loss",
+                sections=(_rounding_sensitive_section("A", 1.0),),
+            ),
+            DuctPath(
+                name="Higher exact loss",
+                sections=(_rounding_sensitive_section("B", 1.00005),),
+            ),
+        )
+    )
+
+    calculation = calculate_duct_network(network)
+    result = analyze_duct_network(network)
+
+    assert [path["total_pressure_drop_pa"] for path in result["paths"]] == [0.6, 0.6]
+    assert (
+        calculation["paths"][1]["total_pressure_drop_pa"]
+        > calculation["paths"][0]["total_pressure_drop_pa"]
+    )
+    assert result["critical_path"] == "Higher exact loss"
+
+
+def test_path_aggregation_rounds_only_after_full_precision_sum() -> None:
+    sections = tuple(
+        _rounding_sensitive_section(
+            f"S{index}",
+            100.00008166666667,
+        )
+        for index in range(20)
+    )
+    result = analyze_duct_network(
+        DuctNetwork(paths=(DuctPath(name="Precision path", sections=sections),))
+    )
+
+    path = result["paths"][0]
+    assert all(section["total_pressure_drop_pa"] == 60.0 for section in path["sections"])
+    assert path["total_pressure_drop_pa"] == 1200.001
+    assert result["critical_path_pressure_drop_pa"] == 1200.001
+
+
+def test_hvac_fan_uses_unrounded_duct_path_pressure() -> None:
+    section_payloads = [
+        {
+            "name": f"S{index}",
+            "length_m": 0.0,
+            "airflow_m3_h": 3600.0,
+            "friction_factor": 0.0,
+            "air_density_kg_m3": 1.2,
+            "local_loss_coefficient": 100.00008166666667,
+            "width_m": 1.0,
+            "height_m": 1.0,
+        }
+        for index in range(20)
+    ]
+    project = hvac_project_from_dict(
+        {
+            "name": "Precision HVAC",
+            "fan_system": {
+                "name": "AHU",
+                "fan_efficiency": 0.7,
+                "motor_efficiency": 0.9,
+            },
+            "duct_network": {
+                "paths": [
+                    {
+                        "name": "Precision path",
+                        "sections": section_payloads,
+                    }
+                ]
+            },
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 3600.0,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    result = analyze_hvac_project(project)
+
+    assert result["duct_network"]["critical_path_pressure_drop_pa"] == 1200.001
+    assert result["supply_fan"]["pressure_components_pa"]["duct"] == 1200.001

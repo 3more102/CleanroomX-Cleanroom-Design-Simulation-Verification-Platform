@@ -34,9 +34,13 @@ selected room resizes its footprint. The property inspector can edit device Z el
 association, opening dimensions/orientation/wall side/swing, room floor elevation,
 classification text, and analysis-room linkage.
 
-Pressure color is shown only when a room has a supplied pressure value. Relationship arrows are
-drawn only from the active analysis's explicit `pressure_cascade` records. CleanroomX does not
-invent missing pressure or airflow values.
+Pressure rendering follows explicit provenance. A fresh solver result is preferred; otherwise
+the workspace falls back to configured engineering pressure, then to an explicit spatial-only
+pressure for unmapped geometry. Missing pressure remains visibly unavailable. The property
+inspector labels the evidence source separately from the editable pressure input. Cascade arrows
+come only from the active analysis's explicit `pressure_cascade` requirements, and pass/fail plus
+observed delta are shown only when a fresh solver result contains the corresponding cascade
+finding. Configured cascade intent without a result is shown as unresolved rather than invented.
 
 ## 3D viewer
 
@@ -82,9 +86,11 @@ These checks are geometry/model-integrity checks, not cleanroom certification cr
 
 ## Demo
 
-`cleanroomx-gui --demo` includes an explicit three-room spatial layout for Process,
-Preparation, and Ante/Airlock, together with pressure data, pressure-cascade relationships,
-doors, supply/return devices, an FFU, equipment, and a transfer opening.
+`cleanroomx-gui --demo` opens directly on the verification workflow and includes an explicit
+three-room spatial layout for Process, Preparation, and Ante/Airlock, together with pressure data,
+pressure-cascade relationships, doors, supply/return devices, an FFU, equipment, and a transfer
+opening. The installed GUI smoke verifies 2D geometry, 3D geometry, cascade rendering, and
+solver-result projection into the spatial overlay.
 
 For an automated GUI smoke path on Linux with a virtual display:
 

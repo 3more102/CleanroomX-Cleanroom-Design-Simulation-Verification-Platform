@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 
 import pytest
 
+import cleanroomx.project as project_module
+
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
+    AnalysisDocument, AtomicWriteDurabilityError, AtomicWriteVerificationError,
+    PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
     ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
     save_project_document,
 )
@@ -53,6 +58,58 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
     assert not target.exists()
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
+
+
+def test_atomic_write_text_writes_exact_utf8_bytes(tmp_path):
+    target = tmp_path / "exact.txt"
+    text = "first line\nβeta line\n"
+
+    atomic_write_text(target, text)
+
+    assert target.read_bytes() == text.encode("utf-8")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits are not portable to Windows")
+def test_atomic_write_text_preserves_existing_regular_file_mode(tmp_path):
+    target = tmp_path / "mode.txt"
+    target.write_text("old", encoding="utf-8")
+    target.chmod(0o640)
+
+    atomic_write_text(target, "new\n")
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+
+
+def test_atomic_write_text_verification_failure_preserves_previous_file(tmp_path, monkeypatch):
+    target = tmp_path / "verified.txt"
+    target.write_text("old", encoding="utf-8")
+
+    def reject_staged_payload(path, expected):
+        raise AtomicWriteVerificationError("staged checksum mismatch")
+
+    monkeypatch.setattr(project_module, "_verify_temp_payload", reject_staged_payload)
+
+    with pytest.raises(AtomicWriteVerificationError, match="checksum mismatch"):
+        atomic_write_text(target, "new\n")
+
+    assert target.read_text(encoding="utf-8") == "old"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_reports_directory_sync_failure_after_visible_replace(tmp_path, monkeypatch):
+    target = tmp_path / "durability.txt"
+    target.write_text("old", encoding="utf-8")
+
+    def fail_directory_sync(handle, destination):
+        raise AtomicWriteDurabilityError(destination, OSError("directory fsync failed"))
+
+    monkeypatch.setattr(project_module, "_sync_parent_directory", fail_directory_sync)
+
+    with pytest.raises(AtomicWriteDurabilityError, match="durability could not be confirmed"):
+        atomic_write_text(target, "new\n")
+
+    assert target.read_text(encoding="utf-8") == "new\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 def test_project_loader_migrates_legacy_single_analysis_shape():
     project = project_from_dict({

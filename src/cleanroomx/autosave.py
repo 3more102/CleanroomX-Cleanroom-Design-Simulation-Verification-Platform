@@ -318,6 +318,7 @@ class AutosaveManager:
         self._current_identity = project_identity(None, unsaved_id=self.session_id)
         self._epochs: dict[str, int] = {self._current_identity: 0}
         self._last_saved_digest: dict[str, str] = {}
+        self._artifacts_by_identity: dict[str, set[Path]] = {}
         self._active_request: _AutosaveRequest | None = None
         self._pending_request: _AutosaveRequest | None = None
         self._future: Future[Path] | None = None
@@ -409,6 +410,7 @@ class AutosaveManager:
             "schema": RECOVERY_SCHEMA,
             "schema_version": RECOVERY_SCHEMA_VERSION,
             "application_version": __version__,
+            "session_id": self.session_id,
             "recovery_id": recovery_id,
             "project_identity": request.project_identity,
             "saved_at_utc": _utc_now_text(),
@@ -464,6 +466,10 @@ class AutosaveManager:
             if not stale:
                 if failure is None:
                     self._last_saved_digest[request.project_identity] = request.digest
+                    assert artifact is not None
+                    self._artifacts_by_identity.setdefault(
+                        request.project_identity, set()
+                    ).add(artifact)
                     self._set_status_locked(
                         "saved",
                         "Autosave saved",
@@ -508,9 +514,12 @@ class AutosaveManager:
             and self._pending_request.project_identity == identity
         ):
             self._pending_request = None
-        if self.recovery_dir.exists():
-            for artifact in self.recovery_dir.glob(f"{identity}-*.recovery.json"):
+        artifacts = self._artifacts_by_identity.pop(identity, set())
+        for artifact in artifacts:
+            try:
                 artifact.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def discard_current_recoveries(self) -> None:
         with self._lock:

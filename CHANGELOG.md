@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased recovery quarantine — 2026-09-25
+
+- Adds a safe quarantine path for malformed, unreadable, or integrity-failed recovery artifacts so they do not reappear on every startup scan.
+- Preserves suspect artifact bytes unchanged, records SHA-256, detection reason, original name, and UTC quarantine time in an audit manifest, and keeps the quarantine under the private recovery root.
+- Refuses to quarantine recovery artifacts that still validate successfully; valid recoveries remain on the explicit restore/discard workflow.
+- Adds bounded quarantine retention plus Recovery Center controls and regression coverage for byte preservation, audit evidence, path containment, valid-artifact refusal, and retention.
+
 ## Unreleased recovery artifact integrity — 2026-09-25
 
 - Upgrades newly written recovery artifacts to schema v2 with deterministic SHA-256 integrity evidence over the complete semantic recovery payload.

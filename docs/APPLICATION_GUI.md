@@ -60,7 +60,9 @@ Current-session recovery artifacts are invalidated after an explicit save or an 
 
 ### Startup recovery
 
-On normal interactive startup, CleanroomX scans the recovery directory before opening a command-line project argument. If recovery data exists, **Recovery Center** lists the project name, exact UTC recovery timestamp, source comparison state, and original source path. **Inspect…** shows the project identity, application version, recovered analysis list, and raw editor draft. Malformed/unreadable recovery artifacts are reported and preserved.
+On normal interactive startup, CleanroomX scans the recovery directory before opening a command-line project argument. If recovery data exists, **Recovery Center** lists the project name, exact UTC recovery timestamp, source comparison state, integrity state, and original source path. **Inspect…** shows the project identity, application version, recovered analysis list, and raw editor draft. Malformed, unreadable, or integrity-failed recovery artifacts are reported and preserved.
+
+**Quarantine Invalid Artifacts…** moves only artifacts that fail recovery validation into a private `quarantine` directory under the recovery root. Their original bytes are preserved unchanged, a SHA-256/reason/timestamp audit manifest is written, normal startup scans stop rediscovering them, and quarantine history is bounded. The quarantine API refuses artifacts that still validate successfully, so healthy recoveries must use the ordinary discard/restore paths.
 
 **Restore as Unsaved Copy** never writes or rebinds the original project file. The recovered project opens dirty with **Save Project As** required. If the recovery came from a saved project, CleanroomX retains that original path only as read/context so relative consistency/dossier references still resolve correctly. The first recovered Save As refuses that original source path, forcing the recovered work to a different file so both versions remain available. After a successful Save As, the new explicit file is durable before the restored recovery artifact is removed.
 

@@ -25,8 +25,11 @@ SUPPORTED_RECOVERY_SCHEMA_VERSIONS = frozenset(
     {LEGACY_RECOVERY_SCHEMA_VERSION, RECOVERY_SCHEMA_VERSION}
 )
 RECOVERY_INTEGRITY_ALGORITHM = "sha256"
+RECOVERY_QUARANTINE_SCHEMA = "cleanroomx.recovery-quarantine"
+RECOVERY_QUARANTINE_SCHEMA_VERSION = 1
 DEFAULT_AUTOSAVE_INTERVAL_SECONDS = 60.0
 DEFAULT_RECOVERY_HISTORY_LIMIT = 5
+DEFAULT_RECOVERY_QUARANTINE_LIMIT = 20
 
 
 class RecoveryFormatError(ValueError):
@@ -64,6 +67,16 @@ class RecoveryScanIssue:
 class RecoveryScan:
     candidates: tuple[RecoveryCandidate, ...]
     issues: tuple[RecoveryScanIssue, ...]
+
+
+@dataclass(frozen=True)
+class QuarantinedRecoveryArtifact:
+    path: Path
+    manifest_path: Path
+    original_name: str
+    quarantined_at_utc: str
+    reason: str
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -308,11 +321,11 @@ def restore_recovery_artifact(path: str | Path) -> RecoveredProjectState:
     )
 
 
-def discard_recovery_artifact(
+def _resolve_recovery_artifact_path(
     path: str | Path,
     *,
     recovery_dir: str | Path | None = None,
-) -> None:
+) -> tuple[Path, Path]:
     artifact_path = Path(path)
     directory = (
         Path(recovery_dir) if recovery_dir is not None else default_recovery_dir()
@@ -326,9 +339,129 @@ def discard_recovery_artifact(
             "recovery artifact must be an existing file inside the recovery directory"
         ) from exc
     if not resolved_artifact.name.endswith(".recovery.json"):
-        raise RecoveryFormatError("refusing to discard a non-recovery file")
+        raise RecoveryFormatError("refusing to operate on a non-recovery file")
+    return resolved_artifact, resolved_directory
+
+
+def discard_recovery_artifact(
+    path: str | Path,
+    *,
+    recovery_dir: str | Path | None = None,
+) -> None:
+    resolved_artifact, _resolved_directory = _resolve_recovery_artifact_path(
+        path,
+        recovery_dir=recovery_dir,
+    )
     load_recovery_artifact(resolved_artifact)
     resolved_artifact.unlink()
+
+
+def _rotate_quarantine(directory: Path, history_limit: int) -> None:
+    dated_manifests: list[tuple[int, str, Path]] = []
+    for manifest in directory.glob("*.quarantined.manifest.json"):
+        try:
+            modified_ns = manifest.stat().st_mtime_ns
+        except OSError:
+            continue
+        dated_manifests.append((modified_ns, manifest.name, manifest))
+
+    manifests = [
+        item[2] for item in sorted(dated_manifests, reverse=True)
+    ]
+    for stale_manifest in manifests[history_limit:]:
+        quarantined_name = stale_manifest.name[: -len(".manifest.json")]
+        stale_artifact = stale_manifest.with_name(quarantined_name)
+        try:
+            stale_artifact.unlink(missing_ok=True)
+            stale_manifest.unlink(missing_ok=True)
+        except OSError:
+            # Retention is best-effort housekeeping; a failed prune must not make a
+            # successfully quarantined artifact look like a failed quarantine.
+            continue
+
+
+def quarantine_recovery_artifact(
+    path: str | Path,
+    *,
+    recovery_dir: str | Path | None = None,
+    reason: str,
+    history_limit: int = DEFAULT_RECOVERY_QUARANTINE_LIMIT,
+) -> QuarantinedRecoveryArtifact:
+    """Move an unreadable recovery artifact out of the active scan set.
+
+    Quarantine never rewrites the suspect bytes. The original bytes are moved
+    atomically within the recovery filesystem and accompanied by a small manifest
+    containing a SHA-256 digest, reason, and UTC timestamp. Valid recovery artifacts
+    are rejected so this path cannot replace the ordinary restore/discard workflow.
+    If manifest creation fails, CleanroomX attempts to roll the move back.
+    """
+
+    if history_limit < 1:
+        raise ValueError("history_limit must be at least 1")
+    reason_text = str(reason).strip()
+    if not reason_text:
+        raise ValueError("quarantine reason must be non-empty")
+
+    resolved_artifact, resolved_directory = _resolve_recovery_artifact_path(
+        path,
+        recovery_dir=recovery_dir,
+    )
+    try:
+        load_recovery_artifact(resolved_artifact)
+    except ValueError:
+        pass
+    else:
+        raise RecoveryFormatError(
+            "refusing to quarantine a valid recovery artifact; use discard instead"
+        )
+
+    _stat, artifact_sha256 = _file_sha256(resolved_artifact)
+    quarantined_at_utc = _utc_now_text()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    token = uuid.uuid4().hex[:8]
+    quarantine_dir = _ensure_recovery_dir(resolved_directory / "quarantine")
+    quarantined_name = f"{resolved_artifact.name}.{stamp}-{token}.quarantined"
+    destination = quarantine_dir / quarantined_name
+    manifest_path = quarantine_dir / f"{quarantined_name}.manifest.json"
+    manifest = {
+        "schema": RECOVERY_QUARANTINE_SCHEMA,
+        "schema_version": RECOVERY_QUARANTINE_SCHEMA_VERSION,
+        "quarantined_at_utc": quarantined_at_utc,
+        "original_name": resolved_artifact.name,
+        "quarantined_name": quarantined_name,
+        "reason": reason_text,
+        "sha256": artifact_sha256,
+    }
+    manifest_text = json.dumps(
+        manifest,
+        indent=2,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+    ) + "\n"
+
+    os.replace(resolved_artifact, destination)
+    try:
+        atomic_write_text(manifest_path, manifest_text)
+    except Exception:
+        try:
+            os.replace(destination, resolved_artifact)
+        except OSError as rollback_error:
+            raise OSError(
+                "quarantine manifest write failed and rollback could not restore "
+                f"{resolved_artifact}: {rollback_error}"
+            ) from rollback_error
+        raise
+
+    _rotate_quarantine(quarantine_dir, history_limit)
+    return QuarantinedRecoveryArtifact(
+        path=destination,
+        manifest_path=manifest_path,
+        original_name=resolved_artifact.name,
+        quarantined_at_utc=quarantined_at_utc,
+        reason=reason_text,
+        sha256=artifact_sha256,
+    )
 
 
 def _compare_source(recovery: dict[str, Any]) -> tuple[str, bool, Path | None]:

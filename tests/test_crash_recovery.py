@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from cleanroomx.autosave import (
     RecoveryFormatError,
     discard_recovery_artifact,
     load_recovery_artifact,
+    quarantine_recovery_artifact,
     restore_recovery_artifact,
     scan_recovery_artifacts,
 )
@@ -153,6 +155,96 @@ def test_discard_refuses_file_outside_recovery_directory(tmp_path):
         discard_recovery_artifact(outside, recovery_dir=recovery_dir)
 
     assert outside.exists()
+
+
+def test_quarantine_invalid_recovery_preserves_bytes_and_audit_evidence(tmp_path):
+    _source, artifact = _write_recovery(tmp_path)
+    recovery_dir = tmp_path / "recovery"
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["snapshot"]["project"]["project"]["name"] = "tampered"
+    artifact.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    before = artifact.read_bytes()
+
+    scan = scan_recovery_artifacts(recovery_dir)
+    assert scan.candidates == ()
+    assert len(scan.issues) == 1
+    issue = scan.issues[0]
+
+    quarantined = quarantine_recovery_artifact(
+        issue.path,
+        recovery_dir=recovery_dir,
+        reason=issue.error,
+    )
+
+    assert not artifact.exists()
+    assert quarantined.path.parent == recovery_dir / "quarantine"
+    assert quarantined.path.read_bytes() == before
+    assert quarantined.sha256 == sha256(before).hexdigest()
+    assert quarantined.manifest_path.exists()
+
+    manifest = json.loads(quarantined.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema"] == "cleanroomx.recovery-quarantine"
+    assert manifest["schema_version"] == 1
+    assert manifest["original_name"] == artifact.name
+    assert manifest["quarantined_name"] == quarantined.path.name
+    assert manifest["reason"] == issue.error
+    assert manifest["sha256"] == sha256(before).hexdigest()
+    assert manifest["quarantined_at_utc"] == quarantined.quarantined_at_utc
+
+    after = scan_recovery_artifacts(recovery_dir)
+    assert after.candidates == ()
+    assert after.issues == ()
+
+
+def test_quarantine_refuses_valid_recovery(tmp_path):
+    _source, artifact = _write_recovery(tmp_path)
+
+    with pytest.raises(RecoveryFormatError, match="valid recovery artifact"):
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=tmp_path / "recovery",
+            reason="operator requested quarantine",
+        )
+
+    assert artifact.exists()
+
+
+def test_quarantine_refuses_file_outside_recovery_directory(tmp_path):
+    outside = tmp_path / "outside.recovery.json"
+    outside.write_text("{broken", encoding="utf-8")
+    recovery_dir = tmp_path / "recovery"
+    recovery_dir.mkdir()
+
+    with pytest.raises(RecoveryFormatError, match="inside the recovery directory"):
+        quarantine_recovery_artifact(
+            outside,
+            recovery_dir=recovery_dir,
+            reason="malformed",
+        )
+
+    assert outside.exists()
+
+
+def test_quarantine_history_is_bounded(tmp_path):
+    recovery_dir = tmp_path / "recovery"
+    recovery_dir.mkdir()
+
+    for index in range(3):
+        artifact = recovery_dir / f"broken-{index}.recovery.json"
+        artifact.write_text(f"{{broken-{index}", encoding="utf-8")
+        quarantine_recovery_artifact(
+            artifact,
+            recovery_dir=recovery_dir,
+            reason=f"malformed-{index}",
+            history_limit=2,
+        )
+
+    quarantine_dir = recovery_dir / "quarantine"
+    assert len(list(quarantine_dir.glob("*.quarantined"))) == 2
+    assert len(list(quarantine_dir.glob("*.manifest.json"))) == 2
 
 
 def test_recovery_inspection_exposes_identity_timestamp_source_and_draft(tmp_path):

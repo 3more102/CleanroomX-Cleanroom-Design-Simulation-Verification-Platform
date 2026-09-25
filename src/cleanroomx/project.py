@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+import time
+from typing import Any, Iterator
+import uuid
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -16,6 +20,20 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectConflictError(RuntimeError):
+    """Raised when a guarded save would overwrite a different on-disk revision."""
+
+
+@dataclass(frozen=True)
+class ProjectFileRevision:
+    """Content identity for an explicit project file."""
+
+    exists: bool
+    size: int | None
+    mtime_ns: int | None
+    sha256: str | None
 
 
 @dataclass
@@ -190,18 +208,169 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
+def _stable_file_bytes(path: Path) -> tuple[bytes, os.stat_result]:
+    """Read one stable file revision, retrying if the path changes during the read."""
+    last_error: OSError | None = None
+    for _attempt in range(3):
+        try:
+            before = path.stat()
+            payload = path.read_bytes()
+            after = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        before_identity = (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        )
+        after_identity = (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        )
+        if before_identity == after_identity and len(payload) == after.st_size:
+            return payload, after
+        last_error = OSError(f"project changed while reading: {path}")
+    assert last_error is not None
+    raise last_error
+
+
+def project_file_revision(path: str | Path) -> ProjectFileRevision:
+    """Return a stable content revision for a project path."""
     source = Path(path)
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
+        payload, stat = _stable_file_bytes(source)
+    except FileNotFoundError:
+        return ProjectFileRevision(
+            exists=False,
+            size=None,
+            mtime_ns=None,
+            sha256=None,
         )
+    return ProjectFileRevision(
+        exists=True,
+        size=stat.st_size,
+        mtime_ns=stat.st_mtime_ns,
+        sha256=sha256(payload).hexdigest(),
+    )
+
+
+def _same_project_revision(
+    expected: ProjectFileRevision,
+    current: ProjectFileRevision,
+) -> bool:
+    if expected.exists != current.exists:
+        return False
+    if not expected.exists:
+        return True
+    return expected.sha256 == current.sha256
+
+
+def _parse_project_bytes(payload: bytes) -> ProjectDocument:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError(
+            f"project file is not valid UTF-8 at byte {exc.start}"
+        ) from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
     return project_from_dict(data)
+
+
+def load_project_document_with_revision(
+    path: str | Path,
+) -> tuple[ProjectDocument, ProjectFileRevision]:
+    """Load and validate a project while capturing the exact on-disk revision."""
+    source = Path(path)
+    payload, stat = _stable_file_bytes(source)
+    project = _parse_project_bytes(payload)
+    revision = ProjectFileRevision(
+        exists=True,
+        size=stat.st_size,
+        mtime_ns=stat.st_mtime_ns,
+        sha256=sha256(payload).hexdigest(),
+    )
+    return project, revision
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _revision = load_project_document_with_revision(path)
+    return project
+
+
+def _save_lock_path(destination: Path) -> Path:
+    return destination.with_name(f".{destination.name}.cleanroomx-save.lock")
+
+
+@contextmanager
+def _exclusive_project_save_lock(
+    destination: Path,
+    *,
+    stale_after_seconds: float = 300.0,
+) -> Iterator[None]:
+    """Serialize cooperating CleanroomX writers around compare-and-replace."""
+    lock_path = _save_lock_path(destination)
+    token = uuid.uuid4().hex
+    descriptor: int | None = None
+
+    for _attempt in range(2):
+        try:
+            descriptor = os.open(
+                lock_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+            break
+        except FileExistsError as exc:
+            try:
+                lock_stat = lock_path.stat()
+            except FileNotFoundError:
+                continue
+            age_seconds = max(0.0, time.time() - lock_stat.st_mtime)
+            if age_seconds >= stale_after_seconds:
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    continue
+                continue
+            raise ProjectConflictError(
+                f"project is currently being saved by another CleanroomX process: "
+                f"{destination}"
+            ) from exc
+
+    if descriptor is None:
+        raise ProjectConflictError(
+            f"could not acquire the project save lock: {destination}"
+        )
+
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            descriptor = None
+            handle.write(
+                json.dumps(
+                    {"pid": os.getpid(), "token": token, "created_unix": time.time()},
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+        yield
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
@@ -228,11 +397,50 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    destination = Path(path)
+def _serialized_project_text(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)
-    text = json.dumps(
+    return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+
+
+def save_project_document_with_revision(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_revision: ProjectFileRevision,
+) -> tuple[Path, ProjectFileRevision]:
+    """Save only when the current file still matches the caller's revision."""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    text = _serialized_project_text(project)
+    payload = text.encode("utf-8")
+    written_digest = sha256(payload).hexdigest()
+
+    with _exclusive_project_save_lock(destination):
+        current = project_file_revision(destination)
+        if not _same_project_revision(expected_revision, current):
+            raise ProjectConflictError(
+                "project file changed on disk since it was opened or last saved: "
+                f"{destination}. CleanroomX did not overwrite the newer file."
+            )
+
+        atomic_write_text(destination, text)
+        saved_revision = project_file_revision(destination)
+        if (
+            not saved_revision.exists
+            or saved_revision.sha256 != written_digest
+        ):
+            raise ProjectConflictError(
+                "project file changed again while the save was completing: "
+                f"{destination}. The current editor state remains unsaved."
+            )
+
+    return destination, saved_revision
+
+
+def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+    """Backward-compatible unconditional save using validated atomic replacement."""
+    destination = Path(path)
+    return atomic_write_text(destination, _serialized_project_text(project))

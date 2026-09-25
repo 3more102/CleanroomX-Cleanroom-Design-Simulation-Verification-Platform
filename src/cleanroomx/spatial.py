@@ -36,6 +36,14 @@ def _finite_number(value: Any, default: float) -> float:
     return number if math.isfinite(number) else default
 
 
+def _finite_optional(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _positive(value: Any, default: float) -> float:
     number = _finite_number(value, default)
     return number if number > 0 else default
@@ -1040,33 +1048,33 @@ def pressure_overlay_state(
         ach = None
         finding, report = _pressure_result_finding(result, target_name)
         actual = (
-            _optional_finite(finding.get("actual"))
+            _finite_optional(finding.get("actual"))
             if isinstance(finding, dict)
             else None
         )
         if actual is not None:
             pressure = actual
-            pressure_target = _optional_finite(finding.get("limit"))
+            pressure_target = _finite_optional(finding.get("limit"))
             source = "result"
             status = str(finding.get("status") or "unavailable")
             ach = (
-                _optional_finite(report.get("ach"))
+                _finite_optional(report.get("ach"))
                 if isinstance(report, dict)
                 else None
             )
         elif target is not None:
-            configured = _optional_finite(target.get("observed_pressure_pa"))
+            configured = _finite_optional(target.get("observed_pressure_pa"))
             if configured is not None:
                 pressure = configured
                 source = "configured"
                 status = "configured"
             elif room.get("pressure_pa") is not None:
-                pressure = _optional_finite(room.get("pressure_pa"))
+                pressure = _finite_optional(room.get("pressure_pa"))
                 source = "spatial"
                 status = mapping_state
-            pressure_target = _optional_finite(target.get("min_pressure_pa"))
+            pressure_target = _finite_optional(target.get("min_pressure_pa"))
         elif room.get("pressure_pa") is not None:
-            pressure = _optional_finite(room.get("pressure_pa"))
+            pressure = _finite_optional(room.get("pressure_pa"))
             source = "spatial"
             status = "unmapped"
 
@@ -1123,9 +1131,9 @@ def pressure_overlay_state(
                 "lower_room_id": target_to_room_id.get(low_name),
                 "higher_pressure_room": high_name,
                 "lower_pressure_room": low_name,
-                "limit_pa": _optional_finite(requirement.get("min_delta_pa")),
+                "limit_pa": _finite_optional(requirement.get("min_delta_pa")),
                 "actual_delta_pa": (
-                    _optional_finite(finding.get("actual_delta_pa"))
+                    _finite_optional(finding.get("actual_delta_pa"))
                     if isinstance(finding, dict)
                     else None
                 ),

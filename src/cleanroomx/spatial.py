@@ -338,9 +338,17 @@ def _require_unique_sync_names(rooms: list[dict], *, source: str) -> None:
 
 
 def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
+    """Explicitly copy mapped spatial dimensions into supported engineering inputs.
+
+    When engineering input is changed, the resulting engineering values are stored
+    as a synchronization baseline on the spatial room. That baseline is provenance
+    only; it never drives solver input implicitly.
+    """
+
     if analysis is None or not isinstance(getattr(analysis, "input", None), dict):
         return False
-    rooms = normalize_layout(layout)["rooms"]
+    normalized = normalize_layout(layout)
+    rooms = normalized["rooms"]
     if not rooms:
         return False
 
@@ -356,6 +364,10 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
             if analysis.input.get("observed_pressure_pa") != source["pressure_pa"]:
                 analysis.input["observed_pressure_pa"] = source["pressure_pa"]
                 changed = True
+        if changed:
+            source[BASELINE_KEY] = baseline_from_engineering(analysis.input)
+            layout.clear()
+            layout.update(normalized)
         return changed
 
     if getattr(analysis, "kind", "") != "project_verification":
@@ -388,16 +400,24 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
                     f"Linked analysis room {source_name!r} does not exist in the active analysis."
                 )
             continue
+        target_changed = False
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:
                 target[key] = source[key]
                 changed = True
+                target_changed = True
         if "observed_pressure_pa" in target and "pressure_pa" in source:
             if target.get("observed_pressure_pa") != source["pressure_pa"]:
                 target["observed_pressure_pa"] = source["pressure_pa"]
                 changed = True
-    return changed
+                target_changed = True
+        if target_changed:
+            source[BASELINE_KEY] = baseline_from_engineering(target)
 
+    if changed:
+        layout.clear()
+        layout.update(normalized)
+    return changed
 
 def _room_overlap_records(
     rooms: list[dict],

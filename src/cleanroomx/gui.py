@@ -508,6 +508,7 @@ class CleanroomXApp:
             return
         self.input_text.edit_modified(False)
         self._invalidate_last_run_for(self._editor_analysis_id)
+        self._invalidate_project_history_for_local_edit()
         self._update_title()
 
     def _current_analysis(self) -> AnalysisDocument | None:
@@ -628,6 +629,14 @@ class CleanroomXApp:
         self._metadata_history_before = None
         self._update_project_history_controls()
 
+    def _invalidate_project_history_for_local_edit(self) -> None:
+        history = getattr(self, "_project_history", None)
+        if history is None or (not history.can_undo and not history.can_redo):
+            return
+        history.clear()
+        self._metadata_history_before = None
+        self._update_project_history_controls()
+
     def _update_project_history_controls(self) -> None:
         menu = getattr(self, "_edit_menu", None)
         history = getattr(self, "_project_history", None)
@@ -688,6 +697,8 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return False
+        if self._metadata_history_before is not None:
+            self._finish_metadata_history()
         restored = self._project_history.undo()
         if restored is None:
             self.status_var.set("Nothing to undo at project level")
@@ -708,6 +719,8 @@ class CleanroomXApp:
                 parent=self.root,
             )
             return False
+        if self._metadata_history_before is not None:
+            self._finish_metadata_history()
         restored = self._project_history.redo()
         if restored is None:
             self.status_var.set("Nothing to redo at project level")
@@ -993,6 +1006,7 @@ class CleanroomXApp:
             self.spatial_workspace.refresh()
 
     def _on_spatial_changed(self) -> None:
+        self._invalidate_project_history_for_local_edit()
         self._update_title()
 
     def _sync_spatial_to_current_analysis(self) -> None:

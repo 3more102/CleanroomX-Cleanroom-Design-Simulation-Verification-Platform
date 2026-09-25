@@ -16,9 +16,9 @@ Do not force-reset shared `main` unless repository policy explicitly permits it 
 
 ## Project-file rollback
 
-Schema version 1 is the current desktop project format. Supported legacy formats are migrated in memory on load and are rewritten as schema version 1 only when the operator saves the project.
+Schema version 1 is the current desktop project format. Supported legacy formats are migrated in memory on load. The desktop treats the converted state as unsaved and requires the first save to use a different path, so the original legacy file remains unchanged for rollback or comparison.
 
-If a migrated project must return to its original legacy representation, restore the archived original file. CleanroomX does not synthesize reverse migrations to historical legacy shapes.
+If a migrated project must return to its original legacy representation, reopen the preserved legacy source with a compatible CleanroomX version. CleanroomX does not synthesize reverse migrations to historical legacy shapes.
 
 ## Result rollback
 

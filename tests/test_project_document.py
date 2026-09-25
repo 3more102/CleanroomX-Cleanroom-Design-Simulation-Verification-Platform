@@ -116,3 +116,134 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+def _valid_spatial_layout():
+    return {
+        "version": 1,
+        "grid_m": 0.5,
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 5.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+                "pressure_pa": 20.0,
+            }
+        ],
+        "devices": [
+            {
+                "id": "sensor-1",
+                "type": "sensor",
+                "name": "DP sensor",
+                "room_id": "process",
+                "x_m": 1.0,
+                "y_m": 1.0,
+                "z_m": 1.5,
+            }
+        ],
+        "view": {
+            "zoom_2d": 1.0,
+            "pan_x": 0.0,
+            "pan_y": 0.0,
+            "azimuth_deg": 35.0,
+            "elevation_deg": 28.0,
+            "zoom_3d": 1.0,
+            "pan_3d_x": 0.0,
+            "pan_3d_y": 0.0,
+        },
+    }
+
+
+def _project_payload_with_spatial(layout):
+    return {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {
+            "name": "Spatial integrity",
+            "description": "",
+            "metadata": {"spatial_layout": layout},
+        },
+        "analyses": [],
+        "active_analysis_id": None,
+    }
+
+
+def test_project_round_trip_preserves_valid_spatial_identity_and_references(tmp_path):
+    project = project_from_dict(_project_payload_with_spatial(_valid_spatial_layout()))
+    path = save_project_document(tmp_path / "spatial.cleanroomx.json", project)
+
+    loaded = load_project_document(path)
+
+    assert loaded.metadata["spatial_layout"] == _valid_spatial_layout()
+
+
+def test_project_loader_rejects_future_spatial_layout_version():
+    layout = _valid_spatial_layout()
+    layout["version"] = 2
+
+    with pytest.raises(ProjectFormatError, match="future spatial layout version 2"):
+        project_from_dict(_project_payload_with_spatial(layout))
+
+
+def test_project_loader_rejects_duplicate_spatial_room_ids():
+    layout = _valid_spatial_layout()
+    duplicate = dict(layout["rooms"][0])
+    duplicate["name"] = "Second room"
+    duplicate["x_m"] = 6.0
+    layout["rooms"].append(duplicate)
+
+    with pytest.raises(ProjectFormatError, match="duplicates room id 'process'"):
+        project_from_dict(_project_payload_with_spatial(layout))
+
+
+def test_project_loader_rejects_duplicate_spatial_device_ids():
+    layout = _valid_spatial_layout()
+    duplicate = dict(layout["devices"][0])
+    duplicate["name"] = "Second sensor"
+    layout["devices"].append(duplicate)
+
+    with pytest.raises(ProjectFormatError, match="duplicates device id 'sensor-1'"):
+        project_from_dict(_project_payload_with_spatial(layout))
+
+
+def test_project_loader_rejects_orphan_spatial_device_reference():
+    layout = _valid_spatial_layout()
+    layout["devices"][0]["room_id"] = "missing-room"
+
+    with pytest.raises(ProjectFormatError, match="references missing room id 'missing-room'"):
+        project_from_dict(_project_payload_with_spatial(layout))
+
+
+def test_project_loader_rejects_invalid_spatial_geometry():
+    layout = _valid_spatial_layout()
+    layout["rooms"][0]["length_m"] = 0.0
+
+    with pytest.raises(ProjectFormatError, match="length_m must be greater than zero"):
+        project_from_dict(_project_payload_with_spatial(layout))
+
+
+def test_project_save_rejects_corrupt_in_memory_spatial_metadata_before_write(tmp_path):
+    layout = _valid_spatial_layout()
+    layout["devices"][0]["z_m"] = float("inf")
+    project = ProjectDocument(
+        name="Invalid spatial project",
+        metadata={"spatial_layout": layout},
+    )
+    path = tmp_path / "invalid.cleanroomx.json"
+
+    with pytest.raises(ProjectFormatError, match="devices\[0\]\.z_m must be a finite number"):
+        save_project_document(path, project)
+
+    assert not path.exists()
+
+
+def test_project_loader_rejects_spatial_view_values_runtime_would_clamp():
+    layout = _valid_spatial_layout()
+    layout["view"]["zoom_2d"] = 100.0
+
+    with pytest.raises(ProjectFormatError, match="zoom_2d must be between 0.2 and 8"):
+        project_from_dict(_project_payload_with_spatial(layout))
+

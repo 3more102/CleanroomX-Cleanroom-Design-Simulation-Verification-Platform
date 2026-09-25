@@ -7,7 +7,7 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 
 SPATIAL_METADATA_KEY = "spatial_layout"
@@ -230,6 +230,173 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
     return changed
 
 
+def room_contains_point(
+    room: dict,
+    x_m: float,
+    y_m: float,
+    *,
+    tolerance: float = 1e-9,
+) -> bool:
+    """Return whether a plan point lies inside a room footprint, including its boundary."""
+
+    x0 = _finite_number(room.get("x_m"), 0.0)
+    y0 = _finite_number(room.get("y_m"), 0.0)
+    x1 = x0 + _positive(room.get("length_m"), 4.0)
+    y1 = y0 + _positive(room.get("width_m"), 4.0)
+    x = _finite_number(x_m, 0.0)
+    y = _finite_number(y_m, 0.0)
+    return (
+        x0 - tolerance <= x <= x1 + tolerance
+        and y0 - tolerance <= y <= y1 + tolerance
+    )
+
+
+def find_room_for_point(
+    layout: dict,
+    x_m: float,
+    y_m: float,
+    *,
+    preferred_room_id: str | None = None,
+) -> str | None:
+    """Resolve a point to a deterministic containing room.
+
+    If overlapping rooms exist, keep the preferred current room when it still
+    contains the point. Otherwise choose the smallest containing room, then ID.
+    """
+
+    rooms = layout.get("rooms", []) if isinstance(layout, dict) else []
+    candidates = [
+        room
+        for room in rooms
+        if isinstance(room, dict) and room_contains_point(room, x_m, y_m)
+    ]
+    if not candidates:
+        return None
+    if preferred_room_id is not None:
+        for room in candidates:
+            if room.get("id") == preferred_room_id:
+                return str(preferred_room_id)
+    chosen = min(
+        candidates,
+        key=lambda room: (
+            _positive(room.get("length_m"), 4.0)
+            * _positive(room.get("width_m"), 4.0),
+            str(room.get("id") or ""),
+        ),
+    )
+    room_id = chosen.get("id")
+    return str(room_id) if room_id is not None else None
+
+
+def reassociate_device(layout: dict, device: dict) -> str | None:
+    """Update a device's room association from its current plan position."""
+
+    room_id = find_room_for_point(
+        layout,
+        _finite_number(device.get("x_m"), 0.0),
+        _finite_number(device.get("y_m"), 0.0),
+        preferred_room_id=device.get("room_id"),
+    )
+    device["room_id"] = room_id
+    return room_id
+
+
+def spatial_issues(layout: dict) -> list[dict[str, Any]]:
+    """Return deterministic, non-blocking spatial design warnings."""
+
+    normalized = normalize_layout(layout)
+    rooms = normalized["rooms"]
+    devices = normalized["devices"]
+    issues: list[dict[str, Any]] = []
+
+    for index, left in enumerate(rooms):
+        lx0 = left["x_m"]
+        ly0 = left["y_m"]
+        lx1 = lx0 + left["length_m"]
+        ly1 = ly0 + left["width_m"]
+        for right in rooms[index + 1 :]:
+            rx0 = right["x_m"]
+            ry0 = right["y_m"]
+            rx1 = rx0 + right["length_m"]
+            ry1 = ry0 + right["width_m"]
+            overlap_x = min(lx1, rx1) - max(lx0, rx0)
+            overlap_y = min(ly1, ry1) - max(ly0, ry0)
+            if overlap_x > 1e-9 and overlap_y > 1e-9:
+                issues.append(
+                    {
+                        "code": "ROOM_OVERLAP",
+                        "room_ids": [left["id"], right["id"]],
+                        "message": (
+                            f"Rooms {left['name']!r} and {right['name']!r} overlap "
+                            f"by {overlap_x:.2f} × {overlap_y:.2f} m."
+                        ),
+                    }
+                )
+
+    by_id = {room["id"]: room for room in rooms}
+    for device in devices:
+        assigned_id = device.get("room_id")
+        containing_id = find_room_for_point(
+            normalized,
+            device["x_m"],
+            device["y_m"],
+            preferred_room_id=assigned_id,
+        )
+        if assigned_id is None:
+            issues.append(
+                {
+                    "code": "DEVICE_UNASSIGNED",
+                    "device_id": device["id"],
+                    "message": (
+                        f"Device {device['name']!r} is not assigned to a room."
+                        if containing_id is None
+                        else (
+                            f"Device {device['name']!r} lies inside room "
+                            f"{by_id[containing_id]['name']!r} but is not assigned to it."
+                        )
+                    ),
+                }
+            )
+            continue
+        assigned_room = by_id.get(str(assigned_id))
+        if assigned_room is None:
+            issues.append(
+                {
+                    "code": "DEVICE_UNKNOWN_ROOM",
+                    "device_id": device["id"],
+                    "message": (
+                        f"Device {device['name']!r} references missing room "
+                        f"{assigned_id!r}."
+                    ),
+                }
+            )
+            continue
+        if not room_contains_point(
+            assigned_room,
+            device["x_m"],
+            device["y_m"],
+        ):
+            destination = by_id.get(containing_id) if containing_id else None
+            issues.append(
+                {
+                    "code": "DEVICE_ROOM_MISMATCH" if destination else "DEVICE_OUTSIDE_ROOM",
+                    "device_id": device["id"],
+                    "room_ids": [assigned_room["id"]],
+                    "message": (
+                        f"Device {device['name']!r} is assigned to "
+                        f"{assigned_room['name']!r} but lies inside "
+                        f"{destination['name']!r}."
+                        if destination
+                        else (
+                            f"Device {device['name']!r} lies outside its assigned room "
+                            f"{assigned_room['name']!r}."
+                        )
+                    ),
+                }
+            )
+    return issues
+
+
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
         return "#dfe7ef"
@@ -279,6 +446,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_grid = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._issues_var = tk.StringVar(value="Spatial checks: OK")
         self._property_vars: dict[str, tk.StringVar] = {}
 
         self._build()
@@ -314,6 +482,8 @@ class SpatialDesignWorkspace(ttk.Frame):
             text="Sync dimensions to active analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
+        ttk.Button(toolbar, text="Issues", command=self.show_issues).pack(side="right", padx=2)
+        ttk.Label(toolbar, textvariable=self._issues_var).pack(side="right", padx=(8, 2))
 
         body = ttk.Panedwindow(self, orient="horizontal")
         body.pack(fill="both", expand=True, padx=6, pady=(3, 6))
@@ -438,6 +608,34 @@ class SpatialDesignWorkspace(ttk.Frame):
             value = item.get(key, "")
             var.set("" if value is None else str(value))
 
+    def _current_issues(self) -> list[dict[str, Any]]:
+        return spatial_issues(self.layout)
+
+    def _update_issues_summary(self) -> None:
+        issues = self._current_issues()
+        if issues:
+            self._issues_var.set(
+                f"Spatial checks: {len(issues)} issue{'s' if len(issues) != 1 else ''}"
+            )
+        else:
+            self._issues_var.set("Spatial checks: OK")
+
+    def show_issues(self) -> None:
+        issues = self._current_issues()
+        if not issues:
+            messagebox.showinfo(
+                "Spatial checks",
+                "No room-overlap or device-placement issues were detected.",
+                parent=self,
+            )
+            return
+        lines = [f"{index}. {issue['message']}" for index, issue in enumerate(issues, start=1)]
+        messagebox.showwarning(
+            "Spatial checks",
+            "\n".join(lines),
+            parent=self,
+        )
+
     def apply_properties(self) -> None:
         item = self._selected_object()
         if item is None:
@@ -459,6 +657,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+        elif self.selected and self.selected.kind == "device":
+            reassociate_device(self.layout, item)
         self._load_property_panel()
         self._persist("Spatial properties updated")
 
@@ -566,6 +766,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._persist("Fit spatial views")
 
     def redraw(self) -> None:
+        self._update_issues_summary()
         self._draw_2d()
         self._draw_3d()
 
@@ -598,16 +799,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         pressures = [room.get("pressure_pa") for room in self.layout["rooms"] if room.get("pressure_pa") is not None]
         pmin = min(pressures) if pressures else None
         pmax = max(pressures) if pressures else None
+        issues = self._current_issues()
+        problem_rooms = {
+            room_id
+            for issue in issues
+            for room_id in issue.get("room_ids", [])
+        }
+        problem_devices = {
+            issue["device_id"]
+            for issue in issues
+            if issue.get("device_id") is not None
+        }
 
         for room in self.layout["rooms"]:
             x0, y0 = self._world_to_canvas(room["x_m"], room["y_m"])
             x1, y1 = self._world_to_canvas(room["x_m"] + room["length_m"], room["y_m"] + room["width_m"])
             selected = self.selected == _Hit("room", room["id"])
-            outline = "#1d4ed8" if selected else "#34495e"
+            has_issue = room["id"] in problem_rooms
+            outline = "#dc2626" if has_issue else ("#1d4ed8" if selected else "#34495e")
             fill = _pressure_fill(room.get("pressure_pa"), pmin, pmax)
             canvas.create_rectangle(
                 x0, y0, x1, y1,
-                fill=fill, outline=outline, width=3 if selected else 2,
+                fill=fill, outline=outline, width=4 if has_issue else (3 if selected else 2),
                 tags=(f"room:{room['id']}", "room"),
             )
             pressure_text = "" if room.get("pressure_pa") is None else f"\n{room['pressure_pa']:g} Pa"
@@ -631,11 +844,13 @@ class SpatialDesignWorkspace(ttk.Frame):
         for device in self.layout["devices"]:
             x, y = self._world_to_canvas(device["x_m"], device["y_m"])
             selected = self.selected == _Hit("device", device["id"])
+            has_issue = device["id"] in problem_devices
             radius = 9 if selected else 7
             canvas.create_oval(
                 x - radius, y - radius, x + radius, y + radius,
-                fill="#ffffff", outline="#c0392b" if selected else "#2c3e50",
-                width=3 if selected else 2,
+                fill="#fee2e2" if has_issue else "#ffffff",
+                outline="#dc2626" if has_issue else ("#c0392b" if selected else "#2c3e50"),
+                width=3 if selected or has_issue else 2,
                 tags=(f"device:{device['id']}", "device"),
             )
             canvas.create_text(
@@ -764,14 +979,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         dx = world[0] - self._drag_anchor[0]
         dy = world[1] - self._drag_anchor[1]
         grid = self.layout["grid_m"]
+        old_x = item["x_m"]
+        old_y = item["y_m"]
         item["x_m"] = round((item["x_m"] + dx) / grid) * grid
         item["y_m"] = round((item["y_m"] + dy) / grid) * grid
+        if self.selected and self.selected.kind == "room":
+            moved_x = item["x_m"] - old_x
+            moved_y = item["y_m"] - old_y
+            if moved_x or moved_y:
+                for device in self.layout["devices"]:
+                    if device.get("room_id") == item["id"]:
+                        device["x_m"] += moved_x
+                        device["y_m"] += moved_y
         self._drag_anchor = world
         self._load_property_panel()
         self.redraw()
 
     def _on_left_up(self, event: tk.Event) -> None:
         if self._drag_anchor is not None and self.selected is not None:
+            item = self._selected_object()
+            if item is not None and self.selected.kind == "device":
+                reassociate_device(self.layout, item)
+                self._load_property_panel()
             self._persist("Spatial item moved")
         self._drag_anchor = None
 

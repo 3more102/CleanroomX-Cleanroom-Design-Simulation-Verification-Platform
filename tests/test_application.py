@@ -225,6 +225,72 @@ def test_analysis_run_input_match_fails_closed_without_valid_provenance():
     ) is False
 
 
+def test_analysis_run_snapshots_reject_recursive_mutation_and_remain_serializable():
+    run = run_analysis("fan_operating_point", _example("fan_operating_point_demo.json"))
+
+    assert isinstance(run.result, dict)
+    assert isinstance(run.diagnostics, dict)
+    assert isinstance(run.plot, dict)
+
+    with pytest.raises(TypeError, match="immutable"):
+        run.result["tampered"] = True
+    with pytest.raises(TypeError, match="immutable"):
+        run.result["curve_point_checks"].append({})
+    with pytest.raises(TypeError, match="immutable"):
+        run.diagnostics["application_execution_provenance"]["input_sha256"] = "0" * 64
+    with pytest.raises(TypeError, match="immutable"):
+        run.plot["series"].clear()
+
+    json.dumps(run.result, allow_nan=False)
+    json.dumps(run.diagnostics, allow_nan=False)
+    json.dumps(run.plot, allow_nan=False)
+    json.dumps(run.to_dict(), allow_nan=False)
+
+
+def test_analysis_run_snapshot_breaks_source_aliases():
+    result = {"nested": {"value": 1}, "items": [{"value": 2}]}
+    diagnostics = {"audit": {"state": "original"}}
+    plot = {"series": [{"x": [1.0], "y": [2.0]}]}
+
+    run = application_module.AnalysisRun(
+        kind="test",
+        title="Test",
+        status="complete",
+        result=result,
+        markdown="report",
+        diagnostics=diagnostics,
+        plot=plot,
+    )
+
+    result["nested"]["value"] = 99
+    result["items"][0]["value"] = 88
+    diagnostics["audit"]["state"] = "changed"
+    plot["series"][0]["x"].append(3.0)
+
+    assert run.result["nested"]["value"] == 1
+    assert run.result["items"][0]["value"] == 2
+    assert run.diagnostics["audit"]["state"] == "original"
+    assert run.plot["series"][0]["x"] == [1.0]
+
+
+def test_analysis_run_to_dict_returns_detached_ordinary_mutable_containers():
+    run = run_analysis("fan_operating_point", _example("fan_operating_point_demo.json"))
+
+    exported = run.to_dict()
+    assert type(exported["result"]) is dict
+    assert type(exported["diagnostics"]) is dict
+    assert type(exported["plot"]) is dict
+    assert type(exported["plot"]["series"]) is list
+
+    exported["result"]["tampered"] = True
+    exported["diagnostics"]["application_execution_provenance"]["input_sha256"] = "0" * 64
+    exported["plot"]["series"].clear()
+
+    assert "tampered" not in run.result
+    assert run.diagnostics["application_execution_provenance"]["input_sha256"] != "0" * 64
+    assert run.plot["series"]
+
+
 
 def test_rebase_analysis_file_references_preserves_consistency_referents(tmp_path):
     source = tmp_path / "source"

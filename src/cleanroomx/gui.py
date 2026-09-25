@@ -42,6 +42,10 @@ from .project import (
     save_project_document,
     save_project_document_guarded,
 )
+from .project_bundle import (
+    export_project_bundle,
+    extract_project_bundle,
+)
 from .recovery_ui import RecoveryCenter
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
@@ -242,6 +246,15 @@ class CleanroomXApp:
         file_menu.add_command(label="Open Project...", accelerator="Ctrl+O", command=self.open_project)
         file_menu.add_command(label="Save Project", accelerator="Ctrl+S", command=self.save_project)
         file_menu.add_command(label="Save Project As...", command=self.save_project_as)
+        file_menu.add_separator()
+        file_menu.add_command(
+            label="Open Portable Project Bundle...",
+            command=self.open_portable_project_bundle,
+        )
+        file_menu.add_command(
+            label="Export Portable Project Bundle...",
+            command=self.export_portable_project_bundle,
+        )
         file_menu.add_command(label="Recovery Center...", command=self.show_recovery_center)
         file_menu.add_separator()
         file_menu.add_command(label="Import Analysis Input JSON...", command=self.import_input_json)
@@ -1056,6 +1069,112 @@ class CleanroomXApp:
                 self.load_project_path(path)
             except Exception as exc:
                 messagebox.showerror("Open failed", str(exc), parent=self.root)
+
+    def open_portable_project_bundle(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
+        bundle_path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Open CleanroomX portable project bundle",
+            filetypes=[
+                ("CleanroomX portable bundle", "*.cleanroomx.zip"),
+                ("ZIP archives", "*.zip"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not bundle_path:
+            return
+        if not self._confirm_project_replacement():
+            return
+        parent_directory = filedialog.askdirectory(
+            parent=self.root,
+            title="Choose folder for the extracted portable project",
+        )
+        if not parent_directory:
+            return
+
+        bundle = Path(bundle_path)
+        suffix = ".cleanroomx.zip"
+        folder_name = (
+            bundle.name[:-len(suffix)]
+            if bundle.name.lower().endswith(suffix)
+            else bundle.stem
+        )
+        folder_name = folder_name.strip()
+        if folder_name in {"", ".", ".."}:
+            folder_name = "CleanroomX Portable Project"
+        destination = Path(parent_directory) / folder_name
+        try:
+            project_path = extract_project_bundle(bundle, destination)
+            self.load_project_path(project_path)
+        except Exception as exc:
+            self.status_var.set("Portable project open failed")
+            messagebox.showerror(
+                "Portable project open failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+        self.status_var.set(f"Opened portable project — {project_path.parent.name}")
+
+    def export_portable_project_bundle(self) -> None:
+        if self._running:
+            messagebox.showwarning("Analysis running", "Abandon the current run first.")
+            return
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                "Cannot export portable project",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="Export CleanroomX portable project bundle",
+            defaultextension=".cleanroomx.zip",
+            filetypes=[
+                ("CleanroomX portable bundle", "*.cleanroomx.zip"),
+                ("ZIP archives", "*.zip"),
+            ],
+        )
+        if not path:
+            return
+        try:
+            report = export_project_bundle(
+                path,
+                self.project,
+                source_base=self._base_dir(),
+                source_project_path=self._autosave_source_path(),
+            )
+        except Exception as exc:
+            self.status_var.set("Portable project export failed")
+            messagebox.showerror(
+                "Portable project export failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        self.status_var.set(
+            f"Portable project exported — {report['dependency_count']} "
+            f"dependency file(s)"
+        )
+        messagebox.showinfo(
+            "Portable project exported",
+            (
+                f"Created {Path(path).name}.\n\n"
+                f"Dependencies packaged: {report['dependency_count']}\n"
+                f"Bundle SHA-256: {report['bundle_sha256']}"
+            ),
+            parent=self.root,
+        )
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)

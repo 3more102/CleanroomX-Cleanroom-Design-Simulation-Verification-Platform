@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased analysis result freshness guard — 2026-09-25
+
+- Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.
+- Revalidates analysis kind and input identity before cache restore, background-run acceptance, and result/run-bundle/report export.
+- Discards stale results with an actionable rerun status instead of relying only on mutation-site cache invalidation.
+- Preserves project schema version 1, solver equations, numerical tolerances, acceptance semantics, run-bundle fields, and existing immediate invalidation behavior.
+- Adds application- and GUI-level regression coverage for canonical identity, missing provenance, stale cache restoration, mid-run mutation, and stale export rejection.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

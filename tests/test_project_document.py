@@ -6,8 +6,9 @@ import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    ProjectFormatError, atomic_write_text, load_project_document,
+    load_project_document_with_revision_info, project_from_dict,
+    project_from_dict_with_migration_info, save_project_document,
 )
 
 
@@ -75,6 +76,81 @@ def test_project_loader_migrates_explicit_v0_shape():
     })
     assert project.name == "Legacy v0"
     assert project.active_analysis_id == "a1"
+
+
+def test_project_migration_info_is_explicit_and_deterministic():
+    current, current_info = project_from_dict_with_migration_info({
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "project": {"name": "Current"},
+        "analyses": [],
+        "active_analysis_id": None,
+    })
+    legacy, legacy_info = project_from_dict_with_migration_info({
+        "schema": PROJECT_SCHEMA,
+        "schema_version": 0,
+        "name": "Legacy v0",
+        "analysis": {
+            "id": "a1",
+            "name": "Room",
+            "kind": "room_verification",
+            "input": {},
+        },
+    })
+
+    assert current.name == "Current"
+    assert current_info.migrated is False
+    assert current_info.source_format == PROJECT_SCHEMA
+    assert current_info.source_schema_version == PROJECT_SCHEMA_VERSION
+    assert current_info.target_schema_version == PROJECT_SCHEMA_VERSION
+    assert current_info.steps == ()
+
+    assert legacy.name == "Legacy v0"
+    assert legacy_info.migrated is True
+    assert legacy_info.source_format == PROJECT_SCHEMA
+    assert legacy_info.source_schema_version == 0
+    assert legacy_info.target_schema_version == PROJECT_SCHEMA_VERSION
+    assert legacy_info.steps == ("schema-v0-single-analysis-to-v1",)
+
+
+def test_legacy_single_analysis_migration_reports_unversioned_source():
+    project, info = project_from_dict_with_migration_info({
+        "name": "Legacy",
+        "analysis_type": "fan_operating_point",
+        "input": {"study": "legacy"},
+    })
+
+    assert project.active_analysis_id == "analysis-1"
+    assert info.migrated is True
+    assert info.source_format == "legacy-single-analysis"
+    assert info.source_schema_version is None
+    assert info.steps == ("legacy-single-analysis-to-v1",)
+
+
+def test_revision_aware_loader_preserves_migration_provenance(tmp_path):
+    path = tmp_path / "legacy.cleanroomx.json"
+    path.write_text(
+        json.dumps({
+            "schema": PROJECT_SCHEMA,
+            "schema_version": 0,
+            "name": "Legacy v0",
+            "analysis": {
+                "id": "a1",
+                "name": "Room",
+                "kind": "room_verification",
+                "input": {},
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    project, revision, info = load_project_document_with_revision_info(path)
+
+    assert project.name == "Legacy v0"
+    assert revision.exists is True
+    assert revision.sha256
+    assert info.migrated is True
+    assert info.source_schema_version == 0
 
 
 def test_project_loader_rejects_future_schema():

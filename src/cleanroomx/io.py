@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from .json_integrity import load_json_file
 
 from .models import ParticleRequirement, PressureCascadeRequirement, ProjectSpec, RoomSpec
 
@@ -42,10 +43,10 @@ def project_from_dict(data: dict) -> ProjectSpec:
 
 
 def load_room(path: str | Path) -> RoomSpec:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_json_file(path)
     return room_from_dict(data)
 
 
 def load_project(path: str | Path) -> ProjectSpec:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    data = load_json_file(path)
     return project_from_dict(data)

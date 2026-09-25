@@ -108,6 +108,7 @@ def _project_differences(
         )
 
     def walk(before: Any, after: Any, path: str, depth: int = 0) -> None:
+        nonlocal truncated
         if before == after:
             return
         if len(changes) >= max_changes:

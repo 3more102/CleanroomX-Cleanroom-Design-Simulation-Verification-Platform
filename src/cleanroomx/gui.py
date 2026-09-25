@@ -507,6 +507,7 @@ class CleanroomXApp:
             on_change=self._on_spatial_changed,
             on_sync_requested=self._sync_spatial_to_current_analysis,
             status_setter=self.status_var.set,
+            result_getter=self._spatial_result_payload,
             on_history_record=self._record_spatial_project_edit,
             on_undo_requested=self.undo_project_edit,
             on_redo_requested=self.redo_project_edit,
@@ -864,6 +865,8 @@ class CleanroomXApp:
         self._runs_by_analysis.pop(analysis_id, None)
         if self.last_run_analysis_id == analysis_id:
             self._clear_rendered_run()
+        if hasattr(self, "spatial_workspace"):
+            self.spatial_workspace.redraw()
 
     def _restore_run_for(self, analysis_id: str) -> bool:
         run = self._runs_by_analysis.get(analysis_id)
@@ -977,6 +980,23 @@ class CleanroomXApp:
             return self.project.analysis_by_id(self._editor_analysis_id)
         except KeyError:
             return None
+
+    def _spatial_result_payload(self) -> dict | None:
+        """Return only a fresh result for the analysis shown by the spatial mapping."""
+        analysis = self._editor_analysis()
+        if analysis is None:
+            return None
+        run = self._runs_by_analysis.get(analysis.id)
+        if run is None:
+            return None
+        if not analysis_run_is_current(
+            run,
+            analysis.kind,
+            analysis.input,
+            base_dir=self._base_dir(),
+        ):
+            return None
+        return run.result if isinstance(run.result, dict) else None
 
     def _commit_editor(self, analysis: AnalysisDocument | None = None) -> AnalysisDocument:
         analysis = analysis or self._editor_analysis() or self._current_analysis()
@@ -2341,8 +2361,12 @@ class CleanroomXApp:
             json.dumps(run.diagnostics, indent=2, ensure_ascii=False, allow_nan=False),
         )
         self._draw_plot()
+        if hasattr(self, "spatial_workspace"):
+            self.spatial_workspace.redraw()
+            self.spatial_workspace._load_property_panel()
         if select_results:
-            self.notebook.select(1)
+            result_tab = self.result_text.master
+            self.notebook.select(result_tab)
 
     def _draw_plot(self) -> None:
         canvas = self.plot_canvas

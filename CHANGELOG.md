@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased durable verified persistence — 2026-09-25
+
+- Hardens the shared project/autosave/export atomic-write primitive: temporary UTF-8 bytes are flushed and file-`fsync()`ed before replacement, the containing directory entry is `fsync()`ed where supported, and the committed destination is re-read from a stable path identity and checked against the intended byte size and SHA-256.
+- Raises an explicit `AtomicWriteVerificationError` when the replaced destination does not match the submitted bytes, preventing the desktop from treating an unverified persistence operation as a successful save.
+- Strengthens project and recovery source fingerprinting to reject path replacement during hashing by checking device/inode identity in addition to size and nanosecond modification time.
+- Preserves project schema version 1, public save call shapes, solver equations, numerical tolerances, acceptance semantics, and the existing optimistic external-write guard.
+- Adds regression coverage for directory-sync invocation, post-replace corruption detection, ordinary atomic replacement cleanup, and the existing guarded-save conflict paths; focused desktop CI now includes `test_project_write_guard.py`.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

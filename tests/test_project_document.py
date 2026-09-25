@@ -5,9 +5,10 @@ import json
 import pytest
 
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectConflictError,
+    ProjectDocument, ProjectFormatError, atomic_write_text, load_project_document,
+    load_project_document_with_fingerprint, project_document_fingerprint,
+    project_from_dict, save_project_document,
 )
 
 
@@ -116,3 +117,54 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+
+def test_guarded_project_save_rejects_external_edit(tmp_path):
+    path = tmp_path / "guarded.cleanroomx.json"
+    original = ProjectDocument(name="Original")
+    save_project_document(path, original)
+    _, baseline = load_project_document_with_fingerprint(path)
+
+    external = ProjectDocument(name="External")
+    save_project_document(path, external)
+
+    with pytest.raises(ProjectConflictError, match="changed outside CleanroomX"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local"),
+            expected_fingerprint=baseline,
+        )
+
+    assert load_project_document(path).name == "External"
+
+
+def test_guarded_project_save_rejects_external_deletion(tmp_path):
+    path = tmp_path / "deleted.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Original"))
+    _, baseline = load_project_document_with_fingerprint(path)
+    path.unlink()
+
+    with pytest.raises(ProjectConflictError, match="removed outside CleanroomX"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local"),
+            expected_fingerprint=baseline,
+        )
+
+    assert not path.exists()
+
+
+def test_guarded_project_save_accepts_unchanged_source_and_tracks_written_revision(tmp_path):
+    path = tmp_path / "unchanged.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Original"))
+    _, baseline = load_project_document_with_fingerprint(path)
+
+    updated = ProjectDocument(name="Updated", description="local edit")
+    save_project_document(path, updated, expected_fingerprint=baseline)
+
+    loaded, written = load_project_document_with_fingerprint(path)
+    expected_written = project_document_fingerprint(updated)
+    assert loaded == updated
+    assert written.sha256 == expected_written.sha256
+    assert written.size_bytes == expected_written.size_bytes

@@ -61,10 +61,13 @@ revert and CI rather than moving release history.
 
 ## v0.102.1 final spatial production closure anchor
 
-The final post-v0.102 spatial code baseline is `f595aaba6e7b8704beb62acc04f0eb4d036d8f09`.
+The final functional post-v0.102 spatial baseline is `1fc662441763fd6bd2070aac6d6449410f06fb2a`.
 It includes PR #467 (tested head `4be4fb840480df7a5f1e0313a73830313150d9dd`,
-CI #1540 / `36170548238`) and PR #472 (tested head
-`8a34c3d649aee54c377b4194a6d619559d219421`, CI #1551 / `36171758793`).
-Both pull-request CI runs succeeded. Publish v0.102.1 as a new immutable tag only
-from a successful current-main CI commit; do not move v0.102.0 or any earlier tag.
+CI #1540 / `36170548238`), PR #472 (tested head
+`8a34c3d649aee54c377b4194a6d619559d219421`, CI #1551 / `36171758793`),
+and PR #473 (tested head `332eb07ed1d4d27a028d7fe8886b3914da29c8d7`,
+CI #1552 / `36171783101`). All three pull-request CI runs succeeded.
+Publish v0.102.1 as a new immutable tag only from a successful current-main CI
+commit; the published tag is the authoritative exact release commit. Do not move
+v0.102.0 or any earlier tag.
 

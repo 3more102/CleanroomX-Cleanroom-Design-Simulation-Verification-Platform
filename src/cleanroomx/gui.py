@@ -32,8 +32,10 @@ from .application import (
 from .project import (
     AnalysisDocument,
     ProjectDocument,
+    ProjectWriteConflictError,
     atomic_write_text,
     load_project_document,
+    project_file_sha256,
     new_project,
     save_project_document,
 )
@@ -176,6 +178,7 @@ class CleanroomXApp:
 
         self.project: ProjectDocument = new_project()
         self.project_path: Path | None = None
+        self._project_source_sha256: str | None = None
         self._recovery_source_path: Path | None = None
         self._restored_recovery_artifact: Path | None = None
         self.last_run: AnalysisRun | None = None
@@ -942,6 +945,7 @@ class CleanroomXApp:
         self._discard_current_autosave()
         self.project = new_project()
         self.project_path = None
+        self._project_source_sha256 = None
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(None)
@@ -976,10 +980,16 @@ class CleanroomXApp:
 
     def load_project_path(self, path: str | Path) -> None:
         project_path = Path(path)
+        source_sha256 = project_file_sha256(project_path)
         project = load_project_document(project_path)
+        if project_file_sha256(project_path) != source_sha256:
+            raise OSError(
+                f"{project_path.name} changed while it was being opened; reopen it before editing"
+            )
         self._discard_current_autosave()
         self.project = project
         self.project_path = project_path
+        self._project_source_sha256 = source_sha256
         self._recovery_source_path = None
         self._restored_recovery_artifact = None
         self._begin_autosave_project(project_path)
@@ -1016,11 +1026,61 @@ class CleanroomXApp:
         if self.project_path is None:
             self.save_project_as()
             return
+        expected_sha256 = getattr(self, "_project_source_sha256", None)
         try:
-            save_project_document(self.project_path, self.project)
+            save_project_document(
+                self.project_path,
+                self.project,
+                expected_sha256=expected_sha256,
+            )
+        except ProjectWriteConflictError as exc:
+            choice = messagebox.askyesnocancel(
+                "Project changed on disk",
+                (
+                    f"{exc}.\n\n"
+                    "Yes: overwrite the current disk version.\n"
+                    "No: save this work to a different file.\n"
+                    "Cancel: leave both versions unchanged."
+                ),
+                parent=self.root,
+            )
+            if choice is None:
+                self.status_var.set("Save cancelled: project changed on disk")
+                return
+            if choice is False:
+                self.status_var.set("Project changed on disk; choose a new save location")
+                self.save_project_as()
+                return
+            try:
+                overwrite_expected = (
+                    project_file_sha256(self.project_path)
+                    if self.project_path.exists()
+                    else None
+                )
+                save_project_document(
+                    self.project_path,
+                    self.project,
+                    expected_sha256=overwrite_expected,
+                )
+            except ProjectWriteConflictError as retry_exc:
+                messagebox.showerror(
+                    "Save conflict",
+                    (
+                        f"{retry_exc}.\n\n"
+                        "The file changed again before overwrite completed. "
+                        "Nothing was replaced; retry Save or use Save As."
+                    ),
+                    parent=self.root,
+                )
+                self.status_var.set("Save conflict: disk version changed again")
+                return
+            except Exception as retry_exc:
+                messagebox.showerror("Save failed", str(retry_exc), parent=self.root)
+                return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
+        self._project_source_sha256 = project_file_sha256(self.project_path)
         self._capture_saved_state()
         self._notify_explicit_save(self.project_path)
         self.status_var.set(f"Saved {self.project_path.name}")
@@ -1086,6 +1146,7 @@ class CleanroomXApp:
 
         self.project = candidate
         self.project_path = saved_path
+        self._project_source_sha256 = project_file_sha256(saved_path)
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

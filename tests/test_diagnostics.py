@@ -35,6 +35,7 @@ def test_configure_diagnostics_writes_strict_structured_json(tmp_path):
 
     record = json.loads(session.log_path.read_text(encoding="utf-8").splitlines()[-1])
     assert record["schema"] == LOG_SCHEMA
+    assert record["application_version"] == __version__
     assert record["event"] == "project.opened"
     assert record["fields"]["project_path"].endswith("demo.cleanroomx.json")
     assert record["fields"]["non_finite"] == "nan"

@@ -232,11 +232,32 @@ def _fingerprint_from_bytes(
     }
 
 
+def _stable_file_digest(path: Path) -> tuple[os.stat_result, str]:
+    """Hash one stable file generation without loading the whole file into memory."""
+    last_error: OSError | None = None
+    for _attempt in range(2):
+        try:
+            before = path.stat()
+            digest = sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            after = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+            return after, digest.hexdigest()
+        last_error = OSError(f"project file changed while fingerprinting: {path}")
+    assert last_error is not None
+    raise last_error
+
+
 def project_file_fingerprint(path: str | Path) -> dict[str, Any]:
     """Return a stable content fingerprint for optimistic project-save checks."""
     source = _normalized_path(path)
     try:
-        payload, stat = _stable_read_bytes(source)
+        stat, digest = _stable_file_digest(source)
     except FileNotFoundError:
         return {
             "path": str(source),
@@ -245,7 +266,13 @@ def project_file_fingerprint(path: str | Path) -> dict[str, Any]:
             "mtime_ns": None,
             "sha256": None,
         }
-    return _fingerprint_from_bytes(source, payload, mtime_ns=stat.st_mtime_ns)
+    return {
+        "path": str(source),
+        "exists": True,
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256": digest,
+    }
 
 
 def load_project_document_with_fingerprint(

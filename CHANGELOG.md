@@ -8,8 +8,9 @@
 - Projects fresh completed verification pressure evidence into the 2D/3D view without persisting it into geometry; explicit spatial pressure remains the fallback and missing evidence remains unavailable.
 - Uses the same fresh-or-spatial pressure evidence for synchronized 2D/3D pressure-cascade visualization.
 - Centralizes deterministic 2D/3D viewport transforms and strengthens the installed-demo smoke to prove rooms and pressure relationships render in both views.
+- Makes **Fit** a true 3D fit-to-view operation, deriving bounded zoom and both pan axes from every room corner at its actual floor and ceiling elevations.
 - Adds windows and generic wall openings as first-class persisted spatial object types.
-- PR #467 head `4be4fb840480df7a5f1e0313a73830313150d9dd` passed CI #1540 / `36170548238`; PR #472 head `8a34c3d649aee54c377b4194a6d619559d219421` passed CI #1551 / `36171758793`.
+- PR #467 head `4be4fb840480df7a5f1e0313a73830313150d9dd` passed CI #1540 / `36170548238`; PR #472 head `8a34c3d649aee54c377b4194a6d619559d219421` passed CI #1551 / `36171758793`; PR #473 head `332eb07ed1d4d27a028d7fe8886b3914da29c8d7` passed CI #1552 / `36171783101`.
 - Preserves spatial X/Y placement during pulls, engineering ownership of pressure evidence, project schema version 1, solver equations, numerical tolerances, and engineering acceptance criteria.
 
 ## v0.102.0 synchronized spatial closure — 2026-09-25

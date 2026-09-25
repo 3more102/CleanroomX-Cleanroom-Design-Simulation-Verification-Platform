@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 from typing import Any, Callable
 
@@ -217,49 +218,73 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
-    try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
-    except json.JSONDecodeError as exc:
-        raise ProjectFormatError(
-            f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
-        ) from exc
-    return project_from_dict(data)
-
-
 def _normalized_project_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
-def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
-    """Capture a stable content revision for optimistic project-save protection."""
+def _missing_project_revision(source: Path) -> ProjectFileRevision:
+    return ProjectFileRevision(
+        path=os.path.normcase(str(source)),
+        exists=False,
+        size=None,
+        mtime_ns=None,
+        sha256=None,
+    )
+
+
+def _snapshot_project_file(
+    path: str | Path,
+    *,
+    include_payload: bool,
+    attempts: int = 3,
+) -> tuple[bytes | None, ProjectFileRevision]:
+    """Capture one stable file snapshot and its revision.
+
+    When payload capture is requested, the SHA-256 revision is computed from the
+    exact bytes returned to the caller. This prevents a parser/revision mismatch
+    caused by separate file reads.
+    """
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
     source = _normalized_project_path(path)
     normalized = os.path.normcase(str(source))
-    if not source.exists():
-        return ProjectFileRevision(
-            path=normalized, exists=False, size=None, mtime_ns=None, sha256=None
-        )
-    if not source.is_file():
-        raise OSError(f"project path is not a regular file: {source}")
-
     last_error: OSError | None = None
-    for _attempt in range(3):
-        before = source.stat()
+
+    for _attempt in range(attempts):
+        try:
+            before = source.stat()
+        except FileNotFoundError:
+            return None, _missing_project_revision(source)
+        if not stat.S_ISREG(before.st_mode):
+            raise OSError(f"project path is not a regular file: {source}")
+
         digest = sha256()
+        payload: bytes | None = None
         try:
             with source.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
+                if include_payload:
+                    payload = handle.read()
+                    digest.update(payload)
+                else:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            after = source.stat()
         except OSError as exc:
             last_error = exc
             continue
-        after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return ProjectFileRevision(
+
+        same_identity = (
+            before.st_dev == after.st_dev
+            and before.st_ino == after.st_ino
+        )
+        if (
+            same_identity
+            and before.st_size == after.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+            and before.st_ctime_ns == after.st_ctime_ns
+        ):
+            return payload, ProjectFileRevision(
                 path=normalized,
                 exists=True,
                 size=after.st_size,
@@ -268,8 +293,35 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
             )
         last_error = OSError(f"project file changed while fingerprinting: {source}")
 
+    if not source.exists():
+        return None, _missing_project_revision(source)
     assert last_error is not None
     raise last_error
+
+
+def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
+    """Capture a stable content revision for optimistic project-save protection."""
+    _payload, revision = _snapshot_project_file(path, include_payload=False)
+    return revision
+
+
+def _project_from_json_bytes(payload: bytes) -> ProjectDocument:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        data = json.loads(text, parse_constant=_reject_json_constant)
+    except json.JSONDecodeError as exc:
+        raise ProjectFormatError(
+            f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
+        ) from exc
+    return project_from_dict(data)
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _revision = load_project_document_with_revision(path)
+    return project
 
 
 def project_file_revision_matches(
@@ -289,17 +341,16 @@ def load_project_document_with_revision(
     *,
     attempts: int = 3,
 ) -> tuple[ProjectDocument, ProjectFileRevision]:
-    """Load a project together with the exact stable content revision that was read."""
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
+    """Load and fingerprint the exact same stable project byte snapshot."""
     source = _normalized_project_path(path)
-    for _attempt in range(attempts):
-        before = capture_project_file_revision(source)
-        project = load_project_document(source)
-        after = capture_project_file_revision(source)
-        if project_file_revision_matches(before, after):
-            return project, after
-    raise OSError(f"project file changed repeatedly while opening: {source}")
+    payload, revision = _snapshot_project_file(
+        source,
+        include_payload=True,
+        attempts=attempts,
+    )
+    if payload is None or not revision.exists:
+        raise FileNotFoundError(f"project file does not exist: {source}")
+    return _project_from_json_bytes(payload), revision
 
 
 def _project_document_text(project: ProjectDocument) -> str:
@@ -310,9 +361,13 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
-def _atomic_write_text(
+def _project_document_bytes(project: ProjectDocument) -> bytes:
+    return _project_document_text(project).encode("utf-8")
+
+
+def _atomic_write_bytes(
     path: str | Path,
-    text: str,
+    payload: bytes,
     *,
     before_replace: Callable[[], None] | None = None,
 ) -> Path:
@@ -322,11 +377,14 @@ def _atomic_write_text(
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
 
@@ -340,14 +398,27 @@ def _atomic_write_text(
     return destination
 
 
+def _atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    before_replace: Callable[[], None] | None = None,
+) -> Path:
+    return _atomic_write_bytes(
+        path,
+        text.encode("utf-8"),
+        before_replace=before_replace,
+    )
+
+
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    """Atomically replace UTF-8 text with byte-stable cross-platform output."""
     return _atomic_write_text(path, text)
 
 
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
     """Save a project atomically without an external-revision precondition."""
-    return atomic_write_text(path, _project_document_text(project))
+    return _atomic_write_bytes(path, _project_document_bytes(project))
 
 
 def save_project_document_guarded(
@@ -365,10 +436,25 @@ def save_project_document_guarded(
             raise ProjectWriteConflictError(destination, expected_revision, current)
 
     assert_unchanged()
-    text = _project_document_text(project)
-    saved_path = _atomic_write_text(
+    payload = _project_document_bytes(project)
+    saved_path = _atomic_write_bytes(
         destination,
-        text,
+        payload,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+
+    try:
+        saved_mtime_ns = saved_path.stat().st_mtime_ns
+    except OSError:
+        # Keep the revision bound to the bytes CleanroomX committed even if another
+        # process changes or removes the destination immediately after replacement.
+        saved_mtime_ns = None
+
+    saved_revision = ProjectFileRevision(
+        path=os.path.normcase(str(saved_path)),
+        exists=True,
+        size=len(payload),
+        mtime_ns=saved_mtime_ns,
+        sha256=sha256(payload).hexdigest(),
+    )
+    return saved_path, saved_revision

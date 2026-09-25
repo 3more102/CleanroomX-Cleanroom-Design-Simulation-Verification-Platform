@@ -77,6 +77,7 @@ def test_restore_recovery_returns_valid_project_and_raw_ui_state(tmp_path):
     assert recovered.ui_state["editor_json_valid"] is False
     assert recovered.source_path == source.resolve()
     assert recovered.artifact_path == artifact
+    assert recovered.integrity_status == "verified"
     assert artifact.exists()
     assert source.exists()
 
@@ -85,6 +86,10 @@ def test_restore_failure_preserves_artifact_and_source(tmp_path):
     source, artifact = _write_recovery(tmp_path)
     source_before = source.read_bytes()
     payload = load_recovery_artifact(artifact)
+    # Preserve this test's original purpose: exercise invalid recovered-project
+    # validation rather than the v2 artifact-integrity guard.
+    payload["schema_version"] = 1
+    payload.pop("integrity", None)
     payload["snapshot"]["project"]["schema_version"] = 999
     artifact.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -150,6 +155,8 @@ def test_recovery_inspection_exposes_identity_timestamp_source_and_draft(tmp_pat
     assert inspection.editor_analysis_id == "room-1"
     assert inspection.editor_json_valid is False
     assert inspection.editor_text == "{broken"
+    assert inspection.integrity_status == "Verified SHA-256"
+    assert candidate.integrity_status == "verified"
     assert recovery_relation_label(candidate) == "Original unchanged"
     assert "separate unsaved copy" in recovery_safety_message(candidate)
 

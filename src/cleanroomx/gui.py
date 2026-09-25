@@ -23,7 +23,7 @@ from .application import (
     ANALYSIS_SPECS,
     AnalysisRun,
     analysis_catalog,
-    analysis_run_matches_input,
+    analysis_run_is_current,
     application_info,
     rebase_analysis_file_references,
     run_analysis,
@@ -782,7 +782,9 @@ class CleanroomXApp:
         except KeyError:
             self._invalidate_last_run_for(analysis_id)
             return False
-        if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+        if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
             self._invalidate_last_run_for(analysis_id)
             self.status_var.set(
                 f"{analysis.name} — cached result is out of date; run the analysis again."
@@ -803,7 +805,9 @@ class CleanroomXApp:
         except KeyError:
             self._invalidate_last_run_for(analysis_id)
             return None
-        if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+        if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
             self._invalidate_last_run_for(analysis_id)
             self.status_var.set(
                 f"{analysis.name} — result is out of date; run the analysis again."
@@ -916,8 +920,8 @@ class CleanroomXApp:
 
         self._perform_project_edit(edit_description, mutate)
         cached_run = getattr(self, "_runs_by_analysis", {}).get(analysis.id)
-        if input_changed and cached_run is not None and not analysis_run_matches_input(
-            cached_run, analysis.kind, payload
+        if input_changed and cached_run is not None and not analysis_run_is_current(
+            cached_run, analysis.kind, payload, base_dir=self._base_dir()
         ):
             self._invalidate_last_run_for(analysis.id)
         return analysis
@@ -1960,9 +1964,9 @@ class CleanroomXApp:
                             "Completed result discarded — the analysis no longer exists."
                         )
                         continue
-                    if not analysis_run_matches_input(
-                        run, analysis.kind, analysis.input
-                    ):
+                    if not analysis_run_is_current(
+            run, analysis.kind, analysis.input, base_dir=self._base_dir()
+        ):
                         self._invalidate_last_run_for(analysis_id)
                         self.status_var.set(
                             f"Completed result discarded — {analysis.name} inputs changed; "

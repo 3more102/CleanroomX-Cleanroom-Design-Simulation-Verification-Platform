@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    project_file_revision,
+    save_project_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -245,6 +251,65 @@ def test_save_project_commits_loaded_editor_when_tree_selection_is_absent(tmp_pa
     saved = load_project_document(app.project_path)
     assert saved.analysis_by_id("a").input == {"value": 2}
     assert "Saved" in app.status_var.value
+
+
+def test_save_project_rejects_external_disk_change_and_preserves_both_versions(
+    tmp_path, monkeypatch
+):
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+
+    path = save_project_document(
+        tmp_path / "shared.cleanroomx.json",
+        ProjectDocument(name="Initially opened"),
+    )
+    opened_revision = project_file_revision(path)
+
+    external_project = ProjectDocument(name="Changed by another process")
+    save_project_document(path, external_project)
+    external_bytes = path.read_bytes()
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.project = ProjectDocument(name="Local unsaved work")
+    app.project_path = path
+    app._project_disk_revision = opened_revision
+    app._editor_analysis_id = None
+    app.name_var = Value("Local unsaved work")
+    app.description_var = Value("")
+    app.status_var = Value("")
+    app.root = object()
+
+    captured = {}
+    saved_state_calls = []
+    explicit_save_calls = []
+    app._capture_saved_state = lambda: saved_state_calls.append(True)
+    app._notify_explicit_save = lambda saved_path: explicit_save_calls.append(saved_path)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: captured.update(
+            {"title": title, "message": message, "parent": parent}
+        ),
+    )
+
+    app.save_project()
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path) == external_project
+    assert app.project.name == "Local unsaved work"
+    assert app.status_var.value == "Save conflict — disk file preserved"
+    assert captured["title"] == "Save conflict"
+    assert "did not overwrite" in captured["message"]
+    assert captured["parent"] is app.root
+    assert saved_state_calls == []
+    assert explicit_save_calls == []
 
 
 def test_save_project_as_invalidates_results_when_base_directory_changes(

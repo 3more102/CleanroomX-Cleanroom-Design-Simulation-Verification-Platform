@@ -1,62 +1,42 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
-Release: CleanroomX v0.102.0
+Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 
-VERIFIED SYNCHRONIZED 2D / 3D SPATIAL BASELINE
-main commit:
-d4b8f6294dd7deed207935423a52cf5f19a035eb
+IMMUTABLE BASELINE
+v0.102.0 is already published at commit:
+37a83dcce3489397647f27faf41a7c79680aa576
 
-Merged pull request:
-#436 — Finish synchronized CleanroomX 2D/3D spatial design
+v0.102.1 is a patch release and does not move or rewrite v0.102.0.
 
-POST-MERGE GITHUB ACTIONS
-CI run #1493
-run id 36167376732
-conclusion SUCCESS
+V0.102.1 FINAL SPATIAL CLOSURE
+- one canonical spatial_layout model remains shared by 2D and 3D
+- persisted engineering synchronization provenance and all-or-nothing mapping preflight remain enabled
+- pressure relationships derive only from explicit active-analysis pressure_cascade records
+- observed relationship delta is computed only when both linked spatial rooms provide pressure
+- relationship state is pass/fail/available/unavailable and is rendered in both 2D and 3D
+- source and packaged demos open on the verification analysis
+- installed GUI smoke requires at least three demo rooms, rendered 2D room geometry, rendered 3D room geometry, and rendered pressure relationships in both views
+- no solver equation, numerical tolerance, root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion is intentionally changed
 
-SUPPORTED PYTHON MATRIX
-Python 3.11: 973 passed
-Python 3.12: 973 passed
-Python 3.13: 973 passed
+REQUIRED RELEASE GATE
+The normal CI workflow must succeed on the exact commit that is still current main.
+That CI runs:
+- Python 3.11 / 3.12 / 3.13 complete suites
+- v0.91 through v0.95 compatibility regressions
+- application/desktop/input-contract/strict-ingestion/project-batch regressions
+- Release 2 consolidation regressions
+- clean wheel build/install and installed command checks
+- Windows PowerShell/CMD checkout launcher smoke
+- Python 3.13 performance evidence
+- installed Tk/Xvfb cleanroomx-gui --demo --smoke
+- representative CLI JSON/Markdown smoke checks
 
-VERIFIED GATES
-PASS - windows-latest PowerShell checkout launcher smoke
-PASS - windows-latest CMD checkout launcher smoke
-PASS - v0.91 through v0.95 compatibility regressions
-PASS - application/desktop/input-contract/strict-ingestion/project-batch gate: 291 passed
-PASS - Release 2 consolidation gate: 130 passed
-PASS - complete suite: 973 passed on Python 3.11 / 3.12 / 3.13
-PASS - clean wheel build/install on Python 3.11 / 3.12 / 3.13
-PASS - installed cleanroomx-gui --check
-PASS - installed cleanroomx-project-bundle entry point
-PASS - installed cleanroomx-project-run demo batch smoke
-PASS - representative CLI JSON/Markdown smoke checks
-PASS - Release 2 spatial-validation and project-bundle performance evidence on Python 3.13
-PASS - installed Tk/Xvfb cleanroomx-gui --demo --smoke on Python 3.13
-
-V0.102 SPATIAL CLOSURE
-PASS - one canonical spatial_layout model shared by 2D and 3D
-PASS - floor metadata, room elevations, classifications, and stable analysis-room links
-PASS - room resize / drag / keyboard nudge with bounded project history
-PASS - doors and transfer openings with dimensions, wall association, orientation, and swing metadata
-PASS - optional grid snap plus pressure / label / device / relationship view toggles
-PASS - pressure relationships derive only from explicit active-analysis pressure_cascade data
-PASS - deterministic room-area / room-volume / device-count metrics
-PASS - explicit geometry-to-analysis synchronization rejects ambiguous or missing explicit links
-PASS - legacy spatial layouts default deterministically without a project-schema bump
-PASS - source and packaged demo contain representative 2D/3D geometry and cleanroom objects
-PASS - no intentional solver-equation, tolerance, root-selection, uncertainty-semantic, project-schema, unit-convention, or engineering-acceptance changes
-
-RELEASE IDENTITY
-The already-published v0.101.0 tag remains immutable at commit
-1ca79b66c2e87c7ab45745ee98a5f60efa444cf5.
-
-v0.102.0 is a new release identity for the verified spatial-closure tree.
-Publication is permitted only after the v0.102.0 metadata commit itself passes the normal
-pull-request and post-merge main CI gates; the publisher additionally requires the successful
-CI commit to still be current main before creating the tag/release.
+PUBLICATION SAFETY
+The v0.102.1 publisher is triggered only by successful CI on main and verifies that the
+successful CI commit is still the current main commit before creating the tag/release.
+A stale successful CI result is not eligible for publication.
 
 RELEASE BOUNDARY
 CleanroomX provides engineering screening, simulation, verification, spatial design, and

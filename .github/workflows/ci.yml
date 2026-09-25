@@ -110,6 +110,13 @@ jobs:
           tests/test_engineering_report.py
           tests/test_project_bundle.py
           tests/test_plugins.py
+      - name: Run spatial design completion regressions
+        run: >-
+          python -m pytest -q
+          tests/test_spatial.py
+          tests/test_spatial_sync.py
+          tests/test_spatial_transform.py
+          tests/test_release2_spatial_integrity.py
       - name: Run complete test suite
         run: python -m pytest -q
       - name: Run Release 2 performance evidence

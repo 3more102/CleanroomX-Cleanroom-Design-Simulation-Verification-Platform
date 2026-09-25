@@ -253,6 +253,48 @@ def nearest_nonoverlap_room_position(
     return best[1], best[2]
 
 
+def resolve_room_overlaps(rooms: list[dict]) -> list[dict]:
+    """Return deterministic moves that eliminate positive-area room overlaps.
+
+    Rooms are processed in input order. Earlier rooms remain fixed while each
+    later room moves only when required to avoid the rooms already placed.
+    The input room dictionaries are never mutated.
+    """
+
+    placed: list[dict] = []
+    moves: list[dict] = []
+    epsilon = 1e-9
+
+    for source in rooms:
+        if not isinstance(source, dict):
+            continue
+        room = copy.deepcopy(source)
+        source_x = _finite_number(source.get("x_m"), 0.0)
+        source_y = _finite_number(source.get("y_m"), 0.0)
+        target_x, target_y = nearest_nonoverlap_room_position(
+            room, [*placed, room]
+        )
+        dx = target_x - source_x
+        dy = target_y - source_y
+        room["x_m"] = target_x
+        room["y_m"] = target_y
+        placed.append(room)
+
+        if abs(dx) <= epsilon and abs(dy) <= epsilon:
+            continue
+        moves.append(
+            {
+                "room_id": str(source.get("id") or ""),
+                "x_m": target_x,
+                "y_m": target_y,
+                "dx_m": dx,
+                "dy_m": dy,
+            }
+        )
+
+    return moves
+
+
 def spatial_layout_summary(value: Any) -> dict:
     """Return operator-facing spatial metrics without changing the stored model."""
     layout = normalize_layout(value)
@@ -1017,6 +1059,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         ).pack(side="left", padx=2)
         ttk.Button(
             toolbar,
+            text="Resolve all",
+            command=self.resolve_all_overlaps,
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            toolbar,
             text="Sync dimensions to active analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
@@ -1421,6 +1468,34 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._alignment_guides = []
         self._load_property_panel()
         self._persist("Resolved selected room overlap", history_before=before)
+
+    def resolve_all_overlaps(self) -> None:
+        moves = resolve_room_overlaps(self.layout["rooms"])
+        if not moves:
+            self._status_setter("No room overlap conflicts to resolve")
+            return
+
+        before = self._snapshot_layout()
+        rooms_by_id = {
+            str(room.get("id") or ""): room for room in self.layout["rooms"]
+        }
+        for move in moves:
+            room = rooms_by_id.get(move["room_id"])
+            if room is None:
+                continue
+            room["x_m"] = move["x_m"]
+            room["y_m"] = move["y_m"]
+            for device in self.layout["devices"]:
+                if device.get("room_id") == room.get("id"):
+                    device["x_m"] += move["dx_m"]
+                    device["y_m"] += move["dy_m"]
+
+        self._alignment_guides = []
+        self._load_property_panel()
+        self._persist(
+            f"Resolved overlaps in {len(moves)} room(s)",
+            history_before=before,
+        )
 
     def _bounds(self) -> tuple[float, float, float, float]:
         rooms = self.layout["rooms"]

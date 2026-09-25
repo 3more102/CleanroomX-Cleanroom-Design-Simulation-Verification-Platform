@@ -1190,13 +1190,14 @@ class CleanroomXApp:
 
         try:
             saved_path = save_project_document(destination, candidate)
+            saved_fingerprint = source_fingerprint(saved_path)
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
             return
 
         self.project = candidate
         self.project_path = saved_path
-        self._refresh_project_source_fingerprint()
+        self._project_source_fingerprint = saved_fingerprint
         self._recovery_source_path = None
         if previous_base is not None and self._base_dir() != previous_base:
             self._clear_run_cache()

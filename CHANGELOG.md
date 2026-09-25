@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.102.1 final spatial production closure — 2026-09-25
+
+- Finalizes the synchronized 2D/3D cleanroom spatial workspace on top of the published v0.102.0 baseline without moving the existing v0.102.0 tag.
+- Makes **Sync dimensions to active analysis** strictly geometry-only: spatial pressure can no longer overwrite engineering `observed_pressure_pa` evidence.
+- Renders explicit pressure-cascade relationship state consistently in 2D and 3D from supplied spatial pressure only, including pass/fail/available/unavailable states.
+- Centralizes deterministic 2D/3D coordinate transforms and adds direct round-trip, zoom-anchor, clamp, and projection regressions.
+- Strengthens the packaged-demo GUI smoke so release CI proves spatial rooms, 2D rendering, 3D rendering, and pressure relationships are actually present.
+- PR #467 head `4be4fb840480df7a5f1e0313a73830313150d9dd` passed CI run #1540 / `36170548238`; merged `main` commit `9a9caedb46b80d376c21f36e3b10f46b05e00764` passed post-merge CI run #1550 / `36171324227` on Python 3.11, 3.12, 3.13 and Windows launcher smoke.
+- Changes no solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, unit convention, or engineering acceptance criterion.
+
+
 ## v0.102.0 synchronized spatial closure — 2026-09-25
 
 - Publishes the completed Design 2D + 3D workspace from one canonical persisted spatial model while preserving the immutable `v0.101.0` tag.

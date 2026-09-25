@@ -9,6 +9,14 @@
 - Keeps schema version 1 and valid existing spatial metadata unchanged; no solver equations, numerical tolerances, or engineering acceptance semantics are modified.
 - Adds deterministic/idempotent normalization, reserved-id, duplicate-device-id, ambiguous-reference, and duplicate-derived-room regression coverage.
 
+## Unreleased external project write protection — 2026-09-25
+
+- Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.
+- Protects explicit project saves with SHA-256 optimistic write checks before serialization and immediately before atomic replacement.
+- Blocks silent overwrite when another CleanroomX session or external editor changes, deletes, replaces, or races to create the destination.
+- Keeps the user's in-memory work available for Save As, and prevents same-path Save As from bypassing the guard.
+- Preserves the low-latency recovery checkpoint workflow, project schema, engineering solver behavior, and the legacy unguarded persistence helper for non-GUI callers.
+
 ## Unreleased low-latency recovery checkpoints — 2026-09-25
 
 - Adds an event-driven recovery checkpoint path for dirty project/editor/spatial changes, reducing the normal crash-recovery exposure window from the periodic autosave interval to a 1.5-second idle debounce.
@@ -27,6 +35,14 @@
 - Preserves both versions when the original file changed or is newer; successful Save As writes a new explicit project first and only then removes the recovery artifact.
 - Hardens discard operations so only validated recovery artifacts inside the configured recovery directory can be deleted.
 - Adds focused restore/discard/source-preservation/startup-precedence regressions without changing project schema version, solver equations, tolerances, or engineering acceptance semantics.
+
+## Unreleased semantic recovery comparison — 2026-09-25
+
+- Adds a deterministic, read-only semantic comparison between each recovery artifact and the current source project before restoration.
+- Reports changed project metadata, recovery-only/source-only analyses, modified analyses, active-analysis selection changes, and raw editor-draft divergence.
+- Handles missing or invalid source files explicitly without guessing a merge result, mutating the source, or changing the recovery artifact.
+- Surfaces the comparison in **Inspect recovery** so operators can understand the delta before choosing whether to restore an unsaved copy.
+- Keeps recovery safety semantics unchanged: no automatic merge, source overwrite, solver change, tolerance change, or engineering acceptance change.
 
 ## Unreleased autosave and crash-recovery foundation — 2026-09-25
 

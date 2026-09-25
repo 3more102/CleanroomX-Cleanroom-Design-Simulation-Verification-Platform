@@ -48,6 +48,14 @@ Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stor
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
+### External-change write protection
+
+When a saved project is opened, CleanroomX records a stable content revision using the normalized path, size, modification timestamp, and SHA-256 digest. **Save Project** is an optimistic guarded write: the destination must still match the content revision that was opened or produced by the previous successful save. The guard is checked before serialization and again immediately before the atomic replace.
+
+If another CleanroomX window or external editor changes, deletes, or replaces the project file, the save is blocked and the newer on-disk file is preserved. The application directs the operator to **Save Project As** to preserve the current window's work under another name, or to reopen the project to accept the disk version. Selecting the already-open project path through **Save Project As** does not bypass the guard. Timestamp-only metadata changes with identical file content do not create a false conflict.
+
+For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
@@ -60,7 +68,7 @@ Current-session recovery artifacts are invalidated after an explicit save or an 
 
 ### Startup recovery
 
-On normal interactive startup, CleanroomX scans the recovery directory before opening a command-line project argument. If recovery data exists, **Recovery Center** lists the project name, exact UTC recovery timestamp, source comparison state, and original source path. **Inspect…** shows the project identity, application version, recovered analysis list, and raw editor draft. Malformed/unreadable recovery artifacts are reported and preserved.
+On normal interactive startup, CleanroomX scans the recovery directory before opening a command-line project argument. If recovery data exists, **Recovery Center** lists the project name, exact UTC recovery timestamp, source comparison state, and original source path. **Inspect…** shows the project identity, application version, recovered analysis list, raw editor draft, and a deterministic semantic comparison against the current source project. The comparison reports changed project fields, recovery-only/source-only analyses, modified analyses, active-analysis changes, and editor-draft divergence. Missing or invalid source files are reported as non-comparable rather than guessed or auto-merged. Malformed/unreadable recovery artifacts are reported and preserved.
 
 **Restore as Unsaved Copy** never writes or rebinds the original project file. The recovered project opens dirty with **Save Project As** required. If the recovery came from a saved project, CleanroomX retains that original path only as read/context so relative consistency/dossier references still resolve correctly. The first recovered Save As refuses that original source path, forcing the recovered work to a different file so both versions remain available. After a successful Save As, the new explicit file is durable before the restored recovery artifact is removed.
 

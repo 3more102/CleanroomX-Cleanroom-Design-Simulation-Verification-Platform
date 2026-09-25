@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .application import ANALYSIS_SPECS
@@ -16,6 +17,32 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectWriteConflictError(RuntimeError):
+    """Raised when an explicit save would overwrite a different on-disk revision."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        expected: "ProjectFileRevision",
+        current: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.expected = expected
+        self.current = current
+        super().__init__(
+            f"project file changed on disk since it was opened or last saved: {self.path}"
+        )
+
+
+@dataclass(frozen=True)
+class ProjectFileRevision:
+    path: str
+    exists: bool
+    size: int | None
+    mtime_ns: int | None
+    sha256: str | None
 
 
 @dataclass
@@ -204,8 +231,91 @@ def load_project_document(path: str | Path) -> ProjectDocument:
     return project_from_dict(data)
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def _normalized_project_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
+    """Capture a stable content revision for optimistic project-save protection."""
+    source = _normalized_project_path(path)
+    normalized = os.path.normcase(str(source))
+    if not source.exists():
+        return ProjectFileRevision(
+            path=normalized, exists=False, size=None, mtime_ns=None, sha256=None
+        )
+    if not source.is_file():
+        raise OSError(f"project path is not a regular file: {source}")
+
+    last_error: OSError | None = None
+    for _attempt in range(3):
+        before = source.stat()
+        digest = sha256()
+        try:
+            with source.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as exc:
+            last_error = exc
+            continue
+        after = source.stat()
+        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
+            return ProjectFileRevision(
+                path=normalized,
+                exists=True,
+                size=after.st_size,
+                mtime_ns=after.st_mtime_ns,
+                sha256=digest.hexdigest(),
+            )
+        last_error = OSError(f"project file changed while fingerprinting: {source}")
+
+    assert last_error is not None
+    raise last_error
+
+
+def project_file_revision_matches(
+    expected: ProjectFileRevision,
+    current: ProjectFileRevision,
+) -> bool:
+    """Compare content revisions while ignoring metadata-only timestamp changes."""
+    if expected.path != current.path or expected.exists != current.exists:
+        return False
+    if not expected.exists:
+        return True
+    return expected.size == current.size and expected.sha256 == current.sha256
+
+
+def load_project_document_with_revision(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+) -> tuple[ProjectDocument, ProjectFileRevision]:
+    """Load a project together with the exact stable content revision that was read."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    source = _normalized_project_path(path)
+    for _attempt in range(attempts):
+        before = capture_project_file_revision(source)
+        project = load_project_document(source)
+        after = capture_project_file_revision(source)
+        if project_file_revision_matches(before, after):
+            return project, after
+    raise OSError(f"project file changed repeatedly while opening: {source}")
+
+
+def _project_document_text(project: ProjectDocument) -> str:
+    data = project.to_dict()
+    project_from_dict(data)
+    return json.dumps(
+        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+    ) + "\n"
+
+
+def _atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    before_replace: Callable[[], None] | None = None,
+) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -220,6 +330,8 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
 
+        if before_replace is not None:
+            before_replace()
         temp_path.replace(destination)
     except Exception:
         if temp_path is not None:
@@ -228,11 +340,35 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
     return destination
 
 
+def atomic_write_text(path: str | Path, text: str) -> Path:
+    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    return _atomic_write_text(path, text)
+
+
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    destination = Path(path)
-    data = project.to_dict()
-    project_from_dict(data)
-    text = json.dumps(
-        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-    ) + "\n"
-    return atomic_write_text(destination, text)
+    """Save a project atomically without an external-revision precondition."""
+    return atomic_write_text(path, _project_document_text(project))
+
+
+def save_project_document_guarded(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_revision: ProjectFileRevision,
+) -> tuple[Path, ProjectFileRevision]:
+    """Save only while the destination still matches the expected content revision."""
+    destination = _normalized_project_path(path)
+
+    def assert_unchanged() -> None:
+        current = capture_project_file_revision(destination)
+        if not project_file_revision_matches(expected_revision, current):
+            raise ProjectWriteConflictError(destination, expected_revision, current)
+
+    assert_unchanged()
+    text = _project_document_text(project)
+    saved_path = _atomic_write_text(
+        destination,
+        text,
+        before_replace=assert_unchanged,
+    )
+    return saved_path, capture_project_file_revision(saved_path)

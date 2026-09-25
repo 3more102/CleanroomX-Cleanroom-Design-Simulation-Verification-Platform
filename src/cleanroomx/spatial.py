@@ -968,36 +968,176 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
+def _pressure_result_finding(
+    result: dict | None, room_name: str
+) -> tuple[dict | None, dict | None]:
+    if not isinstance(result, dict):
+        return None, None
+    if result.get("room") == room_name and isinstance(result.get("findings"), list):
+        reports = [result]
+    else:
+        raw_reports = result.get("rooms")
+        reports = raw_reports if isinstance(raw_reports, list) else []
+    for report in reports:
+        if not isinstance(report, dict) or report.get("room") != room_name:
+            continue
+        findings = report.get("findings")
+        if not isinstance(findings, list):
+            continue
+        for finding in findings:
+            if isinstance(finding, dict) and finding.get("code") == "PRESSURE":
+                return finding, report
+    return None, None
+
+
+def pressure_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> dict:
+    """Project configured or verified-result pressure evidence onto spatial geometry."""
     normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
-    ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
     sync = engineering_sync_status(normalized, analysis)
-    mapping_by_room = {
-        record["room_id"]: record["state"] for record in sync["rooms"]
+    mapping_by_room = {record["room_id"]: record for record in sync["rooms"]}
+
+    payload = getattr(analysis, "input", None)
+    payload = payload if isinstance(payload, dict) else {}
+    kind = getattr(analysis, "kind", "")
+    engineering_rooms: list[dict] = []
+    if kind == "room_verification":
+        engineering_rooms = [payload]
+    elif kind == "project_verification" and isinstance(payload.get("rooms"), list):
+        engineering_rooms = [
+            item for item in payload["rooms"] if isinstance(item, dict)
+        ]
+    engineering_by_name = {
+        str(item.get("name") or "").strip().casefold(): item
+        for item in engineering_rooms
+        if str(item.get("name") or "").strip()
     }
-    rooms = []
+
+    rooms: list[dict] = []
+    target_to_room_id: dict[str, str] = {}
     for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
+        mapping = mapping_by_room.get(room["id"], {})
+        mapping_state = str(mapping.get("state") or "unmapped")
+        target_name = str(
+            mapping.get("analysis_room_name")
+            or room.get("analysis_room_name")
+            or room["name"]
+        ).strip()
+        target = engineering_by_name.get(target_name.casefold())
+        if kind == "room_verification" and engineering_rooms and room is normalized["rooms"][0]:
+            target = engineering_rooms[0]
+            target_name = str(target.get("name") or target_name).strip()
+        if target is not None and target_name:
+            target_to_room_id[target_name] = room["id"]
+
+        pressure = None
+        pressure_target = None
+        source = "unavailable"
+        status = "unavailable"
+        ach = None
+        finding, report = _pressure_result_finding(result, target_name)
+        actual = (
+            _optional_finite(finding.get("actual"))
+            if isinstance(finding, dict)
+            else None
+        )
+        if actual is not None:
+            pressure = actual
+            pressure_target = _optional_finite(finding.get("limit"))
+            source = "result"
+            status = str(finding.get("status") or "unavailable")
+            ach = (
+                _optional_finite(report.get("ach"))
+                if isinstance(report, dict)
+                else None
+            )
+        elif target is not None:
+            configured = _optional_finite(target.get("observed_pressure_pa"))
+            if configured is not None:
+                pressure = configured
+                source = "configured"
+                status = "configured"
+            pressure_target = _optional_finite(target.get("min_pressure_pa"))
+        elif room.get("pressure_pa") is not None:
+            pressure = _optional_finite(room.get("pressure_pa"))
+            source = "spatial"
+            status = "unmapped"
+
         rooms.append(
             {
                 "room_id": room["id"],
-                "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
-                "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
+                "room_name": room["name"],
+                "engineering_room_name": target_name or None,
+                "availability": "available" if pressure is not None else "unavailable",
+                "pressure_pa": pressure,
+                "pressure_target_pa": pressure_target,
+                "source": source,
+                "status": status,
+                "ach": ach,
+                "engineering_state": mapping_state,
+            }
+        )
+
+    values = [item["pressure_pa"] for item in rooms if item["pressure_pa"] is not None]
+    minimum = min(values) if values else None
+    maximum = max(values) if values else None
+    for item in rooms:
+        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+
+    requirements = (
+        payload.get("pressure_cascade", [])
+        if kind == "project_verification"
+        else []
+    )
+    result_relationships = (
+        result.get("pressure_cascade", [])
+        if isinstance(result, dict) and isinstance(result.get("pressure_cascade"), list)
+        else []
+    )
+    relationships: list[dict] = []
+    for requirement in requirements if isinstance(requirements, list) else []:
+        if not isinstance(requirement, dict):
+            continue
+        high_name = str(requirement.get("higher_pressure_room") or "").strip()
+        low_name = str(requirement.get("lower_pressure_room") or "").strip()
+        finding = next(
+            (
+                item
+                for item in result_relationships
+                if isinstance(item, dict)
+                and item.get("higher_pressure_room") == high_name
+                and item.get("lower_pressure_room") == low_name
+            ),
+            None,
+        )
+        relationships.append(
+            {
+                "higher_room_id": target_to_room_id.get(high_name),
+                "lower_room_id": target_to_room_id.get(low_name),
+                "higher_pressure_room": high_name,
+                "lower_pressure_room": low_name,
+                "limit_pa": _optional_finite(requirement.get("min_delta_pa")),
+                "actual_delta_pa": (
+                    _optional_finite(finding.get("actual_delta_pa"))
+                    if isinstance(finding, dict)
+                    else None
+                ),
+                "status": (
+                    str(finding.get("status") or "unavailable")
+                    if isinstance(finding, dict)
+                    else "unavailable"
+                ),
+                "source": "result" if isinstance(finding, dict) else "configured_requirement",
             }
         )
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,
         "rooms": rooms,
+        "relationships": relationships,
     }
 
 

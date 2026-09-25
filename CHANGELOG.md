@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased spatial persistence integrity — 2026-09-25
+
+- Adds a GUI-independent spatial persistence schema and validates spatial metadata at the same project load/save boundary as the core project document.
+- Fails closed on unsupported spatial versions, duplicate room/device IDs, missing required geometry, non-finite values, non-positive room dimensions, unsupported device types, and dangling device-to-room references.
+- Replaces UUID-based repair during lenient workspace normalization with deterministic ID repair, while valid persisted stable IDs remain unchanged.
+- Preserves unknown spatial extension fields during normalization so workspace refresh does not silently erase compatible metadata.
+- Adds corruption/no-overwrite, deterministic-normalization, referential-integrity, and stable round-trip regressions without changing project schema version 1 or engineering solver semantics.
+
 ## Unreleased analysis result freshness guard — 2026-09-25
 
 - Binds every cached desktop result to the canonical SHA-256 of the exact analysis input already recorded in application execution provenance.

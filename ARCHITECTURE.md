@@ -30,3 +30,17 @@ Startup restoration keeps save ownership equally explicit. A recovery is parsed 
 ## Engineering boundary
 
 CleanroomX produces screening and numerical/provenance evidence. It does not by itself establish ISO cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, physical/statistical uncertainty, or regulatory compliance. Applicable requirements and acceptance criteria remain external project inputs.
+
+## Release 2 consolidated architecture
+
+Release 2 keeps validated engineering backends behind a single application boundary while consolidating previously parallel state-management and evidence paths.
+
+- **Persistence authority:** `cleanroomx.persistence` owns durable verified atomic writes and directory durability. Project saves, revision artifacts, exports, recovery artifacts, and bundle publication reuse that boundary instead of implementing independent replace/fsync logic.
+- **Project state authority:** `ProjectDocument` owns detached mutable JSON state. `cleanroomx.project_history` provides the bounded application-wide edit transaction stream used by project, analysis, and spatial edits.
+- **Saved revision authority:** `cleanroomx.project_revisions` preserves validated prior project bytes and guards overwrites against external file changes. Migration-aware loads bind provenance to the exact stable source revision that was parsed.
+- **Recovery authority:** `cleanroomx.autosave` writes session-isolated recovery artifacts with versioned SHA-256 integrity evidence. Legacy v1 artifacts remain readable as explicitly unverified evidence.
+- **Execution evidence authority:** `cleanroomx.application` isolates and single-parses submitted inputs, rejects mutation of the execution snapshot, records exact input and external-dependency provenance, and freezes completed run evidence.
+- **Run-history authority:** `cleanroomx.run_history` persists a bounded integrity-checked audit ledger without making audit evidence part of undoable design state.
+- **Extension and handoff boundaries:** `cleanroomx.plugins` defines analysis plugin API v1; `cleanroomx.project_bundle` owns verified portable project handoff; `cleanroomx.engineering_report` owns verified self-contained HTML engineering reports.
+
+These boundaries do not intentionally change numerical solver equations, tolerances, or acceptance semantics.

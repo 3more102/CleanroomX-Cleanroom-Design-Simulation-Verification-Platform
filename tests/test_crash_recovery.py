@@ -85,6 +85,8 @@ def test_restore_failure_preserves_artifact_and_source(tmp_path):
     source, artifact = _write_recovery(tmp_path)
     source_before = source.read_bytes()
     payload = load_recovery_artifact(artifact)
+    payload["schema_version"] = 1
+    payload.pop("integrity", None)
     payload["snapshot"]["project"]["schema_version"] = 999
     artifact.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",

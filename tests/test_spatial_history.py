@@ -1,101 +1,10 @@
 from __future__ import annotations
 
-import copy
-
 from cleanroomx.project import ProjectDocument
 from cleanroomx.spatial import SpatialDesignWorkspace, _Hit, empty_layout, normalize_layout
-from cleanroomx.spatial_history import SpatialEditHistory
 
 
-def _design(x_m: float) -> dict:
-    layout = empty_layout()
-    layout["rooms"] = [
-        {
-            "id": "room-a",
-            "name": "Room A",
-            "x_m": x_m,
-            "y_m": 0.0,
-            "length_m": 4.0,
-            "width_m": 4.0,
-            "height_m": 3.0,
-        }
-    ]
-    layout.pop("view")
-    return layout
-
-
-def test_spatial_history_round_trip_is_bounded_and_snapshot_isolated():
-    history = SpatialEditHistory(limit=2)
-    before = _design(0.0)
-    after = _design(1.0)
-
-    assert history.record(
-        before_layout=before,
-        before_selection=("room", "room-a"),
-        after_layout=after,
-        after_selection=("room", "room-a"),
-        description="Move room",
-    )
-
-    before["rooms"][0]["x_m"] = 99.0
-    after["rooms"][0]["x_m"] = 88.0
-
-    restored, description = history.undo()
-    assert description == "Move room"
-    assert restored.layout["rooms"][0]["x_m"] == 0.0
-    restored.layout["rooms"][0]["x_m"] = 77.0
-
-    replayed, description = history.redo()
-    assert description == "Move room"
-    assert replayed.layout["rooms"][0]["x_m"] == 1.0
-    assert replayed.selection == ("room", "room-a")
-
-    assert history.undo() is not None
-    assert history.record(
-        before_layout=_design(0.0),
-        before_selection=None,
-        after_layout=_design(2.0),
-        after_selection=("room", "room-a"),
-        description="Move again",
-    )
-    assert history.can_redo is False
-
-    assert history.record(
-        before_layout=_design(2.0),
-        before_selection=("room", "room-a"),
-        after_layout=_design(3.0),
-        after_selection=("room", "room-a"),
-        description="Move third",
-    )
-    assert history.record(
-        before_layout=_design(3.0),
-        before_selection=("room", "room-a"),
-        after_layout=_design(4.0),
-        after_selection=("room", "room-a"),
-        description="Move fourth",
-    )
-    assert history.undo_description == "Move fourth"
-    assert history.undo() is not None
-    oldest_retained, _ = history.undo()
-    assert oldest_retained.layout["rooms"][0]["x_m"] == 2.0
-    assert history.undo() is None
-
-
-def test_spatial_history_ignores_selection_only_noop():
-    history = SpatialEditHistory()
-    layout = _design(0.0)
-    assert history.record(
-        before_layout=layout,
-        before_selection=None,
-        after_layout=copy.deepcopy(layout),
-        after_selection=("room", "room-a"),
-        description="Select room",
-    ) is False
-    assert history.can_undo is False
-    assert history.can_redo is False
-
-
-def test_workspace_undo_redo_restores_model_and_selection_without_rewinding_view():
+def _workspace_project() -> ProjectDocument:
     project = ProjectDocument(name="History integration")
     layout = normalize_layout(
         {
@@ -114,19 +23,34 @@ def test_workspace_undo_redo_restores_model_and_selection_without_rewinding_view
         }
     )
     project.metadata["spatial_layout"] = layout
+    return project
 
+
+def _workspace(project: ProjectDocument) -> SpatialDesignWorkspace:
     workspace = object.__new__(SpatialDesignWorkspace)
     workspace.layout = project.metadata["spatial_layout"]
     workspace.selected = _Hit("room", "room-a")
-    workspace._history = SpatialEditHistory()
     workspace._project_getter = lambda: project
-    changes: list[str] = []
-    statuses: list[str] = []
-    workspace._on_change = lambda: changes.append("changed")
-    workspace._status_setter = statuses.append
+    workspace._on_change = lambda: None
+    workspace._status_setter = lambda value: None
     workspace._load_property_panel = lambda: None
     workspace._update_history_controls = lambda: None
     workspace.redraw = lambda: None
+    workspace._on_history_record = None
+    workspace._on_undo_requested = None
+    workspace._on_redo_requested = None
+    return workspace
+
+
+def test_spatial_workspace_delegates_design_mutation_to_global_history():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    captured = []
+    changes = []
+    statuses = []
+    workspace._on_history_record = lambda *args: captured.append(args) or True
+    workspace._on_change = lambda: changes.append("changed")
+    workspace._status_setter = statuses.append
 
     before = workspace._history_layout()
     workspace.layout["rooms"][0]["x_m"] = 5.0
@@ -135,16 +59,41 @@ def test_workspace_undo_redo_restores_model_and_selection_without_rewinding_view
         history_before=before,
         selection_before=("room", "room-a"),
     )
-    workspace.layout["view"]["azimuth_deg"] = 123.0
+
+    assert not hasattr(workspace, "_history")
+    assert project.metadata["spatial_layout"]["rooms"][0]["x_m"] == 5.0
+    assert len(captured) == 1
+    before_layout, before_selection, after_layout, after_selection, description = captured[0]
+    assert before_layout["rooms"][0]["x_m"] == 2.0
+    assert before_selection == ("room", "room-a")
+    assert after_layout["rooms"][0]["x_m"] == 5.0
+    assert after_selection == ("room", "room-a")
+    assert description == "Spatial item moved"
+    assert changes == ["changed"]
+    assert statuses[-1] == "Spatial item moved"
+
+
+def test_spatial_toolbar_undo_redo_use_application_wide_callbacks():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    calls = []
+    workspace._on_undo_requested = lambda: calls.append("undo") or True
+    workspace._on_redo_requested = lambda: calls.append("redo") or True
 
     assert workspace.undo_edit() is True
-    assert project.metadata["spatial_layout"]["rooms"][0]["x_m"] == 2.0
+    assert workspace.redo_edit() is True
+    assert calls == ["undo", "redo"]
+
+
+def test_history_selection_restore_is_view_neutral_and_validates_target():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    workspace.layout["view"]["azimuth_deg"] = 123.0
+
+    workspace.restore_history_selection(("room", "room-a"))
     assert workspace.selected == _Hit("room", "room-a")
     assert workspace.layout["view"]["azimuth_deg"] == 123.0
-    assert statuses[-1] == "Undo: Spatial item moved"
 
-    assert workspace.redo_edit() is True
-    assert project.metadata["spatial_layout"]["rooms"][0]["x_m"] == 5.0
+    workspace.restore_history_selection(("device", "missing-device"))
+    assert workspace.selected is None
     assert workspace.layout["view"]["azimuth_deg"] == 123.0
-    assert statuses[-1] == "Redo: Spatial item moved"
-    assert len(changes) == 3

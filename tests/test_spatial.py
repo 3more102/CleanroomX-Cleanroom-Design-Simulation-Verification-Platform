@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import copy
 import math
+
+import pytest
 
 from cleanroomx.project import AnalysisDocument, ProjectDocument
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
+    SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
@@ -96,6 +100,130 @@ def test_normalize_layout_rejects_non_finite_and_non_positive_geometry_without_e
     assert layout["grid_m"] == 0.5
     assert math.isfinite(layout["view"]["zoom_2d"])
     assert layout["view"]["elevation_deg"] == 5
+
+
+def test_normalize_layout_repairs_missing_and_duplicate_ids_deterministically():
+    raw = {
+        "rooms": [
+            {"id": "dup", "name": "Process"},
+            {"id": "dup", "name": "Ante"},
+            {"name": "!!!"},
+        ],
+        "devices": [
+            {"id": "device", "type": "sensor", "room_id": "dup"},
+            {"id": "device", "type": "equipment", "room_id": "dup"},
+            {"type": "sensor", "room_id": "dup"},
+        ],
+    }
+
+    first = normalize_layout(raw)
+    second = normalize_layout(copy.deepcopy(raw))
+
+    assert first == second
+    assert normalize_layout(first) == first
+    assert [room["id"] for room in first["rooms"]] == ["dup", "dup-2", "room"]
+    assert [device["id"] for device in first["devices"]] == [
+        "device",
+        "device-2",
+        "device-3",
+    ]
+    assert len({room["id"] for room in first["rooms"]}) == 3
+    assert len({device["id"] for device in first["devices"]}) == 3
+
+
+def test_derive_layout_assigns_unique_deterministic_ids_for_duplicate_room_names():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 4, "width_m": 4, "height_m": 3},
+                {"name": "Process", "length_m": 5, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+
+    first = derive_layout_from_analysis(analysis)
+    second = derive_layout_from_analysis(analysis)
+
+    assert first == second
+    assert [room["id"] for room in first["rooms"]] == ["process", "process-2"]
+
+
+def test_project_sync_rejects_duplicate_spatial_room_names_before_mutation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "Ante", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    original = copy.deepcopy(analysis.input)
+    layout = {
+        "rooms": [
+            {
+                "id": "process-a",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 5,
+                "height_m": 3,
+            },
+            {
+                "id": "process-b",
+                "name": "process",
+                "x_m": 8,
+                "y_m": 0,
+                "length_m": 8,
+                "width_m": 5,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    with pytest.raises(SpatialSyncError, match="spatial layout.*duplicate room name"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == original
+
+
+def test_project_sync_rejects_duplicate_analysis_room_names_before_mutation():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "process", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    original = copy.deepcopy(analysis.input)
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 5,
+                "height_m": 3,
+            }
+        ]
+    }
+
+    with pytest.raises(SpatialSyncError, match="active analysis.*duplicate room name"):
+        sync_layout_to_analysis(layout, analysis)
+
+    assert analysis.input == original
 
 
 def test_sync_layout_to_project_verification_updates_dimensions_but_preserves_engineering_fields():

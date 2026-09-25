@@ -261,7 +261,11 @@ def test_startup_recovery_takes_precedence_over_requested_project(monkeypatch):
 
     monkeypatch.setattr(gui_module.tk, "Tk", Root)
     monkeypatch.setattr(gui_module, "CleanroomXApp", App)
-    monkeypatch.setattr(gui_module, "validate_application_registry", lambda: None)
+    monkeypatch.setattr(
+        gui_module,
+        "validate_application_registry",
+        lambda: {"plugin_issue_count": 0, "plugin_issues": []},
+    )
 
     assert gui_module.main(["requested.cleanroomx.json"]) == 0
     assert events == ["recovery", "mainloop"]

@@ -442,12 +442,107 @@ def _spatial_validation_key(layout: dict) -> tuple:
     )
 
 
-def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+def validate_layout(value: Any, analysis: Any = None) -> list[dict]:
+    """Return deterministic spatial diagnostics without mutating persisted data."""
+    issues: list[dict] = []
+    raw_rooms = value.get("rooms", []) if isinstance(value, dict) else []
+    raw_devices = value.get("devices", []) if isinstance(value, dict) else []
+
+    def valid_positive(raw_value: Any) -> bool:
+        if isinstance(raw_value, bool):
+            return False
+        try:
+            number = float(raw_value)
+        except (TypeError, ValueError):
+            return False
+        return math.isfinite(number) and number > 0
+
+    def valid_finite(raw_value: Any) -> bool:
+        if isinstance(raw_value, bool):
+            return False
+        try:
+            return math.isfinite(float(raw_value))
+        except (TypeError, ValueError):
+            return False
+
+    seen_room_ids: set[str] = set()
+    if isinstance(raw_rooms, list):
+        for index, raw_room in enumerate(raw_rooms):
+            if not isinstance(raw_room, dict):
+                issues.append(
+                    {
+                        "code": "malformed_room",
+                        "severity": "error",
+                        "item_ids": [],
+                        "message": f"Room entry {index + 1} is not an object.",
+                    }
+                )
+                continue
+            item_id = str(raw_room.get("id") or f"room-index-{index + 1}")
+            if item_id in seen_room_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_room_id",
+                        "severity": "error",
+                        "item_ids": [item_id],
+                        "message": f"Duplicate room id '{item_id}' is not allowed.",
+                    }
+                )
+            seen_room_ids.add(item_id)
+            for field in ("length_m", "width_m", "height_m"):
+                if not valid_positive(raw_room.get(field)):
+                    issues.append(
+                        {
+                            "code": "invalid_room_dimension",
+                            "severity": "error",
+                            "item_ids": [item_id],
+                            "field": field,
+                            "message": (
+                                f"Room '{raw_room.get('name') or item_id}' has invalid "
+                                f"{field}; dimensions must be finite and greater than zero."
+                            ),
+                        }
+                    )
+            if "elevation_m" in raw_room and not valid_finite(raw_room.get("elevation_m")):
+                issues.append(
+                    {
+                        "code": "invalid_room_elevation",
+                        "severity": "error",
+                        "item_ids": [item_id],
+                        "message": (
+                            f"Room '{raw_room.get('name') or item_id}' elevation must be finite."
+                        ),
+                    }
+                )
+
+    seen_device_ids: set[str] = set()
+    if isinstance(raw_devices, list):
+        for index, raw_device in enumerate(raw_devices):
+            if not isinstance(raw_device, dict):
+                issues.append(
+                    {
+                        "code": "malformed_device",
+                        "severity": "error",
+                        "item_ids": [],
+                        "message": f"Device entry {index + 1} is not an object.",
+                    }
+                )
+                continue
+            item_id = str(raw_device.get("id") or f"device-index-{index + 1}")
+            if item_id in seen_device_ids:
+                issues.append(
+                    {
+                        "code": "duplicate_device_id",
+                        "severity": "error",
+                        "item_ids": [item_id],
+                        "message": f"Duplicate device id '{item_id}' is not allowed.",
+                    }
+                )
+            seen_device_ids.add(item_id)
+
     layout = normalize_layout(value)
     rooms = layout["rooms"]
     devices = layout["devices"]
-    issues: list[dict] = []
 
     first_room_by_name: dict[str, dict] = {}
     for room in rooms:
@@ -544,7 +639,44 @@ def validate_layout(value: Any) -> list[dict]:
                 }
             )
 
+    if getattr(analysis, "kind", "") in {"room_verification", "project_verification"}:
+        for item in engineering_sync_status(layout, analysis).values():
+            if item["state"] == "synchronized":
+                continue
+            severity = (
+                "warning"
+                if item["state"] in {"conflicting", "unmapped"}
+                else "info"
+            )
+            issues.append(
+                {
+                    "code": f"engineering_{item['state']}",
+                    "severity": severity,
+                    "item_ids": [item["room_id"]],
+                    "message": item["message"],
+                }
+            )
+        for relationship in pressure_relationships(layout, analysis):
+            if relationship["status"] == "conflict":
+                issues.append(
+                    {
+                        "code": "pressure_cascade_conflict",
+                        "severity": "warning",
+                        "item_ids": [
+                            relationship["higher_room_id"],
+                            relationship["lower_room_id"],
+                        ],
+                        "message": (
+                            f"Pressure cascade {relationship['higher_ref']} → "
+                            f"{relationship['lower_ref']} is "
+                            f"{relationship['actual_delta_pa']:g} Pa; configured minimum is "
+                            f"{relationship['min_delta_pa']:g} Pa."
+                        ),
+                    }
+                )
+
     return issues
+
 
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:

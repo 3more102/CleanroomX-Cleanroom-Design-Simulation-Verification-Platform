@@ -2190,6 +2190,7 @@ class CleanroomXApp:
                 analysis_name=analysis.name,
                 analysis_kind=analysis.kind,
                 input_payload=analysis.input,
+                base_dir=self._base_dir(),
             )
         except (KeyError, TypeError, ValueError) as exc:
             self.status_var.set("HTML report export failed")

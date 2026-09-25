@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hashlib import sha256
 import os
 from pathlib import Path
 
@@ -104,6 +105,94 @@ def test_autosave_rotates_history_per_project_identity(tmp_path):
 
         artifacts = list((tmp_path / "recovery").glob("*.recovery.json"))
         assert len(artifacts) == 2
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_autosave_rotation_isolated_between_sessions_for_same_project(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+
+    first = AutosaveManager(
+        recovery_dir,
+        history_limit=3,
+        session_id="session-a",
+    )
+    try:
+        first.begin_project(source)
+        for marker in range(3):
+            assert first.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            )
+            first.wait_for_idle()
+
+        first_paths = set(recovery_dir.glob("*.recovery.json"))
+        assert len(first_paths) == 3
+        assert {
+            load_recovery_artifact(path)["session_id"] for path in first_paths
+        } == {"session-a"}
+    finally:
+        first.shutdown(wait=True)
+
+    second = AutosaveManager(
+        recovery_dir,
+        history_limit=1,
+        session_id="session-b",
+    )
+    try:
+        second.begin_project(source)
+        for marker in range(10, 13):
+            assert second.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            )
+            second.wait_for_idle()
+
+        all_paths = set(recovery_dir.glob("*.recovery.json"))
+        assert first_paths <= all_paths
+        by_session: dict[str, list[Path]] = {}
+        for path in all_paths:
+            session_id = load_recovery_artifact(path)["session_id"]
+            by_session.setdefault(session_id, []).append(path)
+
+        assert len(by_session["session-a"]) == 3
+        assert len(by_session["session-b"]) == 1
+    finally:
+        second.shutdown(wait=True)
+
+
+def test_autosave_rotation_preserves_unverifiable_session_artifact(tmp_path):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+    recovery_dir.mkdir()
+    manager = AutosaveManager(
+        recovery_dir,
+        history_limit=1,
+        session_id="session-a",
+    )
+    try:
+        identity = manager.begin_project(source)
+        session_token = sha256(b"session-a").hexdigest()
+        suspect = recovery_dir / (
+            f"{identity}-session-{session_token}-"
+            "00000000T000000000000Z-broken.recovery.json"
+        )
+        suspect.write_text("{broken", encoding="utf-8")
+
+        for marker in range(2):
+            assert manager.request_autosave(
+                _snapshot(_project(), marker=marker),
+                source_path=source,
+            )
+            manager.wait_for_idle()
+
+        assert suspect.exists()
+        scan = scan_recovery_artifacts(recovery_dir)
+        assert len(scan.candidates) == 1
+        assert load_recovery_artifact(scan.candidates[0].path)["session_id"] == "session-a"
+        assert len(scan.issues) == 1
+        assert scan.issues[0].path == suspect
     finally:
         manager.shutdown(wait=True)
 

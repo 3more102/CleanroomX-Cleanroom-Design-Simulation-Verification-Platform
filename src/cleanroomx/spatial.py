@@ -210,7 +210,10 @@ def nearest_nonoverlap_room_position(
             oy0 = _finite_number(other.get("y_m"), 0.0)
             ox1 = ox0 + _positive(other.get("length_m"), 0.0)
             oy1 = oy0 + _positive(other.get("width_m"), 0.0)
-            if min(x1, ox1) - max(x_m, ox0) > epsilon and min(y1, oy1) - max(y_m, oy0) > epsilon:
+            if (
+                min(x1, ox1) - max(x_m, ox0) > epsilon
+                and min(y1, oy1) - max(y_m, oy0) > epsilon
+            ):
                 return True
         return False
 

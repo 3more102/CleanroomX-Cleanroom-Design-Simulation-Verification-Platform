@@ -727,3 +727,148 @@ def test_window_title_marks_unsaved_editor_changes():
     app.input_text.value = '{"value": 2}'
     app._update_title()
     assert app.root.value.endswith("*")
+
+def test_dirty_title_debounces_recovery_checkpoint():
+    class Root:
+        def __init__(self):
+            self.value = ""
+            self.after_calls = []
+            self.cancelled = []
+
+        def title(self, value):
+            self.value = value
+
+        def after(self, delay, callback):
+            token = f"after-{len(self.after_calls) + 1}"
+            self.after_calls.append((delay, callback, token))
+            return token
+
+        def after_cancel(self, token):
+            self.cancelled.append(token)
+
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    class Text:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self, *args):
+            return self.value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app.project_path = None
+    app.project = ProjectDocument(
+        name="Demo",
+        analyses=[
+            AnalysisDocument(
+                id="a",
+                name="A",
+                kind="room_verification",
+                input={"value": 1},
+            )
+        ],
+        active_analysis_id="a",
+    )
+    app._editor_analysis_id = "a"
+    app.name_var = Value("Demo")
+    app.description_var = Value("")
+    app.input_text = Text('{"value": 1}')
+    app._autosave_interval_ms = 60_000
+    app._recovery_checkpoint_after_id = None
+    app._baseline_state = app._project_state_signature()
+
+    app._update_title()
+    assert app.root.after_calls == []
+
+    app.input_text.value = '{"value": 2}'
+    app._update_title()
+    assert len(app.root.after_calls) == 1
+    delay, callback, first_token = app.root.after_calls[-1]
+    assert delay == gui_module.RECOVERY_CHECKPOINT_DEBOUNCE_MS
+    assert callback == app._run_debounced_recovery_checkpoint
+    assert app._recovery_checkpoint_after_id == first_token
+
+    app.input_text.value = '{"value": 3}'
+    app._update_title()
+    assert len(app.root.after_calls) == 2
+    assert app.root.cancelled == [first_token]
+    assert app._recovery_checkpoint_after_id == app.root.after_calls[-1][2]
+
+
+def test_debounced_recovery_checkpoint_requests_dirty_snapshot():
+    class Manager:
+        def __init__(self):
+            self.calls = []
+
+        def request_autosave(self, snapshot, *, source_path):
+            self.calls.append((snapshot, source_path))
+            return True
+
+    class Value:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app._autosave_interval_ms = 60_000
+    app._recovery_checkpoint_after_id = "after-1"
+    app._autosave_manager = Manager()
+    app.autosave_status_var = Value()
+    app.status_var = Value()
+    app._has_unsaved_changes = lambda: True
+    app._build_recovery_snapshot = lambda: {"project": {"name": "Demo"}}
+    app._autosave_source_path = lambda: Path("demo.cleanroomx.json")
+
+    app._run_debounced_recovery_checkpoint()
+
+    assert app._recovery_checkpoint_after_id is None
+    assert app._autosave_manager.calls == [
+        ({"project": {"name": "Demo"}}, Path("demo.cleanroomx.json"))
+    ]
+    assert app.autosave_status_var.value == "Autosave: saving…"
+
+
+def test_explicit_save_cancels_pending_recovery_checkpoint():
+    class Root:
+        def __init__(self):
+            self.cancelled = []
+
+        def after_cancel(self, token):
+            self.cancelled.append(token)
+
+    class Manager:
+        def __init__(self):
+            self.saved = []
+
+        def notify_explicit_save(self, path):
+            self.saved.append(path)
+
+    class Value:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = Root()
+    app._recovery_checkpoint_after_id = "after-9"
+    app._autosave_manager = Manager()
+    app.autosave_status_var = Value()
+    target = Path("saved.cleanroomx.json")
+
+    app._notify_explicit_save(target)
+
+    assert app.root.cancelled == ["after-9"]
+    assert app._recovery_checkpoint_after_id is None
+    assert app._autosave_manager.saved == [target]
+    assert app.autosave_status_var.value == "Autosave: clean"
+

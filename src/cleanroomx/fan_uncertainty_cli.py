@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .project import atomic_write_text
 from .fan_uncertainty import analyze_fan_system_uncertainty
 from .fan_uncertainty_io import load_fan_system_uncertainty
 from .fan_uncertainty_report import markdown_fan_system_uncertainty_report
@@ -33,7 +34,7 @@ def main() -> int:
         else markdown_fan_system_uncertainty_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
     return 0 if result["status"] == "complete" else 3

@@ -12,10 +12,15 @@ Final release-consolidation pull request:
 
 - PR **#431 — Release 2 final v0.101.0 consolidation**
 - Exact PR head tested: `993a2803e1af6a37af05ac0036948cc9f7fb3fce`
+- Exact tested Git tree: `a6900bc9525721d964498b70c5da68950d7d6fba`
 - Final merged `main` commit: `0f487a7e11ad81c8bcd54eb91b6420a1d46523ea`
-- GitHub Actions run **#1463**
+- Final merged Git tree: `a6900bc9525721d964498b70c5da68950d7d6fba`
+- Pull-request GitHub Actions run **#1463**
 - Run id: `36162913321`
 - Conclusion: **success**
+- Post-merge `main` push CI run **#1464** / id `36163451603`: **success** on Python 3.11, 3.12, and 3.13
+
+The tested PR tree and merged `main` tree are byte-for-byte identical.
 
 The merged final tree includes the strict engineering JSON boundary merged through #430, deterministic project-level batch execution, the remaining project-batch Markdown presentation hardening, and synchronized v0.101.0 package/runtime/demo/test/CI release identity.
 

@@ -541,32 +541,37 @@ class CleanroomXApp:
         self._update_project_history_controls()
         return recorded
 
+    def _project_from_history_state(
+        self, state: ProjectHistoryState
+    ) -> ProjectDocument:
+        """Rebuild validated project state without taking ownership of spatial data."""
+
+        spatial_present = SPATIAL_METADATA_KEY in self.project.metadata
+        spatial_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
+        restored = project_from_dict(copy.deepcopy(state.document))
+        if spatial_present:
+            # Preserve the live spatial object identity. Spatial history owns this
+            # state and its workspace may retain a reference to the same layout.
+            restored.metadata[SPATIAL_METADATA_KEY] = spatial_layout
+        return restored
+
     def _perform_project_edit(self, description: str, mutation):
         """Apply one project mutation atomically and record it for undo/redo."""
 
         before = self._capture_project_history_state()
-        rollback_project = copy.deepcopy(self.project)
-        rollback_editor_id = getattr(self, "_editor_analysis_id", None)
         try:
             result = mutation()
             # Validate the complete post-edit document before publishing the edit.
             project_from_dict(copy.deepcopy(self.project.to_dict()))
         except Exception:
-            self.project = rollback_project
-            self._editor_analysis_id = rollback_editor_id
+            self.project = self._project_from_history_state(before)
+            self._editor_analysis_id = before.editor_analysis_id
             raise
         self._record_project_edit(before, description)
         return result
 
     def _restore_project_history_state(self, state: ProjectHistoryState) -> None:
-        spatial_present = SPATIAL_METADATA_KEY in self.project.metadata
-        spatial_layout = copy.deepcopy(
-            self.project.metadata.get(SPATIAL_METADATA_KEY)
-        )
-        restored = project_from_dict(copy.deepcopy(state.document))
-        if spatial_present:
-            restored.metadata[SPATIAL_METADATA_KEY] = spatial_layout
-
+        restored = self._project_from_history_state(state)
         self.project = restored
         self.name_var.set(restored.name)
         self.description_var.set(restored.description)

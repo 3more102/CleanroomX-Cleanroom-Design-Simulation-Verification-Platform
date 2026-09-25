@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     nearest_nonoverlap_room_position,
+    resolve_room_overlaps,
     resize_room,
     room_clearance_dimensions,
     room_overlap_conflicts,
@@ -669,6 +670,53 @@ def test_nearest_nonoverlap_room_position_handles_multiple_blockers_deterministi
     assert target == (1.0, 3.0)
     moved = {**room, "x_m": target[0], "y_m": target[1]}
     assert room_overlap_conflicts([*blockers, moved]) == []
+
+
+def test_resolve_room_overlaps_moves_only_later_conflicting_rooms():
+    rooms = [
+        {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "b", "x_m": 3.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "c", "x_m": 3.0, "y_m": 3.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+    before = [dict(room) for room in rooms]
+
+    moves = resolve_room_overlaps(rooms)
+
+    assert rooms == before
+    assert moves == [
+        {"room_id": "b", "x_m": 4.0, "y_m": 0.0, "dx_m": 1.0, "dy_m": 0.0},
+        {"room_id": "c", "x_m": 3.0, "y_m": 4.0, "dx_m": 0.0, "dy_m": 1.0},
+    ]
+    moved_by_id = {move["room_id"]: move for move in moves}
+    resolved = [
+        {
+            **room,
+            "x_m": moved_by_id.get(room["id"], {}).get("x_m", room["x_m"]),
+            "y_m": moved_by_id.get(room["id"], {}).get("y_m", room["y_m"]),
+        }
+        for room in rooms
+    ]
+    assert room_overlap_conflicts(resolved) == []
+
+
+def test_resolve_room_overlaps_keeps_edge_and_corner_touching_rooms_in_place():
+    rooms = [
+        {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 4.0, "width_m": 4.0},
+        {"id": "b", "x_m": 4.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "c", "x_m": 4.0, "y_m": 4.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    assert resolve_room_overlaps(rooms) == []
+
+
+def test_resolve_room_overlaps_is_deterministic():
+    rooms = [
+        {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 5.0, "width_m": 4.0},
+        {"id": "b", "x_m": 3.5, "y_m": 1.0, "length_m": 3.0, "width_m": 2.0},
+        {"id": "c", "x_m": 4.0, "y_m": 1.5, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    assert resolve_room_overlaps(rooms) == resolve_room_overlaps(rooms)
 
 
 def test_spatial_layout_summary_counts_room_overlap_conflicts():

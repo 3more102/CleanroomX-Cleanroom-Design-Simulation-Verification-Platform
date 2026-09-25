@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .persistence import atomic_write_text
 from .recovery_io import load_recovery_test
 from .recovery_report import markdown_recovery_report
 from .recovery_test import analyze_recovery_test
@@ -29,7 +30,7 @@ def main() -> int:
         else markdown_recovery_report(result)
     )
     if args.output:
-        Path(args.output).write_text(text, encoding="utf-8")
+        atomic_write_text(args.output, text)
     else:
         print(text)
 

@@ -4,10 +4,11 @@ import json
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
-    AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    AnalysisDocument, AtomicWriteVerificationError, PROJECT_SCHEMA,
+    PROJECT_SCHEMA_VERSION, ProjectDocument, ProjectFormatError, atomic_write_text,
+    load_project_document, project_from_dict, save_project_document,
 )
 
 
@@ -51,6 +52,59 @@ def test_atomic_write_text_cleans_temp_file_when_replace_fails(tmp_path, monkeyp
         atomic_write_text(target, "payload\n")
 
     assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_syncs_parent_directory_after_replace(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    calls = []
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_parent_directory",
+        lambda directory: calls.append(directory),
+    )
+
+    atomic_write_text(target, "payload\n")
+
+    assert calls == [tmp_path]
+    assert target.read_text(encoding="utf-8") == "payload\n"
+
+
+def test_atomic_write_text_reports_parent_directory_sync_failure(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+
+    def fail_directory_sync(_directory):
+        raise OSError("directory fsync failed")
+
+    monkeypatch.setattr(
+        project_module,
+        "_fsync_parent_directory",
+        fail_directory_sync,
+    )
+
+    with pytest.raises(OSError, match="directory fsync failed"):
+        atomic_write_text(target, "payload\n")
+
+    assert target.read_text(encoding="utf-8") == "payload\n"
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_atomic_write_text_detects_post_replace_corruption(tmp_path, monkeypatch):
+    target = tmp_path / "export.json"
+    original_replace = type(target).replace
+
+    def replace_then_corrupt(self, destination):
+        result = original_replace(self, destination)
+        destination_path = type(target)(destination)
+        destination_path.write_text("corrupt\n", encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(type(target), "replace", replace_then_corrupt)
+
+    with pytest.raises(AtomicWriteVerificationError, match="verification failed"):
+        atomic_write_text(target, "payload\n")
+
+    assert target.read_text(encoding="utf-8") == "corrupt\n"
     assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
 
 

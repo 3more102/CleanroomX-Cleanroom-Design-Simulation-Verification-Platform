@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import errno
 import json
 import os
+import stat
 from pathlib import Path
 import tempfile
 from typing import Any, Callable
@@ -17,6 +19,22 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class AtomicWriteVerificationError(OSError):
+    """Raised when staged bytes do not match the payload before atomic commit."""
+
+
+class AtomicWriteDurabilityError(OSError):
+    """Raised after replace when directory durability cannot be confirmed."""
+
+    def __init__(self, path: str | Path, cause: OSError):
+        self.path = Path(path)
+        self.cause = cause
+        super().__init__(
+            "file contents were atomically replaced, but filesystem directory "
+            f"durability could not be confirmed for {self.path}: {cause}"
+        )
 
 
 class ProjectWriteConflictError(RuntimeError):
@@ -310,6 +328,63 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _verify_temp_payload(path: Path, expected: bytes) -> None:
+    """Verify staged bytes before they can replace an existing user file."""
+    actual_size = path.stat().st_size
+    if actual_size != len(expected):
+        raise AtomicWriteVerificationError(
+            f"staged write size mismatch for {path}: "
+            f"expected {len(expected)} bytes, found {actual_size}"
+        )
+
+    expected_digest = sha256(expected).digest()
+    actual_digest = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            actual_digest.update(chunk)
+    if actual_digest.digest() != expected_digest:
+        raise AtomicWriteVerificationError(
+            f"staged write checksum mismatch for {path}"
+        )
+
+
+def _open_parent_directory_for_sync(directory: Path) -> int | None:
+    """Open a POSIX directory handle before commit so rename metadata can be synced."""
+    if os.name == "nt":
+        return None
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        return os.open(directory, flags)
+    except OSError as exc:
+        unsupported = {
+            errno.EINVAL,
+            errno.EBADF,
+            getattr(errno, "ENOTSUP", errno.EINVAL),
+            getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+        }
+        if exc.errno in unsupported:
+            return None
+        raise
+
+
+def _sync_parent_directory(handle: int | None, destination: Path) -> None:
+    """Persist the directory entry containing an atomic replace where supported."""
+    if handle is None:
+        return
+    try:
+        os.fsync(handle)
+    except OSError as exc:
+        unsupported = {
+            errno.EINVAL,
+            errno.EBADF,
+            getattr(errno, "ENOTSUP", errno.EINVAL),
+            getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+        }
+        if exc.errno in unsupported:
+            return
+        raise AtomicWriteDurabilityError(destination, exc) from exc
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -318,30 +393,51 @@ def _atomic_write_text(
 ) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = text.encode("utf-8")
 
+    existing_mode: int | None = None
+    try:
+        current = destination.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if stat.S_ISREG(current.st_mode):
+            existing_mode = stat.S_IMODE(current.st_mode)
+
+    directory_handle = _open_parent_directory_for_sync(destination.parent)
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(payload)
             handle.flush()
+            if existing_mode is not None and hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), existing_mode)
             os.fsync(handle.fileno())
+
+        _verify_temp_payload(temp_path, payload)
 
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        _sync_parent_directory(directory_handle, destination)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
         raise
+    finally:
+        if directory_handle is not None:
+            os.close(directory_handle)
     return destination
 
-
 def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+    """Verified UTF-8 atomic replace with file fsync and directory sync where supported."""
     return _atomic_write_text(path, text)
 
 

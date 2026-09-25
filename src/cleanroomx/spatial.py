@@ -351,10 +351,22 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
         for room in raw_rooms
         if isinstance(room, dict) and str(room.get("name") or "").strip()
     }
+    used_source_links: set[str] = set()
     for source in rooms:
         source_name = str(source.get("analysis_room_name") or source["name"]).strip()
-        target = by_name.get(source_name.casefold())
+        source_key = source_name.casefold()
+        if source_key in used_source_links:
+            raise SpatialSyncError(
+                "Cannot synchronize spatial geometry because multiple layout rooms "
+                f"map to analysis room {source_name!r}."
+            )
+        used_source_links.add(source_key)
+        target = by_name.get(source_key)
         if target is None:
+            if source.get("analysis_room_name"):
+                raise SpatialSyncError(
+                    f"Linked analysis room {source_name!r} does not exist in the active analysis."
+                )
             continue
         for key in ("length_m", "width_m", "height_m"):
             if target.get(key) != source[key]:

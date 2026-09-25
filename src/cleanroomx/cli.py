@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 
+from .jsonio import strict_json_dumps
 from .calculations import decay_concentration, recovery_time_minutes
 from .io import load_project, load_room
 from .project_verification import verify_project
@@ -39,18 +39,18 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.command == "verify":
         report = verify_room(load_room(args.file))
-        print(json.dumps(report.to_dict(), indent=2))
+        print(strict_json_dumps(report.to_dict(), indent=2))
         return 0 if report.passed else 2
     if args.command == "verify-project":
         report = verify_project(load_project(args.file))
-        print(json.dumps(report.to_dict(), indent=2))
+        print(strict_json_dumps(report.to_dict(), indent=2))
         return 0 if report.passed else 2
     if args.command == "decay":
         value = decay_concentration(args.initial, args.ach, args.minutes, args.efficiency)
-        print(json.dumps({"concentration_per_m3": value}, indent=2))
+        print(strict_json_dumps({"concentration_per_m3": value}, indent=2))
         return 0
     value = recovery_time_minutes(args.initial, args.target, args.ach, args.efficiency)
-    print(json.dumps({"recovery_time_minutes": value}, indent=2))
+    print(strict_json_dumps({"recovery_time_minutes": value}, indent=2))
     return 0
 
 

@@ -256,3 +256,48 @@ def test_hvac_fan_curve_requires_fan_system() -> None:
                 ],
             }
         )
+
+
+
+def test_hvac_fan_curve_check_uses_unrounded_static_pressure() -> None:
+    project = hvac_project_from_dict(
+        {
+            "name": "Fan duty precision",
+            "fan_system": {
+                "name": "Supply AHU",
+                "duct_pressure_drop_pa": 100.0004,
+                "fan_efficiency": 0.7,
+                "motor_efficiency": 0.9,
+            },
+            "fan_curve": {
+                "name": "Threshold fan",
+                "points": [
+                    {"airflow_m3_h": 0.0, "pressure_pa": 100.0002},
+                    {"airflow_m3_h": 2000.0, "pressure_pa": 100.0002},
+                ],
+            },
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 1000.0,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+    result = analyze_hvac_project(project)
+    check = result["fan_curve_duty_check"]
+
+    assert result["supply_fan"]["total_static_pressure_pa"] == 100.0
+    assert check is not None
+    assert check["required_pressure_pa"] == 100.0004
+    assert check["available_fan_pressure_pa"] == 100.0002
+    assert check["pressure_margin_pa"] == -0.0002
+    assert check["status"] == "fail"
+    assert check["passes_required_duty"] is False

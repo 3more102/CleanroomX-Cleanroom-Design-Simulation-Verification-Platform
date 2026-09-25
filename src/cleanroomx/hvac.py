@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import math
 
-from .airflow import analyze_air_balance
+from .airflow import _format_air_balance_calculation, calculate_air_balance
 from .branch_network import (
     _format_branch_flow_network_calculation,
     calculate_branch_flow_network,
 )
 from .duct import _format_duct_network_calculation, calculate_duct_network
-from .fan import analyze_supply_fan
+from .fan import _format_supply_fan_calculation, calculate_supply_fan
 from .fan_curve import check_fan_duty_against_curve
 from .hvac_models import HVACProject
-from .thermal import analyze_thermal_design
+from .thermal import _format_thermal_design_calculation, calculate_thermal_design
 
 
 def analyze_hvac_project(project: HVACProject) -> dict:
@@ -26,12 +26,16 @@ def analyze_hvac_project(project: HVACProject) -> dict:
     all_air_balances_pass = True
 
     for room in project.rooms:
-        thermal = analyze_thermal_design(
+        thermal_calculation = calculate_thermal_design(
             room.thermal_design,
             room.cleanroom_airflow_m3_h,
         )
-        governing_airflow = thermal["governing_supply_airflow_m3_h"]
-        air_balance = analyze_air_balance(governing_airflow, room.air_balance)
+        thermal = _format_thermal_design_calculation(thermal_calculation)
+        governing_airflow = thermal_calculation["governing_supply_airflow_m3_h"]
+        air_balance_calculation = calculate_air_balance(
+            governing_airflow, room.air_balance
+        )
+        air_balance = _format_air_balance_calculation(air_balance_calculation)
         all_air_balances_pass = (
             all_air_balances_pass
             and air_balance["passes_minimum_surplus"]
@@ -70,9 +74,9 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         total_governing_airflow += governing_airflow
         total_return_airflow += room.air_balance.return_airflow_m3_h
         total_exhaust_airflow += room.air_balance.exhaust_airflow_m3_h
-        total_net_surplus += air_balance["net_surplus_m3_h"]
-        total_cooling_kw += thermal["preliminary_cooling_capacity_kw"]
-        total_heating_kw += thermal["preliminary_heating_capacity_kw"]
+        total_net_surplus += air_balance_calculation["net_surplus_m3_h"]
+        total_cooling_kw += thermal_calculation["preliminary_cooling_capacity_kw"]
+        total_heating_kw += thermal_calculation["preliminary_heating_capacity_kw"]
 
     duct_calculation = (
         calculate_duct_network(project.duct_network)
@@ -128,18 +132,19 @@ def analyze_hvac_project(project: HVACProject) -> dict:
         else:
             duct_override = None
             duct_source = None
-        supply_fan = analyze_supply_fan(
+        fan_calculation = calculate_supply_fan(
             total_governing_airflow,
             project.fan_system,
             terminal_filter_pressure_drop_pa=filter_drop,
             duct_pressure_drop_override_pa=duct_override,
             duct_pressure_drop_source=duct_source,
         )
+        supply_fan = _format_supply_fan_calculation(fan_calculation)
         if project.fan_curve is not None:
             fan_curve_duty_check = check_fan_duty_against_curve(
                 project.fan_curve,
                 total_governing_airflow,
-                supply_fan["total_static_pressure_pa"],
+                fan_calculation["total_static_pressure_pa"],
             )
 
     return {

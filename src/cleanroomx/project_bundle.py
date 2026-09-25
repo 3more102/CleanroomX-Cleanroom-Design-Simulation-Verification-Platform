@@ -408,6 +408,10 @@ def _manifest_reference_set(dependencies: list[dict[str, Any]]) -> set[tuple[str
             raise ProjectBundleError(
                 f"dependencies[{index}].references must be an array"
             )
+        if not refs:
+            raise ProjectBundleError(
+                f"dependencies[{index}].references must contain at least one project reference"
+            )
         for ref_index, reference in enumerate(refs):
             if not isinstance(reference, dict):
                 raise ProjectBundleError(

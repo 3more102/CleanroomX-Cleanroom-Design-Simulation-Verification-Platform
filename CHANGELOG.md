@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased atomic CLI output persistence — 2026-09-25
+
+- Centralizes the existing same-directory temporary-file, flush/fsync, and atomic-replace behavior in a GUI-independent persistence module.
+- Routes all 23 engineering CLI `--output` paths through the shared atomic writer instead of direct `Path.write_text()` truncation.
+- Preserves the previous complete output when replacement or a pre-replace safety check fails, and removes abandoned temporary files on failure.
+- Keeps `cleanroomx.project.atomic_write_text` available as a compatibility re-export, so project, recovery, and GUI callers retain their existing import surface.
+- Adds focused persistence and CLI failure-injection regressions without changing project schema, solver equations, numerical tolerances, report content, exit-code semantics, or stdout behavior.
+
 ## Unreleased external project write protection — 2026-09-25
 
 - Binds each opened project to the exact stable on-disk content revision that was parsed, retrying if the file changes during open.

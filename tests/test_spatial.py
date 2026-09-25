@@ -8,6 +8,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    spatial_layout_summary,
     sync_layout_to_analysis,
 )
 
@@ -177,3 +178,63 @@ def test_sync_layout_ignores_analysis_kinds_without_room_geometry_contract():
         analysis,
     ) is False
     assert analysis.input == original
+
+
+def test_spatial_layout_summary_reports_operator_metrics_and_unassigned_devices():
+    summary = spatial_layout_summary(
+        {
+            "rooms": [
+                {
+                    "id": "process",
+                    "name": "Process",
+                    "x_m": 0,
+                    "y_m": 0,
+                    "length_m": 6,
+                    "width_m": 5,
+                    "height_m": 3,
+                    "pressure_pa": 30,
+                },
+                {
+                    "id": "ante",
+                    "name": "Ante",
+                    "x_m": 7,
+                    "y_m": 0,
+                    "length_m": 4,
+                    "width_m": 3,
+                    "height_m": 2.5,
+                    "pressure_pa": 8,
+                },
+            ],
+            "devices": [
+                {
+                    "id": "d1",
+                    "type": "ffu",
+                    "name": "FFU-1",
+                    "room_id": "process",
+                    "x_m": 2,
+                    "y_m": 2,
+                    "z_m": 3,
+                },
+                {
+                    "id": "d2",
+                    "type": "sensor",
+                    "name": "DP-1",
+                    "room_id": None,
+                    "x_m": 12,
+                    "y_m": 4,
+                    "z_m": 1.5,
+                },
+            ],
+        }
+    )
+
+    assert summary["room_count"] == 2
+    assert summary["device_count"] == 2
+    assert summary["footprint_m2"] == 42
+    assert summary["volume_m3"] == 120
+    assert summary["pressure_min_pa"] == 8
+    assert summary["pressure_max_pa"] == 30
+    assert summary["device_counts"]["ffu"] == 1
+    assert summary["device_counts"]["sensor"] == 1
+    assert summary["unassigned_device_count"] == 1
+    assert summary["extents_m"] == {"width": 11, "height": 5}

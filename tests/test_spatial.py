@@ -12,6 +12,7 @@ from cleanroomx.spatial import (
     reassociate_device,
     repair_device_assignments,
     spatial_issues,
+    spatial_sync_blockers,
     sync_layout_to_analysis,
 )
 
@@ -363,3 +364,172 @@ def test_repair_device_assignments_repairs_only_room_links():
         (device["id"], device["x_m"], device["y_m"], device["z_m"])
         for device in layout["devices"]
     ] == original_positions
+
+def test_single_room_sync_uses_matching_room_name_when_layout_has_multiple_rooms():
+    analysis = AnalysisDocument(
+        id="room",
+        name="Room",
+        kind="room_verification",
+        input={
+            "name": "Target",
+            "length_m": 2,
+            "width_m": 2,
+            "height_m": 2,
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "other",
+                "name": "Other",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "target",
+                "name": "Target",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 7,
+                "width_m": 6,
+                "height_m": 3.5,
+            },
+        ]
+    }
+
+    assert spatial_sync_blockers(layout, analysis) == []
+    assert sync_layout_to_analysis(layout, analysis) is True
+    assert analysis.input["length_m"] == 7
+    assert analysis.input["width_m"] == 6
+    assert analysis.input["height_m"] == 3.5
+
+
+def test_spatial_sync_blockers_reject_ambiguous_single_room_mapping_and_duplicate_names():
+    analysis = AnalysisDocument(
+        id="room",
+        name="Room",
+        kind="room_verification",
+        input={
+            "name": "Target",
+            "length_m": 2,
+            "width_m": 2,
+            "height_m": 2,
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "Other",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+            {
+                "id": "b",
+                "name": "Other",
+                "x_m": 5,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 4,
+                "height_m": 3,
+            },
+        ]
+    }
+
+    blockers = spatial_sync_blockers(layout, analysis)
+
+    assert len(blockers) == 2
+    assert "must be unique" in blockers[0]
+    assert "cannot be mapped unambiguously" in blockers[1]
+    assert sync_layout_to_analysis(layout, analysis) is False
+
+
+def test_spatial_sync_blockers_reject_duplicate_project_analysis_room_names():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 5, "width_m": 4, "height_m": 3},
+                {"name": "Process", "length_m": 6, "width_m": 4, "height_m": 3},
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+            }
+        ]
+    }
+
+    blockers = spatial_sync_blockers(layout, analysis)
+
+    assert len(blockers) == 1
+    assert "Analysis room names must be unique" in blockers[0]
+
+
+def test_spatial_issues_reports_vertical_device_bounds():
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 5,
+                "width_m": 4,
+                "height_m": 3,
+            }
+        ],
+        "devices": [
+            {
+                "id": "high",
+                "type": "sensor",
+                "name": "High Sensor",
+                "room_id": "process",
+                "x_m": 2,
+                "y_m": 2,
+                "z_m": 3.2,
+            },
+            {
+                "id": "low",
+                "type": "equipment",
+                "name": "Below Floor",
+                "room_id": "process",
+                "x_m": 3,
+                "y_m": 2,
+                "z_m": -0.1,
+            },
+            {
+                "id": "ok",
+                "type": "ffu",
+                "name": "Ceiling FFU",
+                "room_id": "process",
+                "x_m": 1,
+                "y_m": 1,
+                "z_m": 3,
+            },
+        ],
+    }
+
+    issues = spatial_issues(layout)
+    codes = [issue["code"] for issue in issues]
+
+    assert "DEVICE_ABOVE_CEILING" in codes
+    assert "DEVICE_BELOW_FLOOR" in codes
+    assert not any(issue.get("device_id") == "ok" for issue in issues)
+

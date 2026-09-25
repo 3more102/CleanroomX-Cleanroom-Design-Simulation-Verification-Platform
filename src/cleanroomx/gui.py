@@ -28,6 +28,7 @@ from .application import (
     run_analysis,
     validate_analysis_input,
     validate_application_registry,
+    verify_analysis_run_bundle,
 )
 from .project import (
     AnalysisDocument,
@@ -248,6 +249,7 @@ class CleanroomXApp:
         file_menu.add_separator()
         file_menu.add_command(label="Export Result JSON...", command=self.export_result_json)
         file_menu.add_command(label="Export Run Bundle JSON...", command=self.export_run_bundle_json)
+        file_menu.add_command(label="Verify Run Bundle JSON...", command=self.verify_run_bundle_json)
         file_menu.add_command(label="Export Report Markdown...", command=self.export_report_markdown)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
@@ -1557,6 +1559,40 @@ class CleanroomXApp:
                 ) + "\n",
                 label="Run bundle",
             )
+
+    def verify_run_bundle_json(self) -> None:
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Verify CleanroomX run bundle",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        source_path = Path(path)
+        try:
+            document = _strict_json_loads(source_path.read_text(encoding="utf-8"))
+            verification = verify_analysis_run_bundle(document)
+        except Exception as exc:
+            self.status_var.set("Run bundle verification failed")
+            messagebox.showerror(
+                "Run bundle verification failed",
+                str(exc),
+                parent=self.root,
+            )
+            return
+
+        self.status_var.set(f"Verified run bundle — {source_path.name}")
+        messagebox.showinfo(
+            "Run bundle verified",
+            (
+                f"Analysis: {verification['analysis_kind']}\n"
+                f"CleanroomX: {verification['cleanroomx_version']}\n"
+                f"Input SHA-256: {verification['input_sha256']}\n"
+                f"Bundle SHA-256: {verification['bundle_sha256']}\n"
+                f"External dependencies: {verification['external_dependency_count']}"
+            ),
+            parent=self.root,
+        )
 
     def export_report_markdown(self) -> None:
         if self.last_run is None:

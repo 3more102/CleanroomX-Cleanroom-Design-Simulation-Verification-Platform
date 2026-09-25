@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from threading import Event
 
 import pytest
 
+import cleanroomx.autosave as autosave_module
 from cleanroomx.autosave import (
     AutosaveManager,
     RECOVERY_SCHEMA,
@@ -204,4 +207,207 @@ def test_autosave_rejects_non_finite_snapshot_before_background_write(tmp_path):
             )
         assert not (tmp_path / "recovery").exists()
     finally:
+        manager.shutdown(wait=True)
+
+
+def test_stale_inflight_autosave_cannot_rotate_prior_session_recovery(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    recovery_dir = tmp_path / "recovery"
+
+    old_manager = AutosaveManager(
+        recovery_dir,
+        history_limit=1,
+        session_id="old-session",
+    )
+    try:
+        old_manager.begin_project(source)
+        assert old_manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=source,
+        )
+        old_manager.wait_for_idle()
+        old_path = old_manager.status().artifact_path
+        assert old_path is not None and old_path.exists()
+    finally:
+        old_manager.shutdown(wait=True)
+
+    write_completed = Event()
+    release_worker = Event()
+    original_atomic_write = autosave_module.atomic_write_text
+
+    def blocking_atomic_write(path, text):
+        original_atomic_write(path, text)
+        write_completed.set()
+        if not release_worker.wait(5.0):
+            raise TimeoutError("test did not release blocked autosave worker")
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", blocking_atomic_write)
+
+    current_manager = AutosaveManager(
+        recovery_dir,
+        history_limit=1,
+        session_id="current-session",
+    )
+    try:
+        current_manager.begin_project(source)
+        assert current_manager.request_autosave(
+            _snapshot(_project(), marker=2),
+            source_path=source,
+        )
+        assert write_completed.wait(5.0)
+
+        # Explicit save invalidates the in-flight recovery before its worker
+        # completes. The stale generation must not get a chance to evict the
+        # older accepted recovery during history rotation.
+        current_manager.notify_explicit_save(source)
+        release_worker.set()
+        current_manager.wait_for_idle()
+
+        assert current_manager.status().state == "idle"
+        assert old_path.exists()
+        assert list(recovery_dir.glob("*.recovery.json")) == [old_path]
+    finally:
+        release_worker.set()
+        current_manager.shutdown(wait=True)
+
+
+def test_history_rotation_failure_preserves_written_recovery_and_reports_failure(
+    tmp_path, monkeypatch
+):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    manager.begin_project(source)
+
+    def fail_rotation(_identity):
+        raise OSError("retention cleanup blocked")
+
+    monkeypatch.setattr(manager, "_rotate_history", fail_rotation)
+    try:
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=7),
+            source_path=source,
+        )
+        with pytest.raises(RuntimeError, match="history cleanup failed"):
+            manager.wait_for_idle()
+
+        status = manager.status()
+        assert status.state == "failed"
+        assert status.artifact_path is not None
+        assert status.artifact_path.exists()
+        assert "retention cleanup blocked" in status.message
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_done_future_remains_owned_until_callback_finalizes(tmp_path, monkeypatch):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+
+    callback_entered = Event()
+    release_callback = Event()
+    second_write_started = Event()
+    release_second_write = Event()
+
+    original_on_write_done = manager._on_write_done
+    original_write_recovery = manager._write_recovery
+
+    def blocking_on_write_done(request, future):
+        callback_entered.set()
+        if not release_callback.wait(5.0):
+            raise TimeoutError("test did not release autosave completion callback")
+        return original_on_write_done(request, future)
+
+    def controlled_write_recovery(request):
+        artifact = original_write_recovery(request)
+        snapshot = json.loads(request.snapshot_text)
+        if snapshot["ui_state"]["marker"] == 2:
+            second_write_started.set()
+            if not release_second_write.wait(5.0):
+                raise TimeoutError("test did not release second autosave write")
+        return artifact
+
+    monkeypatch.setattr(manager, "_on_write_done", blocking_on_write_done)
+    monkeypatch.setattr(manager, "_write_recovery", controlled_write_recovery)
+
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=1),
+            source_path=source,
+        )
+        assert callback_entered.wait(5.0)
+
+        # The first Future is already done, but its callback has not finalized
+        # shared coordinator state. The new snapshot must remain pending rather
+        # than replacing the Future/request pair owned by that callback.
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=2),
+            source_path=source,
+        )
+
+        release_callback.set()
+        assert second_write_started.wait(5.0)
+
+        with pytest.raises(TimeoutError):
+            manager.wait_for_idle(timeout=0.05)
+
+        release_second_write.set()
+        manager.wait_for_idle()
+
+        status = manager.status()
+        assert status.state == "saved"
+        assert status.artifact_path is not None
+        artifact = load_recovery_artifact(status.artifact_path)
+        assert artifact["snapshot"]["ui_state"]["marker"] == 2
+    finally:
+        release_callback.set()
+        release_second_write.set()
+        manager.shutdown(wait=True)
+
+
+def test_stale_artifact_cleanup_failure_is_reported(tmp_path, monkeypatch):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+
+    write_completed = Event()
+    release_worker = Event()
+    original_atomic_write = autosave_module.atomic_write_text
+    original_unlink = Path.unlink
+
+    def blocking_atomic_write(path, text):
+        original_atomic_write(path, text)
+        write_completed.set()
+        if not release_worker.wait(5.0):
+            raise TimeoutError("test did not release blocked autosave worker")
+
+    def failing_recovery_unlink(path, *args, **kwargs):
+        if path.name.endswith(".recovery.json"):
+            raise OSError("recovery cleanup permission denied")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(autosave_module, "atomic_write_text", blocking_atomic_write)
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=9),
+            source_path=source,
+        )
+        assert write_completed.wait(5.0)
+
+        manager.notify_explicit_save(source)
+        monkeypatch.setattr(Path, "unlink", failing_recovery_unlink)
+        release_worker.set()
+
+        with pytest.raises(RuntimeError, match="invalidated recovery cleanup failed"):
+            manager.wait_for_idle()
+
+        status = manager.status()
+        assert status.state == "failed"
+        assert status.artifact_path is not None
+        assert status.artifact_path.exists()
+        assert "permission denied" in status.message
+    finally:
+        release_worker.set()
         manager.shutdown(wait=True)

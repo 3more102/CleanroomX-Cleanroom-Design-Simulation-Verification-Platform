@@ -361,7 +361,10 @@ class AutosaveManager:
     """Serialize recovery snapshots away from the Tk/UI thread.
 
     Explicit project files are never written by this class. Recovery artifacts are
-    separate JSON envelopes with bounded per-project history.
+    separate JSON envelopes with bounded per-project history. The coordinator owns a
+    submitted Future until its completion callback has finalized shared state. A
+    completed write may rotate history only after its project epoch is revalidated,
+    so an invalidated in-flight request cannot evict an accepted recovery generation.
     """
 
     def __init__(
@@ -454,7 +457,10 @@ class AutosaveManager:
                 snapshot_text=snapshot_text,
                 digest=digest,
             )
-            if self._future is not None and not self._future.done():
+            if self._future is not None:
+                # Future.done() becomes true before its done callbacks are
+                # guaranteed to finish. Keep ownership until _on_write_done()
+                # finalizes the active request and shared coordinator state.
                 self._pending_request = request
                 self._set_status_locked("saving", "Autosave queued")
                 return True
@@ -498,7 +504,6 @@ class AutosaveManager:
             allow_nan=False,
         ) + "\n"
         atomic_write_text(destination, text)
-        self._rotate_history(request.project_identity)
         return destination
 
     def _rotate_history(self, identity: str) -> None:
@@ -525,24 +530,44 @@ class AutosaveManager:
         with self._lock:
             current_epoch = self._epochs.get(request.project_identity, 0)
             stale = request.epoch != current_epoch
+            stale_cleanup_failure: OSError | None = None
             if stale and artifact is not None:
                 try:
                     artifact.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    stale_cleanup_failure = exc
 
-            if not stale:
+            if stale_cleanup_failure is not None:
+                self._set_status_locked(
+                    "failed",
+                    f"Autosave invalidated recovery cleanup failed: {stale_cleanup_failure}",
+                    artifact_path=artifact,
+                )
+            elif not stale:
                 if failure is None:
-                    self._last_saved_digest[request.project_identity] = request.digest
                     assert artifact is not None
+                    self._last_saved_digest[request.project_identity] = request.digest
                     self._artifacts_by_identity.setdefault(
                         request.project_identity, set()
                     ).add(artifact)
-                    self._set_status_locked(
-                        "saved",
-                        "Autosave saved",
-                        artifact_path=artifact,
-                    )
+                    try:
+                        # Retention is part of accepting this autosave generation.
+                        # Holding the lifecycle lock makes the epoch check and
+                        # history mutation atomic with respect to explicit save,
+                        # discard, and project-transition invalidation.
+                        self._rotate_history(request.project_identity)
+                    except OSError as exc:
+                        self._set_status_locked(
+                            "failed",
+                            f"Autosave recovery saved but history cleanup failed: {exc}",
+                            artifact_path=artifact,
+                        )
+                    else:
+                        self._set_status_locked(
+                            "saved",
+                            "Autosave saved",
+                            artifact_path=artifact,
+                        )
                 else:
                     self._set_status_locked(
                         "failed",
@@ -609,7 +634,11 @@ class AutosaveManager:
         deadline = time.monotonic() + timeout
         while True:
             with self._lock:
-                idle = self._future is None and self._pending_request is None
+                idle = (
+                    self._future is None
+                    and self._active_request is None
+                    and self._pending_request is None
+                )
                 failure = self._status if self._status.state == "failed" else None
             if idle:
                 if failure is not None:

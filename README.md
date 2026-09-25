@@ -4,7 +4,7 @@ CleanroomX is an open engineering platform for **cleanroom design screening, sim
 
 ## Verified development status
 
-The current release-candidate line is **CleanroomX v0.101.0 (Release 2)**, built from the consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding durable project lifecycle, recovery/history, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, precision hardening, deterministic project batch automation, and strict engineering JSON ingestion. The published `v0.100.0` tag remains immutable at its original validated commit.
+The current validated release line is **CleanroomX v0.101.0 (Release 2)**, built from the consolidated Release 2 tree on `main`. It preserves the validated solver/provenance backend while adding durable project lifecycle, recovery/history, plugin execution, immutable run evidence, dependency freshness, portable bundles/reports, precision hardening, deterministic project batch automation, strict engineering JSON ingestion, and the synchronized 2D/3D spatial workspace. The published `v0.100.0` tag remains immutable at its original validated commit.
 
 CI preserves the v0.91-v0.95 solver/provenance compatibility gates, the focused v0.100 application/desktop compatibility gate, the Release 2 consolidation gate, strict engineering-ingestion and project-batch regressions, and the complete suite on Python **3.11, 3.12, and 3.13**. Every matrix job builds and installs a clean wheel and validates packaged resources; Python 3.13 also runs the installed Tk/Xvfb desktop smoke and Release 2 performance evidence.
 

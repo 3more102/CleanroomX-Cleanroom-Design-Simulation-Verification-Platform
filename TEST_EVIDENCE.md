@@ -1,8 +1,30 @@
-# CleanroomX v0.101.0 Release 2 Test Evidence
+# CleanroomX v0.102.0 Synchronized Spatial Release Test Evidence
 
 ## Verified final baseline
 
 Validation date: 2026-09-25
+
+## v0.102.0 final synchronized spatial baseline
+
+- PR **#442 — Complete spatial engineering synchronization state**
+- Exact tested PR head: `db9169555127b1799f261f31113d18cdaf2518ed`
+- Merged `main` commit: `2c8d0696170080d5c333ff1fc809f671aec1ac1d`
+- Exact tested and merged Git tree: `af3c534599ee0921f8f21c8a14bd7b6b3e209258`
+- PR CI run **#1503** / id `36168565655`: **success**
+- Focused spatial-design gate: **41 passed**
+- Python 3.11 complete suite: **985 passed**
+- Python 3.12 complete suite: **985 passed**
+- Python 3.13 complete suite: **985 passed**
+- Release 2 consolidation gate: **131 passed**
+- application/desktop/input-contract/strict-ingestion/project-batch gate: **291 passed**
+- Windows PowerShell/CMD checkout launcher smoke: **success**
+- Python 3.13 installed Tk/Xvfb desktop smoke: **CleanroomX GUI smoke: PASS**
+- Clean wheel build/install: **success** on Python 3.11, 3.12, and 3.13
+
+The tested PR head and the squash-merged `main` commit have the same Git tree. The release-identity bump to 0.102.0 is intentionally metadata/publishing-only and must pass the same CI matrix before merge and again on `main` before the immutable tag is published.
+
+The spatial closure adds persisted synchronization provenance and deterministic room states (**synchronized**, **geometry newer**, **engineering newer**, **conflicting**, **unmapped**), fail-closed ambiguity handling, persistence validation, all-mappings preflight before mutation, UI visibility, and focused transform/zoom regressions without changing validated solver semantics.
+
 
 Final Release 2 merge on `main`:
 

@@ -311,6 +311,23 @@ def atomic_write_text(
     return destination
 
 
+def serialize_project_document(project: ProjectDocument) -> str:
+    data = project.to_dict()
+    project_from_dict(data)
+    return json.dumps(
+        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
+    ) + "\n"
+
+
+def project_document_fingerprint(project: ProjectDocument) -> ProjectFileFingerprint:
+    payload = serialize_project_document(project).encode("utf-8")
+    return ProjectFileFingerprint(
+        sha256=hashlib.sha256(payload).hexdigest(),
+        size_bytes=len(payload),
+        mtime_ns=0,
+    )
+
+
 def save_project_document(
     path: str | Path,
     project: ProjectDocument,
@@ -318,11 +335,7 @@ def save_project_document(
     expected_fingerprint: ProjectFileFingerprint | None = None,
 ) -> Path:
     destination = Path(path)
-    data = project.to_dict()
-    project_from_dict(data)
-    text = json.dumps(
-        data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
-    ) + "\n"
+    text = serialize_project_document(project)
     return atomic_write_text(
         destination, text, expected_fingerprint=expected_fingerprint
     )

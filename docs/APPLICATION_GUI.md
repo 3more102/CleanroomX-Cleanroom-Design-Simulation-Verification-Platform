@@ -46,7 +46,9 @@ xvfb-run -a cleanroomx-gui --demo --smoke
 
 Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stores project metadata, an ordered list of analyses, and an optional active analysis identifier. Each analysis stores a stable id, display name, backend analysis kind, and backend input JSON.
 
-Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
+Project saves are validated before writing and use an atomic temporary-file replacement. When an existing project is opened, CleanroomX records a SHA-256 fingerprint of the exact bytes it parsed. Before **Save** replaces that file, CleanroomX verifies that the on-disk content still matches the opened/last-saved fingerprint. If another process, editor, sync client, or CleanroomX instance changed, replaced, or deleted the file, the save is blocked: the disk version is preserved, the current work remains dirty/recoverable, and the operator can reopen the changed file or use **Save Project As** to preserve the current work separately. Timestamp-only metadata changes do not trigger a conflict when file content is unchanged. The same protection applies when **Save Project As** selects the currently open path; a genuinely different Save-As destination keeps the normal explicit overwrite semantics of the file chooser.
+
+The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
 ## Recovery autosave
 
@@ -74,7 +76,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic, filesystem errors are surfaced in the GUI, and a stale explicit project save is rejected instead of overwriting externally changed content.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 

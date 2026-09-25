@@ -53,7 +53,6 @@ def _app() -> CleanroomXApp:
     app._recovery_source_path = None
     app._restored_recovery_artifact = None
     app._migration_source_path = None
-    app._project_migration_info = None
     app._editor_analysis_id = None
     app._baseline_state = ""
     app._autosave_interval_ms = 0
@@ -79,8 +78,6 @@ def test_legacy_project_opens_as_protected_unsaved_migration(tmp_path):
     assert app.project.name == "Legacy Project"
     assert app.project_path == source
     assert app._migration_source_path == source.resolve()
-    assert app._project_migration_info.migrated is True
-    assert app._project_migration_info.source_schema_version == 0
     assert app._has_unsaved_changes() is True
     assert "Save Project As" in app.status_var.value
     assert "Migrated copy" in app.root.last_title
@@ -164,7 +161,6 @@ def test_migrated_save_as_preserves_original_and_writes_current_schema(
     assert saved["project"]["name"] == "Legacy Project"
     assert app.project_path == destination
     assert app._migration_source_path is None
-    assert app._project_migration_info is None
     assert app._has_unsaved_changes() is False
 
 def test_current_schema_project_open_remains_clean(tmp_path):
@@ -191,7 +187,6 @@ def test_current_schema_project_open_remains_clean(tmp_path):
 
     assert app.project.name == "Current Project"
     assert app._migration_source_path is None
-    assert app._project_migration_info.migrated is False
     assert app._has_unsaved_changes() is False
     assert app.status_var.value == "Opened current.cleanroomx.json"
     assert "Migrated copy" not in app.root.last_title
@@ -227,7 +222,6 @@ def test_failed_migrated_save_as_keeps_source_protection(tmp_path, monkeypatch):
     assert not destination.exists()
     assert app.project_path == source
     assert app._migration_source_path == source.resolve()
-    assert app._project_migration_info.migrated is True
     assert app._has_unsaved_changes() is True
     assert errors == [("Save failed", "disk full")]
 

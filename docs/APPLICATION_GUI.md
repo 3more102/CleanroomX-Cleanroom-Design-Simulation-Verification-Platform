@@ -48,6 +48,8 @@ Desktop projects use the `cleanroomx.project` JSON schema. Schema version 1 stor
 
 Project saves are validated before writing and use an atomic temporary-file replacement. The loader rejects unsupported future schema versions, duplicate analysis ids, invalid active-analysis references, malformed JSON, and non-finite JSON constants such as `NaN` or `Infinity`. Supported legacy single-analysis shapes are migrated into the current document model on load.
 
+When a saved project is opened, the desktop records a SHA-256 fingerprint of that exact source file. Before a normal **Save**, CleanroomX fingerprints the current on-disk file again. If another process or CleanroomX window changed or deleted the source, normal Save is blocked so the external version is preserved; the operator can redirect the in-memory work to **Save Project As**. Choosing the already-open path through Save As after such a conflict requires an explicit overwrite confirmation. A successful save refreshes the baseline fingerprint for subsequent edits.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. By default, a dirty project is sampled every 60 seconds; use `--autosave-interval-seconds N` to change the interval or `0` to disable recovery autosave. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
@@ -74,7 +76,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 4. Use **Validate** to run the real backend parser/validation path.
 5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
-7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
+7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic, filesystem errors are surfaced in the GUI, and externally modified project files are protected from silent overwrite.
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 

@@ -19,6 +19,30 @@ class ProjectFormatError(ValueError):
     pass
 
 
+class AtomicWriteVerificationError(OSError):
+    """Raised when an atomic replacement cannot be verified byte-for-byte."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        actual_size: int,
+        expected_sha256: str,
+        actual_sha256: str,
+    ) -> None:
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.actual_size = actual_size
+        self.expected_sha256 = expected_sha256
+        self.actual_sha256 = actual_sha256
+        super().__init__(
+            "atomic replacement verification failed for "
+            f"{self.path}: expected {expected_size} bytes/{expected_sha256}, "
+            f"found {actual_size} bytes/{actual_sha256}"
+        )
+
+
 class ProjectWriteConflictError(RuntimeError):
     """Raised when an explicit save would overwrite a different on-disk revision."""
 
@@ -235,6 +259,68 @@ def _normalized_project_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
+def _stable_file_digest(
+    path: Path,
+    *,
+    attempts: int = 3,
+) -> tuple[os.stat_result, str]:
+    """Hash one stable path revision and reject replacement/torn-read races."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+
+    last_error: OSError | None = None
+    for _attempt in range(attempts):
+        try:
+            before_path = path.stat()
+            digest = sha256()
+            with path.open("rb") as handle:
+                before_handle = os.fstat(handle.fileno())
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                after_handle = os.fstat(handle.fileno())
+            after_path = path.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+
+        before_identity = (
+            before_path.st_dev,
+            before_path.st_ino,
+            before_path.st_size,
+            before_path.st_mtime_ns,
+        )
+        before_handle_identity = (
+            before_handle.st_dev,
+            before_handle.st_ino,
+            before_handle.st_size,
+            before_handle.st_mtime_ns,
+        )
+        after_handle_identity = (
+            after_handle.st_dev,
+            after_handle.st_ino,
+            after_handle.st_size,
+            after_handle.st_mtime_ns,
+        )
+        after_identity = (
+            after_path.st_dev,
+            after_path.st_ino,
+            after_path.st_size,
+            after_path.st_mtime_ns,
+        )
+        if (
+            before_identity
+            == before_handle_identity
+            == after_handle_identity
+            == after_identity
+        ):
+            return after_path, digest.hexdigest()
+
+        last_error = OSError(f"file changed while fingerprinting: {path}")
+
+    assert last_error is not None
+    raise last_error
+
+
 def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     """Capture a stable content revision for optimistic project-save protection."""
     source = _normalized_project_path(path)
@@ -246,30 +332,14 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     if not source.is_file():
         raise OSError(f"project path is not a regular file: {source}")
 
-    last_error: OSError | None = None
-    for _attempt in range(3):
-        before = source.stat()
-        digest = sha256()
-        try:
-            with source.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            last_error = exc
-            continue
-        after = source.stat()
-        if before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns:
-            return ProjectFileRevision(
-                path=normalized,
-                exists=True,
-                size=after.st_size,
-                mtime_ns=after.st_mtime_ns,
-                sha256=digest.hexdigest(),
-            )
-        last_error = OSError(f"project file changed while fingerprinting: {source}")
-
-    assert last_error is not None
-    raise last_error
+    stat, digest = _stable_file_digest(source)
+    return ProjectFileRevision(
+        path=normalized,
+        exists=True,
+        size=stat.st_size,
+        mtime_ns=stat.st_mtime_ns,
+        sha256=digest,
+    )
 
 
 def project_file_revision_matches(
@@ -310,6 +380,20 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _fsync_parent_directory(directory: Path) -> None:
+    """Persist a completed rename on platforms that expose directory fsync."""
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    descriptor = os.open(directory, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -330,9 +414,25 @@ def _atomic_write_text(
             handle.flush()
             os.fsync(handle.fileno())
 
+        expected_stat, expected_sha256 = _stable_file_digest(temp_path, attempts=1)
+
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        _fsync_parent_directory(destination.parent)
+
+        actual_stat, actual_sha256 = _stable_file_digest(destination)
+        if (
+            actual_stat.st_size != expected_stat.st_size
+            or actual_sha256 != expected_sha256
+        ):
+            raise AtomicWriteVerificationError(
+                destination,
+                expected_size=expected_stat.st_size,
+                actual_size=actual_stat.st_size,
+                expected_sha256=expected_sha256,
+                actual_sha256=actual_sha256,
+            )
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)

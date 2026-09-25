@@ -12,6 +12,7 @@ from tkinter import simpledialog, ttk
 from .spatial_engineering import (
     engineering_mapping_diagnostics,
     pressure_relationships,
+    resolve_room_mapping,
     room_pressure_value,
 )
 from .spatial_integrity import (
@@ -338,8 +339,27 @@ def sync_layout_to_analysis(layout: dict, analysis: Any) -> bool:
 
     changed = False
     if getattr(analysis, "kind", "") == "room_verification":
-        source = rooms[0]
-        for key in ("name", "length_m", "width_m", "height_m"):
+        mapped = [
+            source
+            for source in rooms
+            if resolve_room_mapping(source, analysis)[1] == "mapped"
+        ]
+        if len(mapped) > 1:
+            raise SpatialSyncError(
+                "Cannot synchronize room verification because multiple spatial rooms "
+                "map to the active engineering room."
+            )
+        if not mapped:
+            target_name = str(analysis.input.get("name") or "").strip()
+            if not target_name and len(rooms) == 1:
+                mapped = [rooms[0]]
+            else:
+                raise SpatialSyncError(
+                    "Cannot synchronize room verification because no spatial room "
+                    f"maps to engineering room {target_name!r}."
+                )
+        source = mapped[0]
+        for key in ("length_m", "width_m", "height_m"):
             value = source[key]
             if analysis.input.get(key) != value:
                 analysis.input[key] = value

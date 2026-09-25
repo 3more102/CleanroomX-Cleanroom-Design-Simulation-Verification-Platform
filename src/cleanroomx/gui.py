@@ -43,7 +43,7 @@ from .project import (
     save_project_document_guarded,
 )
 from .recovery_ui import RecoveryCenter
-from .run_history import RunHistory, RunHistoryEntry
+from .run_history import RunHistory, RunHistoryEntry, RunHistorySummary
 from .spatial import SpatialDesignWorkspace, sync_layout_to_analysis
 
 
@@ -432,7 +432,7 @@ class CleanroomXApp:
             ("sequence", "#", 55),
             ("analysis", "Analysis at run", 250),
             ("status", "Status", 105),
-            ("relation", "Current relation", 145),
+            ("relation", "Committed-input relation", 165),
             ("input", "Input SHA-256", 145),
         ):
             self.history_tree.heading(key, text=title)
@@ -590,54 +590,52 @@ class CleanroomXApp:
         history.append(analysis.id, analysis.name, run)
         self._refresh_run_history()
 
-    def _run_history_relation(self, entry: RunHistoryEntry) -> str:
+    def _run_history_relation(self, summary: RunHistorySummary) -> str:
         try:
-            analysis = self.project.analysis_by_id(entry.analysis_id)
+            analysis = self.project.analysis_by_id(summary.analysis_id)
         except KeyError:
             return "analysis removed"
-        if analysis_run_matches_input(entry.run, analysis.kind, analysis.input):
-            return "matches current"
-        return "historical input"
+        history = getattr(self, "_run_history", None)
+        if history is None:
+            return "unavailable"
+        try:
+            matches = history.matches_input(
+                summary.sequence, analysis.kind, analysis.input
+            )
+        except KeyError:
+            return "unavailable"
+        return "matches committed" if matches else "historical input"
 
     def _refresh_run_history(self) -> None:
         tree = getattr(self, "history_tree", None)
         if tree is None:
             return
 
-        selected_sequence: int | None = None
-        selection = tree.selection()
-        if selection:
-            token = str(selection[0])
-            if token.startswith("run-"):
-                try:
-                    selected_sequence = int(token[4:])
-                except ValueError:
-                    selected_sequence = None
-
+        selected_sequence = self._selected_run_history_sequence()
         for item in tree.get_children():
             tree.delete(item)
 
         history = getattr(self, "_run_history", None)
-        entries = () if history is None else history.entries()
+        summaries = () if history is None else history.summaries()
         available: set[int] = set()
-        for entry in entries:
-            available.add(entry.sequence)
-            digest = entry.input_sha256 or "unavailable"
+        for summary in summaries:
+            available.add(summary.sequence)
+            digest = summary.input_sha256 or "unavailable"
             tree.insert(
                 "",
                 "end",
-                iid=f"run-{entry.sequence}",
+                iid=f"run-{summary.sequence}",
                 values=(
-                    entry.sequence,
-                    entry.analysis_name,
-                    entry.run.status,
-                    self._run_history_relation(entry),
+                    summary.sequence,
+                    summary.analysis_name,
+                    summary.status,
+                    self._run_history_relation(summary),
                     digest[:12],
                 ),
             )
 
         if selected_sequence not in available:
-            selected_sequence = entries[-1].sequence if entries else None
+            selected_sequence = summaries[-1].sequence if summaries else None
         if selected_sequence is not None:
             iid = f"run-{selected_sequence}"
             tree.selection_set(iid)
@@ -649,10 +647,9 @@ class CleanroomXApp:
             if history_text is not None:
                 self._set_text(history_text, "")
 
-    def _selected_run_history_entry(self) -> RunHistoryEntry | None:
+    def _selected_run_history_sequence(self) -> int | None:
         tree = getattr(self, "history_tree", None)
-        history = getattr(self, "_run_history", None)
-        if tree is None or history is None:
+        if tree is None:
             return None
         selection = tree.selection()
         if not selection:
@@ -661,21 +658,50 @@ class CleanroomXApp:
         if not token.startswith("run-"):
             return None
         try:
-            sequence = int(token[4:])
+            return int(token[4:])
+        except ValueError:
+            return None
+
+    def _selected_run_history_entry(self) -> RunHistoryEntry | None:
+        sequence = self._selected_run_history_sequence()
+        history = getattr(self, "_run_history", None)
+        if sequence is None or history is None:
+            return None
+        try:
             return history.get(sequence)
-        except (KeyError, ValueError):
+        except KeyError:
             return None
 
     def _show_run_history_selection(self, event=None) -> None:
-        entry = self._selected_run_history_entry()
+        sequence = self._selected_run_history_sequence()
+        history = getattr(self, "_run_history", None)
         history_text = getattr(self, "history_text", None)
         if history_text is None:
             return
-        if entry is None:
+        if sequence is None or history is None:
             self._set_text(history_text, "")
             return
-        detail = entry.to_dict()
-        detail["current_relation"] = self._run_history_relation(entry)
+        try:
+            summary = history.summary(sequence)
+        except KeyError:
+            self._set_text(history_text, "")
+            return
+        detail = {
+            "sequence": summary.sequence,
+            "analysis_id": summary.analysis_id,
+            "analysis_name_at_run": summary.analysis_name,
+            "current_relation": self._run_history_relation(summary),
+            "run": {
+                "kind": summary.kind,
+                "title": summary.title,
+                "status": summary.status,
+                "input_sha256": summary.input_sha256,
+            },
+            "note": (
+                "Full historical result/report/diagnostics remain isolated in the "
+                "session snapshot and are available through explicit run-bundle export."
+            ),
+        }
         self._set_text(
             history_text,
             json.dumps(detail, indent=2, ensure_ascii=False, allow_nan=False),
@@ -724,6 +750,7 @@ class CleanroomXApp:
         ):
             self._invalidate_last_run_for(analysis.id)
         self._sync_metadata()
+        self._refresh_run_history()
         return analysis
 
     def _sync_metadata(self) -> None:
@@ -1074,6 +1101,7 @@ class CleanroomXApp:
             self.status_var.set("Spatial geometry already matches the active analysis")
             return
         self._invalidate_last_run_for(analysis.id)
+        self._refresh_run_history()
         self._load_analysis_into_editor(analysis)
         self._update_title()
         self.status_var.set(
@@ -1482,6 +1510,7 @@ class CleanroomXApp:
         self.project.active_analysis_id = (
             self.project.analyses[0].id if self.project.analyses else None
         )
+        self._refresh_run_history()
         self._refresh_analysis_list()
         self._update_title()
 
@@ -1516,6 +1545,7 @@ class CleanroomXApp:
             return
         analysis.input = payload
         self._invalidate_last_run_for(analysis.id)
+        self._refresh_run_history()
         self._load_analysis_into_editor(analysis)
         self.status_var.set(f"Imported {source_path.name}")
         self._update_title()

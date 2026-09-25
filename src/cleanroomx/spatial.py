@@ -15,6 +15,14 @@ from .spatial_integrity import (
     SPATIAL_LAYOUT_VERSION,
     SPATIAL_METADATA_KEY,
 )
+from .spatial_transforms import (
+    BASE_2D_PIXELS_PER_M,
+    fit_3d_zoom,
+    model_to_screen_2d,
+    project_3d,
+    screen_to_model_2d,
+    zoom_2d_at,
+)
 
 
 class SpatialSyncError(ValueError):
@@ -27,6 +35,14 @@ def _finite_number(value: Any, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return number if math.isfinite(number) else default
+
+
+def _finite_optional(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _positive(value: Any, default: float) -> float:
@@ -961,36 +977,180 @@ def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: floa
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def pressure_overlay_state(layout: dict, analysis: Any = None) -> dict:
-    """Describe pressure rendering without inventing unavailable engineering data."""
+def _pressure_result_finding(
+    result: dict | None, room_name: str
+) -> tuple[dict | None, dict | None]:
+    if not isinstance(result, dict):
+        return None, None
+    if result.get("room") == room_name and isinstance(result.get("findings"), list):
+        reports = [result]
+    else:
+        raw_reports = result.get("rooms")
+        reports = raw_reports if isinstance(raw_reports, list) else []
+    for report in reports:
+        if not isinstance(report, dict) or report.get("room") != room_name:
+            continue
+        findings = report.get("findings")
+        if not isinstance(findings, list):
+            continue
+        for finding in findings:
+            if isinstance(finding, dict) and finding.get("code") == "PRESSURE":
+                return finding, report
+    return None, None
+
+
+def pressure_overlay_state(
+    layout: dict,
+    analysis: Any = None,
+    result: dict | None = None,
+) -> dict:
+    """Project configured or verified-result pressure evidence onto spatial geometry."""
     normalized = normalize_layout(layout)
-    pressures = [
-        room["pressure_pa"]
-        for room in normalized["rooms"]
-        if room.get("pressure_pa") is not None
-    ]
-    minimum = min(pressures) if pressures else None
-    maximum = max(pressures) if pressures else None
     sync = engineering_sync_status(normalized, analysis)
-    mapping_by_room = {
-        record["room_id"]: record["state"] for record in sync["rooms"]
+    mapping_by_room = {record["room_id"]: record for record in sync["rooms"]}
+
+    payload = getattr(analysis, "input", None)
+    payload = payload if isinstance(payload, dict) else {}
+    kind = getattr(analysis, "kind", "")
+    engineering_rooms: list[dict] = []
+    if kind == "room_verification":
+        engineering_rooms = [payload]
+    elif kind == "project_verification" and isinstance(payload.get("rooms"), list):
+        engineering_rooms = [
+            item for item in payload["rooms"] if isinstance(item, dict)
+        ]
+    engineering_by_name = {
+        str(item.get("name") or "").strip().casefold(): item
+        for item in engineering_rooms
+        if str(item.get("name") or "").strip()
     }
-    rooms = []
+
+    rooms: list[dict] = []
+    target_to_room_id: dict[str, str] = {}
     for room in normalized["rooms"]:
-        available = room.get("pressure_pa") is not None
+        mapping = mapping_by_room.get(room["id"], {})
+        mapping_state = str(mapping.get("state") or "unmapped")
+        target_name = str(
+            mapping.get("analysis_room_name")
+            or room.get("analysis_room_name")
+            or room["name"]
+        ).strip()
+        target = engineering_by_name.get(target_name.casefold())
+        if kind == "room_verification" and engineering_rooms and room is normalized["rooms"][0]:
+            target = engineering_rooms[0]
+            target_name = str(target.get("name") or target_name).strip()
+        if target is not None and target_name:
+            target_to_room_id[target_name] = room["id"]
+
+        pressure = None
+        pressure_target = None
+        source = "unavailable"
+        status = "unavailable"
+        ach = None
+        finding, report = _pressure_result_finding(result, target_name)
+        actual = (
+            _finite_optional(finding.get("actual"))
+            if isinstance(finding, dict)
+            else None
+        )
+        if actual is not None:
+            pressure = actual
+            pressure_target = _finite_optional(finding.get("limit"))
+            source = "result"
+            status = str(finding.get("status") or "unavailable")
+            ach = (
+                _finite_optional(report.get("ach"))
+                if isinstance(report, dict)
+                else None
+            )
+        elif target is not None:
+            configured = _finite_optional(target.get("observed_pressure_pa"))
+            if configured is not None:
+                pressure = configured
+                source = "configured"
+                status = "configured"
+            elif room.get("pressure_pa") is not None:
+                pressure = _finite_optional(room.get("pressure_pa"))
+                source = "spatial"
+                status = mapping_state
+            pressure_target = _finite_optional(target.get("min_pressure_pa"))
+        elif room.get("pressure_pa") is not None:
+            pressure = _finite_optional(room.get("pressure_pa"))
+            source = "spatial"
+            status = "unmapped"
+
         rooms.append(
             {
                 "room_id": room["id"],
-                "availability": "available" if available else "unavailable",
-                "pressure_pa": room.get("pressure_pa") if available else None,
-                "fill": _pressure_fill(room.get("pressure_pa"), minimum, maximum),
-                "engineering_state": mapping_by_room.get(room["id"], "unmapped"),
+                "room_name": room["name"],
+                "engineering_room_name": target_name or None,
+                "availability": "available" if pressure is not None else "unavailable",
+                "pressure_pa": pressure,
+                "pressure_target_pa": pressure_target,
+                "source": source,
+                "status": status,
+                "ach": ach,
+                "engineering_state": mapping_state,
+            }
+        )
+
+    values = [item["pressure_pa"] for item in rooms if item["pressure_pa"] is not None]
+    minimum = min(values) if values else None
+    maximum = max(values) if values else None
+    for item in rooms:
+        item["fill"] = _pressure_fill(item["pressure_pa"], minimum, maximum)
+
+    requirements = (
+        payload.get("pressure_cascade", [])
+        if kind == "project_verification"
+        else []
+    )
+    result_relationships = (
+        result.get("pressure_cascade", [])
+        if isinstance(result, dict) and isinstance(result.get("pressure_cascade"), list)
+        else []
+    )
+    relationships: list[dict] = []
+    for requirement in requirements if isinstance(requirements, list) else []:
+        if not isinstance(requirement, dict):
+            continue
+        high_name = str(requirement.get("higher_pressure_room") or "").strip()
+        low_name = str(requirement.get("lower_pressure_room") or "").strip()
+        finding = next(
+            (
+                item
+                for item in result_relationships
+                if isinstance(item, dict)
+                and item.get("higher_pressure_room") == high_name
+                and item.get("lower_pressure_room") == low_name
+            ),
+            None,
+        )
+        relationships.append(
+            {
+                "higher_room_id": target_to_room_id.get(high_name),
+                "lower_room_id": target_to_room_id.get(low_name),
+                "higher_pressure_room": high_name,
+                "lower_pressure_room": low_name,
+                "limit_pa": _finite_optional(requirement.get("min_delta_pa")),
+                "actual_delta_pa": (
+                    _finite_optional(finding.get("actual_delta_pa"))
+                    if isinstance(finding, dict)
+                    else None
+                ),
+                "status": (
+                    str(finding.get("status") or "unavailable")
+                    if isinstance(finding, dict)
+                    else "unavailable"
+                ),
+                "source": "result" if isinstance(finding, dict) else "configured_requirement",
             }
         )
     return {
         "minimum_pressure_pa": minimum,
         "maximum_pressure_pa": maximum,
         "rooms": rooms,
+        "relationships": relationships,
     }
 
 
@@ -1012,6 +1172,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         on_change: Callable[[], None],
         on_sync_requested: Callable[[], None],
         status_setter: Callable[[str], None],
+        result_getter: Callable[[], Any] | None = None,
         on_history_record: Callable[
             [dict, tuple[str, str] | None, dict, tuple[str, str] | None, str],
             bool,
@@ -1025,6 +1186,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._on_change = on_change
         self._on_sync_requested = on_sync_requested
         self._status_setter = status_setter
+        self._result_getter = result_getter or (lambda: None)
         self._on_history_record = on_history_record
         self._on_undo_requested = on_undo_requested
         self._on_redo_requested = on_redo_requested
@@ -1042,6 +1204,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._show_relationships = tk.BooleanVar(value=True)
         self._coord_var = tk.StringVar(value="x 0.00 m   y 0.00 m")
         self._selection_var = tk.StringVar(value="No selection")
+        self._pressure_result_var = tk.StringVar(value="Pressure evidence: unavailable")
         self._validation_var = tk.StringVar(value="Spatial checks: PASS")
         self._sync_var = tk.StringVar(value="Engineering sync: unmapped")
         self._metrics_var = tk.StringVar(value="0 rooms")
@@ -1159,8 +1322,14 @@ class SpatialDesignWorkspace(ttk.Frame):
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 6)
         )
         ttk.Label(inspector, textvariable=self._selection_var).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(0, 6)
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 2)
         )
+        ttk.Label(
+            inspector,
+            textvariable=self._pressure_result_var,
+            anchor="w",
+            justify="left",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(0, 6))
         fields = (
             ("name", "Name"),
             ("x_m", "X (m)"),
@@ -1169,7 +1338,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("length_m", "Length (m)"),
             ("width_m", "Width (m)"),
             ("height_m", "Height (m)"),
-            ("pressure_pa", "Pressure (Pa)"),
+            ("pressure_pa", "Pressure input (Pa)"),
             ("floor_elevation_m", "Floor elev. (m)"),
             ("classification", "Classification"),
             ("analysis_room_name", "Analysis room"),
@@ -1179,7 +1348,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("swing", "Swing"),
         )
         for index, (key, label) in enumerate(fields):
-            row = 2 + index // 2
+            row = 3 + index // 2
             column = (index % 2) * 2
             ttk.Label(inspector, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4), pady=2)
             var = tk.StringVar()
@@ -1187,7 +1356,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             ttk.Entry(inspector, textvariable=var, width=18).grid(
                 row=row, column=column + 1, sticky="ew", padx=(0, 8), pady=2
             )
-        button_row = 2 + (len(fields) + 1) // 2
+        button_row = 3 + (len(fields) + 1) // 2
         ttk.Button(inspector, text="Apply", command=self.apply_properties).grid(
             row=button_row, column=3, sticky="e", pady=(8, 0)
         )
@@ -1459,6 +1628,7 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             self._selection_var.set("No selection")
+            self._pressure_result_var.set("Pressure evidence: unavailable")
             for var in self._property_vars.values():
                 var.set("")
             return
@@ -1477,6 +1647,32 @@ class SpatialDesignWorkspace(ttk.Frame):
             if room_sync is not None:
                 selection_text += " — " + room_sync["state"].replace("_", " ")
         self._selection_var.set(selection_text)
+        if self.selected and self.selected.kind == "room":
+            evidence = next(
+                (
+                    record
+                    for record in self._overlay()["rooms"]
+                    if record["room_id"] == self.selected.item_id
+                ),
+                None,
+            )
+            if evidence is None or evidence.get("pressure_pa") is None:
+                self._pressure_result_var.set("Pressure evidence: unavailable")
+            else:
+                source = str(evidence.get("source") or "unavailable").upper()
+                detail = f"{evidence['pressure_pa']:g} Pa"
+                target = evidence.get("pressure_target_pa")
+                if target is not None:
+                    detail += f" · target {target:g} Pa"
+                ach = evidence.get("ach")
+                if ach is not None:
+                    detail += f" · ACH {ach:g}"
+                status = str(evidence.get("status") or "")
+                if status and status not in {"configured", "unmapped"}:
+                    detail += f" · {status}"
+                self._pressure_result_var.set(f"Pressure evidence: {source} · {detail}")
+        else:
+            self._pressure_result_var.set("Pressure evidence: not applicable")
         for key, var in self._property_vars.items():
             value = item.get(key, "")
             var.set("" if value is None else str(value))
@@ -1650,20 +1846,28 @@ class SpatialDesignWorkspace(ttk.Frame):
         return min_x, min_y, max_x, max_y
 
     def _scale_2d(self) -> float:
-        return 55.0 * self.layout["view"]["zoom_2d"]
+        return BASE_2D_PIXELS_PER_M * self.layout["view"]["zoom_2d"]
 
     def _world_to_canvas(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            self.canvas_2d.winfo_width() / 2 + self.layout["view"]["pan_x"] + x * scale,
-            self.canvas_2d.winfo_height() / 2 + self.layout["view"]["pan_y"] + y * scale,
+        return model_to_screen_2d(
+            x,
+            y,
+            width_px=self.canvas_2d.winfo_width(),
+            height_px=self.canvas_2d.winfo_height(),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
         )
 
     def _canvas_to_world(self, x: float, y: float) -> tuple[float, float]:
-        scale = self._scale_2d()
-        return (
-            (x - self.canvas_2d.winfo_width() / 2 - self.layout["view"]["pan_x"]) / scale,
-            (y - self.canvas_2d.winfo_height() / 2 - self.layout["view"]["pan_y"]) / scale,
+        return screen_to_model_2d(
+            x,
+            y,
+            width_px=self.canvas_2d.winfo_width(),
+            height_px=self.canvas_2d.winfo_height(),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
         )
 
     def fit_views(self) -> None:
@@ -1672,14 +1876,45 @@ class SpatialDesignWorkspace(ttk.Frame):
         height_m = max(1.0, max_y - min_y)
         cw = max(200, self.canvas_2d.winfo_width())
         ch = max(200, self.canvas_2d.winfo_height())
-        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (55 * width_m), ch / (55 * height_m))))
+        self.layout["view"]["zoom_2d"] = max(0.2, min(5.0, 0.78 * min(cw / (BASE_2D_PIXELS_PER_M * width_m), ch / (BASE_2D_PIXELS_PER_M * height_m))))
         scale = self._scale_2d()
         cx = (min_x + max_x) / 2
         cy = (min_y + max_y) / 2
         self.layout["view"]["pan_x"] = -cx * scale
         self.layout["view"]["pan_y"] = -cy * scale
-        self.layout["view"]["zoom_3d"] = 1.0
+        model_height = max(
+            (
+                room.get("floor_elevation_m", self.layout["floor"]["elevation_m"])
+                + room["height_m"]
+                - self.layout["floor"]["elevation_m"]
+                for room in self.layout["rooms"]
+            ),
+            default=self.layout["floor"]["default_ceiling_height_m"],
+        )
+        self.layout["view"]["zoom_3d"] = fit_3d_zoom(
+            width_m,
+            height_m,
+            model_height,
+            width_px=max(200, self.canvas_3d.winfo_width()),
+            height_px=max(200, self.canvas_3d.winfo_height()),
+        )
+        self.layout["view"]["pan_3d_x"] = 0.0
+        self.layout["view"]["pan_3d_y"] = 0.0
         self._persist("Fit spatial views")
+
+    def _result_payload(self) -> dict | None:
+        candidate = self._result_getter()
+        if isinstance(candidate, dict):
+            return candidate
+        result = getattr(candidate, "result", None)
+        return result if isinstance(result, dict) else None
+
+    def _overlay(self) -> dict:
+        return pressure_overlay_state(
+            self.layout,
+            self._analysis_getter(),
+            self._result_payload(),
+        )
 
     def redraw(self) -> None:
         self._refresh_validation()
@@ -1688,92 +1923,52 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._draw_2d()
         self._draw_3d()
 
-    def _pressure_relationships(
-        self,
-    ) -> list[tuple[dict, dict, float | None, float | None, str]]:
+    def _pressure_relationships(self) -> list[tuple[dict, dict, dict]]:
         if not self._show_relationships.get():
             return []
-        analysis = self._analysis_getter()
-        payload = getattr(analysis, "input", None)
-        if not isinstance(payload, dict):
-            return []
-        raw = payload.get("pressure_cascade")
-        if not isinstance(raw, list):
-            return []
-        rooms_by_name: dict[str, dict] = {}
-        for room in self.layout["rooms"]:
-            for name in (room.get("name"), room.get("analysis_room_name")):
-                key = str(name or "").strip().casefold()
-                if key and key not in rooms_by_name:
-                    rooms_by_name[key] = room
-        relationships: list[
-            tuple[dict, dict, float | None, float | None, str]
-        ] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            high = rooms_by_name.get(
-                str(item.get("higher_pressure_room") or "").strip().casefold()
-            )
-            low = rooms_by_name.get(
-                str(item.get("lower_pressure_room") or "").strip().casefold()
-            )
-            if high is None or low is None:
-                continue
-            delta = item.get("min_delta_pa")
-            delta_value = (
-                _finite_number(delta, 0.0)
-                if delta is not None
-                else None
-            )
-            observed_delta = None
-            if high.get("pressure_pa") is not None and low.get("pressure_pa") is not None:
-                observed_delta = (
-                    _finite_number(high.get("pressure_pa"), 0.0)
-                    - _finite_number(low.get("pressure_pa"), 0.0)
-                )
-            if observed_delta is None:
-                state = "unavailable"
-            elif delta_value is None:
-                state = "available"
-            elif observed_delta + SPATIAL_GEOMETRY_EPSILON_M >= delta_value:
-                state = "pass"
-            else:
-                state = "fail"
-            relationships.append(
-                (high, low, delta_value, observed_delta, state)
-            )
+        room_by_id = {room["id"]: room for room in self.layout["rooms"]}
+        relationships: list[tuple[dict, dict, dict]] = []
+        for evidence in self._overlay()["relationships"]:
+            high = room_by_id.get(str(evidence.get("higher_room_id") or ""))
+            low = room_by_id.get(str(evidence.get("lower_room_id") or ""))
+            if high is not None and low is not None:
+                relationships.append((high, low, evidence))
         return relationships
 
+    @staticmethod
+    def _relationship_style(status: str) -> tuple[str, tuple[int, ...]]:
+        if status == "pass":
+            return "#15803d", ()
+        if status == "fail":
+            return "#b91c1c", ()
+        return "#64748b", (6, 3)
+
     def _draw_relationships_2d(self) -> None:
-        colors = {
-            "pass": "#15803d",
-            "fail": "#b91c1c",
-            "available": "#7c3aed",
-            "unavailable": "#64748b",
-        }
-        for high, low, min_delta, observed_delta, state in self._pressure_relationships():
+        for high, low, evidence in self._pressure_relationships():
             hx = high["x_m"] + high["length_m"] / 2.0
             hy = high["y_m"] + high["width_m"] / 2.0
             lx = low["x_m"] + low["length_m"] / 2.0
             ly = low["y_m"] + low["width_m"] / 2.0
             x0, y0 = self._world_to_canvas(hx, hy)
             x1, y1 = self._world_to_canvas(lx, ly)
-            color = colors[state]
+            status = str(evidence.get("status") or "unavailable")
+            color, dash = self._relationship_style(status)
+            line_options = {"dash": dash} if dash else {}
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=2, dash=(6, 3), fill=color,
+                arrow="last", width=3, fill=color,
                 tags=("pressure_relationship",),
+                **line_options,
             )
             if self._show_labels.get():
-                if observed_delta is None and min_delta is not None:
-                    label = f"Δ unavailable / target ≥ {min_delta:g} Pa"
-                elif observed_delta is not None and min_delta is not None:
-                    label = f"Δ {observed_delta:g} Pa / target ≥ {min_delta:g} Pa"
-                elif observed_delta is not None:
-                    label = f"Δ {observed_delta:g} Pa"
+                actual = evidence.get("actual_delta_pa")
+                limit = evidence.get("limit_pa")
+                if actual is not None and limit is not None:
+                    label = f"Δ {actual:g} Pa / ≥ {limit:g} Pa · {status}"
+                elif limit is not None:
+                    label = f"Δ unavailable / ≥ {limit:g} Pa"
                 else:
-                    label = "Pressure unavailable"
+                    label = "Pressure relationship unavailable"
                 self.canvas_2d.create_text(
                     (x0 + x1) / 2,
                     (y0 + y1) / 2 - 10,
@@ -1808,7 +2003,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                     canvas.create_line(0, cy, w, cy, fill="#e7ecf1", tags=("grid",))
                     y += grid
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = self._overlay()
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -1835,10 +2030,16 @@ class SpatialDesignWorkspace(ttk.Frame):
                 tags=(f"room:{room['id']}", "room"),
             )
             if self._show_labels.get():
+                pressure = overlay_by_room[room["id"]]
+                pressure_value = pressure.get("pressure_pa")
                 pressure_text = (
-                    f"\n{room['pressure_pa']:g} Pa"
-                    if self._show_pressure.get() and room.get("pressure_pa") is not None
-                    else ""
+                    f"\n{pressure_value:g} Pa ({pressure.get('source', 'unavailable')})"
+                    if self._show_pressure.get() and pressure_value is not None
+                    else (
+                        "\nPressure unavailable"
+                        if self._show_pressure.get()
+                        else ""
+                    )
                 )
                 canvas.create_text(
                     (x0 + x1) / 2,
@@ -1945,15 +2146,17 @@ class SpatialDesignWorkspace(ttk.Frame):
             )
 
     def _project_3d(self, x: float, y: float, z: float) -> tuple[float, float]:
-        az = math.radians(self.layout["view"]["azimuth_deg"])
-        el = math.radians(self.layout["view"]["elevation_deg"])
-        xr = x * math.cos(az) - y * math.sin(az)
-        yr = x * math.sin(az) + y * math.cos(az)
-        sy = yr * math.sin(el) - z * math.cos(el)
-        scale = 34.0 * self.layout["view"]["zoom_3d"]
-        return (
-            self.canvas_3d.winfo_width() / 2 + self.layout["view"]["pan_3d_x"] + xr * scale,
-            self.canvas_3d.winfo_height() * 0.66 + self.layout["view"]["pan_3d_y"] + sy * scale,
+        return project_3d(
+            x,
+            y,
+            z,
+            width_px=self.canvas_3d.winfo_width(),
+            height_px=self.canvas_3d.winfo_height(),
+            azimuth_deg=self.layout["view"]["azimuth_deg"],
+            elevation_deg=self.layout["view"]["elevation_deg"],
+            zoom=self.layout["view"]["zoom_3d"],
+            pan_x_px=self.layout["view"]["pan_3d_x"],
+            pan_y_px=self.layout["view"]["pan_3d_y"],
         )
 
     def _draw_3d(self) -> None:
@@ -1984,7 +2187,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             fill="#202b36", outline="#526577", width=1, tags=("floor3d",),
         )
 
-        overlay = pressure_overlay_state(self.layout, self._analysis_getter())
+        overlay = self._overlay()
         overlay_by_room = {item["room_id"]: item for item in overlay["rooms"]}
         warning_ids = self._warning_item_ids()
 
@@ -2044,9 +2247,20 @@ class SpatialDesignWorkspace(ttk.Frame):
                     *start, *end, fill=outline, width=1, tags=(tag, "room3d")
                 )
             if self._show_labels.get():
+                pressure = overlay_by_room[room["id"]]
+                pressure_value = pressure.get("pressure_pa")
+                pressure_text = (
+                    f"\n{pressure_value:g} Pa ({pressure.get('source', 'unavailable')})"
+                    if self._show_pressure.get() and pressure_value is not None
+                    else (
+                        "\nPressure unavailable"
+                        if self._show_pressure.get()
+                        else ""
+                    )
+                )
                 canvas.create_text(
                     *self._project_3d((x0 + x1) / 2, (y0 + y1) / 2, z1 + 0.2),
-                    text=room["name"],
+                    text=f"{room['name']}{pressure_text}",
                     fill="#f0f6fc",
                     tags=(tag, "room3d"),
                 )
@@ -2241,11 +2455,19 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
-        before = self._canvas_to_world(x, y)
-        self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
-        after = self._world_to_canvas(*before)
-        self.layout["view"]["pan_x"] += x - after[0]
-        self.layout["view"]["pan_y"] += y - after[1]
+        zoom, pan_x, pan_y = zoom_2d_at(
+            factor,
+            x,
+            y,
+            width_px=self.canvas_2d.winfo_width(),
+            height_px=self.canvas_2d.winfo_height(),
+            zoom=self.layout["view"]["zoom_2d"],
+            pan_x_px=self.layout["view"]["pan_x"],
+            pan_y_px=self.layout["view"]["pan_y"],
+        )
+        self.layout["view"]["zoom_2d"] = zoom
+        self.layout["view"]["pan_x"] = pan_x
+        self.layout["view"]["pan_y"] = pan_y
         self.redraw()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:

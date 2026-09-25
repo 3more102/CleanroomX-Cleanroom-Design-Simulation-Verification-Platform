@@ -9,6 +9,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     spatial_layout_summary,
+    spatial_layout_svg,
     sync_layout_to_analysis,
 )
 
@@ -238,3 +239,61 @@ def test_spatial_layout_summary_reports_operator_metrics_and_unassigned_devices(
     assert summary["device_counts"]["sensor"] == 1
     assert summary["unassigned_device_count"] == 1
     assert summary["extents_m"] == {"width": 11, "height": 5}
+
+
+
+def test_spatial_layout_svg_exports_valid_deterministic_vector_plan():
+    import xml.etree.ElementTree as ET
+
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process & Gown",
+                "x_m": -1,
+                "y_m": 2,
+                "length_m": 6,
+                "width_m": 5,
+                "height_m": 3,
+                "pressure_pa": 25,
+            }
+        ],
+        "devices": [
+            {
+                "id": "sensor-1",
+                "type": "sensor",
+                "name": "DP <Sensor>",
+                "room_id": "process",
+                "x_m": 1,
+                "y_m": 4,
+                "z_m": 1.5,
+            }
+        ],
+    }
+
+    svg = spatial_layout_svg(layout)
+    same = spatial_layout_svg(layout)
+
+    assert svg == same
+    assert svg.startswith('<?xml version="1.0" encoding="UTF-8"?>')
+    assert "Process &amp; Gown" in svg
+    assert "DP &lt;Sensor&gt;" in svg
+    assert "25 Pa" in svg
+    assert 'data-room-id="process"' in svg
+    assert 'data-device-type="sensor"' in svg
+    assert "<rect" in svg
+    assert "<circle" in svg
+
+    root = ET.fromstring(svg)
+    assert root.tag.endswith("svg")
+
+
+def test_spatial_layout_svg_handles_empty_layout():
+    import xml.etree.ElementTree as ET
+
+    svg = spatial_layout_svg({})
+
+    root = ET.fromstring(svg)
+    assert root.tag.endswith("svg")
+    assert 'id="rooms"' in svg
+    assert 'id="devices"' in svg

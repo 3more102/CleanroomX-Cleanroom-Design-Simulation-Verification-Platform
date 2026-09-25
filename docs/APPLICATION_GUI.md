@@ -66,6 +66,8 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 **Discard Recovery** deletes only the selected validated artifact inside the recovery directory and never modifies the source project. The same Recovery Center remains available from the File menu. Automated `--smoke` launch deliberately skips the interactive startup chooser.
 
+Normal **Save Project** operations also protect against external edits. CleanroomX remembers the exact SHA-256 of the file version that was opened or last saved and verifies it again immediately before atomic replacement. If another editor, synchronization tool, script, or process changed or removed the project file, CleanroomX does not overwrite it silently. The desktop offers **Overwrite**, **Save As**, or **Cancel**; choosing Overwrite performs a second guarded write so another change that occurs while the prompt is open is detected instead of being lost. A project that changes while it is being opened is rejected and should be reopened from its stable disk version.
+
 ## Operator workflow
 
 1. Create a new project or open an existing `.cleanroomx.json` project.

@@ -274,8 +274,9 @@ def atomic_write_text(
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
+            mode="w", encoding="utf-8", newline="\n",
+            prefix=f".{destination.name}.", suffix=".tmp",
+            dir=destination.parent, delete=False,
         ) as handle:
             temp_path = Path(handle.name)
             handle.write(text)

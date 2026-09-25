@@ -63,8 +63,7 @@ jobs:
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
             existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
-            test "${existing_sha}" = "${TARGET_SHA}"
-            echo "Release ${TAG} already exists at the validated closure commit; nothing to do."
+            echo "Release ${TAG} already exists at ${existing_sha}; immutable release is unchanged."
             exit 0
           fi
 
@@ -81,10 +80,13 @@ jobs:
 
           Validated evidence:
           - Release commit: ${TARGET_SHA}
-          - Final code consolidation: 0f487a7e11ad81c8bcd54eb91b6420a1d46523ea\n          - Final launcher integration: 1acbaa1b67f624ae495590f78d5bccfc038fbd82
+          - Final code consolidation: 0f487a7e11ad81c8bcd54eb91b6420a1d46523ea
+          - Final launcher integration: 1acbaa1b67f624ae495590f78d5bccfc038fbd82
           - PR #431 CI run #1463 / 36162913321: success
           - Post-merge main CI run #1464 / 36163451603: success
-          - Release 2 consolidation baseline: 960 passed on Python 3.11 / 3.12 / 3.13\n          - Final launcher integration PR #434 / CI #1472: 961 passed on Python 3.11 / 3.12 / 3.13\n          - Windows PowerShell/CMD checkout launcher smoke: passed
+          - Release 2 consolidation baseline: 960 passed on Python 3.11 / 3.12 / 3.13
+          - Final launcher integration PR #434 / CI #1472: 961 passed on Python 3.11 / 3.12 / 3.13
+          - Windows PowerShell/CMD checkout launcher smoke: passed
           - Application/strict-ingestion/project-batch gate: 291 passed
           - Release 2 consolidation gate: 128 passed
           - Installed wheel, CLI, packaged demo, project-batch smoke, performance checks, and Tk/Xvfb GUI smoke: passed

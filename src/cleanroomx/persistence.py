@@ -257,6 +257,109 @@ def atomic_write_bytes(
     return destination
 
 
+def _verify_file_digest(
+    path: Path,
+    *,
+    expected_size: int,
+    expected_sha256: str,
+    stage: str,
+    committed: bool,
+) -> None:
+    try:
+        stat_result, actual_sha256 = stable_file_sha256(path)
+    except OSError as exc:
+        raise AtomicWriteVerificationError(
+            path,
+            stage=stage,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_size=None,
+            actual_sha256=None,
+            committed=committed,
+        ) from exc
+    if stat_result.st_size != expected_size or actual_sha256 != expected_sha256:
+        raise AtomicWriteVerificationError(
+            path,
+            stage=stage,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            actual_size=stat_result.st_size,
+            actual_sha256=actual_sha256,
+            committed=committed,
+        )
+
+
+def atomic_publish_staged_file(
+    path: str | Path,
+    staged_path: str | Path,
+    *,
+    before_replace: BeforeReplace | None = None,
+) -> Path:
+    """Publish an already-written sibling file through the canonical atomic path.
+
+    This is intended for streaming producers such as ZIP/report builders that cannot
+    efficiently materialize their complete output as one in-memory bytes object.
+    The staged file must be in the destination directory so replacement is atomic.
+    Its exact byte size and SHA-256 are captured after fsync, rechecked after the
+    optional conflict hook, and verified again after replacement.
+    """
+    destination = Path(path)
+    staged = Path(staged_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    destination_parent = destination.parent.resolve(strict=False)
+    staged_parent = staged.parent.resolve(strict=False)
+    if staged_parent != destination_parent:
+        raise ValueError("staged file must be in the destination directory")
+    if staged.resolve(strict=False) == destination.resolve(strict=False):
+        raise ValueError("staged file must be distinct from destination")
+
+    existing_mode: int | None = None
+    try:
+        existing_mode = stat.S_IMODE(destination.stat().st_mode)
+    except FileNotFoundError:
+        pass
+
+    committed = False
+    try:
+        with staged.open("rb") as handle:
+            if existing_mode is not None and hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), existing_mode)
+            os.fsync(handle.fileno())
+
+        staged_stat, expected_sha256 = stable_file_sha256(staged)
+        expected_size = staged_stat.st_size
+
+        if before_replace is not None:
+            before_replace()
+
+        _verify_file_digest(
+            staged,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            stage="staged publish",
+            committed=False,
+        )
+        staged.replace(destination)
+        committed = True
+        try:
+            _fsync_directory(destination.parent)
+        except OSError as exc:
+            raise AtomicWriteDurabilityError(destination, exc) from exc
+        _verify_file_digest(
+            destination,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            stage="committed publish",
+            committed=True,
+        )
+    except BaseException:
+        if not committed:
+            staged.unlink(missing_ok=True)
+        raise
+    return destination
+
+
 def atomic_write_text(
     path: str | Path,
     text: str,

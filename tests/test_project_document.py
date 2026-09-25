@@ -6,8 +6,9 @@ import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
-    save_project_document,
+    ProjectFormatError, ProjectWriteConflictError, atomic_write_text,
+    load_project_document, load_project_document_with_revision, project_file_revision,
+    project_from_dict, save_project_document, save_project_document_with_revision,
 )
 
 
@@ -116,3 +117,75 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+def test_revision_aware_load_matches_exact_project_bytes(tmp_path):
+    path = save_project_document(tmp_path / "revision.cleanroomx.json", _project_for_revision())
+
+    loaded, revision = load_project_document_with_revision(path)
+
+    assert loaded == _project_for_revision()
+    assert revision == project_file_revision(path)
+    assert revision.size == len(path.read_bytes())
+
+
+def test_checked_save_rejects_external_modification_without_overwrite(tmp_path):
+    path = save_project_document(tmp_path / "guarded.cleanroomx.json", _project_for_revision())
+    _loaded, revision = load_project_document_with_revision(path)
+    external = path.read_text(encoding="utf-8").replace('"round trip"', '"external edit"')
+    path.write_text(external, encoding="utf-8")
+    external_bytes = path.read_bytes()
+
+    changed = _project_for_revision()
+    changed.description = "local edit"
+    with pytest.raises(ProjectWriteConflictError, match="changed on disk"):
+        save_project_document(path, changed, expected_revision=revision)
+
+    assert path.read_bytes() == external_bytes
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_checked_save_rejects_deleted_destination(tmp_path):
+    path = save_project_document(tmp_path / "deleted.cleanroomx.json", _project_for_revision())
+    _loaded, revision = load_project_document_with_revision(path)
+    path.unlink()
+
+    with pytest.raises(ProjectWriteConflictError, match="removed or moved"):
+        save_project_document(path, _project_for_revision(), expected_revision=revision)
+
+    assert not path.exists()
+
+
+def test_revision_aware_save_returns_verified_new_revision(tmp_path):
+    path = save_project_document(tmp_path / "verified.cleanroomx.json", _project_for_revision())
+    _loaded, revision = load_project_document_with_revision(path)
+    changed = _project_for_revision()
+    changed.description = "second revision"
+
+    saved_path, new_revision = save_project_document_with_revision(
+        path,
+        changed,
+        expected_revision=revision,
+    )
+
+    assert saved_path == path
+    assert new_revision == project_file_revision(path)
+    assert new_revision.sha256 != revision.sha256
+    assert load_project_document(path).description == "second revision"
+
+
+def _project_for_revision() -> ProjectDocument:
+    return ProjectDocument(
+        name="GUI Demo",
+        description="round trip",
+        analyses=[
+            AnalysisDocument(
+                id="hvac-1",
+                name="HVAC",
+                kind="hvac",
+                input={"name": "Demo", "rooms": []},
+            )
+        ],
+        active_analysis_id="hvac-1",
+        metadata={"owner": "test"},
+    )

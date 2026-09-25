@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from difflib import get_close_matches
 from typing import Any
 
 
@@ -77,8 +78,20 @@ DOSSIER_CONSISTENCY_OPTION_KEYS = {
 }
 
 
-def _render_unknown_fields(values: list[Any]) -> str:
-    return ", ".join(sorted((repr(value) for value in values)))
+def _render_unknown_fields(
+    values: list[Any],
+    allowed: frozenset[str] | set[str],
+) -> str:
+    rendered: list[str] = []
+    candidates = sorted(allowed)
+    for value in sorted(values, key=repr):
+        detail = repr(value)
+        if isinstance(value, str):
+            matches = get_close_matches(value, candidates, n=1, cutoff=0.75)
+            if matches:
+                detail += f" (did you mean {matches[0]!r}?)"
+        rendered.append(detail)
+    return ", ".join(rendered)
 
 
 def reject_unknown_fields(
@@ -96,7 +109,7 @@ def reject_unknown_fields(
     unknown = [key for key in data if key not in allowed]
     if unknown:
         raise ValueError(
-            f"unsupported {context} field(s): {_render_unknown_fields(unknown)}"
+            f"unsupported {context} field(s): {_render_unknown_fields(unknown, allowed)}"
         )
 
 

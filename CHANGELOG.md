@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.101.0 Release 2 closure — 2026-09-25
+
+- Assigns a new package/release identity to the completed Release 2 tree instead of moving or rewriting the already-published `v0.100.0` tag.
+- Consolidates the CI-green Release 2 work: durable project persistence/recovery/history, bounded undo-redo, plugin API v1, immutable analysis evidence and run history, dependency freshness, verified portable bundles/reports, deterministic project batch automation, strict engineering JSON ingestion, precision-safe composition, explicit verification completeness, Markdown boundary hardening, and numerical-integrity gates.
+- Synchronizes package/runtime/demo/test/CI version metadata at `0.101.0`.
+- Changes no solver equation, numerical tolerance, no-extrapolation/root-selection rule, uncertainty semantic, project schema version, or engineering acceptance criterion.
+- Requires the normal Python 3.11/3.12/3.13 full CI matrix, installed-wheel checks, GUI/CLI smoke coverage, Release 2 gates, project-batch smoke, and strict-ingestion regressions before tagging.
+
 ## Unreleased strict engineering JSON ingestion — 2026-09-25
 
 - Routes all public file-backed engineering JSON loaders and dossier manifests through the shared strict JSON parser.

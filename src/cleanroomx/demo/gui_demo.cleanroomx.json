@@ -1,7 +1,7 @@
 {
   "schema": "cleanroomx.project",
   "schema_version": 1,
-  "application_version": "0.100.0",
+  "application_version": "0.101.0",
   "project": {
     "name": "CleanroomX GUI Demonstration",
     "description": "End-to-end project exercising verification, HVAC, fan operating point, nonlinear loop, uncertainty, consistency, and dossier workflows.",

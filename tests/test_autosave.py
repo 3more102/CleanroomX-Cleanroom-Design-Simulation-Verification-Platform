@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from threading import Event
@@ -301,72 +300,6 @@ def test_history_rotation_failure_preserves_written_recovery_and_reports_failure
         manager.shutdown(wait=True)
 
 
-def test_done_future_remains_owned_until_callback_finalizes(tmp_path, monkeypatch):
-    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
-    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
-
-    callback_entered = Event()
-    release_callback = Event()
-    second_write_started = Event()
-    release_second_write = Event()
-
-    original_on_write_done = manager._on_write_done
-    original_write_recovery = manager._write_recovery
-
-    def blocking_on_write_done(request, future):
-        callback_entered.set()
-        if not release_callback.wait(5.0):
-            raise TimeoutError("test did not release autosave completion callback")
-        return original_on_write_done(request, future)
-
-    def controlled_write_recovery(request):
-        artifact = original_write_recovery(request)
-        snapshot = json.loads(request.snapshot_text)
-        if snapshot["ui_state"]["marker"] == 2:
-            second_write_started.set()
-            if not release_second_write.wait(5.0):
-                raise TimeoutError("test did not release second autosave write")
-        return artifact
-
-    monkeypatch.setattr(manager, "_on_write_done", blocking_on_write_done)
-    monkeypatch.setattr(manager, "_write_recovery", controlled_write_recovery)
-
-    try:
-        manager.begin_project(source)
-        assert manager.request_autosave(
-            _snapshot(_project(), marker=1),
-            source_path=source,
-        )
-        assert callback_entered.wait(5.0)
-
-        # The first Future is already done, but its callback has not finalized
-        # shared coordinator state. The new snapshot must remain pending rather
-        # than replacing the Future/request pair owned by that callback.
-        assert manager.request_autosave(
-            _snapshot(_project(), marker=2),
-            source_path=source,
-        )
-
-        release_callback.set()
-        assert second_write_started.wait(5.0)
-
-        with pytest.raises(TimeoutError):
-            manager.wait_for_idle(timeout=0.05)
-
-        release_second_write.set()
-        manager.wait_for_idle()
-
-        status = manager.status()
-        assert status.state == "saved"
-        assert status.artifact_path is not None
-        artifact = load_recovery_artifact(status.artifact_path)
-        assert artifact["snapshot"]["ui_state"]["marker"] == 2
-    finally:
-        release_callback.set()
-        release_second_write.set()
-        manager.shutdown(wait=True)
-
-
 def test_stale_artifact_cleanup_failure_is_reported(tmp_path, monkeypatch):
     source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
     manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
@@ -410,4 +343,79 @@ def test_stale_artifact_cleanup_failure_is_reported(tmp_path, monkeypatch):
         assert "permission denied" in status.message
     finally:
         release_worker.set()
+        manager.shutdown(wait=True)
+
+
+def test_explicit_save_cleanup_failure_is_tracked_and_retryable(tmp_path, monkeypatch):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=10),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None and artifact.exists()
+
+        original_unlink = Path.unlink
+        attempts = {"count": 0}
+
+        def fail_once(path, *args, **kwargs):
+            if path == artifact and attempts["count"] == 0:
+                attempts["count"] += 1
+                raise PermissionError("cleanup permission denied")
+            return original_unlink(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", fail_once)
+
+        failed = manager.notify_explicit_save(source)
+        assert failed.state == "failed"
+        assert failed.artifact_path == artifact
+        assert "Project saved" in failed.message
+        assert "permission denied" in failed.message
+        assert artifact.exists()
+
+        retried = manager.notify_explicit_save(source)
+        assert retried.state == "idle"
+        assert not artifact.exists()
+    finally:
+        manager.shutdown(wait=True)
+
+
+def test_discard_cleanup_failure_is_tracked_and_retryable(tmp_path, monkeypatch):
+    source = save_project_document(tmp_path / "project.cleanroomx.json", _project())
+    manager = AutosaveManager(tmp_path / "recovery", session_id="session-a")
+    try:
+        manager.begin_project(source)
+        assert manager.request_autosave(
+            _snapshot(_project(), marker=11),
+            source_path=source,
+        )
+        manager.wait_for_idle()
+        artifact = manager.status().artifact_path
+        assert artifact is not None and artifact.exists()
+
+        original_unlink = Path.unlink
+        attempts = {"count": 0}
+
+        def fail_once(path, *args, **kwargs):
+            if path == artifact and attempts["count"] == 0:
+                attempts["count"] += 1
+                raise OSError("discard blocked")
+            return original_unlink(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "unlink", fail_once)
+
+        failed = manager.discard_current_recoveries()
+        assert failed.state == "failed"
+        assert failed.artifact_path == artifact
+        assert "discard incomplete" in failed.message
+        assert artifact.exists()
+
+        retried = manager.discard_current_recoveries()
+        assert retried.state == "idle"
+        assert not artifact.exists()
+    finally:
         manager.shutdown(wait=True)

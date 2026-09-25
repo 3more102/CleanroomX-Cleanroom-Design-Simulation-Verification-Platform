@@ -58,20 +58,27 @@ def _unique_identifier(
     fallback: str,
     used_ids: set[str],
     reserved_ids: set[str] | None = None,
+    next_suffixes: dict[str, int] | None = None,
 ) -> str:
     """Allocate a deterministic unique identifier without rewriting valid stable IDs."""
     reserved = reserved_ids or set()
+    suffixes = next_suffixes if next_suffixes is not None else {}
     preferred_id = str(preferred).strip() if preferred is not None else ""
     if preferred_id and preferred_id not in used_ids:
         used_ids.add(preferred_id)
         return preferred_id
 
     base = preferred_id or fallback
-    candidate = base
-    suffix = 2
+    if base not in used_ids and base not in reserved:
+        used_ids.add(base)
+        return base
+
+    suffix = suffixes.get(base, 2)
+    candidate = f"{base}-{suffix}"
     while candidate in used_ids or candidate in reserved:
-        candidate = f"{base}-{suffix}"
         suffix += 1
+        candidate = f"{base}-{suffix}"
+    suffixes[base] = suffix + 1
     used_ids.add(candidate)
     return candidate
 
@@ -114,6 +121,7 @@ def normalize_layout(value: Any) -> dict:
 
     rooms: list[dict] = []
     used_ids: set[str] = set()
+    room_suffixes: dict[str, int] = {}
     raw_rooms = source.get("rooms", [])
     reserved_room_ids = _reserved_explicit_ids(raw_rooms)
     if isinstance(raw_rooms, list):
@@ -126,6 +134,7 @@ def normalize_layout(value: Any) -> dict:
                 fallback=_room_id(name, index=index),
                 used_ids=used_ids,
                 reserved_ids=reserved_room_ids,
+                next_suffixes=room_suffixes,
             )
             room = {
                 "id": room_id,
@@ -143,6 +152,7 @@ def normalize_layout(value: Any) -> dict:
 
     devices: list[dict] = []
     used_device_ids: set[str] = set()
+    device_suffixes: dict[str, int] = {}
     raw_devices = source.get("devices", [])
     reserved_device_ids = _reserved_explicit_ids(raw_devices)
     if isinstance(raw_devices, list):
@@ -158,6 +168,7 @@ def normalize_layout(value: Any) -> dict:
                 fallback=_device_id(name, device_type, index=index),
                 used_ids=used_device_ids,
                 reserved_ids=reserved_device_ids,
+                next_suffixes=device_suffixes,
             )
             raw_room_id = raw.get("room_id")
             room_id = (
@@ -211,6 +222,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
 
     x_cursor = 0.0
     used_ids: set[str] = set()
+    room_suffixes: dict[str, int] = {}
     for index, raw in enumerate(raw_rooms):
         if not isinstance(raw, dict):
             continue
@@ -223,6 +235,7 @@ def derive_layout_from_analysis(analysis: Any) -> dict:
                 None,
                 fallback=_room_id(name, index=index),
                 used_ids=used_ids,
+                next_suffixes=room_suffixes,
             ),
             "name": name,
             "x_m": x_cursor,

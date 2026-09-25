@@ -131,6 +131,48 @@ def test_consistency_cli_preserves_json_result_contract(monkeypatch, tmp_path, c
     assert "application_execution_provenance" not in payload
 
 
+def test_dossier_cli_does_not_require_writable_manifest_directory(
+    monkeypatch, tmp_path, capsys
+):
+    source_dir = tmp_path / "read-only-inputs"
+    source_dir.mkdir()
+    verification = source_dir / "facility_project.json"
+    verification.write_bytes((EXAMPLES / "facility_project.json").read_bytes())
+    manifest = source_dir / "dossier.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "name": "Read-only source dossier",
+                "verification_project": verification.name,
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "dossier-output.json"
+    source_dir.chmod(0o555)
+    try:
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "cleanroomx-dossier",
+                str(manifest),
+                "--format",
+                "json",
+                "--output",
+                str(output),
+            ],
+        )
+        code = dossier_main()
+    finally:
+        source_dir.chmod(0o755)
+
+    assert code in {0, 2}
+    assert capsys.readouterr().err == ""
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["source_files"][0]["path"] == verification.name
+
+
 def test_dossier_cli_preserves_json_result_contract(monkeypatch, tmp_path, capsys):
     verification = _copy_example(tmp_path, "facility_project.json")
     manifest = tmp_path / "dossier.json"

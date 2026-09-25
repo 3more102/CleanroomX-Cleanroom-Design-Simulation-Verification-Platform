@@ -149,13 +149,20 @@ def _revision_payload(
 def preserve_project_revision(
     project_path: str | Path,
     source_bytes: bytes,
-) -> Path:
-    """Persist the exact prior project bytes before an explicit guarded overwrite."""
+) -> Path | None:
+    """Persist exact prior project bytes before overwriting a valid CleanroomX project.
+
+    Existing non-project destination bytes are protected by the guarded write conflict
+    check but are not mislabeled as a CleanroomX project revision.
+    """
     if not isinstance(source_bytes, bytes):
         raise TypeError("source_bytes must be bytes")
     source = _normalized_path(project_path)
     created_at = _utc_now_text()
-    payload = _revision_payload(source, source_bytes, created_at_utc=created_at)
+    try:
+        payload = _revision_payload(source, source_bytes, created_at_utc=created_at)
+    except ProjectRevisionError:
+        return None
     digest = payload["source"]["sha256"]
     stamp = _parse_utc(created_at).strftime("%Y%m%dT%H%M%S%fZ")
     directory = project_revision_dir(source)

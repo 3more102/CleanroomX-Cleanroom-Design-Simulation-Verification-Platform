@@ -30,6 +30,7 @@ from .application import (
     validate_analysis_input,
     validate_application_registry,
 )
+from .engineering_report import engineering_report_html
 from .project import (
     AnalysisDocument,
     ProjectDocument,

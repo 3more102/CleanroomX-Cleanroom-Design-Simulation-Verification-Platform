@@ -36,6 +36,27 @@ class ProjectWriteConflictError(RuntimeError):
         )
 
 
+class ProjectSaveVerificationError(OSError):
+    """Raised when persisted project bytes do not match validated serialization."""
+
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        expected_size: int,
+        expected_sha256: str,
+        current: "ProjectFileRevision",
+    ):
+        self.path = Path(path)
+        self.expected_size = expected_size
+        self.expected_sha256 = expected_sha256
+        self.current = current
+        super().__init__(
+            f"project save verification failed for {self.path}: persisted bytes do "
+            "not match the validated project serialization"
+        )
+
+
 @dataclass(frozen=True)
 class ProjectFileRevision:
     path: str
@@ -310,6 +331,43 @@ def _project_document_text(project: ProjectDocument) -> str:
     ) + "\n"
 
 
+def _fsync_directory(directory: Path) -> None:
+    """Durably commit a completed rename on POSIX filesystems."""
+
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(directory, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _verify_project_text(
+    path: str | Path,
+    text: str,
+) -> ProjectFileRevision:
+    """Verify the exact bytes persisted for a validated project document."""
+
+    encoded = text.encode("utf-8")
+    expected_size = len(encoded)
+    expected_sha256 = sha256(encoded).hexdigest()
+    current = capture_project_file_revision(path)
+    if (
+        not current.exists
+        or current.size != expected_size
+        or current.sha256 != expected_sha256
+    ):
+        raise ProjectSaveVerificationError(
+            path,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+            current=current,
+        )
+    return current
+
+
 def _atomic_write_text(
     path: str | Path,
     text: str,
@@ -333,6 +391,7 @@ def _atomic_write_text(
         if before_replace is not None:
             before_replace()
         temp_path.replace(destination)
+        _fsync_directory(destination.parent)
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -346,8 +405,12 @@ def atomic_write_text(path: str | Path, text: str) -> Path:
 
 
 def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    """Save a project atomically without an external-revision precondition."""
-    return atomic_write_text(path, _project_document_text(project))
+    """Save and verify a project without an external-revision precondition."""
+
+    text = _project_document_text(project)
+    saved_path = atomic_write_text(path, text)
+    _verify_project_text(saved_path, text)
+    return saved_path
 
 
 def save_project_document_guarded(
@@ -371,4 +434,4 @@ def save_project_document_guarded(
         text,
         before_replace=assert_unchanged,
     )
-    return saved_path, capture_project_file_revision(saved_path)
+    return saved_path, _verify_project_text(saved_path, text)

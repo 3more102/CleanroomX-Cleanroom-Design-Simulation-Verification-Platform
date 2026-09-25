@@ -8,6 +8,7 @@ import cleanroomx.gui as gui_module
 import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
+    AtomicWriteDurabilityError,
     ProjectDocument,
     ProjectWriteConflictError,
     capture_project_file_revision,
@@ -208,3 +209,40 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+def test_gui_save_preserves_recovery_when_directory_sync_is_unconfirmed(tmp_path, monkeypatch):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+
+    completed_save_steps = []
+    app._capture_saved_state = lambda: completed_save_steps.append("baseline")
+    app._notify_explicit_save = lambda _path: completed_save_steps.append("recovery-cleanup")
+
+    def fail_directory_sync(handle, destination):
+        raise AtomicWriteDurabilityError(destination, OSError("directory fsync failed"))
+
+    monkeypatch.setattr(project_module, "_sync_parent_directory", fail_directory_sync)
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("durability uncertainty must not be reported as a generic save error")
+        ),
+    )
+
+    app.save_project()
+
+    assert load_project_document(path).name == "Window edit"
+    assert app._project_file_revision == capture_project_file_revision(path)
+    assert completed_save_steps == []
+    assert warnings
+    assert "durability" in warnings[0][0].lower()
+    assert "recovery preserved" in app.status_var.value.lower()

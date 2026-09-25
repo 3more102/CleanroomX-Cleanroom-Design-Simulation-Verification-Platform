@@ -10,6 +10,7 @@ from cleanroomx.spatial import (
     derive_layout_from_analysis,
     ensure_project_layout,
     normalize_layout,
+    nearest_nonoverlap_room_position,
     resize_room,
     room_clearance_dimensions,
     room_overlap_conflicts,
@@ -603,6 +604,41 @@ def test_room_overlap_conflicts_returns_each_pair_once_in_stable_order():
         ("b", "c"),
     ]
     assert [item["area_m2"] for item in conflicts] == [8.0, 4.0, 4.0]
+
+
+def test_nearest_nonoverlap_room_position_returns_current_position_when_clear():
+    room = {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 2.0, "width_m": 2.0}
+    rooms = [
+        room,
+        {"id": "b", "x_m": 4.0, "y_m": 0.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    assert nearest_nonoverlap_room_position(room, rooms) == (0.0, 0.0)
+
+
+def test_nearest_nonoverlap_room_position_resolves_single_overlap_by_shortest_move():
+    fixed = {"id": "fixed", "x_m": 0.0, "y_m": 0.0, "length_m": 5.0, "width_m": 4.0}
+    room = {"id": "move", "x_m": 3.5, "y_m": 1.0, "length_m": 3.0, "width_m": 2.0}
+
+    target = nearest_nonoverlap_room_position(room, [fixed, room])
+
+    assert target == (5.0, 1.0)
+    moved = {**room, "x_m": target[0], "y_m": target[1]}
+    assert room_overlap_conflicts([fixed, moved]) == []
+
+
+def test_nearest_nonoverlap_room_position_handles_multiple_blockers_deterministically():
+    room = {"id": "move", "x_m": 1.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0}
+    blockers = [
+        {"id": "a", "x_m": 0.0, "y_m": 0.0, "length_m": 2.0, "width_m": 3.0},
+        {"id": "b", "x_m": 2.0, "y_m": 0.0, "length_m": 2.0, "width_m": 3.0},
+    ]
+
+    target = nearest_nonoverlap_room_position(room, [*blockers, room])
+
+    assert target == (1.0, 3.0)
+    moved = {**room, "x_m": target[0], "y_m": target[1]}
+    assert room_overlap_conflicts([*blockers, moved]) == []
 
 
 def test_spatial_layout_summary_counts_room_overlap_conflicts():

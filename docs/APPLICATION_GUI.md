@@ -56,6 +56,16 @@ If another CleanroomX window or external editor changes, deletes, or replaces th
 
 For a genuinely different Save As destination, CleanroomX captures the destination revision after the file chooser returns and applies the same guarded replace, protecting against a race where another process changes or creates the target before the atomic commit.
 
+## Project edit history
+
+Committed project-document edits now have a bounded 100-entry **Undo Project Edit / Redo Project Edit** history from the **Edit** menu. Ctrl+Z and Ctrl+Y route to this project history when the focused widget does not own a more specific undo binding; the JSON editor retains its native text undo and the spatial canvases retain their dedicated geometry undo/redo.
+
+History covers committed analysis-input edits, project metadata commits, analysis creation, rename and removal, imported analysis JSON, and explicit spatial-to-analysis synchronization. Every stored state is round-tripped through the ordinary `cleanroomx.project` validator before it can enter history, so undo/redo cannot bypass schema, unique-id, analysis-kind, active-reference, strict-JSON, or non-finite-value checks. Restoring a history state clears cached analysis results so results computed from a newer input cannot be silently shown against restored inputs.
+
+The history engine detects tracked document changes made outside its chain and blocks replay rather than overwriting them. A new divergent edit clears redo. The current spatial layout is deliberately preserved during project-history replay because the spatial workspace has its own fine-grained transactional history; project undo therefore cannot accidentally rewind unrelated room/device geometry. Invalid raw JSON drafts are never forced into project history: undo/redo is blocked until the draft is fixed or preserved.
+
+Project history is in-memory session state and does not change schema version 1. It resets when a new/open/recovered project replaces the active document. A Save As that moves the project to a different directory also resets history because older snapshots may contain relative external-file references whose meaning depended on the previous base directory.
+
 ## Recovery autosave
 
 The desktop application maintains crash-recovery autosaves separately from explicit project files. Dirty edits schedule an idle-debounced recovery checkpoint after 1.5 seconds, while the 60-second periodic sampler remains a fallback for long-lived dirty sessions. Rapid edits reset the short checkpoint so typing and drag gestures coalesce instead of generating one file per event. Use `--autosave-interval-seconds N` to change the periodic fallback interval or `0` to disable recovery autosave entirely. The right side of the status bar reports whether autosave is ready, saving, saved, clean, or failed.
@@ -86,7 +96,7 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 
 The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
 
-Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
+Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion. Project undo can restore that analysis with its stable id and input; restoring any project-history state clears all retained run results before the restored document is shown.
 
 ## Supported workflows
 
@@ -114,7 +124,7 @@ When a supplied fan curve and operating point are available, the application bui
 
 ## Validation and automated smoke
 
-Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
+Regression coverage includes end-to-end execution of every workflow exposed by the application catalog, structural registry integrity plus binding resolution, strict result serialization, relative-file adapters, project round-trip/migration/rejection cases, non-finite JSON rejection, project-history round-trip/bounds/divergence/spatial-preservation cases, GUI history integration, unsaved-editor preservation and dirty-state visibility, per-analysis result restoration, active-run selection guards, unit/path flattening, headless `--check`, and execution of the active demonstration analysis.
 
 CI retains all v0.91-v0.95 provenance/replay compatibility gates and runs the complete suite on Python 3.11/3.12/3.13. Every matrix job also builds a wheel, installs it into a clean virtual environment, validates `cleanroomx-gui --check`, and verifies the packaged demonstration resources. On Python 3.13 CI launches the real Tk GUI from that installed wheel with `--demo --smoke`, executes the active demonstration analysis, updates the UI, and exits successfully.
 

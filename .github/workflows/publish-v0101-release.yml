@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Qualify one-time release closure
+      - name: Qualify release publication
         id: closure
         shell: bash
         run: |
@@ -35,13 +35,8 @@ jobs:
           workflow=.github/workflows/publish-v0101-release.yml
           git cat-file -e "${TARGET_SHA}^{commit}"
           git cat-file -e "${TARGET_SHA}:${workflow}"
-          if git cat-file -e "${TARGET_SHA}^:${workflow}" 2>/dev/null; then
-            echo "publish=false" >> "${GITHUB_OUTPUT}"
-            echo "Release workflow already existed in the parent; skip publication."
-          else
-            echo "publish=true" >> "${GITHUB_OUTPUT}"
-            echo "This commit introduces the release workflow; publication is eligible."
-          fi
+          echo "publish=true" >> "${GITHUB_OUTPUT}"
+          echo "Successful CI may publish only if this target is still current main; existing releases remain immutable."
 
       - name: Verify validated release baseline
         if: steps.closure.outputs.publish == 'true'

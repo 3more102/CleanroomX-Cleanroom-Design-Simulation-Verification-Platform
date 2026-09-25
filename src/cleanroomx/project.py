@@ -284,6 +284,24 @@ def project_file_revision_matches(
     return expected.size == current.size and expected.sha256 == current.sha256
 
 
+def load_project_document_with_revision(
+    path: str | Path,
+    *,
+    attempts: int = 3,
+) -> tuple[ProjectDocument, ProjectFileRevision]:
+    """Load a project together with the exact stable content revision that was read."""
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    source = _normalized_project_path(path)
+    for _attempt in range(attempts):
+        before = capture_project_file_revision(source)
+        project = load_project_document(source)
+        after = capture_project_file_revision(source)
+        if project_file_revision_matches(before, after):
+            return project, after
+    raise OSError(f"project file changed repeatedly while opening: {source}")
+
+
 def _project_document_text(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)

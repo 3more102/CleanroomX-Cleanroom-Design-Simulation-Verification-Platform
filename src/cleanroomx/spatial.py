@@ -1963,6 +1963,18 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _on_motion(self, event: tk.Event) -> None:
         x, y = self._canvas_to_world(event.x, event.y)
         self._coord_var.set(f"x {x:.2f} m   y {y:.2f} m")
+        current = self.canvas_2d.find_withtag("current")
+        hovered = None
+        if current:
+            hovered = self._parse_hit(self.canvas_2d.gettags(current[0]))
+        if hovered != self._hovered:
+            self._hovered = hovered
+            self.redraw()
+
+    def _on_leave_2d(self, event=None) -> None:
+        if self._hovered is not None:
+            self._hovered = None
+            self.redraw()
 
     def _on_pan_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)
@@ -1982,11 +1994,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self._zoom_at(1.1 if event.delta > 0 else 1 / 1.1, event.x, event.y)
 
     def _zoom_at(self, factor: float, x: float, y: float) -> None:
-        before = self._canvas_to_world(x, y)
-        self.layout["view"]["zoom_2d"] = max(0.2, min(8.0, self.layout["view"]["zoom_2d"] * factor))
-        after = self._world_to_canvas(*before)
-        self.layout["view"]["pan_x"] += x - after[0]
-        self.layout["view"]["pan_y"] += y - after[1]
+        transformed = self._transform_2d().zoom_about(factor, x, y)
+        self.layout["view"]["zoom_2d"] = transformed.pixels_per_m / 55.0
+        self.layout["view"]["pan_x"] = transformed.pan_x_px
+        self.layout["view"]["pan_y"] = transformed.pan_y_px
         self.redraw()
 
     def _on_wheel_3d(self, event: tk.Event) -> None:
@@ -2013,6 +2024,27 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.layout["view"]["pan_3d_x"] = 0.0
         self.layout["view"]["pan_3d_y"] = 0.0
         self._draw_3d()
+
+    def _on_orbit_3d_down(self, event: tk.Event) -> str:
+        self._orbit_anchor = (event.x, event.y)
+        self._orbit_origin = (
+            self.layout["view"]["azimuth_deg"],
+            self.layout["view"]["elevation_deg"],
+        )
+        return "break"
+
+    def _on_orbit_3d_drag(self, event: tk.Event) -> str:
+        if self._orbit_anchor is None or self._orbit_origin is None:
+            return "break"
+        dx = event.x - self._orbit_anchor[0]
+        dy = event.y - self._orbit_anchor[1]
+        self.layout["view"]["azimuth_deg"] = (self._orbit_origin[0] + dx * 0.5) % 360
+        self.layout["view"]["elevation_deg"] = max(
+            5.0,
+            min(75.0, self._orbit_origin[1] - dy * 0.35),
+        )
+        self._draw_3d()
+        return "break"
 
     def _on_pan_3d_down(self, event: tk.Event) -> None:
         self._pan_anchor = (event.x, event.y)

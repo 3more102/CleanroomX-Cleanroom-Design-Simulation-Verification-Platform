@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .fan_duct_network import analyze_fan_duct_network
 from .fan_duct_network_io import load_fan_duct_network_study
 from .fan_duct_network_report import markdown_fan_duct_network_report

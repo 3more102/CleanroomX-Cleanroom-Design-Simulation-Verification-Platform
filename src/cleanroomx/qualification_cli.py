@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .qualification import analyze_qualification_uncertainty
 from .qualification_io import load_qualification_uncertainty
 from .qualification_report import markdown_qualification_report

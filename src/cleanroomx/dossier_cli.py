@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .dossier import build_dossier
 from .dossier_report import markdown_dossier_report
 

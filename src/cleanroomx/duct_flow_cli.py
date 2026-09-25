@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .duct_flow import solve_parallel_branch_flows
 from .duct_flow_io import load_parallel_flow_network
 from .duct_flow_report import markdown_parallel_flow_report

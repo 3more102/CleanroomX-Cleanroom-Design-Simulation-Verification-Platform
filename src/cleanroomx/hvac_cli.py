@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .hvac import analyze_hvac_project
 from .hvac_io import load_hvac_project
 from .hvac_report import markdown_hvac_report

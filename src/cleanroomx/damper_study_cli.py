@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .damper_study import solve_loop_damper_study
 from .damper_study_io import load_loop_damper_study
 from .damper_study_report import markdown_loop_damper_study_report

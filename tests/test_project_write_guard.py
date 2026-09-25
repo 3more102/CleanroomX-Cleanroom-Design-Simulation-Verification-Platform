@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import errno
 
 import pytest
 
 import cleanroomx.gui as gui_module
+import cleanroomx.persistence as persistence_module
 import cleanroomx.project as project_module
 from cleanroomx.gui import CleanroomXApp
 from cleanroomx.project import (
     ProjectDocument,
+    ProjectSaveDurabilityError,
     ProjectWriteConflictError,
     capture_project_file_revision,
     load_project_document,
@@ -208,3 +211,75 @@ def test_gui_save_as_same_path_cannot_bypass_external_change(tmp_path, monkeypat
     assert load_project_document(path).name == "External edit"
     assert warnings
     assert app.project_path == path
+
+
+def test_guarded_save_reports_verified_revision_when_directory_sync_fails(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    expected = capture_project_file_revision(path)
+
+    def fail_sync(_directory):
+        raise OSError(errno.EIO, "injected directory sync failure")
+
+    monkeypatch.setattr(persistence_module, "_fsync_directory", fail_sync)
+
+    with pytest.raises(ProjectSaveDurabilityError) as exc_info:
+        save_project_document_guarded(
+            path,
+            ProjectDocument(name="Window edit"),
+            expected_revision=expected,
+        )
+
+    assert load_project_document(path).name == "Window edit"
+    assert exc_info.value.committed_revision == capture_project_file_revision(path)
+
+
+def test_gui_durability_failure_keeps_dirty_state_but_allows_safe_retry(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "project.cleanroomx.json"
+    save_project_document(path, ProjectDocument(name="Opened"))
+    app = _minimal_gui_app(path, ProjectDocument(name="Window edit"))
+    initial_revision = app._project_file_revision
+    warnings = []
+    errors = []
+    saved_baselines = []
+    explicit_saves = []
+    app._capture_saved_state = lambda: saved_baselines.append(True)
+    app._notify_explicit_save = lambda saved_path: explicit_saves.append(saved_path)
+
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+    original_sync = persistence_module._fsync_directory
+
+    def fail_sync(_directory):
+        raise OSError(errno.EIO, "injected directory sync failure")
+
+    monkeypatch.setattr(persistence_module, "_fsync_directory", fail_sync)
+    app.save_project()
+
+    committed_revision = capture_project_file_revision(path)
+    assert load_project_document(path).name == "Window edit"
+    assert app._project_file_revision == committed_revision
+    assert app._project_file_revision != initial_revision
+    assert "durability not confirmed" in app.status_var.value
+    assert warnings and errors == []
+    assert saved_baselines == []
+    assert explicit_saves == []
+
+    monkeypatch.setattr(persistence_module, "_fsync_directory", original_sync)
+    app.save_project()
+
+    assert app.status_var.value == f"Saved {path.name}"
+    assert saved_baselines == [True]
+    assert explicit_saves == [path.resolve(strict=False)]

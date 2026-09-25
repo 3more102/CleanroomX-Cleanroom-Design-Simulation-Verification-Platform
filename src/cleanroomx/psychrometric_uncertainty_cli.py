@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .psychrometric_uncertainty import analyze_psychrometric_uncertainty
 from .psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from .psychrometric_uncertainty_report import (

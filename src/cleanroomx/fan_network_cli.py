@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .persistence import atomic_write_text
 from .fan_network import solve_fan_driven_parallel_network
 from .fan_network_io import load_fan_driven_parallel_network_study
 from .fan_network_report import markdown_fan_driven_parallel_network_report

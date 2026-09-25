@@ -32,7 +32,7 @@ CI preserves the v0.91-v0.95 solver/provenance compatibility gates, runs focused
 
 ### v0.100 consolidated desktop release
 
-v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves and GUI exports use same-directory atomic replacement; export failures are surfaced in the desktop UI.
+v0.100 records canonical SHA-256 identity for submitted application inputs and before/after SHA-256 plus byte-size evidence for external consistency/dossier dependencies. Diagnostics and **Export Run Bundle JSON** preserve that execution provenance. Relative consistency/dossier references are rebased when JSON is imported or a project is moved with **Save Project As**, while absolute references remain stable. Project saves, recovery artifacts, GUI exports, and CLI report files use a shared same-directory atomic replacement primitive with deterministic UTF-8 bytes, file fsync, POSIX permission preservation, and parent-directory synchronization where supported; export failures are surfaced in the desktop UI.
 
 Fan operating-point plots reuse backend-computed system-pressure evidence and render labeled fan/system series. Abandoned runs remain exclusive until their backend worker exits. The installed wheel includes the self-contained demo and supports `cleanroomx-gui --demo`.
 

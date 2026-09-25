@@ -1113,9 +1113,89 @@ class SpatialDesignWorkspace(ttk.Frame):
         )
 
     def _refresh_validation(self, *, force: bool = False) -> None:
-        validation_key = _spatial_validation_key(self.layout)
+        analysis = self._analysis_getter()
+        mapping_records = (
+            spatial_sync_status(self.layout, analysis)
+            if getattr(analysis, "kind", "") in {"room_verification", "project_verification"}
+            else []
+        )
+        pressure_records = pressure_relationship_records(self.layout, analysis)
+        validation_key = (
+            _spatial_validation_key(self.layout),
+            tuple(
+                (
+                    record.get("room_id"),
+                    record.get("analysis_room_name"),
+                    record.get("state"),
+                    record.get("reason"),
+                    repr(record.get("engineering")),
+                    repr(record.get("baseline")),
+                )
+                for record in mapping_records
+            ),
+            tuple(
+                (
+                    record.get("higher_room_id"),
+                    record.get("lower_room_id"),
+                    record.get("delta_pa"),
+                    record.get("min_delta_pa"),
+                    record.get("state"),
+                )
+                for record in pressure_records
+            ),
+        )
         if force or validation_key != self._last_validation_key:
-            self._validation_issues = validate_layout(self.layout)
+            issues = validate_layout(self.layout)
+            for record in mapping_records:
+                if record.get("state") == "synchronized":
+                    continue
+                issues.append(
+                    {
+                        "code": f"engineering_mapping_{record.get('state')}",
+                        "severity": "warning",
+                        "item_ids": [record.get("room_id")],
+                        "message": (
+                            f"Engineering mapping is {str(record.get('state')).replace('_', ' ')}: "
+                            f"{record.get('reason', '')}."
+                        ),
+                    }
+                )
+            for record in pressure_records:
+                state = record.get("state")
+                if state == "pass":
+                    continue
+                item_ids = [
+                    item_id
+                    for item_id in (
+                        record.get("higher_room_id"),
+                        record.get("lower_room_id"),
+                    )
+                    if item_id
+                ]
+                if state == "fail":
+                    message = (
+                        f"Pressure cascade {record.get('higher_pressure_room')} → "
+                        f"{record.get('lower_pressure_room')} is "
+                        f"{record.get('delta_pa'):g} Pa; minimum is "
+                        f"{record.get('min_delta_pa'):g} Pa."
+                    )
+                    code = "pressure_cascade_conflict"
+                else:
+                    message = (
+                        f"Pressure cascade {record.get('higher_pressure_room')} → "
+                        f"{record.get('lower_pressure_room')} is unresolved because "
+                        "mapped observed pressure data is unavailable."
+                    )
+                    code = "pressure_cascade_unavailable"
+                issues.append(
+                    {
+                        "code": code,
+                        "severity": "warning",
+                        "item_ids": item_ids,
+                        "message": message,
+                    }
+                )
+            self._validation_issues = issues
             self._last_validation_key = validation_key
             self._update_validation_summary()
 

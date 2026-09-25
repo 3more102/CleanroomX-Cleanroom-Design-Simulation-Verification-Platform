@@ -47,3 +47,12 @@ revert/CI flow for any rollback from Release 2.
 ## v0.101.0 final launcher integration
 
 The final repository-checkout launcher integration is PR #434, merged as `1acbaa1b67f624ae495590f78d5bccfc038fbd82` after CI run #1472 / `36164491604` passed on Python 3.11, 3.12, and 3.13 with **961 passed** per interpreter plus the Windows PowerShell/CMD launcher smoke. Treat this commit as part of the v0.101.0 release closure; roll back through normal revert and CI rather than moving the release tag.
+
+## v0.101.1 final spatial patch anchor
+
+The published `v0.101.0` tag remains immutable at its original release commit. The completed
+spatial-design tree is merged on `main` at `d4b8f6294dd7deed207935423a52cf5f19a035eb`
+after PR #436 CI run #1491 and post-merge main CI run #1493 both succeeded. Release
+`v0.101.1` is the patch identity for that completed tree plus release-only version/evidence
+metadata. Preserve both release tags and use normal revert/CI flow for rollback.
+

@@ -521,6 +521,42 @@ def spatial_layout_schedule_csv(value: Any) -> str:
     return stream.getvalue()
 
 
+def remap_room_devices(
+    devices: list[dict],
+    room_before: dict,
+    room_after: dict,
+) -> int:
+    """Preserve relative XY placement for devices assigned to a changed room."""
+    room_id = room_after.get("id") or room_before.get("id")
+    if not room_id:
+        return 0
+
+    old_x = _finite_number(room_before.get("x_m"), 0.0)
+    old_y = _finite_number(room_before.get("y_m"), 0.0)
+    old_length = _positive(room_before.get("length_m"), 4.0)
+    old_width = _positive(room_before.get("width_m"), 4.0)
+    new_x = _finite_number(room_after.get("x_m"), old_x)
+    new_y = _finite_number(room_after.get("y_m"), old_y)
+    new_length = _positive(room_after.get("length_m"), old_length)
+    new_width = _positive(room_after.get("width_m"), old_width)
+
+    changed = 0
+    for device in devices:
+        if device.get("room_id") != room_id:
+            continue
+        old_device_x = _finite_number(device.get("x_m"), old_x)
+        old_device_y = _finite_number(device.get("y_m"), old_y)
+        u = (old_device_x - old_x) / old_length
+        v = (old_device_y - old_y) / old_width
+        new_device_x = new_x + u * new_length
+        new_device_y = new_y + v * new_width
+        if new_device_x != old_device_x or new_device_y != old_device_y:
+            device["x_m"] = new_device_x
+            device["y_m"] = new_device_y
+            changed += 1
+    return changed
+
+
 def resize_room(
     room: dict,
     handle: str,
@@ -529,11 +565,13 @@ def resize_room(
     *,
     grid_m: float | None = None,
     min_size_m: float = 0.25,
+    devices: list[dict] | None = None,
 ) -> bool:
-    """Resize a room from one edge/corner while preserving the opposite edge."""
+    """Resize a room while preserving its opposite edge and device placement."""
     if handle not in RESIZE_HANDLES:
         return False
 
+    room_before = dict(room)
     x0 = _finite_number(room.get("x_m"), 0.0)
     y0 = _finite_number(room.get("y_m"), 0.0)
     x1 = x0 + _positive(room.get("length_m"), 4.0)
@@ -561,7 +599,10 @@ def resize_room(
     room["y_m"] = y0
     room["length_m"] = x1 - x0
     room["width_m"] = y1 - y0
-    return (x0, y0, x1, y1) != original
+    changed = (x0, y0, x1, y1) != original
+    if changed and devices is not None:
+        remap_room_devices(devices, room_before, room)
+    return changed
 
 
 class SpatialEditHistory:
@@ -966,6 +1007,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         if item is None:
             return
         before = self._snapshot_layout()
+        room_before = (
+            dict(item)
+            if self.selected and self.selected.kind == "room"
+            else None
+        )
         name = self._property_vars["name"].get().strip()
         if name:
             item["name"] = name
@@ -983,6 +1029,8 @@ class SpatialDesignWorkspace(ttk.Frame):
                 item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
             elif "pressure_pa" in item:
                 item.pop("pressure_pa", None)
+            if room_before is not None:
+                remap_room_devices(self.layout["devices"], room_before, item)
         self._load_property_panel()
         self._persist("Spatial properties updated", history_before=before)
 
@@ -1433,6 +1481,7 @@ class SpatialDesignWorkspace(ttk.Frame):
                 world[0],
                 world[1],
                 grid_m=grid,
+                devices=self.layout["devices"],
             ):
                 self._drag_changed = True
             self._load_property_panel()

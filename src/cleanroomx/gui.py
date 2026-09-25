@@ -30,6 +30,7 @@ from .application import (
     validate_application_registry,
 )
 from .project import (
+    AtomicWriteDurabilityError,
     AnalysisDocument,
     ProjectDocument,
     ProjectWriteConflictError,
@@ -1073,6 +1074,36 @@ class CleanroomXApp:
             parent=self.root,
         )
 
+    def _report_save_durability_failure(
+        self,
+        path: Path,
+        error: AtomicWriteDurabilityError,
+    ) -> None:
+        open_path = getattr(self, "project_path", None)
+        if (
+            open_path is not None
+            and Path(open_path).resolve(strict=False) == path.resolve(strict=False)
+        ):
+            try:
+                self._project_file_revision = capture_project_file_revision(path)
+            except OSError:
+                self._project_file_revision = None
+
+        self.status_var.set(
+            f"Save durability not confirmed for {path.name}; recovery preserved"
+        )
+        messagebox.showwarning(
+            "Save durability not confirmed",
+            (
+                f"{error}\n\n"
+                "The replacement is visible, but CleanroomX could not confirm that "
+                "the directory entry is crash-durable. The save is not considered "
+                "durably complete, and recovery data was not cleared. Retry Save "
+                "after resolving the filesystem or disk issue."
+            ),
+            parent=self.root,
+        )
+
     def save_project(self) -> None:
         try:
             if self._editor_analysis() is not None:
@@ -1097,6 +1128,9 @@ class CleanroomXApp:
             )
         except ProjectWriteConflictError:
             self._report_external_save_conflict(self.project_path)
+            return
+        except AtomicWriteDurabilityError as exc:
+            self._report_save_durability_failure(self.project_path, exc)
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)
@@ -1181,6 +1215,9 @@ class CleanroomXApp:
             )
         except ProjectWriteConflictError:
             self._report_external_save_conflict(destination)
+            return
+        except AtomicWriteDurabilityError as exc:
+            self._report_save_durability_failure(destination, exc)
             return
         except Exception as exc:
             messagebox.showerror("Save failed", str(exc), parent=self.root)

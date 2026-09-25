@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
+from pathlib import Path
 
 import pytest
 
-from cleanroomx.project import AnalysisDocument, ProjectDocument
+from cleanroomx.project import AnalysisDocument, ProjectDocument, project_from_dict
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
     SpatialSyncError,
@@ -618,3 +620,81 @@ def test_normalize_layout_preserves_opening_geometry_and_view_toggles():
     assert layout["view"]["snap_to_grid"] is False
     assert layout["view"]["show_pressure"] is False
     assert layout["view"]["show_relationships"] is False
+
+
+def test_project_sync_rejects_duplicate_and_missing_explicit_analysis_links():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {"name": "Process", "length_m": 6, "width_m": 5, "height_m": 3},
+                {"name": "Ante", "length_m": 4, "width_m": 3, "height_m": 3},
+            ]
+        },
+    )
+    duplicate_links = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "A",
+                "analysis_room_name": "Process",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 6,
+                "width_m": 5,
+                "height_m": 3,
+            },
+            {
+                "id": "b",
+                "name": "B",
+                "analysis_room_name": "Process",
+                "x_m": 7,
+                "y_m": 0,
+                "length_m": 4,
+                "width_m": 3,
+                "height_m": 3,
+            },
+        ]
+    }
+    with pytest.raises(SpatialSyncError, match="multiple layout rooms"):
+        sync_layout_to_analysis(duplicate_links, analysis)
+
+    missing_link = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "A",
+                "analysis_room_name": "Missing",
+                "x_m": 0,
+                "y_m": 0,
+                "length_m": 6,
+                "width_m": 5,
+                "height_m": 3,
+            }
+        ]
+    }
+    with pytest.raises(SpatialSyncError, match="does not exist"):
+        sync_layout_to_analysis(missing_link, analysis)
+
+
+def test_packaged_gui_demo_contains_explicit_spatial_design():
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "src" / "cleanroomx" / "demo" / "gui_demo.cleanroomx.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    project = project_from_dict(payload)
+    layout = project.metadata[SPATIAL_METADATA_KEY]
+
+    assert layout["floor"]["name"] == "Main Cleanroom Floor"
+    assert [room["analysis_room_name"] for room in layout["rooms"]] == [
+        "Process",
+        "Preparation",
+        "Ante",
+    ]
+    assert [room["pressure_pa"] for room in layout["rooms"]] == [30.0, 16.0, 8.0]
+    device_types = {device["type"] for device in layout["devices"]}
+    assert {"door", "supply", "return", "ffu", "equipment", "transfer"} <= device_types

@@ -287,7 +287,7 @@ def test_recovered_first_save_refuses_original_source_path(tmp_path, monkeypatch
     )
     monkeypatch.setattr(
         gui_module,
-        "save_project_document",
+        "save_project_document_with_fingerprint",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("recovered first save must not overwrite source")
         ),

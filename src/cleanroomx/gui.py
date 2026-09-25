@@ -49,6 +49,7 @@ from .project import (
 from .project_history import ProjectEditHistory, ProjectHistoryState
 from .recovery_ui import RecoveryCenter
 from .run_history import (
+    RUN_HISTORY_METADATA_KEY,
     RunHistoryIntegrityError,
     append_run_history_evidence,
     build_run_history_evidence,
@@ -489,6 +490,9 @@ class CleanroomXApp:
             on_change=self._on_spatial_changed,
             on_sync_requested=self._sync_spatial_to_current_analysis,
             status_setter=self.status_var.set,
+            on_history_record=self._record_spatial_project_edit,
+            on_undo_requested=self.undo_project_edit,
+            on_redo_requested=self.redo_project_edit,
         )
         self.notebook.add(self.spatial_workspace, text="Design 2D + 3D")
 
@@ -607,50 +611,63 @@ class CleanroomXApp:
             self._project_history = history
         return history
 
-    def _project_history_document(self) -> dict:
-        """Capture project state owned by the project-level history.
+    def _spatial_history_selection(self) -> tuple[str, str] | None:
+        workspace = getattr(self, "spatial_workspace", None)
+        getter = getattr(workspace, "history_selection", None)
+        return getter() if callable(getter) else None
 
-        Spatial design state has its own transactional history and is deliberately
-        excluded so undoing an analysis edit cannot rewind unrelated geometry.
+    def _project_history_document(self) -> dict:
+        """Capture the complete undoable design state.
+
+        Persistent audit evidence is not an edit and must never be erased by Undo.
+        Spatial camera/view state is also excluded so design undo preserves the
+        operator's current viewport.
         """
 
         data = copy.deepcopy(self.project.to_dict())
         metadata = data.get("project", {}).get("metadata")
         if isinstance(metadata, dict):
-            metadata.pop(SPATIAL_METADATA_KEY, None)
+            metadata.pop(RUN_HISTORY_METADATA_KEY, None)
+            layout = metadata.get(SPATIAL_METADATA_KEY)
+            if isinstance(layout, dict):
+                layout.pop("view", None)
         return data
 
     def _capture_project_history_state(self) -> ProjectHistoryState:
         return self._project_history_manager().capture(
             self._project_history_document(),
             getattr(self, "_editor_analysis_id", None),
+            self._spatial_history_selection(),
         )
 
     def _update_project_history_controls(self) -> None:
-        menu = getattr(self, "edit_menu", None)
-        if menu is None:
-            return
         history = self._project_history_manager()
-        undo_description = history.undo_description
-        redo_description = history.redo_description
-        menu.entryconfigure(
-            0,
-            label=(
-                f"Undo {undo_description}"
-                if undo_description is not None
-                else "Undo Project Edit"
-            ),
-            state="normal" if history.can_undo else "disabled",
-        )
-        menu.entryconfigure(
-            1,
-            label=(
-                f"Redo {redo_description}"
-                if redo_description is not None
-                else "Redo Project Edit"
-            ),
-            state="normal" if history.can_redo else "disabled",
-        )
+        menu = getattr(self, "edit_menu", None)
+        if menu is not None:
+            undo_description = history.undo_description
+            redo_description = history.redo_description
+            menu.entryconfigure(
+                0,
+                label=(
+                    f"Undo {undo_description}"
+                    if undo_description is not None
+                    else "Undo Project Edit"
+                ),
+                state="normal" if history.can_undo else "disabled",
+            )
+            menu.entryconfigure(
+                1,
+                label=(
+                    f"Redo {redo_description}"
+                    if redo_description is not None
+                    else "Redo Project Edit"
+                ),
+                state="normal" if history.can_redo else "disabled",
+            )
+        workspace = getattr(self, "spatial_workspace", None)
+        setter = getattr(workspace, "set_history_availability", None)
+        if callable(setter):
+            setter(history.can_undo, history.can_redo)
 
     def _clear_project_history(self) -> None:
         self._project_history_manager().clear()
@@ -665,6 +682,45 @@ class CleanroomXApp:
             before=before,
             after_document=self._project_history_document(),
             after_editor_analysis_id=getattr(self, "_editor_analysis_id", None),
+            after_spatial_selection=self._spatial_history_selection(),
+            description=description,
+        )
+        self._update_project_history_controls()
+        return recorded
+
+    def _record_spatial_project_edit(
+        self,
+        before_layout: dict,
+        before_selection: tuple[str, str] | None,
+        after_layout: dict,
+        after_selection: tuple[str, str] | None,
+        description: str,
+    ) -> bool:
+        """Record a spatial mutation in the same transaction stream as all edits."""
+
+        after_document = self._project_history_document()
+        before_document = copy.deepcopy(after_document)
+        project_block = before_document.get("project")
+        if not isinstance(project_block, dict):
+            raise ValueError("project history snapshot is missing project metadata")
+        metadata = project_block.get("metadata")
+        if not isinstance(metadata, dict):
+            raise ValueError("project history snapshot metadata must be an object")
+        before_design = copy.deepcopy(before_layout)
+        if isinstance(before_design, dict):
+            before_design.pop("view", None)
+        metadata[SPATIAL_METADATA_KEY] = before_design
+
+        before = self._project_history_manager().capture(
+            before_document,
+            getattr(self, "_editor_analysis_id", None),
+            before_selection,
+        )
+        recorded = self._project_history_manager().record(
+            before=before,
+            after_document=after_document,
+            after_editor_analysis_id=getattr(self, "_editor_analysis_id", None),
+            after_spatial_selection=after_selection,
             description=description,
         )
         self._update_project_history_controls()
@@ -673,24 +729,36 @@ class CleanroomXApp:
     def _project_from_history_state(
         self, state: ProjectHistoryState
     ) -> ProjectDocument:
-        """Rebuild validated project state without taking ownership of spatial data."""
+        """Rebuild validated design state while preserving audit evidence and viewport."""
 
-        spatial_present = SPATIAL_METADATA_KEY in self.project.metadata
-        spatial_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
+        current_metadata = self.project.metadata
+        audit_history = (
+            copy.deepcopy(current_metadata[RUN_HISTORY_METADATA_KEY])
+            if RUN_HISTORY_METADATA_KEY in current_metadata
+            else None
+        )
+        current_layout = current_metadata.get(SPATIAL_METADATA_KEY)
+        current_view = (
+            copy.deepcopy(current_layout.get("view", {}))
+            if isinstance(current_layout, dict)
+            else {}
+        )
+
         restored = project_from_dict(copy.deepcopy(state.document))
-        if spatial_present:
-            # Preserve the live spatial object identity. Spatial history owns this
-            # state and its workspace may retain a reference to the same layout.
-            restored.metadata[SPATIAL_METADATA_KEY] = spatial_layout
+        if audit_history is not None:
+            restored.metadata[RUN_HISTORY_METADATA_KEY] = audit_history
+
+        restored_layout = restored.metadata.get(SPATIAL_METADATA_KEY)
+        if isinstance(restored_layout, dict) and current_view:
+            restored_layout["view"] = current_view
         return restored
 
     def _perform_project_edit(self, description: str, mutation):
-        """Apply one project mutation atomically and record it for undo/redo."""
+        """Apply one validated application-wide mutation transaction."""
 
         before = self._capture_project_history_state()
         try:
             result = mutation()
-            # Validate the complete post-edit document before publishing the edit.
             project_from_dict(copy.deepcopy(self.project.to_dict()))
         except Exception:
             self.project = self._project_from_history_state(before)
@@ -706,6 +774,14 @@ class CleanroomXApp:
         self.description_var.set(restored.description)
         self._clear_run_cache()
         self._refresh_analysis_list(select_id=state.editor_analysis_id)
+
+        workspace = getattr(self, "spatial_workspace", None)
+        if workspace is not None:
+            workspace.refresh()
+            restore_selection = getattr(workspace, "restore_history_selection", None)
+            if callable(restore_selection):
+                restore_selection(state.spatial_selection)
+
         self._update_project_history_controls()
         self._update_title()
 

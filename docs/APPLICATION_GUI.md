@@ -80,11 +80,11 @@ On normal interactive startup, CleanroomX scans the recovery directory before op
 2. Add an analysis from the application catalog, or select an existing analysis.
 3. Edit or import the analysis input JSON. The editor accepts strict JSON objects only; non-finite constants such as `NaN` and `Infinity` are rejected.
 4. Use **Validate** to run the real backend parser/validation path.
-5. Use **Run** to execute the real backend workflow in a worker thread while keeping the UI responsive.
+5. Use **Run** to execute the real backend workflow in an isolated worker process while keeping the UI responsive.
 6. Inspect normalized JSON results, diagnostics/provenance evidence, Markdown reporting, and available plots.
 7. Export input/result JSON, complete run-bundle JSON, or report Markdown and save the project. Writes are atomic and filesystem errors are surfaced in the GUI.
 
-The **Abandon** action suppresses the pending result but does not force-terminate Python threads. The application keeps the run exclusive and input locked until that worker actually exits, so abandoning a long computation cannot create overlapping backend runs. The status line reports both the waiting and worker-finished states.
+The **Cancel** action terminates the isolated analysis worker instead of merely suppressing its eventual result. The editor remains locked until the worker process has actually exited, preventing overlapping runs. A cancelled task cannot publish a result into the project session. If the worker exits unexpectedly or cannot produce a readable strict-JSON outcome, the GUI reports that failure explicitly and re-enables the workspace. Closing CleanroomX while an analysis is active offers to cancel that worker before shutdown.
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 

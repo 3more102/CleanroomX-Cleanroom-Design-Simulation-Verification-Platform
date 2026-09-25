@@ -11,6 +11,7 @@ from cleanroomx.spatial import (
     ensure_project_layout,
     normalize_layout,
     resize_room,
+    room_clearance_dimensions,
     snap_room_translation,
     SpatialEditHistory,
     spatial_layout_schedule_csv,
@@ -539,6 +540,83 @@ def test_resize_room_rejects_unknown_handle_without_mutation():
     assert resize_room(room, "center", 8.0, 8.0) is False
     assert room == before
 
+
+
+def test_room_clearance_dimensions_reports_nearest_neighbor_on_each_side():
+    room = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 4.0,
+        "width_m": 4.0,
+    }
+    rooms = [
+        room,
+        {"id": "left", "x_m": -3.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "right", "x_m": 6.0, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "top", "x_m": 1.0, "y_m": -2.0, "length_m": 2.0, "width_m": 1.0},
+        {"id": "bottom", "x_m": 1.0, "y_m": 5.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    dimensions = room_clearance_dimensions(room, rooms)
+
+    assert [item["side"] for item in dimensions] == ["left", "right", "top", "bottom"]
+    assert [item["reference_room_id"] for item in dimensions] == [
+        "left",
+        "right",
+        "top",
+        "bottom",
+    ]
+    assert [item["gap_m"] for item in dimensions] == [1.0, 2.0, 1.0, 1.0]
+
+
+def test_room_clearance_dimensions_uses_nearest_candidate_and_ignores_diagonal_rooms():
+    room = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 4.0,
+        "width_m": 4.0,
+    }
+    rooms = [
+        room,
+        {"id": "far", "x_m": 9.0, "y_m": 0.5, "length_m": 2.0, "width_m": 2.0},
+        {"id": "near", "x_m": 5.5, "y_m": 1.0, "length_m": 2.0, "width_m": 2.0},
+        {"id": "diagonal", "x_m": 4.5, "y_m": 8.0, "length_m": 2.0, "width_m": 2.0},
+    ]
+
+    dimensions = room_clearance_dimensions(room, rooms)
+
+    assert len(dimensions) == 1
+    assert dimensions[0]["side"] == "right"
+    assert dimensions[0]["reference_room_id"] == "near"
+    assert dimensions[0]["gap_m"] == 1.5
+    assert dimensions[0]["start_x_m"] == 4.0
+    assert dimensions[0]["end_x_m"] == 5.5
+
+
+def test_room_clearance_dimensions_reports_touching_room_as_zero_gap():
+    room = {
+        "id": "process",
+        "x_m": 0.0,
+        "y_m": 0.0,
+        "length_m": 4.0,
+        "width_m": 4.0,
+    }
+    touching = {
+        "id": "ante",
+        "x_m": 4.0,
+        "y_m": 1.0,
+        "length_m": 3.0,
+        "width_m": 2.0,
+    }
+
+    dimensions = room_clearance_dimensions(room, [room, touching])
+
+    assert len(dimensions) == 1
+    assert dimensions[0]["side"] == "right"
+    assert dimensions[0]["gap_m"] == 0.0
+    assert dimensions[0]["reference_room_id"] == "ante"
 
 
 def test_snap_room_translation_aligns_nearby_edges_and_reports_guide():

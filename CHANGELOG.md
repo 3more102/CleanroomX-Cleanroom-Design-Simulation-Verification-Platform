@@ -5,7 +5,7 @@
 
 - Advances the separate `cleanroomx.autosave` recovery envelope to schema version 2 without changing the project-file schema.
 - Adds canonical SHA-256 self-integrity evidence over the complete recovery payload excluding its own integrity block.
-- Reopens and verifies every newly written recovery before bounded history rotation, so a corrupt new artifact cannot silently evict the previous known-good generation.
+- Reopens and verifies every newly written recovery before bounded history rotation; an invalid new artifact is removed best-effort, so it cannot silently evict the previous known-good generation or accumulate during repeated write failures.
 - Rejects structurally valid version-2 artifacts whose payload does not match the recorded digest and preserves them as recovery scan issues instead of offering them for restore.
 - Keeps schema-version-1 recovery artifacts readable as explicitly legacy/unverified, preserving backward recovery compatibility.
 - Exposes recovery-integrity status in Recovery Center and recovery inspection.

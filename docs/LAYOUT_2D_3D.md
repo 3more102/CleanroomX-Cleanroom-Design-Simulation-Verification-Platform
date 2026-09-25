@@ -25,7 +25,7 @@ Open **Design 2D + 3D** in the desktop application. The 2D side supports:
 - room creation, selection, drag movement, corner-handle resizing, deletion, and property editing;
 - placed doors, windows, generic openings, supply, return, exhaust, FFU, equipment, sensor, and transfer objects;
 - configurable metric grid spacing through **Floor…** and independently switchable snap-to-grid;
-- zoom, pan, fit-to-view, coordinate feedback, selection highlighting, and project-wide undo/redo;
+- zoom, pan, fit-to-view, explicit 2D reset, coordinate feedback, selection highlighting, and project-wide undo/redo;
 - optional labels, device visibility, pressure overlay, and pressure-cascade relationship arrows;
 - floor area, room volume, room count, and key device-count summaries.
 
@@ -47,8 +47,9 @@ values.
 
 The right side projects the same room footprints and heights into an interactive pure-Tk 3D
 view. It renders the floor plane, room top/wall geometry, room labels, and placed devices/openings.
-Mouse wheel zooms. Middle/right drag pans. The rotate, tilt, reset, and fit controls move the
-camera. **Fit** computes zoom and pan from every room corner at its real floor and ceiling elevation,
+Mouse wheel zooms. Middle/right drag pans. Shift+left-drag orbits the camera directly; the rotate,
+tilt, reset, and fit controls remain available for deterministic step changes. **Fit** computes zoom
+and pan from every room corner at its real floor and ceiling elevation,
 so large or elevated layouts are recentered instead of merely resetting zoom. Selecting a room or
 object in 3D selects the same canonical object used by the 2D editor.
 

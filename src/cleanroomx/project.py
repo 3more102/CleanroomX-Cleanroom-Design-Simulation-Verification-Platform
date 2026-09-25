@@ -667,8 +667,16 @@ def save_project_document_guarded(
     project: ProjectDocument,
     *,
     expected_revision: ProjectFileRevision,
+    revision_history_limit: int = 5,
 ) -> tuple[Path, ProjectFileRevision]:
-    """Save one verified project revision under the cooperative process lock."""
+    """Save one verified project revision under the cooperative process lock.
+
+    Before replacing an existing valid CleanroomX project, preserve its exact bytes
+    as an integrity-checked bounded revision. The revision service delegates writes
+    to the shared persistence layer, so this remains a single persistence engine.
+    """
+    if type(revision_history_limit) is not int or revision_history_limit < 0:
+        raise ValueError("project revision history limit must be non-negative")
     destination = _normalized_project_path(path)
 
     def assert_unchanged() -> None:
@@ -681,6 +689,28 @@ def save_project_document_guarded(
         text = _project_document_text(project)
         payload = text.encode("utf-8")
         expected_sha256 = sha256(payload).hexdigest()
+
+        revision_path = None
+        if expected_revision.exists:
+            previous_bytes = destination.read_bytes()
+            if (
+                len(previous_bytes) != expected_revision.size
+                or sha256(previous_bytes).hexdigest() != expected_revision.sha256
+            ):
+                current = capture_project_file_revision(destination)
+                raise ProjectWriteConflictError(
+                    destination, expected_revision, current
+                )
+            # Detect a pathname replacement after reading the candidate revision.
+            assert_unchanged()
+            if previous_bytes != payload and revision_history_limit > 0:
+                from .project_revisions import preserve_project_revision
+
+                revision_path = preserve_project_revision(
+                    destination,
+                    previous_bytes,
+                )
+
         try:
             saved_path = _atomic_write_text(
                 destination,
@@ -688,6 +718,12 @@ def save_project_document_guarded(
                 before_replace=assert_unchanged,
             )
         except AtomicWriteDurabilityError as exc:
+            # Replacement already happened. Keep the prior revision and bound
+            # retention before reporting durability uncertainty to the GUI.
+            if revision_path is not None:
+                from .project_revisions import rotate_project_revisions
+
+                rotate_project_revisions(destination, revision_history_limit)
             committed_revision = capture_project_file_revision(destination)
             if (
                 committed_revision.exists
@@ -699,5 +735,16 @@ def save_project_document_guarded(
                     committed_revision,
                 ) from exc
             raise
-        return saved_path, capture_project_file_revision(saved_path)
+        except BaseException as exc:
+            if revision_path is not None and not getattr(exc, "committed", False):
+                from .project_revisions import discard_project_revision
 
+                discard_project_revision(revision_path)
+            raise
+
+        saved_revision = capture_project_file_revision(saved_path)
+        if revision_path is not None:
+            from .project_revisions import rotate_project_revisions
+
+            rotate_project_revisions(destination, revision_history_limit)
+        return saved_path, saved_revision

@@ -58,6 +58,24 @@ def _validate_floor(floor: Any) -> None:
             raise SpatialLayoutFormatError("spatial_layout.floor.units must be 'm'")
 
 
+def _validate_engineering_baseline(value: Any, prefix: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise SpatialLayoutFormatError(f"{prefix} must be an object")
+    allowed = {"length_m", "width_m", "height_m", "pressure_pa"}
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise SpatialLayoutFormatError(
+            f"{prefix} contains unsupported field(s): {', '.join(unknown)}"
+        )
+    for field in ("length_m", "width_m", "height_m"):
+        if field in value:
+            _require_positive_number(value[field], f"{prefix}.{field}")
+    if "pressure_pa" in value:
+        _require_finite_number(value["pressure_pa"], f"{prefix}.pressure_pa")
+
+
 def _validate_view(view: Any) -> None:
     if view is None:
         return
@@ -160,6 +178,10 @@ def validate_spatial_layout_document(value: Any) -> None:
         for field in ("classification", "analysis_room_name"):
             if room.get(field) is not None:
                 _require_non_empty_string(room.get(field), f"{prefix}.{field}")
+        _validate_engineering_baseline(
+            room.get("engineering_baseline"),
+            f"{prefix}.engineering_baseline",
+        )
 
     devices = value.get("devices", [])
     if not isinstance(devices, list):

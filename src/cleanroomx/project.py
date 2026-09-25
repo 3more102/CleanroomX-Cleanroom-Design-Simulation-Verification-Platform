@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,32 @@ PROJECT_SCHEMA_VERSION = 1
 
 class ProjectFormatError(ValueError):
     pass
+
+
+class ProjectSaveConflictError(RuntimeError):
+    """Raised when an explicit save would overwrite a changed project file."""
+
+    def __init__(self, path: str | Path, reason: str):
+        self.path = Path(path)
+        self.reason = reason
+        super().__init__(f"refusing to overwrite {self.path}: {reason}")
+
+
+@dataclass(frozen=True)
+class FileRevision:
+    """Content identity captured for optimistic project-save conflict checks."""
+
+    path: Path
+    size: int
+    mtime_ns: int
+    sha256: str
+
+    def same_content(self, other: "FileRevision") -> bool:
+        return (
+            self.path == other.path
+            and self.size == other.size
+            and self.sha256 == other.sha256
+        )
 
 
 @dataclass
@@ -190,49 +217,177 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def load_project_document(path: str | Path) -> ProjectDocument:
-    source = Path(path)
+def _normalized_file_path(path: str | Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
+
+
+def _stat_identity(stat: os.stat_result) -> tuple[int, int, int | None, int | None]:
+    return (
+        stat.st_size,
+        stat.st_mtime_ns,
+        getattr(stat, "st_dev", None),
+        getattr(stat, "st_ino", None),
+    )
+
+
+def _stable_read_bytes(path: str | Path) -> tuple[bytes, FileRevision]:
+    source = _normalized_file_path(path)
+    last_error: OSError | None = None
+    for _attempt in range(2):
+        try:
+            before = source.stat()
+            data = source.read_bytes()
+            after = source.stat()
+        except OSError as exc:
+            last_error = exc
+            continue
+        if (
+            _stat_identity(before) == _stat_identity(after)
+            and len(data) == after.st_size
+        ):
+            return data, FileRevision(
+                path=source,
+                size=after.st_size,
+                mtime_ns=after.st_mtime_ns,
+                sha256=sha256(data).hexdigest(),
+            )
+        last_error = OSError(f"file changed while reading: {source}")
+    assert last_error is not None
+    raise last_error
+
+
+def file_revision(path: str | Path) -> FileRevision | None:
+    """Return a stable content revision, or None when the path does not exist."""
     try:
-        data = json.loads(
-            source.read_text(encoding="utf-8"),
-            parse_constant=_reject_json_constant,
-        )
+        _data, revision = _stable_read_bytes(path)
+    except FileNotFoundError:
+        return None
+    return revision
+
+
+def _project_from_bytes(data: bytes) -> ProjectDocument:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError("project file must be valid UTF-8") from exc
+    try:
+        payload = json.loads(text, parse_constant=_reject_json_constant)
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
         ) from exc
-    return project_from_dict(data)
+    return project_from_dict(payload)
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Atomically replace a UTF-8 text file using a same-directory temporary file."""
+def load_project_document_with_revision(
+    path: str | Path,
+) -> tuple[ProjectDocument, FileRevision]:
+    data, revision = _stable_read_bytes(path)
+    return _project_from_bytes(data), revision
+
+
+def load_project_document(path: str | Path) -> ProjectDocument:
+    project, _revision = load_project_document_with_revision(path)
+    return project
+
+
+def _assert_expected_revision(
+    destination: Path,
+    expected_revision: FileRevision,
+) -> None:
+    normalized = _normalized_file_path(destination)
+    if normalized != expected_revision.path:
+        raise ValueError(
+            "expected file revision path does not match the save destination"
+        )
+    actual = file_revision(normalized)
+    if actual is None:
+        raise ProjectSaveConflictError(
+            destination,
+            "the project file was deleted or moved after it was opened",
+        )
+    if not expected_revision.same_content(actual):
+        raise ProjectSaveConflictError(
+            destination,
+            "the project file changed on disk after it was opened or last saved",
+        )
+
+
+def _atomic_write_text_with_revision(
+    path: str | Path,
+    text: str,
+    *,
+    expected_revision: FileRevision | None = None,
+) -> tuple[Path, FileRevision]:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = text.encode("utf-8")
+    expected_digest = sha256(encoded).hexdigest()
 
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", prefix=f".{destination.name}.",
-            suffix=".tmp", dir=destination.parent, delete=False,
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
         ) as handle:
             temp_path = Path(handle.name)
-            handle.write(text)
+            handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
 
+        if expected_revision is not None:
+            _assert_expected_revision(destination, expected_revision)
+
         temp_path.replace(destination)
+        written_revision = file_revision(destination)
+        if written_revision is None:
+            raise OSError(f"save verification failed because {destination} is missing")
+        if (
+            written_revision.size != len(encoded)
+            or written_revision.sha256 != expected_digest
+        ):
+            raise ProjectSaveConflictError(
+                destination,
+                "the project file changed during post-save verification",
+            )
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
         raise
+    return destination, written_revision
+
+
+def atomic_write_text(path: str | Path, text: str) -> Path:
+    """Atomically replace UTF-8 text and verify the bytes written to disk."""
+    destination, _revision = _atomic_write_text_with_revision(path, text)
     return destination
 
 
-def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
-    destination = Path(path)
+def _serialize_project_document(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)
-    text = json.dumps(
+    return json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
-    return atomic_write_text(destination, text)
+
+
+def save_project_document_with_revision(
+    path: str | Path,
+    project: ProjectDocument,
+    *,
+    expected_revision: FileRevision | None = None,
+) -> tuple[Path, FileRevision]:
+    text = _serialize_project_document(project)
+    return _atomic_write_text_with_revision(
+        path,
+        text,
+        expected_revision=expected_revision,
+    )
+
+
+def save_project_document(path: str | Path, project: ProjectDocument) -> Path:
+    destination, _revision = save_project_document_with_revision(path, project)
+    return destination

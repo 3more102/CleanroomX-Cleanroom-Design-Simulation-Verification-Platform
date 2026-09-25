@@ -102,7 +102,11 @@ def _analysis_from_dict(data: dict) -> AnalysisDocument:
     name = _validated_string(data.get("name", analysis_id), "analysis.name")
     kind = _validated_string(data.get("kind"), "analysis.kind")
     if kind not in ANALYSIS_SPECS:
-        raise ProjectFormatError(f"unsupported analysis kind in project: {kind}")
+        raise ProjectFormatError(
+            f"unsupported analysis kind in project: {kind}. "
+            "If this project uses an extension, install a compatible CleanroomX "
+            "analysis plugin and reopen the project."
+        )
     payload = data.get("input", {})
     if not isinstance(payload, dict):
         raise ProjectFormatError(f"analysis {analysis_id!r} input must be an object")

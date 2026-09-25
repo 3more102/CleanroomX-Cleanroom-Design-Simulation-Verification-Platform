@@ -97,3 +97,84 @@ def test_history_selection_restore_is_view_neutral_and_validates_target():
     workspace.restore_history_selection(("device", "missing-device"))
     assert workspace.selected is None
     assert workspace.layout["view"]["azimuth_deg"] == 123.0
+
+
+
+class _Flag:
+    def __init__(self, value: bool):
+        self.value = value
+
+    def get(self) -> bool:
+        return self.value
+
+
+class _Event:
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
+
+
+def test_room_drag_uses_snap_and_translates_assigned_devices():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    workspace.layout["devices"].append(
+        {
+            "id": "device-a",
+            "type": "sensor",
+            "name": "Sensor",
+            "room_id": "room-a",
+            "x_m": 3.0,
+            "y_m": 1.0,
+            "z_m": 1.0,
+        }
+    )
+    workspace._snap_to_grid = _Flag(True)
+    workspace._resize_room_id = None
+    workspace._drag_anchor = (2.0, 0.0)
+    workspace._canvas_to_world = lambda x, y: (float(x), float(y))
+
+    workspace._on_left_drag(_Event(2.6, 0.6))
+
+    room = workspace.layout["rooms"][0]
+    device = workspace.layout["devices"][0]
+    assert (room["x_m"], room["y_m"]) == (2.5, 0.5)
+    assert (device["x_m"], device["y_m"]) == (3.5, 1.5)
+
+
+def test_room_resize_handle_obeys_grid_snap():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    workspace._snap_to_grid = _Flag(True)
+    workspace._resize_room_id = "room-a"
+    workspace._drag_anchor = (6.0, 4.0)
+    workspace._canvas_to_world = lambda x, y: (float(x), float(y))
+
+    workspace._on_left_drag(_Event(7.4, 5.4))
+
+    room = workspace.layout["rooms"][0]
+    assert room["length_m"] == 5.5
+    assert room["width_m"] == 5.5
+
+
+def test_keyboard_nudge_moves_room_and_assigned_devices_one_grid_step():
+    project = _workspace_project()
+    workspace = _workspace(project)
+    workspace.layout["devices"].append(
+        {
+            "id": "device-a",
+            "type": "sensor",
+            "name": "Sensor",
+            "room_id": "room-a",
+            "x_m": 3.0,
+            "y_m": 1.0,
+            "z_m": 1.0,
+        }
+    )
+    workspace._snap_to_grid = _Flag(True)
+
+    assert workspace._nudge_selected(1, 0) == "break"
+
+    room = workspace.layout["rooms"][0]
+    device = workspace.layout["devices"][0]
+    assert room["x_m"] == 2.5
+    assert device["x_m"] == 3.5

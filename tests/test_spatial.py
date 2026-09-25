@@ -14,6 +14,7 @@ from cleanroomx.spatial import (
     next_room_overlap_conflict,
     fit_2d_view_to_bounds,
     room_overlap_focus_bounds,
+    room_overlap_resolution_preview,
     resolve_room_overlaps,
     resize_room,
     room_clearance_dimensions,
@@ -912,6 +913,64 @@ def test_room_overlap_focus_bounds_falls_back_to_intersection_geometry():
         3.75,
         5.25,
     )
+
+
+def test_room_overlap_resolution_preview_is_deterministic_and_non_mutating():
+    rooms = [
+        {
+            "id": "a",
+            "name": "Process",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+        },
+        {
+            "id": "b",
+            "name": "Gowning",
+            "x_m": 2.0,
+            "y_m": 0.0,
+            "length_m": 4.0,
+            "width_m": 4.0,
+        },
+    ]
+    before = [dict(room) for room in rooms]
+
+    preview = room_overlap_resolution_preview(rooms[1], rooms)
+
+    assert preview is not None
+    assert preview["room_id"] == "b"
+    assert preview["source_x_m"] == 2.0
+    assert preview["source_y_m"] == 0.0
+    assert preview["target_x_m"] == 4.0
+    assert preview["target_y_m"] == 0.0
+    assert preview["dx_m"] == 2.0
+    assert preview["dy_m"] == 0.0
+    assert preview["distance_m"] == 2.0
+    assert preview["length_m"] == 4.0
+    assert preview["width_m"] == 4.0
+    assert rooms == before
+
+
+def test_room_overlap_resolution_preview_returns_none_when_no_move_is_needed():
+    rooms = [
+        {
+            "id": "a",
+            "x_m": 0.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
+        {
+            "id": "b",
+            "x_m": 3.0,
+            "y_m": 0.0,
+            "length_m": 2.0,
+            "width_m": 2.0,
+        },
+    ]
+
+    assert room_overlap_resolution_preview(rooms[1], rooms) is None
 
 
 def test_fit_2d_view_to_bounds_centers_and_scales_deterministically():

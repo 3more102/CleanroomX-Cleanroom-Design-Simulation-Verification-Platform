@@ -6,7 +6,9 @@ import pytest
 
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document, project_from_dict,
+    ProjectFormatError, ProjectSaveConflictError, atomic_write_text,
+    load_project_document, load_project_document_with_revision,
+    project_document_revision, project_file_revision, project_from_dict,
     save_project_document,
 )
 
@@ -28,6 +30,72 @@ def test_project_document_round_trip(tmp_path):
     raw = json.loads(path.read_text(encoding="utf-8"))
     assert raw["schema"] == PROJECT_SCHEMA
     assert raw["schema_version"] == PROJECT_SCHEMA_VERSION
+
+
+def test_loaded_revision_matches_exact_saved_project_bytes(tmp_path):
+    project = ProjectDocument(name="Revision identity")
+    path = save_project_document(tmp_path / "revision.cleanroomx.json", project)
+
+    loaded, revision = load_project_document_with_revision(path)
+
+    assert loaded == project
+    assert revision == project_file_revision(path)
+    assert revision == project_document_revision(project)
+
+
+def test_checked_save_succeeds_when_disk_revision_is_unchanged(tmp_path):
+    path = save_project_document(
+        tmp_path / "checked.cleanroomx.json",
+        ProjectDocument(name="Initial"),
+    )
+    expected_revision = project_file_revision(path)
+    updated = ProjectDocument(name="Updated")
+
+    save_project_document(path, updated, expected_revision=expected_revision)
+
+    assert load_project_document(path) == updated
+    assert project_file_revision(path) == project_document_revision(updated)
+
+
+def test_checked_save_rejects_external_modification_and_preserves_disk(tmp_path):
+    path = save_project_document(
+        tmp_path / "conflict.cleanroomx.json",
+        ProjectDocument(name="Initial"),
+    )
+    expected_revision = project_file_revision(path)
+    external = ProjectDocument(name="External writer")
+    save_project_document(path, external)
+    external_bytes = path.read_bytes()
+
+    with pytest.raises(ProjectSaveConflictError, match="changed on disk"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local unsaved work"),
+            expected_revision=expected_revision,
+        )
+
+    assert path.read_bytes() == external_bytes
+    assert load_project_document(path) == external
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+
+def test_checked_save_rejects_deleted_source_without_recreating_it(tmp_path):
+    path = save_project_document(
+        tmp_path / "deleted.cleanroomx.json",
+        ProjectDocument(name="Initial"),
+    )
+    expected_revision = project_file_revision(path)
+    path.unlink()
+
+    with pytest.raises(ProjectSaveConflictError, match="changed on disk"):
+        save_project_document(
+            path,
+            ProjectDocument(name="Local unsaved work"),
+            expected_revision=expected_revision,
+        )
+
+    assert not path.exists()
+    assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
 
 
 def test_atomic_write_text_replaces_content_without_leaving_temp_file(tmp_path):

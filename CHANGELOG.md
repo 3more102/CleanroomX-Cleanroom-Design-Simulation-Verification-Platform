@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased exact runtime provenance — 2026-09-25
+
+- Binds every application analysis to a deterministic SHA-256 fingerprint of the exact CleanroomX Python source tree, not only the semantic package version.
+- Captures the source revision before and after execution and discards a result with `RuntimeCodeChangedError` if application code changes while the run is in progress.
+- Records parser/runner/reporter or custom-adapter bindings plus Python implementation/version, platform, byte order, and floating-point radix/mantissa metadata in application execution provenance.
+- Exposes the new evidence automatically through Diagnostics and existing run-bundle export without changing the project schema, solver equations, numerical tolerances, acceptance semantics, or application registry API.
+- Adds deterministic source-tree fingerprint, runtime-code-change failure, direct binding, and custom-adapter provenance regressions.
+
 ## Unreleased external analysis input stability — 2026-09-25
 
 - Makes file-backed `consistency` and `dossier` runs fail closed when any referenced engineering input changes, disappears, or cannot be fingerprinted consistently during execution.

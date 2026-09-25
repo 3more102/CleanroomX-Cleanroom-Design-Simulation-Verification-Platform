@@ -109,8 +109,11 @@ jobs:
           - PR #473 3D-fit head: 332eb07ed1d4d27a028d7fe8886b3914da29c8d7
           - PR #473 CI #1552 / 36171783101: success
           - post-#473 code integration commit: 1fc662441763fd6bd2070aac6d6449410f06fb2a
+          - PR #476 viewport-controls head: df1ef16207fcca8abfbaf08a48fe13fadd77c221
+          - PR #476 CI #1561 / 36183831885: success; 1003 passed on Python 3.11/3.12/3.13
+          - final functional spatial merge commit: e528c694debbf6a3263693669f5acb6026f1951f
 
-          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D Fit derive zoom and pan from real room floor/ceiling geometry; and strengthens the installed demo smoke.
+          v0.102.1 keeps one canonical persisted spatial model; makes engineering synchronization bidirectional but dimension-only; projects fresh current verification pressure into 2D/3D visualization without persisting solver evidence into geometry; uses that same evidence for pressure-cascade state; supports persisted windows and generic wall openings; centralizes deterministic viewport transforms; makes 3D Fit derive zoom and pan from real room floor/ceiling geometry; adds explicit 2D viewport reset and Shift+left-drag 3D orbit; and strengthens the installed demo smoke.
 
           The successful current-main CI that triggers this publisher is the release gate for the exact tagged commit. Published v0.100.0, v0.101.0, and v0.102.0 remain unchanged.
 

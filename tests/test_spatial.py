@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from cleanroomx.project import AnalysisDocument, ProjectDocument, project_from_dict
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    project_from_dict,
+    save_project_document,
+)
 from cleanroomx.spatial import (
     SPATIAL_METADATA_KEY,
     SpatialSyncError,
@@ -16,6 +22,7 @@ from cleanroomx.spatial import (
     engineering_sync_status,
     layout_metrics,
     normalize_layout,
+    pressure_overlay_state,
     sync_layout_to_analysis,
     validate_layout,
 )
@@ -921,4 +928,148 @@ def test_project_sync_validates_all_links_before_mutating_any_engineering_room()
 
     assert analysis.input == original
     assert "engineering_sync" not in layout
+
+def test_pressure_overlay_reports_available_unavailable_conflicting_and_unmapped_states():
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                }
+            ]
+        },
+    )
+    layout = {
+        "rooms": [
+            {
+                "id": "process",
+                "name": "Process",
+                "analysis_room_name": "Process",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 7.0,
+                "width_m": 5.0,
+                "height_m": 3.0,
+                "pressure_pa": 30.0,
+            },
+            {
+                "id": "support",
+                "name": "Support",
+                "analysis_room_name": "Missing",
+                "x_m": 8.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 3.0,
+                "height_m": 3.0,
+            },
+        ]
+    }
+
+    overlay = pressure_overlay_state(layout, analysis)
+    by_id = {item["room_id"]: item for item in overlay["rooms"]}
+
+    assert overlay["minimum_pressure_pa"] == 30.0
+    assert overlay["maximum_pressure_pa"] == 30.0
+    assert by_id["process"]["availability"] == "available"
+    assert by_id["process"]["pressure_pa"] == 30.0
+    assert by_id["process"]["fill"] != "#dfe7ef"
+    assert by_id["process"]["engineering_state"] == "conflicting"
+    assert by_id["support"]["availability"] == "unavailable"
+    assert by_id["support"]["pressure_pa"] is None
+    assert by_id["support"]["fill"] == "#dfe7ef"
+    assert by_id["support"]["engineering_state"] == "unmapped"
+
+
+def test_spatial_project_persistence_round_trip_preserves_geometry_ids_mapping_pressure_and_sync(tmp_path):
+    analysis = AnalysisDocument(
+        id="verification",
+        name="Facility",
+        kind="project_verification",
+        input={
+            "rooms": [
+                {
+                    "name": "Process",
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "observed_pressure_pa": 30.0,
+                }
+            ]
+        },
+    )
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "process-stable",
+                    "name": "Process display",
+                    "analysis_room_name": "Process",
+                    "x_m": 1.25,
+                    "y_m": 2.5,
+                    "length_m": 6.0,
+                    "width_m": 5.0,
+                    "height_m": 3.0,
+                    "pressure_pa": 30.0,
+                }
+            ],
+            "engineering_sync": {
+                "analysis_id": "verification",
+                "rooms": [
+                    {
+                        "room_id": "process-stable",
+                        "analysis_room_name": "Process",
+                        "length_m": 6.0,
+                        "width_m": 5.0,
+                        "height_m": 3.0,
+                    }
+                ],
+            },
+        }
+    )
+    project = ProjectDocument(
+        name="Spatial round trip",
+        metadata={SPATIAL_METADATA_KEY: layout},
+        analyses=[analysis],
+        active_analysis_id="verification",
+    )
+
+    target = save_project_document(tmp_path / "spatial.cleanroomx.json", project)
+    reloaded = load_project_document(target)
+    saved_layout = reloaded.metadata[SPATIAL_METADATA_KEY]
+
+    assert saved_layout == layout
+    assert saved_layout["rooms"][0]["id"] == "process-stable"
+    assert saved_layout["rooms"][0]["analysis_room_name"] == "Process"
+    assert saved_layout["rooms"][0]["pressure_pa"] == 30.0
+    assert saved_layout["engineering_sync"]["analysis_id"] == "verification"
+    assert engineering_sync_status(
+        saved_layout, reloaded.analysis_by_id("verification")
+    )["overall"] == "synchronized"
+
+
+def test_v0100_project_without_spatial_metadata_opens_without_fabricated_geometry():
+    payload = {
+        "schema": "cleanroomx.project",
+        "schema_version": 1,
+        "application_version": "0.100.0",
+        "project": {
+            "name": "Legacy v0.100",
+            "description": "",
+            "metadata": {"legacy_note": "preserve"},
+        },
+        "analyses": [],
+        "active_analysis_id": None,
+    }
+
+    project = project_from_dict(payload)
+
+    assert project.name == "Legacy v0.100"
+    assert project.metadata == {"legacy_note": "preserve"}
+    assert SPATIAL_METADATA_KEY not in project.metadata
 

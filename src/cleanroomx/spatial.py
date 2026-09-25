@@ -1935,10 +1935,12 @@ class SpatialDesignWorkspace(ttk.Frame):
             x1, y1 = self._world_to_canvas(lx, ly)
             status = str(evidence.get("status") or "unavailable")
             color, dash = self._relationship_style(status)
+            line_options = {"dash": dash} if dash else {}
             self.canvas_2d.create_line(
                 x0, y0, x1, y1,
-                arrow="last", width=3, dash=dash, fill=color,
+                arrow="last", width=3, fill=color,
                 tags=("pressure_relationship",),
+                **line_options,
             )
             if self._show_labels.get():
                 actual = evidence.get("actual_delta_pa")

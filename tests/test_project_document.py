@@ -205,6 +205,46 @@ def test_project_loader_rejects_oversized_file_before_json_parsing(tmp_path, mon
         load_project_document(path)
 
 
+def _underreport_file_size(monkeypatch, path, *, reported_size):
+    real_stat = project_module.Path.stat
+
+    class _StatProxy:
+        def __init__(self, value):
+            self._value = value
+            self.st_size = reported_size
+
+        def __getattr__(self, name):
+            return getattr(self._value, name)
+
+    def fake_stat(self, *args, **kwargs):
+        value = real_stat(self, *args, **kwargs)
+        return _StatProxy(value) if self == path else value
+
+    monkeypatch.setattr(project_module.Path, "stat", fake_stat)
+
+
+def test_bounded_project_reader_rechecks_bytes_if_file_outgrows_initial_stat(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "growing.cleanroomx.json"
+    path.write_bytes(b"x" * 65)
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+    _underreport_file_size(monkeypatch, path, reported_size=64)
+
+    with pytest.raises(ProjectFormatError, match="exceeds maximum supported size"):
+        project_module._read_project_bytes_bounded(path)
+
+
+def test_revision_hash_stops_if_file_outgrows_initial_stat(tmp_path, monkeypatch):
+    path = tmp_path / "growing.cleanroomx.json"
+    path.write_bytes(b"x" * 65)
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+    _underreport_file_size(monkeypatch, path, reported_size=64)
+
+    with pytest.raises(OSError, match="exceeds maximum supported size"):
+        capture_project_file_revision(path)
+
+
 def test_project_loader_accepts_valid_file_at_exact_byte_limit(tmp_path, monkeypatch):
     payload = {
         "schema": PROJECT_SCHEMA,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import copy
+import heapq
 import math
 import uuid
 from typing import Any, Callable
@@ -824,9 +825,11 @@ def _room_overlap_records(
 ) -> list[tuple[int, int, list[float]]]:
     """Return deterministic room-overlap records using an adaptive broad phase.
 
-    The sweep axis is chosen from projected room density. Exact two-dimensional
-    overlap checks still use the same explicit engineering tolerance as before.
-    Results are sorted by original room order to preserve validation/report order.
+    The sweep axis is chosen from projected room density. Expired candidates are
+    removed through an end-coordinate heap, avoiding a full active-list rebuild
+    for every room. Exact two-dimensional overlap checks still use the same
+    explicit engineering tolerance as before. Results are sorted by original room
+    order to preserve validation/report order.
     """
     if len(rooms) < 2:
         return []
@@ -850,25 +853,25 @@ def _room_overlap_records(
     x_density = sum(item[3] - item[1] for item in bounds) / x_span
     y_density = sum(item[4] - item[2] for item in bounds) / y_span
     sweep_x = x_density <= y_density
+    start_index = 1 if sweep_x else 2
+    end_index = 3 if sweep_x else 4
 
-    def axis_start(item: tuple[int, float, float, float, float]) -> float:
-        return item[1] if sweep_x else item[2]
-
-    def axis_end(item: tuple[int, float, float, float, float]) -> float:
-        return item[3] if sweep_x else item[4]
-
-    ordered = sorted(bounds, key=lambda item: (axis_start(item), item[0]))
-    active: list[tuple[int, float, float, float, float]] = []
+    ordered = sorted(bounds, key=lambda item: (item[start_index], item[0]))
+    active_by_index: dict[
+        int, tuple[int, float, float, float, float]
+    ] = {}
+    expiry_heap: list[tuple[float, int]] = []
     overlaps: list[tuple[int, int, list[float]]] = []
 
     for current in ordered:
-        current_start = axis_start(current)
-        active = [
-            item
-            for item in active
-            if axis_end(item) > current_start + SPATIAL_GEOMETRY_EPSILON_M
-        ]
-        for other in active:
+        expiry_threshold = (
+            current[start_index] + SPATIAL_GEOMETRY_EPSILON_M
+        )
+        while expiry_heap and expiry_heap[0][0] <= expiry_threshold:
+            _axis_end, expired_index = heapq.heappop(expiry_heap)
+            active_by_index.pop(expired_index, None)
+
+        for other in active_by_index.values():
             x0 = max(current[1], other[1])
             y0 = max(current[2], other[2])
             x1 = min(current[3], other[3])
@@ -880,7 +883,8 @@ def _room_overlap_records(
                 left_index, right_index = sorted((current[0], other[0]))
                 overlaps.append((left_index, right_index, [x0, y0, x1, y1]))
 
-        active.append(current)
+        active_by_index[current[0]] = current
+        heapq.heappush(expiry_heap, (current[end_index], current[0]))
 
     overlaps.sort(key=lambda item: (item[0], item[1]))
     return overlaps
@@ -923,9 +927,8 @@ def _spatial_validation_key(layout: dict) -> tuple:
     )
 
 
-def validate_layout(value: Any) -> list[dict]:
-    """Return advisory spatial-edit warnings without mutating persisted layout data."""
-    layout = normalize_layout(value)
+def _validate_normalized_layout(layout: dict) -> list[dict]:
+    """Validate one canonical normalized layout without allocating a second copy."""
     rooms = layout["rooms"]
     devices = layout["devices"]
     issues: list[dict] = []
@@ -1067,6 +1070,12 @@ def validate_layout(value: Any) -> list[dict]:
                 )
 
     return issues
+
+
+def validate_layout(value: Any) -> list[dict]:
+    """Return advisory spatial-edit warnings without mutating persisted layout data."""
+    return _validate_normalized_layout(normalize_layout(value))
+
 
 def _pressure_fill(pressure: Any, min_pressure: float | None, max_pressure: float | None) -> str:
     if pressure is None or min_pressure is None or max_pressure is None:
@@ -1645,7 +1654,7 @@ class SpatialDesignWorkspace(ttk.Frame):
     def _refresh_validation(self, *, force: bool = False) -> None:
         validation_key = _spatial_validation_key(self.layout)
         if force or validation_key != self._last_validation_key:
-            self._validation_issues = validate_layout(self.layout)
+            self._validation_issues = _validate_normalized_layout(self.layout)
             self._last_validation_key = validation_key
             self._update_validation_summary()
 

@@ -230,7 +230,7 @@ def test_revision_capture_rejects_oversized_file_before_hashing(tmp_path, monkey
     path.write_bytes(b"x" * 65)
     monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
 
-    with pytest.raises(ProjectFormatError, match="exceeds maximum supported size"):
+    with pytest.raises(OSError, match="exceeds maximum supported size"):
         capture_project_file_revision(path)
 
 

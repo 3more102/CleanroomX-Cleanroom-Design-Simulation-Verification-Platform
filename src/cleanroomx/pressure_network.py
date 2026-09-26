@@ -22,9 +22,19 @@ _FLOW_MODELS = frozenset({"power_law", "orifice"})
 
 
 def _finite(value: float, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be a finite number")
     value = float(value)
     if not math.isfinite(value):
         raise ValueError(f"{field_name} must be finite")
+    return value
+
+
+def _solver_finite(value: float, context: str) -> float:
+    if not math.isfinite(value):
+        raise RuntimeError(
+            "pressure-network solver produced non-finite " + context
+        )
     return value
 
 
@@ -340,10 +350,11 @@ def _path_flow_and_derivative(
     start_pressure_pa: float,
     end_pressure_pa: float,
 ) -> tuple[float, float, float]:
-    effective_delta_pa = (
+    effective_delta_pa = _solver_finite(
         start_pressure_pa
         - end_pressure_pa
-        + path.pressure_offset_pa
+        + path.pressure_offset_pa,
+        f"effective pressure difference for path {path.name!r}",
     )
     magnitude = abs(effective_delta_pa)
     transition = path.linearization_pressure_pa
@@ -354,42 +365,69 @@ def _path_flow_and_derivative(
         coefficient = path.coefficient_m3_s_pa_n
         exponent = path.exponent
         if magnitude < transition:
-            slope = coefficient * transition ** (exponent - 1.0)
-            return (
+            slope = _solver_finite(
+                coefficient * transition ** (exponent - 1.0),
+                f"flow sensitivity for path {path.name!r}",
+            )
+            flow = _solver_finite(
                 slope * effective_delta_pa,
+                f"airflow for path {path.name!r}",
+            )
+            return (
+                flow,
                 slope,
                 effective_delta_pa,
             )
-        flow = coefficient * math.copysign(
-            magnitude**exponent,
-            effective_delta_pa,
+        flow = _solver_finite(
+            coefficient
+            * math.copysign(
+                magnitude**exponent,
+                effective_delta_pa,
+            ),
+            f"airflow for path {path.name!r}",
         )
-        derivative = (
+        derivative = _solver_finite(
             coefficient
             * exponent
-            * magnitude ** (exponent - 1.0)
+            * magnitude ** (exponent - 1.0),
+            f"flow sensitivity for path {path.name!r}",
         )
         return flow, derivative, effective_delta_pa
 
     assert path.discharge_coefficient is not None
     assert path.area_m2 is not None
-    k = (
+    k = _solver_finite(
         path.discharge_coefficient
         * path.area_m2
-        * math.sqrt(2.0 / path.air_density_kg_m3)
+        * math.sqrt(2.0 / path.air_density_kg_m3),
+        f"orifice coefficient for path {path.name!r}",
     )
     if magnitude < transition:
-        slope = k / math.sqrt(transition)
-        return (
+        slope = _solver_finite(
+            k / math.sqrt(transition),
+            f"flow sensitivity for path {path.name!r}",
+        )
+        flow = _solver_finite(
             slope * effective_delta_pa,
+            f"airflow for path {path.name!r}",
+        )
+        return (
+            flow,
             slope,
             effective_delta_pa,
         )
-    flow = k * math.copysign(
-        math.sqrt(magnitude),
-        effective_delta_pa,
+    flow = _solver_finite(
+        k
+        * math.copysign(
+            math.sqrt(magnitude),
+            effective_delta_pa,
+        ),
+        f"airflow for path {path.name!r}",
     )
-    derivative = 0.5 * k / math.sqrt(magnitude)
+    derivative = _solver_finite(
+        0.5 * k / math.sqrt(magnitude),
+        f"flow sensitivity for path {path.name!r}",
+    )
     return flow, derivative, effective_delta_pa
 
 
@@ -472,8 +510,13 @@ def solve_room_pressure_network(
         for node in network.nodes
         if node.fixed_pressure_pa is not None
     ]
-    initial_pressure = (
-        sum(fixed_pressures) / len(fixed_pressures)
+    fixed_pressure_count = len(fixed_pressures)
+    initial_pressure = _solver_finite(
+        sum(
+            pressure / fixed_pressure_count
+            for pressure in fixed_pressures
+        ),
+        "initial pressure estimate",
     )
     pressures = {
         node.name: (
@@ -640,9 +683,13 @@ def solve_room_pressure_network(
                     6,
                 ),
                 "direction": (
-                    "outflow"
-                    if room_outward_flow > 0
-                    else "inflow"
+                    "zero flow"
+                    if room_outward_flow == 0.0
+                    else (
+                        "outflow"
+                        if room_outward_flow > 0.0
+                        else "inflow"
+                    )
                 ),
             }
 

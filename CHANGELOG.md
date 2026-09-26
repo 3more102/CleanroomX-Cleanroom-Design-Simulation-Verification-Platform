@@ -6,6 +6,7 @@
 - Reports structured severity, affected element, explanation, and corrective action for spatial conflicts, invalid analysis inputs, ambiguous analysis names, synchronization conflicts/staleness, never-run analyses, stale current inputs, stale external dependencies, and orphan run-history evidence.
 - Adds `cleanroomx-project-check` with strict JSON or Markdown output, source-revision stability checks, actionable exit codes, and the shared fsync-backed atomic output path.
 - Adds focused regression coverage plus installed-wheel CLI smoke coverage and `docs/PROJECT_DIAGNOSTICS.md`.
+- Fixes run-history freshness selection for file-backed analyses: diagnostics now search all input-matching retained runs for a dependency-current revision instead of falsely flagging staleness when only the newest matching run references an older/different file revision.
 - Preserves project schema version 1, v0.102.1 release identity, solver equations/tolerances, configured engineering acceptance semantics, and project Undo/Redo state because diagnostics are read-only.
 
 ## Unreleased next-level Phase 1 — design requirements and air-system design

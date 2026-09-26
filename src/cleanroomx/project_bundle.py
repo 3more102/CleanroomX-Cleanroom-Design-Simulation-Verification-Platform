@@ -23,6 +23,7 @@ from .persistence import (
     stable_file_sha256,
 )
 from .project import (
+    PROJECT_FILE_MAX_BYTES,
     ProjectDocument,
     ProjectFormatError,
     _project_document_text,
@@ -407,6 +408,12 @@ def _read_project_member(
     archive: zipfile.ZipFile,
     archive_path: str,
 ) -> ProjectDocument:
+    info = archive.getinfo(archive_path)
+    if info.file_size > PROJECT_FILE_MAX_BYTES:
+        raise ProjectBundleError(
+            f"bundled project size {info.file_size} bytes exceeds maximum supported "
+            f"project size of {PROJECT_FILE_MAX_BYTES} bytes"
+        )
     try:
         text = archive.read(archive_path).decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -490,6 +497,11 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
                 manifest.get("project"),
                 field="project",
             )
+            if project_size > PROJECT_FILE_MAX_BYTES:
+                raise ProjectBundleError(
+                    f"bundled project size {project_size} bytes exceeds maximum supported "
+                    f"project size of {PROJECT_FILE_MAX_BYTES} bytes"
+                )
             if project_path != PROJECT_BUNDLE_PROJECT:
                 raise ProjectBundleError(
                     f"bundle project path must be {PROJECT_BUNDLE_PROJECT!r}"

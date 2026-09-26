@@ -191,8 +191,12 @@ def _copy_dependency(
         _zip_info(archive_path), mode="w", force_zip64=True
     ) as dst:
         for chunk in iter(lambda: src.read(_COPY_CHUNK_SIZE), b""):
-            digest.update(chunk)
             size += len(chunk)
+            if size > expected_size:
+                raise ProjectBundleError(
+                    f"dependency changed while portable bundle was being written: {source}"
+                )
+            digest.update(chunk)
             dst.write(chunk)
     if size != expected_size or digest.hexdigest() != expected_sha256:
         raise ProjectBundleError(
@@ -210,6 +214,7 @@ def _build_portable_project(
 
     source_to_record: dict[str, dict[str, Any]] = {}
     archive_to_source: dict[str, Path] = {}
+    dependency_bytes = 0
 
     for analysis in portable.analyses:
         for field, declared_path in _external_dependency_references(
@@ -232,13 +237,46 @@ def _build_portable_project(
             source_key = os.path.normcase(str(source))
             record = source_to_record.get(source_key)
             if record is None:
+                if len(source_to_record) >= _MAX_DEPENDENCY_COUNT:
+                    raise ProjectBundleError(
+                        "bundle dependency count exceeds supported limit "
+                        f"(more than {_MAX_DEPENDENCY_COUNT})"
+                    )
                 archive_path = _dependency_filename(len(source_to_record) + 1, source)
+                try:
+                    initial_dependency_stat = source.stat()
+                except OSError as exc:
+                    raise ProjectBundleError(
+                        f"dependency is unavailable or changing while packaging: {source}"
+                    ) from exc
+                if initial_dependency_stat.st_size > _MAX_DEPENDENCY_MEMBER_BYTES:
+                    raise ProjectBundleError(
+                        "bundle dependency exceeds supported size limit: "
+                        f"{source} ({initial_dependency_stat.st_size} > "
+                        f"{_MAX_DEPENDENCY_MEMBER_BYTES} bytes)"
+                    )
+                if dependency_bytes > _MAX_TOTAL_PAYLOAD_BYTES - initial_dependency_stat.st_size:
+                    raise ProjectBundleError(
+                        "bundle dependencies exceed supported total size limit "
+                        f"(more than {_MAX_TOTAL_PAYLOAD_BYTES} bytes)"
+                    )
                 try:
                     source_stat, source_sha256 = stable_file_sha256(source)
                 except OSError as exc:
                     raise ProjectBundleError(
                         f"dependency is unavailable or changing while packaging: {source}"
                     ) from exc
+                if source_stat.st_size > _MAX_DEPENDENCY_MEMBER_BYTES:
+                    raise ProjectBundleError(
+                        "bundle dependency exceeds supported size limit after fingerprinting: "
+                        f"{source}"
+                    )
+                if dependency_bytes > _MAX_TOTAL_PAYLOAD_BYTES - source_stat.st_size:
+                    raise ProjectBundleError(
+                        "bundle dependencies exceed supported total size limit "
+                        f"(more than {_MAX_TOTAL_PAYLOAD_BYTES} bytes)"
+                    )
+                dependency_bytes += source_stat.st_size
                 record = {
                     "path": archive_path,
                     "size_bytes": source_stat.st_size,
@@ -482,7 +520,16 @@ def _read_project_member(
     archive_path: str,
 ) -> ProjectDocument:
     try:
-        text = archive.read(archive_path).decode("utf-8")
+        info = archive.getinfo(archive_path)
+        with archive.open(info, mode="r") as stream:
+            raw = stream.read(_MAX_PROJECT_MEMBER_BYTES + 1)
+        if len(raw) > _MAX_PROJECT_MEMBER_BYTES:
+            raise ProjectBundleError(
+                f"bundle project exceeds supported size limit while reading: {archive_path}"
+            )
+        text = raw.decode("utf-8")
+    except KeyError as exc:
+        raise ProjectBundleError(f"bundle member is missing: {archive_path}") from exc
     except UnicodeDecodeError as exc:
         raise ProjectBundleError("bundled project is not UTF-8") from exc
     try:
@@ -539,6 +586,11 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
         bundle_before_stat, bundle_before_sha256 = stable_file_sha256(source_resolved)
     except OSError as exc:
         raise ProjectBundleError(f"bundle is unavailable or changing: {source}") from exc
+    if bundle_before_stat.st_size > _MAX_BUNDLE_ARCHIVE_BYTES:
+        raise ProjectBundleError(
+            "bundle archive exceeds supported size limit after fingerprinting "
+            f"({bundle_before_stat.st_size} > {_MAX_BUNDLE_ARCHIVE_BYTES} bytes)"
+        )
     try:
         with zipfile.ZipFile(source, mode="r") as archive:
             infos = archive.infolist()

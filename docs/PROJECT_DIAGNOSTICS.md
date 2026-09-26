@@ -55,7 +55,7 @@ The CLI loads one stable project revision, runs diagnostics against that in-memo
 
 JSON/Markdown `--output` files use the same durable atomic-write boundary as other CleanroomX exports, so a failed staging write or replacement does not intentionally truncate a previously valid report.
 
-The CLI rejects an `--output` path that resolves to the checked project itself, including ordinary path aliases, so a diagnostics export cannot replace the source project file.
+The CLI rejects an `--output` path that resolves to the checked project itself or to any external engineering dependency declared by a saved analysis, including ordinary path aliases. Diagnostics export therefore cannot replace the source project or one of the project inputs it is checking.
 
 The diagnostics service itself is read-only and therefore does not participate in Undo/Redo.
 

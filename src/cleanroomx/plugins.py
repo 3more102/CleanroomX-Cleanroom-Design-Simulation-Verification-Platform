@@ -74,12 +74,59 @@ def _nonempty_text(value: Any, field_name: str) -> str:
     return value.strip()
 
 
+_UNAVAILABLE_ORIGIN_TEXT = "<unavailable>"
+
+
+def _safe_diagnostic_text(
+    value: Any,
+    *,
+    fallback: str = _UNAVAILABLE_ORIGIN_TEXT,
+) -> str:
+    """Best-effort text for diagnostics without letting plugin metadata abort discovery."""
+    try:
+        return str(value)
+    except (Exception, SystemExit):
+        return fallback
+
+
+def _safe_entry_point_text(entry_point: Any, field_name: str) -> str:
+    try:
+        value = getattr(entry_point, field_name)
+    except (Exception, SystemExit):
+        return _UNAVAILABLE_ORIGIN_TEXT
+    return _safe_diagnostic_text(value)
+
+
+def _required_entry_point_text(entry_point: Any, field_name: str) -> str:
+    try:
+        value = getattr(entry_point, field_name)
+    except (Exception, SystemExit) as exc:
+        raise ValueError(f"entry point {field_name} is unavailable") from exc
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"entry point {field_name} must be a non-empty string")
+    return value
+
+
+def _optional_origin_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = _safe_diagnostic_text(value, fallback="")
+    return text or None
+
+
+def _plugin_error_text(exc: BaseException) -> str:
+    message = _safe_diagnostic_text(exc, fallback="<unprintable error>")
+    return f"{type(exc).__name__}: {message}"
+
+
 def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
     if not isinstance(plugin, AnalysisPlugin):
         raise TypeError(
             "entry point must expose AnalysisPlugin or a zero-argument factory "
             "returning AnalysisPlugin"
         )
+    if type(plugin.api_version) is not int:
+        raise TypeError("plugin API version must be an integer")
     if plugin.api_version != PLUGIN_API_VERSION:
         raise ValueError(
             f"unsupported plugin API version {plugin.api_version!r}; "
@@ -87,6 +134,10 @@ def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
         )
 
     key = _nonempty_text(plugin.key, "plugin key")
+    if key != plugin.key:
+        raise ValueError(
+            "plugin key must not contain leading or trailing whitespace"
+        )
     if _PLUGIN_KEY_RE.fullmatch(key) is None:
         raise ValueError(
             "plugin key must match ^[a-z][a-z0-9_]*$ for stable project identity"
@@ -114,23 +165,37 @@ def validate_analysis_plugin(plugin: AnalysisPlugin) -> AnalysisPlugin:
 
 
 def _origin(entry_point: Any) -> PluginOrigin:
-    dist = getattr(entry_point, "dist", None)
-    distribution_name = getattr(dist, "name", None)
-    if distribution_name is None and dist is not None:
+    entry_point_name = _required_entry_point_text(entry_point, "name")
+    entry_point_value = _required_entry_point_text(entry_point, "value")
+
+    try:
+        dist = getattr(entry_point, "dist", None)
+    except (Exception, SystemExit):
+        dist = None
+
+    distribution_name = None
+    distribution_version = None
+    if dist is not None:
         try:
-            distribution_name = dist.metadata.get("Name")
-        except (AttributeError, KeyError, TypeError):
+            distribution_name = getattr(dist, "name", None)
+        except (Exception, SystemExit):
             distribution_name = None
-    distribution_version = getattr(dist, "version", None)
+        if distribution_name is None:
+            try:
+                metadata_record = getattr(dist, "metadata")
+                distribution_name = metadata_record.get("Name")
+            except (Exception, SystemExit):
+                distribution_name = None
+        try:
+            distribution_version = getattr(dist, "version", None)
+        except (Exception, SystemExit):
+            distribution_version = None
+
     return PluginOrigin(
-        entry_point_name=str(getattr(entry_point, "name", "")),
-        entry_point_value=str(getattr(entry_point, "value", "")),
-        distribution_name=(
-            str(distribution_name) if distribution_name is not None else None
-        ),
-        distribution_version=(
-            str(distribution_version) if distribution_version is not None else None
-        ),
+        entry_point_name=entry_point_name,
+        entry_point_value=entry_point_value,
+        distribution_name=_optional_origin_text(distribution_name),
+        distribution_version=_optional_origin_text(distribution_version),
     )
 
 
@@ -167,8 +232,8 @@ def discover_analysis_plugins(
         sorted(
             points,
             key=lambda item: (
-                str(getattr(item, "name", "")),
-                str(getattr(item, "value", "")),
+                _safe_entry_point_text(item, "name"),
+                _safe_entry_point_text(item, "value"),
             ),
         )
     )
@@ -176,15 +241,17 @@ def discover_analysis_plugins(
     candidates: list[DiscoveredAnalysisPlugin] = []
     issues: list[PluginIssue] = []
     for point in points:
-        origin = _origin(point)
+        issue_name = _safe_entry_point_text(point, "name")
+        issue_value = _safe_entry_point_text(point, "value")
         try:
+            origin = _origin(point)
             plugin = validate_analysis_plugin(_load_registration(point))
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:
             issues.append(
                 PluginIssue(
-                    entry_point_name=origin.entry_point_name,
-                    entry_point_value=origin.entry_point_value,
-                    error=f"{type(exc).__name__}: {exc}",
+                    entry_point_name=issue_name,
+                    entry_point_value=issue_value,
+                    error=_plugin_error_text(exc),
                 )
             )
             continue

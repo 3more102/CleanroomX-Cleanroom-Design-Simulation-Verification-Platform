@@ -43,15 +43,16 @@ def markdown_air_system_design_report(result: dict) -> str:
         "",
         f"Status: **{markdown_text(result['status']).upper()}**",
         "",
-        "| Room | Strategy | Governing airflow m³/h | Basis | Return m³/h | Exhaust m³/h | Makeup m³/h | Surplus m³/h |",
-        "|---|---|---:|---|---:|---:|---:|---:|",
+        "| Room | Strategy | Governing airflow m³/h | Basis | Return m³/h | Exhaust m³/h | Makeup m³/h | Minimum surplus m³/h | Achieved surplus m³/h | Margin m³/h |",
+        "|---|---|---:|---|---:|---:|---:|---:|---:|---:|",
     ]
     for room in result["rooms"]:
         lines.append(
             f"| {markdown_text(room['name'])} | {markdown_text(room['strategy'])} | "
             f"{room['governing_airflow_m3_h']} | {markdown_text(room['governing_basis'])} | "
             f"{room['proposed_return_airflow_m3_h']} | {room['exhaust_airflow_m3_h']} | "
-            f"{room['preliminary_makeup_airflow_m3_h']} | {room['achieved_surplus_m3_h']} |"
+            f"{room['preliminary_makeup_airflow_m3_h']} | {room['minimum_surplus_m3_h']} | "
+            f"{room['achieved_surplus_m3_h']} | {room['surplus_margin_m3_h']} |"
         )
     lines.extend(["", "## Preliminary equipment counts", ""])
     for room in result["rooms"]:

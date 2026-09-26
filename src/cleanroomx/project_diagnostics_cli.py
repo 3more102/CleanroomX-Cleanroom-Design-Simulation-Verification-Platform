@@ -54,10 +54,27 @@ def _attach_source_evidence(result: dict, path: Path, revision) -> dict:
     return output
 
 
+def _output_aliases_source(source: Path, output: str | Path) -> bool:
+    """Return True when an output path refers to the checked project itself."""
+    candidate = Path(output).expanduser()
+    try:
+        if candidate.resolve(strict=False) == source:
+            return True
+    except (OSError, RuntimeError):
+        pass
+    try:
+        return candidate.exists() and candidate.samefile(source)
+    except OSError:
+        return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source = Path(args.project).expanduser().resolve(strict=False)
+    output = Path(args.output).expanduser() if args.output else None
     try:
+        if output is not None and _output_aliases_source(source, output):
+            raise ValueError("--output must not refer to the source project file")
         project, revision_before = load_project_document_with_revision(source)
         result = analyze_project_diagnostics(project, base_dir=source.parent)
         revision_after = capture_project_file_revision(source)
@@ -78,8 +95,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.output_format == "json"
             else markdown_project_diagnostics_report(result)
         )
-        if args.output:
-            atomic_write_text(args.output, text)
+        if output is not None:
+            atomic_write_text(output, text)
         else:
             sys.stdout.write(text)
         return project_diagnostics_exit_code(result)

@@ -5,7 +5,7 @@
 - Caps CleanroomX project files at 64 MiB of raw UTF-8 JSON before project parsing and before revision hashing, preventing untrusted oversized project files from forcing unbounded whole-file allocation or hashing work.
 - Uses bounded binary reads plus a second byte-limit check, and bounds revision hashing itself, so file growth after the initial `stat()` cannot bypass the ceiling or force unbounded hashing/allocation.
 - Applies the same ceiling to portable-bundle project members before integrity hashing/allocation, with a defensive member-size check at the bundle project reader.
-- Bounds saved revision artifacts to the maximum Base64-encoded project plus a fixed metadata allowance, rejects oversized declared revision sources before Base64 decoding, and defensively rechecks restored project bytes.
+- Bounds saved revision artifacts to the maximum Base64-encoded project plus one project-size allowance for duplicated source strings and a fixed envelope allowance; rejects oversized declared revision sources before Base64 decoding and defensively rechecks restored project bytes.
 - Converts invalid UTF-8 project input into an actionable project-format error instead of leaking a raw decoder exception.
 - Applies the same limit to project serialization so CleanroomX cannot save a project that its normal loader will refuse to reopen.
 - Adds boundary, oversized-input, revision-capture, invalid-UTF-8, and save-symmetry regressions without changing project schema version 1, solver equations, numerical tolerances, or engineering acceptance semantics.

@@ -96,7 +96,9 @@ def _safe_archive_path(value: str, *, field: str) -> PurePosixPath:
     if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
         raise ProjectBundleError(f"{field} must be a safe relative POSIX path")
     raw_parts = value.split("/")
-    if any(part in {"", ".", ".."} for part in raw_parts):
+    if any(part == ".." for part in raw_parts):
+        raise ProjectBundleError(f"{field} must be a safe relative POSIX path")
+    if any(part in {"", "."} for part in raw_parts):
         raise ProjectBundleError(f"{field} must be a canonical relative POSIX path")
     path = PurePosixPath(value)
     if path.is_absolute():

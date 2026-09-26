@@ -27,7 +27,7 @@ The checker composes existing CleanroomX authorities rather than introducing par
 - **Spatial integrity** reuses the spatial workspace validator for overlapping rooms, duplicate room names, unassigned/orphan devices, devices outside assigned rooms, invalid elevations, and wall-opening placement.
 - **Analysis input validity** runs every saved analysis through its real application parser/validation path. File-backed workflows are resolved relative to the checked project.
 - **Engineering synchronization** evaluates the explicitly persisted spatial synchronization authority and reports geometry-newer, engineering-newer, conflicting, unmapped, missing-analysis, and unsupported-contract states.
-- **Run-history freshness** reuses application provenance hashes and external-dependency fingerprints. Retained evidence is current only when the analysis kind/input match and every recorded file-backed dependency still matches by content.
+- **Run-history freshness** reuses application provenance hashes and external-dependency fingerprints. Retained evidence is current when the analysis kind/input match and every recorded file-backed dependency still matches by content. The checker searches retained history newest-first and accepts the newest matching run whose dependency revisions are current, so restoring an older dependency revision does not create a false stale warning when matching evidence already exists.
 - **Traceability hygiene** distinguishes analyses that have never been run from analyses whose retained evidence no longer matches current inputs, and identifies run-history evidence for removed analyses.
 - **Analysis naming** reports duplicate display names as an ambiguity warning while stable analysis IDs remain authoritative.
 

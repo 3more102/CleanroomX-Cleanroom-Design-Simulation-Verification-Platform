@@ -126,6 +126,10 @@ The result preserves:
 
 Non-convergence raises an error rather than returning a false solved result.
 
+Imported engineering scalar fields must be JSON numbers; booleans and numeric
+strings are rejected rather than silently coerced. Direct Python model construction
+retains the existing typed API behavior.
+
 All configured numeric inputs must be finite, and CleanroomX also checks derived
 solver states for finite representability. If finite inputs overflow while forming
 an effective pressure difference, pressure-flow law, residual, Newton/Jacobian
@@ -136,7 +140,8 @@ saturated.
 
 The combined node mechanical injection
 `supply - return - exhaust` must itself remain finite, even when each component is
-finite individually.
+finite individually. A dominant path carrying exactly zero airflow is reported as
+`zero flow`, not as inflow or outflow.
 
 ## Example
 

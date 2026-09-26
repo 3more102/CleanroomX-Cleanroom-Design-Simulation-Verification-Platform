@@ -7,6 +7,7 @@
 - Adds `cleanroomx-project-check` with strict JSON or Markdown output, source-revision stability checks, actionable exit codes, and the shared fsync-backed atomic output path.
 - Adds focused regression coverage plus installed-wheel CLI smoke coverage and `docs/PROJECT_DIAGNOSTICS.md`.
 - Preserves project schema version 1, v0.102.1 release identity, solver equations/tolerances, configured engineering acceptance semantics, and project Undo/Redo state because diagnostics are read-only.
+- Fixes retained-run freshness selection so diagnostics accept the newest available same-input run whose external dependency revisions still match current file content, instead of falsely reporting staleness when a dependency was changed and later restored to an older retained revision.
 
 ## Unreleased next-level Phase 1 — design requirements and air-system design
 

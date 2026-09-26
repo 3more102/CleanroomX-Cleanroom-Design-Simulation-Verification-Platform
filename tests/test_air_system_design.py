@@ -5,6 +5,7 @@ from cleanroomx.air_system_design import (
     air_system_design_from_dict,
     analyze_air_system_design,
 )
+from cleanroomx.design_report import markdown_air_system_design_report
 
 
 def _payload():
@@ -119,3 +120,12 @@ def test_air_balance_requirement_is_a_valid_standalone_airflow_driver():
     assert room["governing_airflow_m3_h"] == 300.0
     assert room["achieved_surplus_m3_h"] == 75.0
     assert room["surplus_margin_m3_h"] == 0.0
+
+
+def test_air_system_report_exposes_surplus_requirement_and_margin():
+    result = analyze_air_system_design(air_system_design_from_dict(_payload()))
+    report = markdown_air_system_design_report(result)
+
+    assert "Minimum surplus m³/h" in report
+    assert "Achieved surplus m³/h" in report
+    assert "Margin m³/h" in report

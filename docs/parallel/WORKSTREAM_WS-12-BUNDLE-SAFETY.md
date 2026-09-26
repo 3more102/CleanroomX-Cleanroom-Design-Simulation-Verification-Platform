@@ -35,7 +35,12 @@
 ## Tests run
 
 - Pre-change CI baseline: 1043 passed on Python 3.11 / 3.12 / 3.13 (run 36194881564).
-- Post-change branch CI is the integration gate for this workstream and should be read from the pull request head SHA.
+- Post-change CI run 36229194711 / CI #1637 on head `df6521ad4cfbd0df68fbbac310f6ff8feb439538`: success.
+- Release 2 consolidation gate: 137 passed on Python 3.11 / 3.12 / 3.13.
+- Complete suite: 1048 passed on Python 3.11, 1048 passed on Python 3.12, and 1048 passed on Python 3.13.
+- Windows launcher smoke: success.
+- Installed-wheel build/verification and representative CLI smoke: success on all three Python jobs.
+- Python 3.13 Tk/Xvfb desktop GUI smoke: PASS.
 
 ## Known limitations
 

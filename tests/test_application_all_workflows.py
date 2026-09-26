@@ -17,6 +17,7 @@ _WORKFLOW_EXAMPLES = {
     "project_verification": "facility_project.json",
     "design_requirements": "design_requirements_demo.json",
     "air_system_design": "air_system_design_demo.json",
+    "design_consistency": "design_consistency_demo.json",
     "hvac": "duct_network_demo.json",
     "recovery_test": "recovery_test_demo.json",
     "room_uncertainty": "uncertainty_room_demo.json",

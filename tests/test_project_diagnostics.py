@@ -351,6 +351,21 @@ def test_project_diagnostics_cli_discards_output_if_source_changes_during_check(
     assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
 
 
+def test_project_diagnostics_cli_refuses_to_overwrite_source_project(tmp_path):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Protect source project"),
+    )
+    original_bytes = project_path.read_bytes()
+
+    exit_code = diagnostics_main(
+        [str(project_path), "--output", str(project_path)]
+    )
+
+    assert exit_code == 2
+    assert project_path.read_bytes() == original_bytes
+
+
 def test_project_diagnostics_cli_returns_one_for_actionable_findings(tmp_path):
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",

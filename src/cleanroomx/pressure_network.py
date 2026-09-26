@@ -47,7 +47,12 @@ def _finite_sum(values, context: str) -> float:
 
 
 def _finite(value: float, field_name: str) -> float:
-    value = float(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be a finite number")
+    try:
+        value = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{field_name} must be finite") from exc
     if not math.isfinite(value):
         raise ValueError(f"{field_name} must be finite")
     return value
@@ -805,9 +810,13 @@ def solve_room_pressure_network(
                     6,
                 ),
                 "direction": (
-                    "outflow"
-                    if room_outward_flow > 0
-                    else "inflow"
+                    "zero flow"
+                    if room_outward_flow == 0.0
+                    else (
+                        "outflow"
+                        if room_outward_flow > 0.0
+                        else "inflow"
+                    )
                 ),
             }
 

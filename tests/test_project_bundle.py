@@ -240,6 +240,51 @@ def test_bundle_verifier_detects_dependency_corruption(tmp_path):
         inspect_project_bundle(corrupt)
 
 
+def test_bundle_verifier_rejects_project_member_above_project_limit(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(bundle_module, "PROJECT_FILE_MAX_BYTES", 64)
+    project_bytes = b"x" * 65
+    bundle = tmp_path / "oversized-project.cleanroomx.zip"
+    with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr(
+            PROJECT_BUNDLE_MANIFEST,
+            json.dumps(
+                {
+                    "schema": "cleanroomx.project-bundle",
+                    "schema_version": 1,
+                    "cleanroomx_version": "test",
+                    "project": {
+                        "path": "project.cleanroomx.json",
+                        "size_bytes": len(project_bytes),
+                        "sha256": hashlib.sha256(project_bytes).hexdigest(),
+                    },
+                    "dependencies": [],
+                }
+            ),
+        )
+        archive.writestr("project.cleanroomx.json", project_bytes)
+
+    with pytest.raises(ProjectBundleError, match="exceeds maximum supported project size"):
+        inspect_project_bundle(bundle)
+
+
+def test_bundle_project_reader_defensively_bounds_member_allocation(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(bundle_module, "PROJECT_FILE_MAX_BYTES", 64)
+    bundle = tmp_path / "oversized-reader.cleanroomx.zip"
+    with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("project.cleanroomx.json", b"x" * 65)
+
+    with zipfile.ZipFile(bundle, "r") as archive:
+        with pytest.raises(
+            ProjectBundleError,
+            match="exceeds maximum supported project size",
+        ):
+            bundle_module._read_project_member(archive, "project.cleanroomx.json")
+
+
 def test_bundle_verifier_rejects_path_traversal_member(tmp_path):
     malicious = tmp_path / "traversal.cleanroomx.zip"
     with zipfile.ZipFile(malicious, "w", compression=zipfile.ZIP_STORED) as archive:

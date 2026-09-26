@@ -54,7 +54,18 @@ Baseline exact-main CI before modification:
 - Windows launcher smoke: success
 - Python 3.13 performance and installed GUI smoke: success
 
-Final branch verification is owned by draft PR #500 and its GitHub Actions checks for the report-containing branch head. The PR must not be integrated unless those checks are successful.
+Final code/report candidate verification completed successfully on branch head `297836fe7d1b40aaef9b2fca0e159eb042284dc3`:
+
+- PR #500 CI run: `36228844464`
+- Python 3.11 complete suite: `1047 passed in 153.98s`
+- Python 3.12 complete suite: `1047 passed in 156.76s`
+- Python 3.13 complete suite: `1047 passed in 161.78s`
+- Windows PowerShell/CMD launcher smoke: success
+- Python 3.13 Release 2 performance evidence: success
+- Clean wheel build/install and installed application checks: success
+- Python 3.13 installed Tk/Xvfb GUI smoke: `CleanroomX GUI smoke: PASS`
+
+No test failure or skip was reported by the complete-suite pytest summaries.
 
 ## Engineering validation
 
@@ -92,6 +103,8 @@ This remains a preliminary steady airflow sizing workflow. It does not infer lea
 
 ## Parallel integration safety
 
-At final overlap review, active PRs #494-#499 modify packaging, strict JSON, project diagnostics, and project I/O. None modifies this workstream's production or test files.
+Initial overlap review found PRs #494-#499 limited to packaging, strict JSON, project diagnostics, and project I/O; none modifies this workstream's production or test files.
 
-Recommended integration order: independent of those workstreams; merge PR #500 only after its final CI is successful and after confirming `main` has not introduced a conflicting `air_system_design` or `design_report` change.
+A later parallel PR, #503 (`feat(design): add Phase 1 design consistency analysis`), also imports and runs `analyze_air_system_design`. Its current implementation reads the existing `airflow_drivers.minimum_ach` evidence and does not depend on the new balance fields, so the production interfaces are compatible. PR #503 also edits `docs/DESIGN_FOUNDATION.md`, which is the one direct file-level overlap and must be reconciled by preserving both documentation additions.
+
+Recommended integration order: production changes are independent. If #503 merges first, re-resolve only the design-foundation documentation on PR #500 and rerun affected tests; if #500 merges first, #503 should retain the air-balance sizing text when resolving its documentation change.

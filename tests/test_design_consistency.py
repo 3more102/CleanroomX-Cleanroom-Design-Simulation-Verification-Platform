@@ -198,7 +198,7 @@ def test_markdown_report_escapes_user_controlled_text() -> None:
 
     assert "Study \\| &lt;A&gt;" in markdown
     assert "Deliberately not evaluated" in markdown
-    assert "pressure_target_pa" in markdown
+    assert "pressure\\_target\\_pa" in markdown
 
 
 def test_application_path_executes_and_preserves_status() -> None:

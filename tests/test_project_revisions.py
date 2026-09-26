@@ -5,6 +5,7 @@ import json
 import pytest
 
 import cleanroomx.project as project_module
+import cleanroomx.project_revisions as revision_module
 from cleanroomx.project import (
     ProjectDocument,
     ProjectWriteConflictError,
@@ -90,6 +91,111 @@ def test_project_revision_history_is_bounded_newest_first(tmp_path):
         for item in scan.revisions
     ]
     assert descriptions == ["v5", "v4", "v3"]
+
+
+def test_revision_envelope_budget_preserves_valid_large_project_name(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source.cleanroomx.json"
+    project = ProjectDocument(name="N" * 800, description="revision envelope")
+    source_bytes = project_module._project_document_text(project).encode("utf-8")
+    monkeypatch.setattr(
+        revision_module,
+        "PROJECT_FILE_MAX_BYTES",
+        len(source_bytes),
+    )
+    monkeypatch.setattr(
+        revision_module,
+        "PROJECT_REVISION_METADATA_MAX_BYTES",
+        512,
+    )
+    payload = revision_module._revision_payload(
+        source,
+        source_bytes,
+        created_at_utc="2026-09-26T00:00:00Z",
+    )
+    artifact_bytes = (
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    encoded_only_budget = (
+        ((len(source_bytes) + 2) // 3) * 4
+        + revision_module.PROJECT_REVISION_METADATA_MAX_BYTES
+    )
+    assert len(artifact_bytes) > encoded_only_budget
+    assert len(artifact_bytes) <= revision_module._project_revision_max_bytes()
+
+    artifact = tmp_path / "large-name.cleanroomx.revision.json"
+    artifact.write_bytes(artifact_bytes)
+    snapshot = load_project_revision(artifact, expected_source_path=source)
+
+    assert snapshot.project.name == project.name
+    assert snapshot.source_bytes == source_bytes
+
+
+def test_revision_loader_rejects_oversized_artifact_before_json_parsing(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(revision_module, "PROJECT_FILE_MAX_BYTES", 64)
+    monkeypatch.setattr(
+        revision_module,
+        "PROJECT_REVISION_METADATA_MAX_BYTES",
+        64,
+    )
+    artifact = tmp_path / "oversized.cleanroomx.revision.json"
+    artifact.write_bytes(b"{" + (b"x" * 256))
+
+    with pytest.raises(ProjectRevisionError, match="artifact size .* exceeds"):
+        load_project_revision(artifact)
+
+
+def test_revision_loader_rejects_declared_project_above_project_limit_before_decode(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(revision_module, "PROJECT_FILE_MAX_BYTES", 64)
+    source = tmp_path / "source.cleanroomx.json"
+    artifact = tmp_path / "declared-oversized.cleanroomx.revision.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "schema": "cleanroomx.project-revision",
+                "schema_version": 1,
+                "application_version": "test",
+                "created_at_utc": "2026-09-26T00:00:00Z",
+                "source": {
+                    "path": str(source.resolve(strict=False)),
+                    "size_bytes": 65,
+                    "sha256": "0" * 64,
+                    "project_name": "Oversized",
+                    "application_version": "test",
+                    "content_base64": "AAAA",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ProjectRevisionError,
+        match="exceeds maximum supported project size",
+    ):
+        load_project_revision(artifact)
+
+
+def test_revision_embedded_project_bytes_are_defensively_bounded(monkeypatch):
+    monkeypatch.setattr(revision_module, "PROJECT_FILE_MAX_BYTES", 64)
+
+    with pytest.raises(
+        ProjectRevisionError,
+        match="exceeds maximum supported project size",
+    ):
+        revision_module._project_from_bytes(b"x" * 65)
 
 
 def test_corrupted_revision_is_reported_and_preserved(tmp_path):

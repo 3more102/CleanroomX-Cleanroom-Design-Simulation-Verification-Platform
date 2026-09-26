@@ -24,6 +24,7 @@ from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatia
 
 PROJECT_SCHEMA = "cleanroomx.project"
 PROJECT_SCHEMA_VERSION = 1
+PROJECT_FILE_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _project_json_snapshot(value: Any) -> Any:
@@ -72,6 +73,19 @@ def _merge_extra_fields(extra_fields: dict[str, Any], known: dict[str, Any]) -> 
 
 class ProjectFormatError(ValueError):
     pass
+
+
+def _project_file_size_message(size_bytes: int) -> str:
+    return (
+        f"project file size {size_bytes} bytes exceeds maximum supported size "
+        f"of {PROJECT_FILE_MAX_BYTES} bytes"
+    )
+
+
+def _validate_project_file_size(size_bytes: int) -> None:
+    """Fail closed before oversized project bytes reach JSON parsing."""
+    if size_bytes > PROJECT_FILE_MAX_BYTES:
+        raise ProjectFormatError(_project_file_size_message(size_bytes))
 
 
 class ProjectFileBusyError(RuntimeError):
@@ -545,13 +559,34 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
+def _read_project_bytes_bounded(source: Path) -> bytes:
+    """Read project bytes without allowing growth past the configured ceiling."""
+    _validate_project_file_size(source.stat().st_size)
+    with source.open("rb") as handle:
+        payload = handle.read(PROJECT_FILE_MAX_BYTES + 1)
+    _validate_project_file_size(len(payload))
+    return payload
+
+
+def _read_project_text(source: Path) -> str:
+    """Read one project through a bounded strict UTF-8 file boundary."""
+    payload = _read_project_bytes_bounded(source)
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProjectFormatError(
+            "project file must contain valid UTF-8 text; "
+            f"invalid byte sequence at offset {exc.start}"
+        ) from exc
+
+
 def load_project_document_with_migration_info(
     path: str | Path,
 ) -> tuple[ProjectDocument, ProjectMigrationInfo]:
     """Load and validate a project while reporting supported legacy migration."""
     source = Path(path)
     try:
-        data = strict_json_loads(source.read_text(encoding="utf-8"))
+        data = strict_json_loads(_read_project_text(source))
     except json.JSONDecodeError as exc:
         raise ProjectFormatError(
             f"invalid JSON in project file at line {exc.lineno}, column {exc.colno}"
@@ -585,10 +620,18 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     last_error: OSError | None = None
     for _attempt in range(3):
         before = source.stat()
+        if before.st_size > PROJECT_FILE_MAX_BYTES:
+            # Revision capture historically reports file-access failures as OSError;
+            # preserve that contract for batch/bundle stability checks.
+            raise OSError(_project_file_size_message(before.st_size))
         digest = sha256()
         try:
+            bytes_hashed = 0
             with source.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    bytes_hashed += len(chunk)
+                    if bytes_hashed > PROJECT_FILE_MAX_BYTES:
+                        raise OSError(_project_file_size_message(bytes_hashed))
                     digest.update(chunk)
         except OSError as exc:
             last_error = exc
@@ -736,9 +779,11 @@ def load_project_document_with_revision_info(
 def _project_document_text(project: ProjectDocument) -> str:
     data = project.to_dict()
     project_from_dict(data)
-    return json.dumps(
+    text = json.dumps(
         data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False
     ) + "\n"
+    _validate_project_file_size(len(text.encode("utf-8")))
+    return text
 
 
 def atomic_write_text(path: str | Path, text: str) -> Path:
@@ -790,7 +835,7 @@ def save_project_document_guarded(
 
         revision_path = None
         if expected_revision.exists:
-            previous_bytes = destination.read_bytes()
+            previous_bytes = _read_project_bytes_bounded(destination)
             if (
                 len(previous_bytes) != expected_revision.size
                 or sha256(previous_bytes).hexdigest() != expected_revision.sha256

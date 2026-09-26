@@ -108,15 +108,27 @@ def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, An
 
 
 def strict_json_loads(text: str) -> Any:
-    """Parse JSON while rejecting non-finite constants and duplicate object keys."""
-    value = json.loads(
-        text,
-        parse_constant=_reject_json_constant,
-        object_pairs_hook=_object_without_duplicate_keys,
-    )
-    return clone_strict_json(value)
+    """Parse strict JSON and normalize excessive nesting to StrictJSONError."""
+    try:
+        value = json.loads(
+            text,
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_object_without_duplicate_keys,
+        )
+        return clone_strict_json(value)
+    except RecursionError as exc:
+        raise StrictJSONError(
+            "JSON nesting exceeds the supported parser/validation depth"
+        ) from exc
 
 
 def load_strict_json(path: str | Path) -> Any:
-    """Read UTF-8 JSON through the canonical strict parser."""
-    return strict_json_loads(Path(path).read_text(encoding="utf-8"))
+    """Read a UTF-8 JSON file through the canonical strict parser."""
+    source = Path(path)
+    try:
+        text = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise StrictJSONError(
+            f"{source} must contain valid UTF-8 JSON text"
+        ) from exc
+    return strict_json_loads(text)

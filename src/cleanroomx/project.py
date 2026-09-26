@@ -559,12 +559,18 @@ def new_project(name: str = "Untitled Project") -> ProjectDocument:
     return ProjectDocument(name=_validated_string(name, "project.name"))
 
 
-def _read_project_text(source: Path) -> str:
-    """Read one project through a bounded strict UTF-8 file boundary."""
+def _read_project_bytes_bounded(source: Path) -> bytes:
+    """Read project bytes without allowing growth past the configured ceiling."""
     _validate_project_file_size(source.stat().st_size)
     with source.open("rb") as handle:
         payload = handle.read(PROJECT_FILE_MAX_BYTES + 1)
     _validate_project_file_size(len(payload))
+    return payload
+
+
+def _read_project_text(source: Path) -> str:
+    """Read one project through a bounded strict UTF-8 file boundary."""
+    payload = _read_project_bytes_bounded(source)
     try:
         return payload.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -620,8 +626,12 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
             raise OSError(_project_file_size_message(before.st_size))
         digest = sha256()
         try:
+            bytes_hashed = 0
             with source.open("rb") as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    bytes_hashed += len(chunk)
+                    if bytes_hashed > PROJECT_FILE_MAX_BYTES:
+                        raise OSError(_project_file_size_message(bytes_hashed))
                     digest.update(chunk)
         except OSError as exc:
             last_error = exc
@@ -825,7 +835,7 @@ def save_project_document_guarded(
 
         revision_path = None
         if expected_revision.exists:
-            previous_bytes = destination.read_bytes()
+            previous_bytes = _read_project_bytes_bounded(destination)
             if (
                 len(previous_bytes) != expected_revision.size
                 or sha256(previous_bytes).hexdigest() != expected_revision.sha256

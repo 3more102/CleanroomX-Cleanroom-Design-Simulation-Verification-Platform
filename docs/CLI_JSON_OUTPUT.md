@@ -9,7 +9,7 @@ This workstream hardens these stable file-backed commands:
 - cleanroomx-duct-flow
 - cleanroomx-dossier
 
-Before JSON is serialized, the result is passed through the canonical strict-JSON clone. The boundary rejects non-finite floats, non-string object keys, cyclic references, invalid UTF-8 strings, and Python-only value/container types. The encoder also uses allow_nan=False.
+Before JSON is serialized, the result is checked for non-finite numbers, invalid UTF-8 strings, and cyclic containers. Existing JSON-compatible immutable container subclasses used by completed analysis snapshots remain supported. The encoder uses allow_nan=False as the final standards-compliance guard and normalizes unsupported serialization failures to the shared StrictJSONError boundary.
 
 Serialization happens before atomic output replacement. Therefore, if a result is not representable as strict JSON, the command returns an operational error and an existing --output file is left unchanged.
 

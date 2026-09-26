@@ -99,6 +99,29 @@ def test_missing_requirements_ach_is_not_promoted_to_pass() -> None:
     assert _finding(result, "requirements.ach_based_supply_airflow")["status"] == "not_checked"
 
 
+def test_omitted_sensible_load_requirement_is_not_promoted_to_zero_watt_pass() -> None:
+    payload = _payload()
+    room = payload["requirements"]["rooms"][0]
+    for field in (
+        "occupancy",
+        "occupant_sensible_w_per_person",
+        "equipment_sensible_load_w",
+        "process_sensible_load_w",
+    ):
+        room.pop(field, None)
+    payload["air_system"]["rooms"][0]["sensible_load_w"] = 0
+
+    result = analyze_design_consistency(design_consistency_from_dict(payload))
+    finding = _finding(result, "requirements.provided_sensible_load")
+
+    assert result["status"] == "pass_with_unchecked"
+    assert result["complete"] is False
+    assert finding["status"] == "not_checked"
+    assert finding["expected"] is None
+    assert finding["actual"] == 0.0
+    assert finding["provenance"]["configured_requirement_components"] == []
+
+
 def test_missing_air_system_ach_fails_when_requirement_exists() -> None:
     payload = _payload()
     del payload["air_system"]["rooms"][0]["min_ach"]

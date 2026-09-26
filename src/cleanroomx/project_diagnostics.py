@@ -382,16 +382,22 @@ def _run_history_issues(
             )
             continue
 
-        same_input_record = None
-        same_input_run = None
+        latest_matching_record = None
+        current_evidence_found = False
         for record in reversed(candidates):
             run = _analysis_run_from_record(record)
-            if analysis_run_matches_input(run, analysis.kind, analysis.input):
-                same_input_record = record
-                same_input_run = run
+            if not analysis_run_matches_input(run, analysis.kind, analysis.input):
+                continue
+            if latest_matching_record is None:
+                latest_matching_record = record
+            if analysis_run_external_dependencies_current(
+                run,
+                base_dir=base_dir,
+            ):
+                current_evidence_found = True
                 break
 
-        if same_input_record is None or same_input_run is None:
+        if latest_matching_record is None:
             latest = candidates[-1]
             issues.append(
                 _issue(
@@ -414,12 +420,9 @@ def _run_history_issues(
             )
             continue
 
-        provenance = same_input_record["execution_provenance"]
-        dependency_count = provenance.get("external_dependency_count", 0)
-        if not analysis_run_external_dependencies_current(
-            same_input_run,
-            base_dir=base_dir,
-        ):
+        if not current_evidence_found:
+            provenance = latest_matching_record["execution_provenance"]
+            dependency_count = provenance.get("external_dependency_count", 0)
             issues.append(
                 _issue(
                     rule="run_history.external_dependency_stale",
@@ -429,8 +432,8 @@ def _run_history_issues(
                     element_id=analysis.id,
                     element_name=analysis.name,
                     message=(
-                        "A retained run matches the current analysis input, but one or more "
-                        "file-backed engineering dependencies no longer match the recorded revision."
+                        "Retained run evidence matches the current analysis input, but no matching "
+                        "run has file-backed engineering dependencies at their recorded revision."
                     ),
                     suggested_action=(
                         "Review the changed/missing dependency and re-run the analysis against the "
@@ -438,7 +441,7 @@ def _run_history_issues(
                     ),
                     details={
                         "analysis_kind": analysis.kind,
-                        "retained_sequence": same_input_record["sequence"],
+                        "retained_sequence": latest_matching_record["sequence"],
                         "external_dependency_count": dependency_count,
                     },
                 )

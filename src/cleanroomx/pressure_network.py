@@ -805,9 +805,13 @@ def solve_room_pressure_network(
                     6,
                 ),
                 "direction": (
-                    "outflow"
-                    if room_outward_flow > 0
-                    else "inflow"
+                    "zero flow"
+                    if room_outward_flow == 0.0
+                    else (
+                        "outflow"
+                        if room_outward_flow > 0.0
+                        else "inflow"
+                    )
                 ),
             }
 

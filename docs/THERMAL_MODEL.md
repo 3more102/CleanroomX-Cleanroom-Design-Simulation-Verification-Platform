@@ -55,3 +55,14 @@ This is not a final coil-selection, CFD, certification, or code-compliance calcu
 For deterministic interval propagation of explicit thermal loads, airflow inputs, supply-air temperature, and optional available cooling/heating capacity checks, see `docs/THERMAL_UNCERTAINTY.md`.
 
 The v0.10 uncertainty workflow holds room/outdoor psychrometric states fixed; it does not turn the preliminary thermal model into an hourly load or probabilistic uncertainty simulation.
+
+
+## Numerical integrity
+
+All user-supplied thermal inputs are finite-validated by the model layer. The
+thermal calculation also finite-validates derived loads, makeup-air mass flow,
+capacity sizing, and sensible-load airflow before returning results. If an
+extreme but individually finite input set would overflow floating-point
+arithmetic, CleanroomX raises a descriptive `ValueError` rather than emitting
+`NaN` or `Infinity` into an engineering result or serialized report. This
+guard does not change the equations or normal-range results.

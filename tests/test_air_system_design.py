@@ -129,3 +129,14 @@ def test_air_system_report_exposes_surplus_requirement_and_margin():
     assert "Minimum surplus m³/h" in report
     assert "Achieved surplus m³/h" in report
     assert "Margin m³/h" in report
+
+
+def test_air_system_report_replays_legacy_result_without_surplus_margin():
+    result = analyze_air_system_design(air_system_design_from_dict(_payload()))
+    legacy_room = result["rooms"][0]
+    legacy_room.pop("surplus_margin_m3_h")
+
+    report = markdown_air_system_design_report(result)
+
+    assert "Margin m³/h" in report
+    assert "| 100.0 | 100.0 | 0.0 |" in report

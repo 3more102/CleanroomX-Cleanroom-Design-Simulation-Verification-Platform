@@ -33,7 +33,7 @@ from cleanroomx.loop_network_io import load_looped_flow_network
 from cleanroomx.psychrometric_uncertainty_io import load_psychrometric_uncertainty
 from cleanroomx.qualification_io import load_qualification_uncertainty
 from cleanroomx.recovery_io import load_recovery_test
-from cleanroomx.strict_json import StrictJSONError, load_strict_json
+from cleanroomx.strict_json import StrictJSONError, load_strict_json, strict_json_loads
 from cleanroomx.thermal_uncertainty_io import load_thermal_uncertainty
 from cleanroomx.uncertainty_io import load_uncertain_room
 
@@ -87,6 +87,33 @@ def test_strict_file_loader_rejects_duplicate_object_keys(tmp_path: Path) -> Non
 
     with pytest.raises(StrictJSONError, match="duplicate JSON object key"):
         load_strict_json(source)
+
+
+@pytest.mark.parametrize("loader", FILE_LOADERS, ids=lambda loader: loader.__name__)
+def test_file_backed_engineering_loaders_reject_invalid_utf8(
+    tmp_path: Path,
+    loader: Callable[[str | Path], object],
+) -> None:
+    source = tmp_path / "invalid-utf8.json"
+    source.write_bytes(b'{"sentinel": "\xff"}')
+
+    with pytest.raises(StrictJSONError, match="valid UTF-8 JSON text") as raised:
+        loader(source)
+
+    assert source.name in str(raised.value)
+    assert isinstance(raised.value.__cause__, UnicodeDecodeError)
+
+
+def test_strict_json_parser_normalizes_excessive_nesting() -> None:
+    nested = "[" * 2_000 + "0" + "]" * 2_000
+
+    with pytest.raises(
+        StrictJSONError,
+        match="JSON nesting exceeds the supported parser/validation depth",
+    ) as raised:
+        strict_json_loads(nested)
+
+    assert isinstance(raised.value.__cause__, RecursionError)
 
 
 @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])

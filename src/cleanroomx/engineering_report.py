@@ -10,6 +10,7 @@ from typing import Any
 
 from . import __version__
 from .application import AnalysisRun, analysis_run_is_current
+from .markdown import markdown_text
 
 
 ENGINEERING_REPORT_SCHEMA = "cleanroomx.engineering-report"
@@ -435,12 +436,12 @@ def render_engineering_report_markdown(payload: dict[str, Any]) -> str:
     project = payload["project"]
     analysis = payload["analysis"]
     lines = [
-        f"# {analysis['name']} — CleanroomX Engineering Report",
+        f"# {markdown_text(analysis['name'])} — CleanroomX Engineering Report",
         "",
-        f"- Project: {project['name']}",
-        f"- Status: {analysis['status']}",
-        f"- Workflow: {analysis['kind']}",
-        f"- Analysis ID: {analysis['id']}",
+        f"- Project: {markdown_text(project['name'])}",
+        f"- Status: {markdown_text(analysis['status'])}",
+        f"- Workflow: {markdown_text(analysis['kind'])}",
+        f"- Analysis ID: {markdown_text(analysis['id'])}",
         f"- Generated UTC: {payload['generated_at_utc']}",
         f"- Project state SHA-256: `{project['state_sha256']}`",
         f"- Run SHA-256: `{analysis['run_sha256']}`",
@@ -452,7 +453,7 @@ def render_engineering_report_markdown(payload: dict[str, Any]) -> str:
         "",
         "## Limitations",
         "",
-        *[f"- {item}" for item in payload["limitations"]],
+        *[f"- {markdown_text(item)}" for item in payload["limitations"]],
         "",
         "## Traceability evidence",
         "",

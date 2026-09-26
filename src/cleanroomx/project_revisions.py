@@ -34,9 +34,20 @@ PROJECT_REVISION_METADATA_MAX_BYTES = 1024 * 1024
 
 
 def _project_revision_max_bytes() -> int:
-    """Bound a revision envelope containing one maximum-size base64 project."""
+    """Bound one revision envelope without rejecting a valid maximum-size project.
+
+    The revision stores the full project as Base64 and also duplicates selected
+    source strings such as the project name outside that payload. In the worst
+    case those duplicated strings can consume nearly the full source-project
+    byte budget, so reserve one additional project-size allowance plus a fixed
+    envelope allowance for paths, keys, timestamps, hashes, and formatting.
+    """
     encoded_project_bytes = ((PROJECT_FILE_MAX_BYTES + 2) // 3) * 4
-    return encoded_project_bytes + PROJECT_REVISION_METADATA_MAX_BYTES
+    return (
+        encoded_project_bytes
+        + PROJECT_FILE_MAX_BYTES
+        + PROJECT_REVISION_METADATA_MAX_BYTES
+    )
 
 
 class ProjectRevisionError(ProjectFormatError):

@@ -32,9 +32,18 @@ The `air_system_design` workflow evaluates explicit preliminary airflow drivers:
 
 - minimum ACH;
 - sensible-load airflow using disclosed air properties and room/supply temperatures;
-- minimum outdoor airflow.
+- minimum outdoor airflow;
+- the room air-balance requirement needed to support configured exhaust, transfer-out, and minimum surplus after transfer-in.
 
-The largest evaluated driver becomes the governing preliminary supply airflow. The result then exposes a proposed return airflow, exhaust/transfer balance, minimum-surplus evidence, preliminary makeup airflow, and capacity-based counts for user-supplied FFU/filter units and supply/return/exhaust terminals.
+The air-balance sizing requirement is
+
+`max(0, exhaust + transfer_out + minimum_surplus - transfer_in)`.
+
+This follows from the steady room balance
+
+`supply + transfer_in = return + exhaust + transfer_out + surplus`
+
+with non-negative return airflow and `surplus >= minimum_surplus`. The largest evaluated driver becomes the governing preliminary supply airflow, so a configured surplus target cannot be undercut merely by clamping return airflow to zero. Results expose the balance driver, proposed return airflow, configured minimum surplus, achieved surplus, surplus margin, exhaust/transfer evidence, preliminary makeup airflow, and capacity-based counts for user-supplied FFU/filter units and supply/return/exhaust terminals.
 
 Supported strategy labels include ceiling-supply/low-return, FFU ceiling, mixed return, wall return, positive-pressure suite, negative-pressure containment, unidirectional concept, and turbulent/mixing concept. Strategy labels do not inject hidden airflow requirements.
 

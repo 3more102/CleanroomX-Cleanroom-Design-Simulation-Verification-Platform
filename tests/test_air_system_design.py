@@ -5,6 +5,7 @@ from cleanroomx.air_system_design import (
     air_system_design_from_dict,
     analyze_air_system_design,
 )
+from cleanroomx.design_report import markdown_air_system_design_report
 
 
 def _payload():
@@ -42,9 +43,11 @@ def test_air_system_uses_strongest_explicit_airflow_driver():
     expected_sensible = 8500 / (1.2 * 1006 * 6) * 3600
     assert room["airflow_drivers"]["minimum_ach"]["airflow_m3_h"] == 2160.0
     assert room["airflow_drivers"]["sensible_load"]["airflow_m3_h"] == pytest.approx(expected_sensible)
+    assert room["airflow_drivers"]["air_balance"]["airflow_m3_h"] == 300.0
     assert room["governing_basis"] == "sensible_load"
     assert room["governing_airflow_m3_h"] == pytest.approx(expected_sensible)
     assert room["achieved_surplus_m3_h"] == pytest.approx(100.0)
+    assert room["surplus_margin_m3_h"] == pytest.approx(0.0)
     assert room["equipment_counts"]["filter_units"] == math.ceil(expected_sensible / 1080.0)
 
 
@@ -56,6 +59,10 @@ def test_air_system_requires_an_explicit_airflow_driver():
     room.pop("room_air_temp_c")
     room.pop("supply_air_temp_c")
     room["minimum_outdoor_air_m3_h"] = 0
+    room["exhaust_airflow_m3_h"] = 0
+    room["transfer_in_airflow_m3_h"] = 0
+    room["transfer_out_airflow_m3_h"] = 0
+    room["minimum_surplus_m3_h"] = 0
     with pytest.raises(ValueError, match="no airflow driver"):
         analyze_air_system_design(air_system_design_from_dict(payload))
 
@@ -65,3 +72,71 @@ def test_air_system_rejects_non_cooling_supply_for_positive_sensible_load():
     payload["rooms"][0]["supply_air_temp_c"] = 22
     with pytest.raises(ValueError, match="must be below"):
         air_system_design_from_dict(payload)
+
+
+def test_air_balance_requirement_can_govern_supply_and_prevents_surplus_shortfall():
+    payload = _payload()
+    room_input = payload["rooms"][0]
+    room_input["min_ach"] = 10
+    room_input["sensible_load_w"] = 0
+    room_input.pop("room_air_temp_c")
+    room_input.pop("supply_air_temp_c")
+    room_input["minimum_outdoor_air_m3_h"] = 0
+    room_input["exhaust_airflow_m3_h"] = 900
+    room_input["transfer_out_airflow_m3_h"] = 200
+    room_input["minimum_surplus_m3_h"] = 100
+
+    result = analyze_air_system_design(air_system_design_from_dict(payload))
+    room = result["rooms"][0]
+
+    assert room["airflow_drivers"]["minimum_ach"]["airflow_m3_h"] == 720.0
+    assert room["airflow_drivers"]["air_balance"]["airflow_m3_h"] == 1200.0
+    assert room["governing_basis"] == "air_balance"
+    assert room["governing_airflow_m3_h"] == 1200.0
+    assert room["proposed_return_airflow_m3_h"] == 0.0
+    assert room["minimum_surplus_m3_h"] == 100.0
+    assert room["achieved_surplus_m3_h"] == 100.0
+    assert room["surplus_margin_m3_h"] == 0.0
+    assert not any("clamped" in warning for warning in room["warnings"])
+
+
+def test_air_balance_requirement_is_a_valid_standalone_airflow_driver():
+    payload = _payload()
+    room_input = payload["rooms"][0]
+    room_input.pop("min_ach")
+    room_input["sensible_load_w"] = 0
+    room_input.pop("room_air_temp_c")
+    room_input.pop("supply_air_temp_c")
+    room_input["minimum_outdoor_air_m3_h"] = 0
+    room_input["exhaust_airflow_m3_h"] = 250
+    room_input["transfer_in_airflow_m3_h"] = 50
+    room_input["transfer_out_airflow_m3_h"] = 25
+    room_input["minimum_surplus_m3_h"] = 75
+
+    room = analyze_air_system_design(air_system_design_from_dict(payload))["rooms"][0]
+
+    assert room["airflow_drivers"]["air_balance"]["airflow_m3_h"] == 300.0
+    assert room["governing_basis"] == "air_balance"
+    assert room["governing_airflow_m3_h"] == 300.0
+    assert room["achieved_surplus_m3_h"] == 75.0
+    assert room["surplus_margin_m3_h"] == 0.0
+
+
+def test_air_system_report_exposes_surplus_requirement_and_margin():
+    result = analyze_air_system_design(air_system_design_from_dict(_payload()))
+    report = markdown_air_system_design_report(result)
+
+    assert "Minimum surplus m³/h" in report
+    assert "Achieved surplus m³/h" in report
+    assert "Margin m³/h" in report
+
+
+def test_air_system_report_replays_legacy_result_without_surplus_margin():
+    result = analyze_air_system_design(air_system_design_from_dict(_payload()))
+    legacy_room = result["rooms"][0]
+    legacy_room.pop("surplus_margin_m3_h")
+
+    report = markdown_air_system_design_report(result)
+
+    assert "Margin m³/h" in report
+    assert "| 100.0 | 100.0 | 0.0 |" in report

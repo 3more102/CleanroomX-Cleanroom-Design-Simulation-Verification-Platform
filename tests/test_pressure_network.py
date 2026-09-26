@@ -586,3 +586,96 @@ def test_solver_rejects_nonfinite_target_margin(
         match=expected_context,
     ):
         solve_room_pressure_network(network)
+
+@pytest.mark.parametrize("bad_value", [True, "100.0"])
+def test_parser_rejects_non_numeric_engineering_scalars(
+    bad_value: object,
+) -> None:
+    with pytest.raises(ValueError, match="must be a finite number"):
+        pressure_network_from_dict(
+            {
+                "name": "Strict numeric input",
+                "nodes": [
+                    {
+                        "name": "Room",
+                        "supply_m3_h": bad_value,
+                    },
+                    {
+                        "name": "Outside",
+                        "fixed_pressure_pa": 0.0,
+                    },
+                ],
+                "paths": [
+                    {
+                        "name": "Leak",
+                        "start_node": "Room",
+                        "end_node": "Outside",
+                        "kind": "crack",
+                        "model": "power_law",
+                        "coefficient_m3_s_pa_n": 0.01,
+                        "exponent": 1.0,
+                    }
+                ],
+            }
+        )
+
+
+def test_initial_pressure_mean_avoids_finite_input_overflow() -> None:
+    network = RoomPressureNetwork(
+        name="Large finite fixed pressures",
+        nodes=(
+            PressureNode("Room"),
+            PressureNode("Boundary A", fixed_pressure_pa=1e308),
+            PressureNode("Boundary B", fixed_pressure_pa=1e308),
+        ),
+        paths=(
+            PressurePath(
+                "Room-Boundary A",
+                "Room",
+                "Boundary A",
+                "crack",
+                "power_law",
+                coefficient_m3_s_pa_n=0.01,
+                exponent=1.0,
+            ),
+        ),
+    )
+
+    result = solve_room_pressure_network(network)
+    room = next(
+        item for item in result["nodes"] if item["name"] == "Room"
+    )
+
+    assert math.isfinite(room["pressure_pa"])
+    assert room["pressure_pa"] == pytest.approx(1e308)
+    assert result["solver"]["iterations"] == 0
+
+
+def test_zero_flow_dominant_path_is_not_reported_as_inflow() -> None:
+    network = RoomPressureNetwork(
+        name="Zero-flow room",
+        nodes=(
+            PressureNode("Room"),
+            PressureNode("Outside", fixed_pressure_pa=0.0),
+        ),
+        paths=(
+            PressurePath(
+                "Leak",
+                "Room",
+                "Outside",
+                "crack",
+                "power_law",
+                coefficient_m3_s_pa_n=0.01,
+                exponent=1.0,
+            ),
+        ),
+    )
+
+    result = solve_room_pressure_network(network)
+    room = next(
+        item for item in result["nodes"] if item["name"] == "Room"
+    )
+
+    assert room["dominant_pressure_path"]["airflow_m3_h"] == 0.0
+    assert room["dominant_pressure_path"]["direction"] == "zero flow"
+

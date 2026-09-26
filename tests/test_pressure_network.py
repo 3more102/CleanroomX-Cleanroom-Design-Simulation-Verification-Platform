@@ -534,3 +534,55 @@ def test_solver_rejects_nonfinite_report_unit_conversion() -> None:
         match="mass_balance_residual_m3_h",
     ):
         solve_room_pressure_network(network)
+
+
+@pytest.mark.parametrize(
+    ("maximum_delta_pa", "expected_context"),
+    (
+        (None, "minimum_margin_pa"),
+        (1e308, "maximum_margin_pa"),
+    ),
+)
+def test_solver_rejects_nonfinite_target_margin(
+    maximum_delta_pa: float | None,
+    expected_context: str,
+) -> None:
+    network = RoomPressureNetwork(
+        name="Extreme target margin",
+        nodes=(
+            PressureNode(
+                "Low-pressure boundary",
+                fixed_pressure_pa=-1e308,
+            ),
+            PressureNode(
+                "Reference",
+                fixed_pressure_pa=0.0,
+            ),
+        ),
+        paths=(
+            PressurePath(
+                "Finite extreme path",
+                "Low-pressure boundary",
+                "Reference",
+                "crack",
+                "power_law",
+                coefficient_m3_s_pa_n=1e-308,
+                exponent=0.5,
+            ),
+        ),
+        targets=(
+            PressureTarget(
+                "Extreme target",
+                "Low-pressure boundary",
+                "Reference",
+                1e308 if maximum_delta_pa is None else 0.0,
+                maximum_delta_pa,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match=expected_context,
+    ):
+        solve_room_pressure_network(network)

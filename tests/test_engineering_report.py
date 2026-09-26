@@ -220,3 +220,41 @@ def test_unified_markdown_report_uses_verified_report_payload():
     assert "Project state SHA-256:" in document
     assert "## Limitations" in document
     assert "## Traceability evidence" in document
+
+def test_unified_markdown_report_escapes_metadata_and_limitations():
+    input_payload, run = _run()
+
+    document = engineering_report_markdown(
+        run,
+        project_name="Facility | table\n# forged-project <script>alert(1)</script>",
+        project_description="",
+        analysis_id="room-a\n- forged-id",
+        analysis_name="Room *unsafe*\n# forged-analysis <img>",
+        analysis_kind="room_verification",
+        input_payload=input_payload,
+        generated_at_utc="2026-09-25T12:34:56Z",
+        limitations=[
+            "Review | only\n# forged-limitation <script>alert(2)</script>"
+        ],
+    )
+
+    assert (
+        "# Room \\*unsafe\\*<br># forged-analysis &lt;img&gt; "
+        "— CleanroomX Engineering Report"
+    ) in document
+    assert (
+        "- Project: Facility \\| table<br># forged-project "
+        "&lt;script&gt;alert(1)&lt;/script&gt;"
+    ) in document
+    assert "- Analysis ID: room-a<br>- forged-id" in document
+    assert (
+        "- Review \\| only<br># forged-limitation "
+        "&lt;script&gt;alert(2)&lt;/script&gt;"
+    ) in document
+    assert "\n# forged-project" not in document
+    assert "\n# forged-analysis" not in document
+    assert "\n- forged-id" not in document
+    assert "\n# forged-limitation" not in document
+    assert "<script>" not in document
+    assert "<img>" not in document
+

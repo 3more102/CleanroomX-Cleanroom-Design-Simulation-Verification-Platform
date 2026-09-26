@@ -951,6 +951,18 @@ def solve_room_pressure_network(
             or delta <= target.maximum_delta_pa
         )
         passed = minimum_ok and maximum_ok
+        minimum_margin_pa = _finite_result(
+            delta - target.minimum_delta_pa,
+            f"{target.name} minimum_margin_pa",
+        )
+        maximum_margin_pa = (
+            None
+            if target.maximum_delta_pa is None
+            else _finite_result(
+                target.maximum_delta_pa - delta,
+                f"{target.name} maximum_margin_pa",
+            )
+        )
         target_results.append(
             {
                 "name": target.name,
@@ -967,14 +979,14 @@ def solve_room_pressure_network(
                     "pass" if passed else "fail"
                 ),
                 "minimum_margin_pa": round(
-                    delta - target.minimum_delta_pa,
+                    minimum_margin_pa,
                     9,
                 ),
                 "maximum_margin_pa": (
                     None
-                    if target.maximum_delta_pa is None
+                    if maximum_margin_pa is None
                     else round(
-                        target.maximum_delta_pa - delta,
+                        maximum_margin_pa,
                         9,
                     )
                 ),

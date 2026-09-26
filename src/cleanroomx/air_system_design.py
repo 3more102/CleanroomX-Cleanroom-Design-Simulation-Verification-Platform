@@ -232,6 +232,27 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
                 )
                 sensible_equation = "Q_sensible / (rho × cp × (T_room - T_supply)) × 3600"
 
+        # Minimum supply required by the room air-balance equation while
+        # retaining a non-negative return path and the configured surplus:
+        #
+        #   supply + transfer_in
+        #       = return + exhaust + transfer_out + surplus
+        #
+        # With return >= 0 and surplus >= minimum_surplus, therefore:
+        #
+        #   supply >= exhaust + transfer_out + minimum_surplus - transfer_in
+        #
+        # This is an engineering sizing constraint, not merely a post-solve
+        # warning: omitting it can publish a design that cannot meet its own
+        # configured pressure/surplus intent.
+        air_balance_airflow = max(
+            0.0,
+            room.exhaust_airflow_m3_h
+            + room.transfer_out_airflow_m3_h
+            + room.minimum_surplus_m3_h
+            - room.transfer_in_airflow_m3_h,
+        )
+
         drivers: list[tuple[str, float]] = []
         if ach_airflow is not None:
             drivers.append(("minimum_ach", ach_airflow))
@@ -239,24 +260,35 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
             drivers.append(("sensible_load", sensible_airflow))
         if room.minimum_outdoor_air_m3_h > 0:
             drivers.append(("minimum_outdoor_air", room.minimum_outdoor_air_m3_h))
+        if air_balance_airflow > 0:
+            drivers.append(("air_balance", air_balance_airflow))
         if not drivers:
             raise ValueError(
-                f"room {room.name!r} has no airflow driver; configure min_ach, sensible-load temperatures, or minimum_outdoor_air_m3_h"
+                f"room {room.name!r} has no airflow driver; configure min_ach, sensible-load temperatures, "
+                "minimum_outdoor_air_m3_h, or a nonzero exhaust/transfer/surplus balance requirement"
             )
         governing_basis, governing_airflow = max(drivers, key=lambda item: (item[1], item[0]))
 
-        proposed_return = (
+        raw_proposed_return = (
             governing_airflow
             + room.transfer_in_airflow_m3_h
             - room.exhaust_airflow_m3_h
             - room.transfer_out_airflow_m3_h
             - room.minimum_surplus_m3_h
         )
-        if proposed_return < 0:
-            room_warnings.append(
-                "Requested exhaust/transfer/surplus exceeds supply plus transfer-in; proposed return was clamped to 0 m^3/h."
+        balance_scale = max(
+            1.0,
+            governing_airflow,
+            room.transfer_in_airflow_m3_h,
+            room.exhaust_airflow_m3_h + room.transfer_out_airflow_m3_h + room.minimum_surplus_m3_h,
+        )
+        balance_tolerance = 1e-12 * balance_scale
+        if raw_proposed_return < -balance_tolerance:
+            raise RuntimeError(
+                f"room {room.name!r} air-balance sizing invariant failed: proposed return would be "
+                f"{raw_proposed_return} m^3/h"
             )
-            proposed_return = 0.0
+        proposed_return = max(0.0, raw_proposed_return)
         achieved_surplus = (
             governing_airflow
             + room.transfer_in_airflow_m3_h
@@ -264,6 +296,14 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
             - room.exhaust_airflow_m3_h
             - room.transfer_out_airflow_m3_h
         )
+        surplus_margin = achieved_surplus - room.minimum_surplus_m3_h
+        if surplus_margin < -balance_tolerance:
+            raise RuntimeError(
+                f"room {room.name!r} air-balance sizing invariant failed: achieved surplus "
+                f"{achieved_surplus} m^3/h is below minimum {room.minimum_surplus_m3_h} m^3/h"
+            )
+        if abs(surplus_margin) <= balance_tolerance:
+            surplus_margin = 0.0
         makeup_airflow = max(
             room.minimum_outdoor_air_m3_h,
             room.exhaust_airflow_m3_h + room.transfer_out_airflow_m3_h - room.transfer_in_airflow_m3_h,
@@ -304,6 +344,11 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
                         "equation": "configured requirement",
                         "status": "evaluated" if room.minimum_outdoor_air_m3_h > 0 else "unchecked",
                     },
+                    "air_balance": {
+                        "airflow_m3_h": air_balance_airflow,
+                        "equation": "max(0, exhaust + transfer_out + minimum_surplus - transfer_in)",
+                        "status": "evaluated",
+                    },
                 },
                 "governing_airflow_m3_h": governing_airflow,
                 "governing_basis": governing_basis,
@@ -313,6 +358,7 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
                 "transfer_out_airflow_m3_h": room.transfer_out_airflow_m3_h,
                 "minimum_surplus_m3_h": room.minimum_surplus_m3_h,
                 "achieved_surplus_m3_h": achieved_surplus,
+                "surplus_margin_m3_h": surplus_margin,
                 "preliminary_makeup_airflow_m3_h": makeup_airflow,
                 "equipment_counts": counts,
                 "warnings": room_warnings,

@@ -75,13 +75,17 @@ class ProjectFormatError(ValueError):
     pass
 
 
+def _project_file_size_message(size_bytes: int) -> str:
+    return (
+        f"project file size {size_bytes} bytes exceeds maximum supported size "
+        f"of {PROJECT_FILE_MAX_BYTES} bytes"
+    )
+
+
 def _validate_project_file_size(size_bytes: int) -> None:
-    """Fail closed before oversized project bytes reach JSON parsing or hashing."""
+    """Fail closed before oversized project bytes reach JSON parsing."""
     if size_bytes > PROJECT_FILE_MAX_BYTES:
-        raise ProjectFormatError(
-            f"project file size {size_bytes} bytes exceeds maximum supported size "
-            f"of {PROJECT_FILE_MAX_BYTES} bytes"
-        )
+        raise ProjectFormatError(_project_file_size_message(size_bytes))
 
 
 class ProjectFileBusyError(RuntimeError):
@@ -610,7 +614,10 @@ def capture_project_file_revision(path: str | Path) -> ProjectFileRevision:
     last_error: OSError | None = None
     for _attempt in range(3):
         before = source.stat()
-        _validate_project_file_size(before.st_size)
+        if before.st_size > PROJECT_FILE_MAX_BYTES:
+            # Revision capture historically reports file-access failures as OSError;
+            # preserve that contract for batch/bundle stability checks.
+            raise OSError(_project_file_size_message(before.st_size))
         digest = sha256()
         try:
             with source.open("rb") as handle:

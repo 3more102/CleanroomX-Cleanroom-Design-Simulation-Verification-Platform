@@ -21,6 +21,31 @@ _PATH_KINDS = frozenset(
 _FLOW_MODELS = frozenset({"power_law", "orifice"})
 
 
+class _PressureNetworkNumericalError(RuntimeError):
+    """Raised when finite inputs produce a non-finite solver state."""
+
+
+def _finite_result(value: float, context: str) -> float:
+    value = float(value)
+    if not math.isfinite(value):
+        raise _PressureNetworkNumericalError(
+            "pressure-network numerical result became non-finite: "
+            + context
+        )
+    return value
+
+
+def _finite_sum(values, context: str) -> float:
+    try:
+        total = math.fsum(values)
+    except OverflowError as exc:
+        raise _PressureNetworkNumericalError(
+            "pressure-network numerical result became non-finite: "
+            + context
+        ) from exc
+    return _finite_result(total, context)
+
+
 def _finite(value: float, field_name: str) -> float:
     value = float(value)
     if not math.isfinite(value):
@@ -76,6 +101,15 @@ class PressureNode:
                     self.fixed_pressure_pa,
                     f"{self.name} fixed_pressure_pa",
                 ),
+            )
+        mechanical_injection = (
+            self.supply_m3_h
+            - self.return_m3_h
+            - self.exhaust_m3_h
+        )
+        if not math.isfinite(mechanical_injection):
+            raise ValueError(
+                f"{self.name} mechanical_injection_m3_h must remain finite"
             )
 
     @property
@@ -340,10 +374,11 @@ def _path_flow_and_derivative(
     start_pressure_pa: float,
     end_pressure_pa: float,
 ) -> tuple[float, float, float]:
-    effective_delta_pa = (
+    effective_delta_pa = _finite_result(
         start_pressure_pa
         - end_pressure_pa
-        + path.pressure_offset_pa
+        + path.pressure_offset_pa,
+        f"{path.name} effective_pressure_difference_pa",
     )
     magnitude = abs(effective_delta_pa)
     transition = path.linearization_pressure_pa
@@ -354,42 +389,73 @@ def _path_flow_and_derivative(
         coefficient = path.coefficient_m3_s_pa_n
         exponent = path.exponent
         if magnitude < transition:
-            slope = coefficient * transition ** (exponent - 1.0)
-            return (
+            slope = _finite_result(
+                coefficient * transition ** (exponent - 1.0),
+                f"{path.name} local_flow_sensitivity_m3_s_pa",
+            )
+            flow = _finite_result(
                 slope * effective_delta_pa,
+                f"{path.name} airflow_m3_s",
+            )
+            return (
+                flow,
                 slope,
                 effective_delta_pa,
             )
-        flow = coefficient * math.copysign(
-            magnitude**exponent,
-            effective_delta_pa,
+        flow = _finite_result(
+            coefficient
+            * math.copysign(
+                magnitude**exponent,
+                effective_delta_pa,
+            ),
+            f"{path.name} airflow_m3_s",
         )
-        derivative = (
+        derivative = _finite_result(
             coefficient
             * exponent
-            * magnitude ** (exponent - 1.0)
+            * magnitude ** (exponent - 1.0),
+            f"{path.name} local_flow_sensitivity_m3_s_pa",
         )
         return flow, derivative, effective_delta_pa
 
     assert path.discharge_coefficient is not None
     assert path.area_m2 is not None
-    k = (
+    density_factor = _finite_result(
+        2.0 / path.air_density_kg_m3,
+        f"{path.name} inverse_density_factor",
+    )
+    k = _finite_result(
         path.discharge_coefficient
         * path.area_m2
-        * math.sqrt(2.0 / path.air_density_kg_m3)
+        * math.sqrt(density_factor),
+        f"{path.name} orifice_flow_coefficient",
     )
     if magnitude < transition:
-        slope = k / math.sqrt(transition)
-        return (
+        slope = _finite_result(
+            k / math.sqrt(transition),
+            f"{path.name} local_flow_sensitivity_m3_s_pa",
+        )
+        flow = _finite_result(
             slope * effective_delta_pa,
+            f"{path.name} airflow_m3_s",
+        )
+        return (
+            flow,
             slope,
             effective_delta_pa,
         )
-    flow = k * math.copysign(
-        math.sqrt(magnitude),
-        effective_delta_pa,
+    flow = _finite_result(
+        k
+        * math.copysign(
+            math.sqrt(magnitude),
+            effective_delta_pa,
+        ),
+        f"{path.name} airflow_m3_s",
     )
-    derivative = 0.5 * k / math.sqrt(magnitude)
+    derivative = _finite_result(
+        0.5 * k / math.sqrt(magnitude),
+        f"{path.name} local_flow_sensitivity_m3_s_pa",
+    )
     return flow, derivative, effective_delta_pa
 
 
@@ -398,9 +464,25 @@ def _solve_linear_system(
     rhs: list[float],
 ) -> list[float]:
     size = len(rhs)
+    if len(matrix) != size or any(len(row) != size for row in matrix):
+        raise RuntimeError(
+            "pressure-network Newton system dimensions are inconsistent"
+        )
     augmented = [
-        row[:] + [rhs[index]]
-        for index, row in enumerate(matrix)
+        [
+            _finite_result(
+                value,
+                f"Newton matrix row {row_index} column {column_index}",
+            )
+            for column_index, value in enumerate(row)
+        ]
+        + [
+            _finite_result(
+                rhs[row_index],
+                f"Newton right-hand side row {row_index}",
+            )
+        ]
+        for row_index, row in enumerate(matrix)
     ]
 
     for column in range(size):
@@ -418,24 +500,53 @@ def _solve_linear_system(
         )
 
         for row in range(column + 1, size):
-            factor = (
+            factor = _finite_result(
                 augmented[row][column]
-                / augmented[column][column]
+                / augmented[column][column],
+                f"Newton elimination factor row {row} column {column}",
             )
             if factor == 0.0:
                 continue
             for item in range(column, size + 1):
-                augmented[row][item] -= (
-                    factor * augmented[column][item]
+                product = _finite_result(
+                    factor * augmented[column][item],
+                    (
+                        "Newton elimination product "
+                        f"row {row} column {item}"
+                    ),
+                )
+                augmented[row][item] = _finite_result(
+                    augmented[row][item] - product,
+                    (
+                        "Newton elimination state "
+                        f"row {row} column {item}"
+                    ),
                 )
 
     solution = [0.0] * size
     for row in range(size - 1, -1, -1):
-        numerator = augmented[row][size] - sum(
-            augmented[row][column] * solution[column]
+        products = [
+            _finite_result(
+                augmented[row][column] * solution[column],
+                (
+                    "Newton back-substitution product "
+                    f"row {row} column {column}"
+                ),
+            )
             for column in range(row + 1, size)
+        ]
+        correction = _finite_sum(
+            products,
+            f"Newton back-substitution sum row {row}",
         )
-        solution[row] = numerator / augmented[row][row]
+        numerator = _finite_result(
+            augmented[row][size] - correction,
+            f"Newton back-substitution numerator row {row}",
+        )
+        solution[row] = _finite_result(
+            numerator / augmented[row][row],
+            f"Newton solution row {row}",
+        )
     return solution
 
 
@@ -472,8 +583,12 @@ def solve_room_pressure_network(
         for node in network.nodes
         if node.fixed_pressure_pa is not None
     ]
-    initial_pressure = (
-        sum(fixed_pressures) / len(fixed_pressures)
+    initial_pressure = _finite_sum(
+        (
+            pressure / len(fixed_pressures)
+            for pressure in fixed_pressures
+        ),
+        "initial fixed-pressure average",
     )
     pressures = {
         node.name: (
@@ -512,8 +627,14 @@ def solve_room_pressure_network(
             flows.append(flow)
             derivatives.append(derivative)
             effective_deltas.append(effective_delta)
-            residuals[path.start_node] -= flow
-            residuals[path.end_node] += flow
+            residuals[path.start_node] = _finite_result(
+                residuals[path.start_node] - flow,
+                f"{path.start_node} mass-balance residual",
+            )
+            residuals[path.end_node] = _finite_result(
+                residuals[path.end_node] + flow,
+                f"{path.end_node} mass-balance residual",
+            )
         return (
             residuals,
             flows,
@@ -556,13 +677,37 @@ def solve_room_pressure_network(
             start_index = unknown_index.get(path.start_node)
             end_index = unknown_index.get(path.end_node)
             if start_index is not None:
-                jacobian[start_index][start_index] -= derivative
+                jacobian[start_index][start_index] = _finite_result(
+                    jacobian[start_index][start_index] - derivative,
+                    (
+                        "Newton Jacobian diagonal for "
+                        f"{path.start_node}"
+                    ),
+                )
                 if end_index is not None:
-                    jacobian[start_index][end_index] += derivative
+                    jacobian[start_index][end_index] = _finite_result(
+                        jacobian[start_index][end_index] + derivative,
+                        (
+                            "Newton Jacobian coupling "
+                            f"{path.start_node}->{path.end_node}"
+                        ),
+                    )
             if end_index is not None:
                 if start_index is not None:
-                    jacobian[end_index][start_index] += derivative
-                jacobian[end_index][end_index] -= derivative
+                    jacobian[end_index][start_index] = _finite_result(
+                        jacobian[end_index][start_index] + derivative,
+                        (
+                            "Newton Jacobian coupling "
+                            f"{path.end_node}->{path.start_node}"
+                        ),
+                    )
+                jacobian[end_index][end_index] = _finite_result(
+                    jacobian[end_index][end_index] - derivative,
+                    (
+                        "Newton Jacobian diagonal for "
+                        f"{path.end_node}"
+                    ),
+                )
 
         step = _solve_linear_system(
             jacobian,
@@ -576,14 +721,26 @@ def solve_room_pressure_network(
         accepted = False
         while scale >= 2.0**-20:
             candidate = dict(pressures)
+            candidate_is_finite = True
             for name, delta in zip(
                 unknown_nodes,
                 step,
             ):
-                candidate[name] = (
+                candidate_pressure = (
                     pressures[name] + scale * delta
                 )
-            candidate_residuals, *_ = evaluate(candidate)
+                if not math.isfinite(candidate_pressure):
+                    candidate_is_finite = False
+                    break
+                candidate[name] = candidate_pressure
+            if not candidate_is_finite:
+                scale *= 0.5
+                continue
+            try:
+                candidate_residuals, *_ = evaluate(candidate)
+            except _PressureNetworkNumericalError:
+                scale *= 0.5
+                continue
             candidate_norm = max(
                 (
                     abs(candidate_residuals[name])
@@ -624,8 +781,9 @@ def solve_room_pressure_network(
 
     node_results = []
     for node in network.nodes:
-        residual_m3_h = (
-            residuals[node.name] * 3600.0
+        residual_m3_h = _finite_result(
+            residuals[node.name] * 3600.0,
+            f"{node.name} mass_balance_residual_m3_h",
         )
         dominant = None
         if incident[node.name]:
@@ -633,10 +791,17 @@ def solve_room_pressure_network(
                 incident[node.name],
                 key=lambda item: abs(item[1]),
             )
+            dominant_airflow_m3_h = _finite_result(
+                abs(room_outward_flow) * 3600.0,
+                (
+                    f"{node.name} dominant pressure-path "
+                    "airflow_m3_h"
+                ),
+            )
             dominant = {
                 "path": dominant_path.name,
                 "airflow_m3_h": round(
-                    abs(room_outward_flow) * 3600.0,
+                    dominant_airflow_m3_h,
                     6,
                 ),
                 "direction": (
@@ -708,6 +873,15 @@ def solve_room_pressure_network(
         else:
             direction = "zero flow"
 
+        airflow_m3_h = _finite_result(
+            flow * 3600.0,
+            f"{path.name} airflow_m3_h",
+        )
+        pressure_difference_pa = _finite_result(
+            pressures[path.start_node] - pressures[path.end_node],
+            f"{path.name} pressure_difference_pa",
+        )
+
         path_results.append(
             {
                 "name": path.name,
@@ -716,8 +890,7 @@ def solve_room_pressure_network(
                 "start_node": path.start_node,
                 "end_node": path.end_node,
                 "pressure_difference_pa": round(
-                    pressures[path.start_node]
-                    - pressures[path.end_node],
+                    pressure_difference_pa,
                     9,
                 ),
                 "pressure_offset_pa": round(
@@ -730,7 +903,7 @@ def solve_room_pressure_network(
                 ),
                 "airflow_m3_s": round(flow, 12),
                 "airflow_m3_h": round(
-                    flow * 3600.0,
+                    airflow_m3_h,
                     6,
                 ),
                 "flow_direction": direction,
@@ -765,9 +938,10 @@ def solve_room_pressure_network(
 
     target_results = []
     for target in network.targets:
-        delta = (
+        delta = _finite_result(
             pressures[target.high_node]
-            - pressures[target.low_node]
+            - pressures[target.low_node],
+            f"{target.name} observed_delta_pa",
         )
         minimum_ok = (
             delta >= target.minimum_delta_pa
@@ -814,19 +988,29 @@ def solve_room_pressure_network(
     ]
     max_residual_m3_h = max(
         (
-            abs(residuals[name] * 3600.0)
+            _finite_result(
+                abs(residuals[name] * 3600.0),
+                f"{name} absolute mass_balance_residual_m3_h",
+            )
             for name in unknown_nodes
         ),
         default=0.0,
     )
-    total_supply = sum(
-        node.supply_m3_h for node in network.nodes
+    total_supply = _finite_sum(
+        (node.supply_m3_h for node in network.nodes),
+        "total supply_m3_h",
     )
-    total_return = sum(
-        node.return_m3_h for node in network.nodes
+    total_return = _finite_sum(
+        (node.return_m3_h for node in network.nodes),
+        "total return_m3_h",
     )
-    total_exhaust = sum(
-        node.exhaust_m3_h for node in network.nodes
+    total_exhaust = _finite_sum(
+        (node.exhaust_m3_h for node in network.nodes),
+        "total exhaust_m3_h",
+    )
+    net_injection = _finite_result(
+        total_supply - total_return - total_exhaust,
+        "total mechanical net_injection_m3_h",
     )
 
     return {
@@ -856,9 +1040,7 @@ def solve_room_pressure_network(
             "return": round(total_return, 6),
             "exhaust": round(total_exhaust, 6),
             "net_injection": round(
-                total_supply
-                - total_return
-                - total_exhaust,
+                net_injection,
                 6,
             ),
         },

@@ -264,6 +264,50 @@ def test_bundle_verifier_rejects_path_traversal_member(tmp_path):
         inspect_project_bundle(malicious)
 
 
+@pytest.mark.parametrize(
+    ("unsafe_member", "message"),
+    [
+        ("dependencies//input.json", "canonical relative POSIX path"),
+        ("dependencies/./input.json", "canonical relative POSIX path"),
+        ("dependencies/NUL.json", "Windows-reserved path component"),
+        ("dependencies/CON .txt", "Windows-reserved path component"),
+        ("dependencies/COM¹.txt", "Windows-reserved path component"),
+        ("dependencies/report?.json", "not portable to Windows"),
+        ("dependencies/report.json.", "trailing space or dot"),
+    ],
+)
+def test_bundle_verifier_rejects_nonportable_archive_members(
+    tmp_path, unsafe_member, message
+):
+    malicious = tmp_path / "nonportable.cleanroomx.zip"
+    with zipfile.ZipFile(malicious, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr(PROJECT_BUNDLE_MANIFEST, b"{}")
+        archive.writestr(unsafe_member, b"unsafe")
+
+    with pytest.raises(ProjectBundleError, match=message):
+        inspect_project_bundle(malicious)
+
+
+@pytest.mark.parametrize(
+    ("first_name", "second_name"),
+    [
+        ("dependencies/Input.json", "dependencies/input.json"),
+        ("dependencies/\u00e9.json", "dependencies/e\u0301.json"),
+    ],
+)
+def test_bundle_verifier_rejects_portable_filesystem_member_collisions(
+    tmp_path, first_name, second_name
+):
+    malicious = tmp_path / "colliding.cleanroomx.zip"
+    with zipfile.ZipFile(malicious, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr(PROJECT_BUNDLE_MANIFEST, b"{}")
+        archive.writestr(first_name, b"first")
+        archive.writestr(second_name, b"second")
+
+    with pytest.raises(ProjectBundleError, match="collide on portable filesystems"):
+        inspect_project_bundle(malicious)
+
+
 def test_bundle_verifier_rejects_unmanifested_member(tmp_path):
     source = tmp_path / "source"
     source.mkdir()

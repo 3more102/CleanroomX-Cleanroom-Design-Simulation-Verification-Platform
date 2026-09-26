@@ -9,6 +9,7 @@ import re
 import shutil
 import tempfile
 from typing import Any, Callable
+import unicodedata
 import zipfile
 
 from . import __version__
@@ -42,6 +43,19 @@ _DEPENDENCY_DIRECTORY = "dependencies"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _FIELD_INDEX_RE = re.compile(r"^([^\[\]]+)\[(\d+)\]$")
 _COPY_CHUNK_SIZE = 1024 * 1024
+_WINDOWS_INVALID_PATH_CHARS = frozenset('<>"|?*')
+_WINDOWS_RESERVED_PATH_STEMS = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *(f"com{index}" for index in range(1, 10)),
+        *(f"lpt{index}" for index in range(1, 10)),
+        *(f"com{digit}" for digit in "¹²³"),
+        *(f"lpt{digit}" for digit in "¹²³"),
+    }
+)
 
 
 class ProjectBundleError(ValueError):
@@ -81,12 +95,42 @@ def _sha256_bytes(value: bytes) -> str:
 def _safe_archive_path(value: str, *, field: str) -> PurePosixPath:
     if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
         raise ProjectBundleError(f"{field} must be a safe relative POSIX path")
-    path = PurePosixPath(value)
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+    raw_parts = value.split("/")
+    if any(part == ".." for part in raw_parts):
         raise ProjectBundleError(f"{field} must be a safe relative POSIX path")
-    if any(":" in part for part in path.parts):
-        raise ProjectBundleError(f"{field} contains an unsafe path component")
+    if any(part in {"", "."} for part in raw_parts):
+        raise ProjectBundleError(f"{field} must be a canonical relative POSIX path")
+    path = PurePosixPath(value)
+    if path.is_absolute():
+        raise ProjectBundleError(f"{field} must be a safe relative POSIX path")
+    for part in raw_parts:
+        if ":" in part:
+            raise ProjectBundleError(f"{field} contains an unsafe path component")
+        if part.endswith((" ", ".")):
+            raise ProjectBundleError(
+                f"{field} contains a path component with a trailing space or dot"
+            )
+        if any(
+            ord(character) < 32 or character in _WINDOWS_INVALID_PATH_CHARS
+            for character in part
+        ):
+            raise ProjectBundleError(
+                f"{field} contains a path component that is not portable to Windows"
+            )
+        stem = part.split(".", 1)[0].rstrip(" .").casefold()
+        if stem in _WINDOWS_RESERVED_PATH_STEMS:
+            raise ProjectBundleError(
+                f"{field} contains a Windows-reserved path component: {part}"
+            )
     return path
+
+
+def _portable_archive_key(path: PurePosixPath) -> tuple[str, ...]:
+    """Return a deterministic collision key for common portable filesystems."""
+    return tuple(
+        unicodedata.normalize("NFC", part).casefold()
+        for part in path.parts
+    )
 
 
 def _dependency_filename(index: int, source: Path) -> str:
@@ -462,8 +506,17 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
             names = [info.filename for info in infos]
             if len(names) != len(set(names)):
                 raise ProjectBundleError("bundle contains duplicate archive member names")
+            portable_names: dict[tuple[str, ...], str] = {}
             for info in infos:
-                _safe_archive_path(info.filename, field="archive member")
+                safe_name = _safe_archive_path(info.filename, field="archive member")
+                portable_key = _portable_archive_key(safe_name)
+                previous_name = portable_names.get(portable_key)
+                if previous_name is not None and previous_name != info.filename:
+                    raise ProjectBundleError(
+                        "bundle archive member names collide on portable filesystems: "
+                        f"{previous_name!r} and {info.filename!r}"
+                    )
+                portable_names[portable_key] = info.filename
                 if info.is_dir():
                     raise ProjectBundleError(
                         f"bundle contains an unexpected directory entry: {info.filename}"

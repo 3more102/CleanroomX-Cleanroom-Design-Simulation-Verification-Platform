@@ -24,7 +24,8 @@ Verification rejects:
 
 - invalid or unsupported bundle schemas;
 - duplicate or undeclared archive members;
-- absolute paths, parent traversal, Windows drive-style path components, and backslash paths;
+- absolute paths, parent traversal, non-canonical POSIX segments, Windows drive-style path components, and backslash paths;
+- Windows-reserved or Windows-invalid path components, trailing-dot/space aliases, and archive member names that collide after Unicode normalization plus case folding;
 - encrypted or unexpectedly compressed members;
 - project/dependency size or SHA-256 mismatches;
 - invalid bundled project JSON or unsupported project schemas;

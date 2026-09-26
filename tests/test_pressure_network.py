@@ -389,3 +389,148 @@ def test_solver_is_deterministic_and_report_exposes_scope() -> None:
             "local_flow_sensitivity_m3_s_pa"
         ]
     )
+
+
+def test_pressure_node_rejects_nonfinite_combined_mechanical_injection() -> None:
+    with pytest.raises(
+        ValueError,
+        match="mechanical_injection_m3_h must remain finite",
+    ):
+        PressureNode(
+            "Overflow room",
+            return_m3_h=1e308,
+            exhaust_m3_h=1e308,
+        )
+
+
+def test_solver_rejects_nonfinite_effective_pressure_difference() -> None:
+    network = RoomPressureNetwork(
+        name="Extreme pressure boundary",
+        nodes=(
+            PressureNode(
+                "High",
+                fixed_pressure_pa=1e308,
+            ),
+            PressureNode(
+                "Low",
+                fixed_pressure_pa=-1e308,
+            ),
+        ),
+        paths=(
+            PressurePath(
+                "Extreme delta",
+                "High",
+                "Low",
+                "crack",
+                "power_law",
+                coefficient_m3_s_pa_n=0.01,
+                exponent=1.0,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Extreme delta effective_pressure_difference_pa",
+    ):
+        solve_room_pressure_network(network)
+
+
+def test_solver_rejects_nonfinite_power_law_flow() -> None:
+    network = RoomPressureNetwork(
+        name="Extreme power-law flow",
+        nodes=(
+            PressureNode(
+                "High",
+                fixed_pressure_pa=2.0,
+            ),
+            PressureNode(
+                "Low",
+                fixed_pressure_pa=0.0,
+            ),
+        ),
+        paths=(
+            PressurePath(
+                "Extreme leak",
+                "High",
+                "Low",
+                "crack",
+                "power_law",
+                coefficient_m3_s_pa_n=1e308,
+                exponent=1.0,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Extreme leak airflow_m3_s",
+    ):
+        solve_room_pressure_network(network)
+
+
+def test_solver_rejects_nonfinite_orifice_coefficient() -> None:
+    network = RoomPressureNetwork(
+        name="Extreme orifice",
+        nodes=(
+            PressureNode(
+                "High",
+                fixed_pressure_pa=1.0,
+            ),
+            PressureNode(
+                "Low",
+                fixed_pressure_pa=0.0,
+            ),
+        ),
+        paths=(
+            PressurePath(
+                "Extreme opening",
+                "High",
+                "Low",
+                "generic_opening",
+                "orifice",
+                discharge_coefficient=1e308,
+                area_m2=1e308,
+                air_density_kg_m3=1.2,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Extreme opening orifice_flow_coefficient",
+    ):
+        solve_room_pressure_network(network)
+
+
+def test_solver_rejects_nonfinite_report_unit_conversion() -> None:
+    network = RoomPressureNetwork(
+        name="Extreme output conversion",
+        nodes=(
+            PressureNode(
+                "High",
+                fixed_pressure_pa=1.0,
+            ),
+            PressureNode(
+                "Low",
+                fixed_pressure_pa=0.0,
+            ),
+        ),
+        paths=(
+            PressurePath(
+                "Large finite leak",
+                "High",
+                "Low",
+                "crack",
+                "power_law",
+                coefficient_m3_s_pa_n=1e305,
+                exponent=1.0,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="mass_balance_residual_m3_h",
+    ):
+        solve_room_pressure_network(network)

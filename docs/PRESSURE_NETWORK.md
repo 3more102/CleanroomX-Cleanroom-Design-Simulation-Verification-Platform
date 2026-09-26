@@ -126,6 +126,18 @@ The result preserves:
 
 Non-convergence raises an error rather than returning a false solved result.
 
+All configured numeric inputs must be finite, and CleanroomX also checks derived
+solver states for finite representability. If finite inputs overflow while forming
+an effective pressure difference, pressure-flow law, residual, Newton/Jacobian
+state, or reported unit conversion, the solve fails explicitly instead of emitting
+`NaN` or `Infinity`. During damped Newton line search, a non-finite trial state is
+rejected and a smaller step is attempted. Values are not silently clipped or
+saturated.
+
+The combined node mechanical injection
+`supply - return - exhaust` must itself remain finite, even when each component is
+finite individually.
+
 ## Example
 
 Run the repository example:

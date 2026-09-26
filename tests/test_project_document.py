@@ -4,10 +4,11 @@ import json
 
 import pytest
 
+import cleanroomx.project as project_module
 from cleanroomx.project import (
     AnalysisDocument, PROJECT_SCHEMA, PROJECT_SCHEMA_VERSION, ProjectDocument,
-    ProjectFormatError, atomic_write_text, load_project_document,
-    load_project_document_with_revision_info, project_from_dict,
+    ProjectFormatError, atomic_write_text, capture_project_file_revision,
+    load_project_document, load_project_document_with_revision_info, project_from_dict,
     project_from_dict_with_migration_info, save_project_document,
 )
 
@@ -193,6 +194,66 @@ def test_project_loader_reports_invalid_json(tmp_path):
     path.write_text("{broken", encoding="utf-8")
     with pytest.raises(ProjectFormatError, match="invalid JSON"):
         load_project_document(path)
+
+
+def test_project_loader_rejects_oversized_file_before_json_parsing(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.cleanroomx.json"
+    path.write_bytes(b"{" + (b"x" * 128))
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+
+    with pytest.raises(ProjectFormatError, match="exceeds maximum supported size"):
+        load_project_document(path)
+
+
+def test_project_loader_accepts_valid_file_at_exact_byte_limit(tmp_path, monkeypatch):
+    payload = {
+        "schema": PROJECT_SCHEMA,
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "application_version": "test",
+        "project": {"name": "Boundary"},
+        "analyses": [],
+        "active_analysis_id": None,
+    }
+    text = json.dumps(payload)
+    encoded = text.encode("utf-8")
+    path = tmp_path / "boundary.cleanroomx.json"
+    path.write_bytes(encoded)
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", len(encoded))
+
+    loaded = load_project_document(path)
+
+    assert loaded.name == "Boundary"
+
+
+def test_revision_capture_rejects_oversized_file_before_hashing(tmp_path, monkeypatch):
+    path = tmp_path / "oversized.cleanroomx.json"
+    path.write_bytes(b"x" * 65)
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 64)
+
+    with pytest.raises(ProjectFormatError, match="exceeds maximum supported size"):
+        capture_project_file_revision(path)
+
+
+def test_project_loader_reports_invalid_utf8(tmp_path):
+    path = tmp_path / "invalid-utf8.cleanroomx.json"
+    path.write_bytes(b'{"schema":"cleanroomx.project","name":"\xff"}')
+
+    with pytest.raises(ProjectFormatError, match="valid UTF-8"):
+        load_project_document(path)
+
+
+def test_project_save_refuses_output_larger_than_loader_limit(tmp_path, monkeypatch):
+    path = tmp_path / "too-large.cleanroomx.json"
+    project = ProjectDocument(
+        name="Too large",
+        description="x" * 512,
+    )
+    monkeypatch.setattr(project_module, "PROJECT_FILE_MAX_BYTES", 128)
+
+    with pytest.raises(ProjectFormatError, match="exceeds maximum supported size"):
+        save_project_document(path, project)
+
+    assert not path.exists()
 
 def test_project_round_trip_preserves_additive_fields_at_all_schema_levels(tmp_path):
     raw = {

@@ -3,7 +3,7 @@
 - **Worker ID:** WS-11-PROJECT-IO
 - **Branch:** `dev/WS-11-PROJECT-IO`
 - **Starting SHA:** `2cccdbacff36e609cf9d39996cd36886bd574f35`
-- **Implementation/docs SHA before final coordination-report update:** `edb5ae5396e6f4007af13e3208e1b17dc337092b`
+- **Implementation/docs SHA before final coordination-report update:** `67ad99562b6dd006a4176be1a2bb7270400e940b`
 - **Assigned scope:** Harden project-file ingestion, persistence compatibility, and hostile/oversized project-data boundaries without changing engineering calculations.
 
 ## Files intentionally modified
@@ -27,7 +27,7 @@
 - Refuse serialization of projects larger than the normal loader limit.
 - Bound guarded-overwrite and revision-restore reads so a file that grows after revision capture cannot force an unbounded allocation.
 - Apply the project ceiling to embedded portable-bundle project members before integrity hashing/allocation and at the project member reader.
-- Bound saved project-revision envelopes to the maximum Base64-encoded project plus a fixed metadata allowance.
+- Bound saved project-revision envelopes to the maximum Base64-encoded project plus one project-size allowance for duplicated source strings and a fixed envelope allowance, preserving valid large-name projects.
 - Reject oversized declared revision sources before Base64 decoding and defensively bound decoded/restored project bytes.
 
 ## Tests added
@@ -44,6 +44,7 @@ Focused regressions cover:
 - defensive bundle project reader limit;
 - oversized revision-envelope rejection before JSON parsing;
 - oversized declared revision source rejection before Base64 decode;
+- revision-envelope compatibility for a valid project whose large name is duplicated outside the Base64 payload;
 - defensive revision embedded-project byte limit.
 
 ## Tests run / baseline evidence

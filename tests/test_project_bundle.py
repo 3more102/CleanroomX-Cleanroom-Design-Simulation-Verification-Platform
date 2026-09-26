@@ -270,6 +270,7 @@ def test_bundle_verifier_rejects_path_traversal_member(tmp_path):
         ("dependencies//input.json", "canonical relative POSIX path"),
         ("dependencies/./input.json", "canonical relative POSIX path"),
         ("dependencies/NUL.json", "Windows-reserved path component"),
+        ("dependencies/CON .txt", "Windows-reserved path component"),
         ("dependencies/report?.json", "not portable to Windows"),
         ("dependencies/report.json.", "trailing space or dot"),
     ],

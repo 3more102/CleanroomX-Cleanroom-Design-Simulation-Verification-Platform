@@ -18,6 +18,7 @@ from .project import (
     ProjectFileRevision,
     ProjectFormatError,
     ProjectWriteConflictError,
+    _read_project_bytes_bounded,
     capture_project_file_revision,
     project_file_revision_matches,
     project_from_dict,
@@ -387,7 +388,7 @@ def _expected_bytes(
         raise ProjectWriteConflictError(destination, expected_revision, current)
     if not expected_revision.exists:
         return None
-    payload = destination.read_bytes()
+    payload = _read_project_bytes_bounded(destination)
     if (
         len(payload) != expected_revision.size
         or sha256(payload).hexdigest() != expected_revision.sha256

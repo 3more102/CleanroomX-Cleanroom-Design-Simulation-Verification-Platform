@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import cleanroomx.spatial as spatial_module
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
@@ -15,8 +16,11 @@ from cleanroomx.project import (
     save_project_document,
 )
 from cleanroomx.spatial import (
+    SPATIAL_GEOMETRY_EPSILON_M,
     SPATIAL_METADATA_KEY,
     SpatialDesignWorkspace,
+    _room_overlap_records,
+    _validate_normalized_layout,
     SpatialSyncError,
     derive_layout_from_analysis,
     ensure_project_layout,
@@ -1529,3 +1533,140 @@ def test_window_and_generic_opening_are_first_class_spatial_devices():
     assert layout["devices"][1]["width_m"] == 1.0
     assert layout["devices"][1]["height_m"] == 2.1
     assert validate_layout(layout) == []
+
+def test_room_overlap_sweep_matches_reference_scan_on_adversarial_rectangles():
+    def reference(rooms):
+        overlaps = []
+        for left_index, left in enumerate(rooms):
+            left_x1 = left["x_m"] + left["length_m"]
+            left_y1 = left["y_m"] + left["width_m"]
+            for right_index in range(left_index + 1, len(rooms)):
+                right = rooms[right_index]
+                right_x1 = right["x_m"] + right["length_m"]
+                right_y1 = right["y_m"] + right["width_m"]
+                x0 = max(left["x_m"], right["x_m"])
+                y0 = max(left["y_m"], right["y_m"])
+                x1 = min(left_x1, right_x1)
+                y1 = min(left_y1, right_y1)
+                if (
+                    x1 > x0 + SPATIAL_GEOMETRY_EPSILON_M
+                    and y1 > y0 + SPATIAL_GEOMETRY_EPSILON_M
+                ):
+                    overlaps.append(
+                        (left_index, right_index, [x0, y0, x1, y1])
+                    )
+        return overlaps
+
+    horizontal = [
+        {"x_m": 0.0, "y_m": 0.0, "length_m": 10.0, "width_m": 2.0},
+        {"x_m": 1.0, "y_m": 0.5, "length_m": 2.0, "width_m": 1.0},
+        {"x_m": 10.0, "y_m": 0.0, "length_m": 2.0, "width_m": 2.0},
+        {
+            "x_m": 10.0 - SPATIAL_GEOMETRY_EPSILON_M / 2.0,
+            "y_m": 0.25,
+            "length_m": 1.0,
+            "width_m": 1.0,
+        },
+        {"x_m": 9.5, "y_m": 1.0, "length_m": 2.0, "width_m": 1.5},
+        {"x_m": 30.0, "y_m": 0.0, "length_m": 1.0, "width_m": 2.0},
+    ]
+    vertical = [
+        {
+            "x_m": room["y_m"],
+            "y_m": room["x_m"],
+            "length_m": room["width_m"],
+            "width_m": room["length_m"],
+        }
+        for room in horizontal
+    ]
+
+    assert _room_overlap_records(horizontal) == reference(horizontal)
+    assert _room_overlap_records(vertical) == reference(vertical)
+
+
+def test_normalized_validation_fast_path_matches_public_validation_exactly():
+    raw = {
+        "rooms": [
+            {
+                "id": "a",
+                "name": "Duplicate",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+            {
+                "id": "b",
+                "name": "duplicate",
+                "x_m": 3.0,
+                "y_m": 2.0,
+                "length_m": 4.0,
+                "width_m": 4.0,
+                "height_m": 3.0,
+            },
+        ],
+        "devices": [
+            {
+                "id": "door",
+                "type": "door",
+                "name": "Door",
+                "room_id": "a",
+                "x_m": 2.0,
+                "y_m": 1.0,
+                "z_m": 1.5,
+                "width_m": 0.9,
+                "height_m": 2.1,
+                "wall_side": "south",
+            },
+            {
+                "id": "orphan",
+                "type": "sensor",
+                "name": "Orphan",
+                "room_id": "missing",
+                "x_m": 0.0,
+                "y_m": 0.0,
+                "z_m": 0.0,
+            },
+        ],
+    }
+    normalized = normalize_layout(raw)
+
+    assert _validate_normalized_layout(normalized) == validate_layout(raw)
+
+
+def test_workspace_validation_uses_normalized_hot_path_without_renormalizing(
+    monkeypatch,
+):
+    layout = normalize_layout(
+        {
+            "rooms": [
+                {
+                    "id": "room",
+                    "name": "Room",
+                    "x_m": 0.0,
+                    "y_m": 0.0,
+                    "length_m": 4.0,
+                    "width_m": 4.0,
+                    "height_m": 3.0,
+                }
+            ],
+            "devices": [],
+        }
+    )
+    workspace = object.__new__(SpatialDesignWorkspace)
+    workspace.layout = layout
+    workspace._last_validation_key = None
+    workspace._validation_issues = []
+    workspace._update_validation_summary = lambda: None
+
+    def unexpected_normalization(_value):
+        raise AssertionError("workspace validation must reuse canonical normalized state")
+
+    monkeypatch.setattr(spatial_module, "normalize_layout", unexpected_normalization)
+
+    workspace._refresh_validation()
+
+    assert workspace._validation_issues == []
+    assert workspace._last_validation_key is not None
+

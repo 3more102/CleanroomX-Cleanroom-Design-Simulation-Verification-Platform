@@ -113,7 +113,7 @@ def _safe_archive_path(value: str, *, field: str) -> PurePosixPath:
             raise ProjectBundleError(
                 f"{field} contains a path component that is not portable to Windows"
             )
-        stem = part.split(".", 1)[0].casefold()
+        stem = part.split(".", 1)[0].rstrip(" .").casefold()
         if stem in _WINDOWS_RESERVED_PATH_STEMS:
             raise ProjectBundleError(
                 f"{field} contains a Windows-reserved path component: {part}"

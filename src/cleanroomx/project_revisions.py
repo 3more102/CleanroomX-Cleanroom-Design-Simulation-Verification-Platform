@@ -13,6 +13,7 @@ from typing import Any
 from . import __version__
 from .persistence import atomic_write_bytes, atomic_write_text
 from .project import (
+    PROJECT_FILE_MAX_BYTES,
     ProjectDocument,
     ProjectFileRevision,
     ProjectFormatError,
@@ -28,6 +29,13 @@ from .strict_json import StrictJSONError, strict_json_loads
 PROJECT_REVISION_SCHEMA = "cleanroomx.project-revision"
 PROJECT_REVISION_SCHEMA_VERSION = 1
 DEFAULT_PROJECT_REVISION_HISTORY_LIMIT = 5
+PROJECT_REVISION_METADATA_MAX_BYTES = 1024 * 1024
+
+
+def _project_revision_max_bytes() -> int:
+    """Bound a revision envelope containing one maximum-size base64 project."""
+    encoded_project_bytes = ((PROJECT_FILE_MAX_BYTES + 2) // 3) * 4
+    return encoded_project_bytes + PROJECT_REVISION_METADATA_MAX_BYTES
 
 
 class ProjectRevisionError(ProjectFormatError):
@@ -97,6 +105,11 @@ def _parse_utc(value: Any) -> datetime:
 
 
 def _project_from_bytes(payload: bytes) -> tuple[ProjectDocument, dict[str, Any]]:
+    if len(payload) > PROJECT_FILE_MAX_BYTES:
+        raise ProjectRevisionError(
+            f"saved project revision size {len(payload)} bytes exceeds maximum "
+            f"supported project size of {PROJECT_FILE_MAX_BYTES} bytes"
+        )
     try:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -186,10 +199,26 @@ def preserve_project_revision(
 
 
 def _load_payload(path: Path) -> dict[str, Any]:
+    max_bytes = _project_revision_max_bytes()
+    size_bytes = path.stat().st_size
+    if size_bytes > max_bytes:
+        raise ProjectRevisionError(
+            f"project revision artifact size {size_bytes} bytes exceeds maximum "
+            f"supported size of {max_bytes} bytes"
+        )
+    with path.open("rb") as handle:
+        raw = handle.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise ProjectRevisionError(
+            f"project revision artifact size exceeds maximum supported size "
+            f"of {max_bytes} bytes"
+        )
     try:
-        data = strict_json_loads(path.read_text(encoding="utf-8"))
+        text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ProjectRevisionError("project revision must be UTF-8 text") from exc
+    try:
+        data = strict_json_loads(text)
     except json.JSONDecodeError as exc:
         raise ProjectRevisionError(
             f"invalid project revision JSON at line {exc.lineno}, column {exc.colno}"
@@ -241,6 +270,11 @@ def load_project_revision(
     if type(size) is not int or size < 0:
         raise ProjectRevisionError(
             "project revision source.size_bytes must be a non-negative integer"
+        )
+    if size > PROJECT_FILE_MAX_BYTES:
+        raise ProjectRevisionError(
+            f"saved project revision size {size} bytes exceeds maximum supported "
+            f"project size of {PROJECT_FILE_MAX_BYTES} bytes"
         )
     if (
         not isinstance(digest, str)

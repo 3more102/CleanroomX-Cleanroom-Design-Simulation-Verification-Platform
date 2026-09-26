@@ -47,12 +47,15 @@ def markdown_air_system_design_report(result: dict) -> str:
         "|---|---|---:|---|---:|---:|---:|---:|---:|---:|",
     ]
     for room in result["rooms"]:
+        minimum_surplus = room.get("minimum_surplus_m3_h", 0.0)
+        achieved_surplus = room["achieved_surplus_m3_h"]
+        surplus_margin = room.get("surplus_margin_m3_h", achieved_surplus - minimum_surplus)
         lines.append(
             f"| {markdown_text(room['name'])} | {markdown_text(room['strategy'])} | "
             f"{room['governing_airflow_m3_h']} | {markdown_text(room['governing_basis'])} | "
             f"{room['proposed_return_airflow_m3_h']} | {room['exhaust_airflow_m3_h']} | "
-            f"{room['preliminary_makeup_airflow_m3_h']} | {room['minimum_surplus_m3_h']} | "
-            f"{room['achieved_surplus_m3_h']} | {room['surplus_margin_m3_h']} |"
+            f"{room['preliminary_makeup_airflow_m3_h']} | {minimum_surplus} | "
+            f"{achieved_surplus} | {surplus_margin} |"
         )
     lines.extend(["", "## Preliminary equipment counts", ""])
     for room in result["rooms"]:

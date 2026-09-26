@@ -6,7 +6,12 @@ from pathlib import Path
 
 from cleanroomx.application import run_analysis
 import cleanroomx.project_diagnostics_cli as diagnostics_cli
-from cleanroomx.project import AnalysisDocument, ProjectDocument, save_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    capture_project_file_revision,
+    save_project_document,
+)
 from cleanroomx.project_diagnostics import (
     PROJECT_DIAGNOSTICS_SCHEMA,
     analyze_project_diagnostics,
@@ -317,6 +322,46 @@ def test_project_diagnostics_cli_writes_revision_bound_strict_json(tmp_path):
     assert len(payload["source"]["sha256"]) == 64
     json.dumps(payload, allow_nan=False)
 
+
+def test_project_diagnostics_cli_markdown_includes_source_revision_evidence(tmp_path):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Markdown traceability"),
+    )
+    revision = capture_project_file_revision(project_path)
+    output_path = tmp_path / "diagnostics.md"
+
+    exit_code = diagnostics_main(
+        [
+            str(project_path),
+            "--format",
+            "markdown",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    markdown = output_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "## Source revision" in markdown
+    assert str(project_path.resolve()) in markdown
+    assert f"- Size: **{revision.size} bytes**" in markdown
+    assert f"- SHA-256: **{revision.sha256}**" in markdown
+    assert "- Stable during check: **yes**" in markdown
+
+
+def test_project_diagnostics_markdown_escapes_source_path():
+    result = analyze_project_diagnostics(ProjectDocument(name="Escaping"))
+    result["source"] = {
+        "path": "Plant | <A> `draft`.cleanroomx.json",
+        "size_bytes": 123,
+        "sha256": "a" * 64,
+        "stable_during_check": True,
+    }
+
+    markdown = markdown_project_diagnostics_report(result)
+
+    assert "Plant \\| &lt;A&gt; \\`draft\\`.cleanroomx.json" in markdown
 
 def test_project_diagnostics_cli_discards_output_if_source_changes_during_check(
     tmp_path, monkeypatch

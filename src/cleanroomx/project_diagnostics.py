@@ -530,6 +530,23 @@ def markdown_project_diagnostics_report(result: dict[str, Any]) -> str:
         f"- Informational: **{summary.get('info_count', 0)}**",
         "",
     ]
+
+    source = result.get("source")
+    if isinstance(source, dict):
+        stable = source.get("stable_during_check")
+        stable_text = "yes" if stable is True else ("no" if stable is False else "unknown")
+        lines.extend(
+            [
+                "## Source revision",
+                "",
+                f"- Path: {markdown_text(source.get('path', ''))}",
+                f"- Size: **{markdown_text(source.get('size_bytes', 'unknown'))} bytes**",
+                f"- SHA-256: **{markdown_text(source.get('sha256', 'unknown'))}**",
+                f"- Stable during check: **{stable_text}**",
+                "",
+            ]
+        )
+
     issues = result.get("issues", [])
     if not issues:
         lines.extend(

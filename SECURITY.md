@@ -16,6 +16,8 @@ Some workflows, including dossier and consistency, resolve user-supplied file re
 
 Project saving uses a temporary file followed by replacement to reduce the chance of leaving a partially written project after an interrupted save.
 
+Portable project bundles are treated as untrusted archive input. Inspection rejects unsafe paths, duplicate or undeclared members, encryption, unsupported compression, integrity mismatches, and explicit resource-limit violations before extraction is published. Bundle extraction uses a private staging directory and never calls `ZipFile.extractall()`.
+
 ## Operational guidance
 
 - Run CleanroomX with normal user privileges.

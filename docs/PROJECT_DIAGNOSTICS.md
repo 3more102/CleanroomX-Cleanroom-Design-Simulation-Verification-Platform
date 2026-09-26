@@ -53,6 +53,8 @@ The CLI returns:
 
 The CLI loads one stable project revision, runs diagnostics against that in-memory project, then fingerprints the source again. If the source content changed during the check, the report is discarded.
 
+Both JSON and Markdown reports carry the verified source path, byte size, SHA-256, and `stable_during_check` evidence. This keeps the human-readable report traceable to the same exact project revision already recorded by JSON output.
+
 JSON/Markdown `--output` files use the same durable atomic-write boundary as other CleanroomX exports, so a failed staging write or replacement does not intentionally truncate a previously valid report.
 
 The diagnostics service itself is read-only and therefore does not participate in Undo/Redo.

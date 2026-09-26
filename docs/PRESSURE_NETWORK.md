@@ -138,6 +138,13 @@ The combined node mechanical injection
 `supply - return - exhaust` must itself remain finite, even when each component is
 finite individually.
 
+Engineering scalar inputs are strict JSON numbers. Booleans and numeric strings are
+rejected instead of being silently coerced into airflow, pressure, coefficient,
+density, or target values.
+
+A dominant pressure path carrying exactly zero airflow is reported as `zero flow`
+rather than being mislabeled as inflow or outflow.
+
 ## Example
 
 Run the repository example:

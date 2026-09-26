@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from cleanroomx.application import run_analysis
+from cleanroomx.markdown import markdown_text
 import cleanroomx.project_diagnostics_cli as diagnostics_cli
 from cleanroomx.project import (
     AnalysisDocument,
@@ -344,7 +345,7 @@ def test_project_diagnostics_cli_markdown_includes_source_revision_evidence(tmp_
     markdown = output_path.read_text(encoding="utf-8")
     assert exit_code == 0
     assert "## Source revision" in markdown
-    assert str(project_path.resolve()) in markdown
+    assert markdown_text(str(project_path.resolve())) in markdown
     assert f"- Size: **{revision.size} bytes**" in markdown
     assert f"- SHA-256: **{revision.sha256}**" in markdown
     assert "- Stable during check: **yes**" in markdown
@@ -362,6 +363,7 @@ def test_project_diagnostics_markdown_escapes_source_path():
     markdown = markdown_project_diagnostics_report(result)
 
     assert "Plant \\| &lt;A&gt; \\`draft\\`.cleanroomx.json" in markdown
+
 
 def test_project_diagnostics_cli_discards_output_if_source_changes_during_check(
     tmp_path, monkeypatch

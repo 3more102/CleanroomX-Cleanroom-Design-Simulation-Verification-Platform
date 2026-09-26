@@ -425,16 +425,42 @@ def analyze_design_consistency(study: DesignConsistencyStudy) -> dict:
         sensible_target = _target(
             requirement_result, "provided_sensible_load"
         )
+        sensible_origin_keys = {
+            key
+            for key in (
+                "occupancy",
+                "occupant_sensible_w_per_person",
+                "equipment_sensible_load_w",
+                "process_sensible_load_w",
+            )
+            if key in requirement_room.origins
+        }
+        sensible_requirement_configured = (
+            "equipment_sensible_load_w" in sensible_origin_keys
+            or "process_sensible_load_w" in sensible_origin_keys
+            or {
+                "occupancy",
+                "occupant_sensible_w_per_person",
+            }.issubset(sensible_origin_keys)
+        )
+        sensible_provenance = dict(sensible_target.get("provenance") or {})
+        sensible_provenance["configured_requirement_components"] = sorted(
+            sensible_origin_keys
+        )
         findings.append(
             _numeric_finding(
                 code="requirements.provided_sensible_load",
                 room=room_name,
-                expected=sensible_target["value"],
+                expected=(
+                    sensible_target["value"]
+                    if sensible_requirement_configured
+                    else None
+                ),
                 actual=air_room.sensible_load_w,
                 tolerance=study.sensible_load_abs_tolerance_w,
                 unit="W",
                 label="provided sensible load",
-                provenance=sensible_target.get("provenance"),
+                provenance=sensible_provenance,
             )
         )
 

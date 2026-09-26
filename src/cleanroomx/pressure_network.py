@@ -24,7 +24,10 @@ _FLOW_MODELS = frozenset({"power_law", "orifice"})
 def _finite(value: float, field_name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field_name} must be a finite number")
-    value = float(value)
+    try:
+        value = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{field_name} must be finite") from exc
     if not math.isfinite(value):
         raise ValueError(f"{field_name} must be finite")
     return value
@@ -527,7 +530,10 @@ def solve_room_pressure_network(
         for node in network.nodes
     }
     mechanical_m3_s = {
-        node.name: node.mechanical_injection_m3_h / 3600.0
+        node.name: _solver_finite(
+            node.mechanical_injection_m3_h / 3600.0,
+            f"mechanical airflow injection for node {node.name!r}",
+        )
         for node in network.nodes
     }
     tolerance_m3_s = tolerance_m3_h / 3600.0
@@ -555,8 +561,20 @@ def solve_room_pressure_network(
             flows.append(flow)
             derivatives.append(derivative)
             effective_deltas.append(effective_delta)
-            residuals[path.start_node] -= flow
-            residuals[path.end_node] += flow
+            residuals[path.start_node] = _solver_finite(
+                residuals[path.start_node] - flow,
+                (
+                    "mass-balance residual for node "
+                    f"{path.start_node!r}"
+                ),
+            )
+            residuals[path.end_node] = _solver_finite(
+                residuals[path.end_node] + flow,
+                (
+                    "mass-balance residual for node "
+                    f"{path.end_node!r}"
+                ),
+            )
         return (
             residuals,
             flows,
@@ -812,9 +830,10 @@ def solve_room_pressure_network(
 
     target_results = []
     for target in network.targets:
-        delta = (
+        delta = _solver_finite(
             pressures[target.high_node]
-            - pressures[target.low_node]
+            - pressures[target.low_node],
+            f"pressure-target delta for {target.name!r}",
         )
         minimum_ok = (
             delta >= target.minimum_delta_pa
@@ -866,14 +885,17 @@ def solve_room_pressure_network(
         ),
         default=0.0,
     )
-    total_supply = sum(
-        node.supply_m3_h for node in network.nodes
+    total_supply = _solver_finite(
+        sum(node.supply_m3_h for node in network.nodes),
+        "total supply airflow",
     )
-    total_return = sum(
-        node.return_m3_h for node in network.nodes
+    total_return = _solver_finite(
+        sum(node.return_m3_h for node in network.nodes),
+        "total return airflow",
     )
-    total_exhaust = sum(
-        node.exhaust_m3_h for node in network.nodes
+    total_exhaust = _solver_finite(
+        sum(node.exhaust_m3_h for node in network.nodes),
+        "total exhaust airflow",
     )
 
     return {

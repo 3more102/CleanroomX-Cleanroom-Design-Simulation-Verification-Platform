@@ -5,6 +5,7 @@
 - Adds a deterministic read-only project diagnostics service that composes existing spatial validation, analysis parser validation, persisted engineering synchronization state, and run-history/application provenance instead of duplicating those authorities.
 - Reports structured severity, affected element, explanation, and corrective action for spatial conflicts, invalid analysis inputs, ambiguous analysis names, synchronization conflicts/staleness, never-run analyses, stale current inputs, stale external dependencies, and orphan run-history evidence.
 - Adds `cleanroomx-project-check` with strict JSON or Markdown output, source-revision stability checks, actionable exit codes, and the shared fsync-backed atomic output path.
+- Carries the checked project path, byte size, SHA-256, and stable-source flag into Markdown diagnostics as well as JSON so human-readable reports remain revision-auditable.
 - Adds focused regression coverage plus installed-wheel CLI smoke coverage and `docs/PROJECT_DIAGNOSTICS.md`.
 - Preserves project schema version 1, v0.102.1 release identity, solver equations/tolerances, configured engineering acceptance semantics, and project Undo/Redo state because diagnostics are read-only.
 

@@ -126,6 +126,23 @@ The result preserves:
 
 Non-convergence raises an error rather than returning a false solved result.
 
+### Numeric input and finite-state safety
+
+Engineering scalar fields are strict JSON numbers. Booleans and numeric strings are
+rejected instead of being coerced to pressure, airflow, coefficient, density, or
+target values. Every configured scalar must also be finite.
+
+The solver keeps finite-state checks at the pressure-path evaluation boundary.
+If an otherwise finite input set overflows while forming an effective pressure
+difference, airflow, or local dQ/dP sensitivity, the solve fails explicitly rather
+than publishing non-finite engineering evidence. The initial unknown-node pressure
+estimate averages fixed boundaries using divide-before-sum arithmetic so a finite
+same-sign boundary set does not overflow merely while constructing the starting
+estimate.
+
+A dominant path carrying exactly zero airflow is reported as `zero flow`; it is
+not labeled as inflow or outflow.
+
 ## Example
 
 Run the repository example:

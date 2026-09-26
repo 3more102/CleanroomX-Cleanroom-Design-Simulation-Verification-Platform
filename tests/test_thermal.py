@@ -1,3 +1,5 @@
+import pytest
+
 from cleanroomx.hvac_models import AirState, ThermalDesign, ThermalLoads
 from cleanroomx.thermal import analyze_thermal_design
 
@@ -34,3 +36,30 @@ def test_makeup_air_can_govern_total_supply_airflow() -> None:
     result = analyze_thermal_design(design, cleanroom_airflow_m3_h=1500.0)
     assert result["governing_supply_airflow_m3_h"] == 2500.0
     assert result["governing_airflow_basis"] == "makeup_air"
+
+
+
+def test_extreme_finite_internal_loads_fail_before_nonfinite_result_escape() -> None:
+    design = ThermalDesign(
+        room_air=AirState(22.0, 45.0),
+        loads=ThermalLoads(
+            lighting_w=1.0e308,
+            equipment_w=1.0e308,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="internal_sensible_kw must be finite"):
+        analyze_thermal_design(design, cleanroom_airflow_m3_h=1500.0)
+
+
+def test_extreme_capacity_margin_fails_before_nonfinite_capacity_escape() -> None:
+    design = ThermalDesign(
+        room_air=AirState(22.0, 45.0),
+        loads=ThermalLoads(lighting_w=1.0e308),
+        capacity_margin_percent=1.0e308,
+    )
+
+    with pytest.raises(
+        ValueError, match="preliminary_cooling_capacity_kw must be finite"
+    ):
+        analyze_thermal_design(design, cleanroom_airflow_m3_h=1500.0)

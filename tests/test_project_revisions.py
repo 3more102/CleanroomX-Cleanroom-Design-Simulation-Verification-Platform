@@ -93,6 +93,52 @@ def test_project_revision_history_is_bounded_newest_first(tmp_path):
     assert descriptions == ["v5", "v4", "v3"]
 
 
+def test_revision_envelope_budget_preserves_valid_large_project_name(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source.cleanroomx.json"
+    project = ProjectDocument(name="N" * 800, description="revision envelope")
+    source_bytes = project_module._project_document_text(project).encode("utf-8")
+    monkeypatch.setattr(
+        revision_module,
+        "PROJECT_FILE_MAX_BYTES",
+        len(source_bytes),
+    )
+    monkeypatch.setattr(
+        revision_module,
+        "PROJECT_REVISION_METADATA_MAX_BYTES",
+        512,
+    )
+    payload = revision_module._revision_payload(
+        source,
+        source_bytes,
+        created_at_utc="2026-09-26T00:00:00Z",
+    )
+    artifact_bytes = (
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    encoded_only_budget = (
+        ((len(source_bytes) + 2) // 3) * 4
+        + revision_module.PROJECT_REVISION_METADATA_MAX_BYTES
+    )
+    assert len(artifact_bytes) > encoded_only_budget
+    assert len(artifact_bytes) <= revision_module._project_revision_max_bytes()
+
+    artifact = tmp_path / "large-name.cleanroomx.revision.json"
+    artifact.write_bytes(artifact_bytes)
+    snapshot = load_project_revision(artifact, expected_source_path=source)
+
+    assert snapshot.project.name == project.name
+    assert snapshot.source_bytes == source_bytes
+
+
 def test_revision_loader_rejects_oversized_artifact_before_json_parsing(
     tmp_path, monkeypatch
 ):

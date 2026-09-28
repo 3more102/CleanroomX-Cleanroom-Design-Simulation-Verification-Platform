@@ -122,6 +122,36 @@ def test_air_balance_requirement_is_a_valid_standalone_airflow_driver():
     assert room["surplus_margin_m3_h"] == 0.0
 
 
+def test_air_balance_rejects_nonfinite_derived_airflow() -> None:
+    payload = _payload()
+    room = payload["rooms"][0]
+    room["min_ach"] = 1
+    room["sensible_load_w"] = 0
+    room.pop("room_air_temp_c")
+    room.pop("supply_air_temp_c")
+    room["minimum_outdoor_air_m3_h"] = 0
+    room["exhaust_airflow_m3_h"] = 1.0e308
+    room["transfer_out_airflow_m3_h"] = 1.0e308
+    room["transfer_in_airflow_m3_h"] = 0
+    room["minimum_surplus_m3_h"] = 0
+
+    with pytest.raises(ValueError, match="air_balance_airflow_m3_h must be finite"):
+        analyze_air_system_design(air_system_design_from_dict(payload))
+
+
+def test_air_system_rejects_nonfinite_derived_room_volume() -> None:
+    payload = _payload()
+    room = payload["rooms"][0]
+    room["dimensions_m"] = {
+        "length": 1.0e200,
+        "width": 1.0e200,
+        "height": 1.0e100,
+    }
+
+    with pytest.raises(ValueError, match="volume_m3 must be finite"):
+        analyze_air_system_design(air_system_design_from_dict(payload))
+
+
 def test_air_system_report_exposes_surplus_requirement_and_margin():
     result = analyze_air_system_design(air_system_design_from_dict(_payload()))
     report = markdown_air_system_design_report(result)

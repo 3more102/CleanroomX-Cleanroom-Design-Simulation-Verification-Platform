@@ -95,7 +95,12 @@ def test_ifc_semantics_reject_duplicate_ids_and_dangling_space_links():
 
 def test_ifc_semantic_digest_detects_record_tampering():
     semantics = normalize_ifc_semantic_records(_records())
-    semantics["records"][0]["length_m"] = 7.0
+    space = next(
+        record
+        for record in semantics["records"]
+        if record["ifc_class"] == "IfcSpace"
+    )
+    space["length_m"] = 7.0
 
     with pytest.raises(IfcImportError, match="semantic digest"):
         layout_from_ifc_semantics(semantics)

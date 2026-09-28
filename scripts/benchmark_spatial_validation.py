@@ -6,6 +6,8 @@ from time import perf_counter
 from cleanroomx.spatial import (
     SPATIAL_GEOMETRY_EPSILON_M,
     _room_overlap_records,
+    _validate_normalized_layout,
+    normalize_layout,
     validate_layout,
 )
 
@@ -85,18 +87,26 @@ def _timed(callable_):
 def main() -> int:
     print("CleanroomX Release 2 spatial validation benchmark")
     print(
-        "layout,rooms,devices,sweep_s,naive_s,full_validate_s,"
-        "overlap_speedup"
+        "layout,rooms,devices,sweep_s,naive_s,normalized_validate_s,"
+        "public_validate_s,overlap_speedup"
     )
     for label, room_count, device_count in CASES:
         rooms = _grid(room_count)
         devices = _devices(rooms, device_count)
         layout = {"rooms": rooms, "devices": devices}
+        normalized_layout = normalize_layout(layout)
         sweep_seconds, sweep = _timed(lambda: _room_overlap_records(rooms))
         naive_seconds, naive = _timed(lambda: _naive_overlap_records(rooms))
+        normalized_seconds, normalized_issues = _timed(
+            lambda: _validate_normalized_layout(normalized_layout)
+        )
         full_seconds, issues = _timed(lambda: validate_layout(layout))
         if sweep != naive:
             raise RuntimeError(f"{label} overlap result differs from reference scan")
+        if normalized_issues != issues:
+            raise RuntimeError(
+                f"{label} normalized/public validation results differ"
+            )
         if issues:
             raise RuntimeError(
                 f"{label} valid synthetic project unexpectedly produced warnings: "
@@ -105,7 +115,8 @@ def main() -> int:
         speedup = naive_seconds / max(sweep_seconds, 1e-12)
         print(
             f"{label},{len(rooms)},{len(devices)},{sweep_seconds:.6f},"
-            f"{naive_seconds:.6f},{full_seconds:.6f},{speedup:.2f}x"
+            f"{naive_seconds:.6f},{normalized_seconds:.6f},"
+            f"{full_seconds:.6f},{speedup:.2f}x"
         )
     return 0
 

@@ -1,0 +1,53 @@
+{
+  "name": "Process suite project criteria",
+  "rule_pack": {
+    "schema": "cleanroomx.compliance-rule-pack",
+    "schema_version": 1,
+    "id": "project-urs-demo",
+    "version": "1.0",
+    "title": "Project URS demonstration criteria",
+    "source": "Example project criteria only; not a regulatory standard",
+    "rules": [
+      {
+        "id": "temperature",
+        "title": "Room temperature",
+        "evidence_path": "/rooms/Process/temperature_c",
+        "operator": "range",
+        "expected": {
+          "min": 20,
+          "max": 22
+        },
+        "unit": "degC",
+        "tolerance": 0.2,
+        "reference": "URS-ENV-001"
+      },
+      {
+        "id": "ach",
+        "title": "Minimum air changes",
+        "evidence_path": "/rooms/Process/ach",
+        "operator": "min",
+        "expected": 20,
+        "unit": "1/h",
+        "reference": "URS-HVAC-004"
+      },
+      {
+        "id": "pressure",
+        "title": "Minimum room differential pressure",
+        "evidence_path": "/rooms/Process/differential_pressure_pa",
+        "operator": "min",
+        "expected": 10,
+        "unit": "Pa",
+        "reference": "URS-HVAC-006"
+      }
+    ]
+  },
+  "evidence": {
+    "rooms": {
+      "Process": {
+        "temperature_c": 21,
+        "ach": 22,
+        "differential_pressure_pa": 12
+      }
+    }
+  }
+}

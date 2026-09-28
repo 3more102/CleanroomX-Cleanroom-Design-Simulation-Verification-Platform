@@ -8,13 +8,6 @@
 - Integrates through the shared application parser/runner/reporter boundary with a real example, focused regression coverage, full workflow-matrix coverage, and dedicated documentation.
 - Introduces no new HVAC equations, standards limits, certification claims, implicit semantic mappings, project-schema changes, or engineering acceptance criteria.
 
-## Unreleased next-level Phase 1 — design assurance — 2026-09-28
-
-- Adds a read-only `design_assurance` workflow that composes the canonical `design_consistency` result with one or more versioned `compliance_check` rule-pack evaluations.
-- Preserves complete component results and compliance rule-pack SHA-256 traceability while aggregating pass/fail/not-checked evidence without adding engineering equations, standards limits, acceptance thresholds, or hidden semantic mappings.
-- Registers the workflow through the existing application parser/runner/reporter boundary, with a real example, focused regression coverage, application-catalog end-to-end coverage, README exposure, architecture notes, and dedicated documentation.
-- Preserves project schema version 1, v0.102.1 release identity, existing solver equations/tolerances, and configured engineering acceptance semantics.
-
 ## Unreleased next-level Phase 1 — design consistency — 2026-09-26
 
 - Adds a deterministic read-only `design_consistency` workflow that composes the canonical design-requirements and preliminary air-system engines rather than introducing a competing room or calculation model.

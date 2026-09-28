@@ -361,6 +361,7 @@ def _evaluate_rule(rule: ComplianceRule, actual: Any) -> tuple[bool, float | Non
 
 def analyze_compliance_check(check: ComplianceCheck) -> dict:
     pack_document = check.rule_pack.to_dict()
+    evidence_sha256 = _canonical_sha256(check.evidence)
     findings: list[dict] = []
 
     for rule in check.rule_pack.rules:
@@ -433,6 +434,7 @@ def analyze_compliance_check(check: ComplianceCheck) -> dict:
             "source": check.rule_pack.source,
             "sha256": _canonical_sha256(pack_document),
         },
+        "evidence_sha256": evidence_sha256,
         "summary": {
             "rule_count": len(findings),
             "pass_count": pass_count,

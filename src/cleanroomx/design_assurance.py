@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import copy
-import html
 import json
 from typing import Any
 
@@ -17,6 +16,7 @@ from .design_consistency import (
     design_consistency_from_dict,
 )
 from .input_contracts import reject_unknown_fields
+from .markdown import markdown_text
 
 
 _ALLOWED_INPUT_KEYS = frozenset({"name", "design_consistency", "compliance_checks"})
@@ -167,7 +167,7 @@ def _md(value: Any) -> str:
             allow_nan=False,
             separators=(",", ":"),
         )
-    return html.escape(text).replace("|", "\\|").replace("\n", " ")
+    return markdown_text(text)
 
 
 def markdown_design_assurance_report(result: dict) -> str:

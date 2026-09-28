@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — pressure evidence in design assurance — 2026-09-28
+
+- Extends `design_assurance` with an optional canonical `pressure_design_consistency` component while keeping legacy assurance inputs/results unchanged when the field is absent.
+- Aggregates explicit pressure pass/fail/not-checked findings into the assurance status and summary without inventing pressure mappings, reference rooms, tolerances, or standards criteria.
+- Preserves the complete pressure-design result as an independent component and binds it into the traceability manifest with a deterministic normalized-result SHA-256.
+- Makes design-assurance snapshots automatically freeze and replay the optional pressure component through their existing exact-source, result, traceability, and whole-snapshot digests; snapshot schema v1 remains unchanged.
+- Adds focused regression coverage for successful aggregation, failure propagation, Markdown evidence, parser fail-closed behavior, and snapshot replay.
+
 ## Unreleased next-level Phase 1 — pressure design consistency — 2026-09-28
 
 - Adds a deterministic read-only `pressure_design_consistency` workflow that composes the canonical design-requirements service with the canonical room pressure-network solver.

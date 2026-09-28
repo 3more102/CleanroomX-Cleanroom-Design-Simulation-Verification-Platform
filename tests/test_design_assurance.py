@@ -107,11 +107,14 @@ def test_engine_is_deterministic_and_does_not_mutate_input() -> None:
 
 def test_markdown_escapes_user_controlled_content() -> None:
     payload = _payload()
-    payload["name"] = "Assurance | <A>"
+    payload["name"] = "Assurance | <A> **bold** `code` [link]\\path\nnext"
 
     report = markdown_design_assurance_report(
         analyze_design_assurance(design_assurance_from_dict(payload))
     )
 
     assert "Assurance \\| &lt;A&gt;" in report
+    assert "\\*\\*bold\\*\\*" in report
+    assert "\\`code\\`" in report
+    assert "\\[link\\]\\\\path<br>next" in report
     assert "not regulatory approval" in report

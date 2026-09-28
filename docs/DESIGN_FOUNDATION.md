@@ -69,7 +69,9 @@ Relative humidity, pressure targets, recovery targets, filtration text, contamin
 
 The pressure/leakage network remains the stronger implementation already present on `main`, with strict input parsing, CLI support, fixed-pressure boundaries, explicit power-law/orifice paths, damped-Newton continuity solving, target checks, residual/convergence evidence, and its own documentation.
 
-The design-requirements and air-system workflows are intentionally separate services so future phases can connect them through explicit mappings rather than duplicating pressure physics.
+Phase 1 now adds a read-only `pressure_design_consistency` composer. It requires an explicit mapping from each compared requirements room to a pressure-network node and reference node, then compares the configured signed `pressure_target_pa` only with `pressure(node) - pressure(reference_node)` using a caller-supplied absolute tolerance. It never infers a reference room or converts the pressure network's own target definitions into requirements semantics. Missing configured mappings fail by default and can only be left unresolved by explicitly disabling complete mapping.
+
+The design-requirements, air-system, and pressure-network workflows remain separate canonical services so composition adds traceability without duplicating pressure physics.
 
 ## Engineering boundary
 

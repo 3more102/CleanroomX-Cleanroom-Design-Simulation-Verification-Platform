@@ -48,56 +48,7 @@ registration = AnalysisPlugin(
 ```
 
 Plugin keys are persistent project identifiers. They must match
-`^[a-z][a-z0-9_]*# CleanroomX analysis plugin API
-
-CleanroomX supports trusted installed Python packages that add engineering analysis
-workflows to the same application registry used by built-in analyses.
-
-## Contract
-
-The current plugin API version is **1**. Extensions register one analysis per Python
-entry point in the group:
-
-```toml
-[project.entry-points."cleanroomx.analysis_plugins"]
-example_pressure_check = "cleanroomx_example.plugin:registration"
-```
-
-The referenced object must be either a
-`cleanroomx.plugins.AnalysisPlugin` instance or a zero-argument factory that
-returns one:
-
-```python
-from cleanroomx.plugins import AnalysisPlugin, PLUGIN_API_VERSION
-
-
-def parse(payload: dict):
-    # Validate every engineering field and return a domain object.
-    ...
-
-
-def run(model):
-    # Return a dict, dataclass, or object exposing to_dict().
-    ...
-
-
-def report(result: dict) -> str:
-    return "# Example pressure check\n"
-
-
-registration = AnalysisPlugin(
-    api_version=PLUGIN_API_VERSION,
-    key="example_pressure_check",
-    title="Example pressure check",
-    category="Extensions",
-    description="Example versioned engineering analysis.",
-    parser=parse,
-    runner=run,
-    reporter=report,
-)
-```
-
- exactly, with no leading or trailing whitespace, and
+`^[a-z][a-z0-9_]*$` exactly, with no leading or trailing whitespace, and
 therefore should never be renamed after projects use them. `api_version` must
 be a real integer value; boolean aliases such as `True` are rejected even
 though Python normally compares `True == 1`.

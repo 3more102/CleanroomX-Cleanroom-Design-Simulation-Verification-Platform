@@ -24,6 +24,7 @@ from .persistence import (
     stable_file_sha256,
 )
 from .project import (
+    PROJECT_FILE_MAX_BYTES,
     ProjectDocument,
     ProjectFormatError,
     _project_document_text,
@@ -57,7 +58,6 @@ _WINDOWS_RESERVED_PATH_STEMS = frozenset(
     }
 )
 _MAX_MANIFEST_BYTES = 1024 * 1024
-_MAX_PROJECT_MEMBER_BYTES = 64 * 1024 * 1024
 _MAX_DEPENDENCY_MEMBER_BYTES = 512 * 1024 * 1024
 _MAX_TOTAL_PAYLOAD_BYTES = 1024 * 1024 * 1024
 _MAX_DEPENDENCY_COUNT = 1024
@@ -79,10 +79,10 @@ def _validate_payload_resource_limits(
     extraction bounded for untrusted archives and ensure the exporter never
     creates a bundle this build would subsequently reject.
     """
-    if project_size > _MAX_PROJECT_MEMBER_BYTES:
+    if project_size > PROJECT_FILE_MAX_BYTES:
         raise ProjectBundleError(
             "bundle project exceeds supported size limit "
-            f"({project_size} > {_MAX_PROJECT_MEMBER_BYTES} bytes)"
+            f"({project_size} > {PROJECT_FILE_MAX_BYTES} bytes)"
         )
     if len(dependencies) > _MAX_DEPENDENCY_COUNT:
         raise ProjectBundleError(
@@ -564,8 +564,8 @@ def _read_project_member(
     try:
         info = archive.getinfo(archive_path)
         with archive.open(info, mode="r") as stream:
-            raw = stream.read(_MAX_PROJECT_MEMBER_BYTES + 1)
-        if len(raw) > _MAX_PROJECT_MEMBER_BYTES:
+            raw = stream.read(PROJECT_FILE_MAX_BYTES + 1)
+        if len(raw) > PROJECT_FILE_MAX_BYTES:
             raise ProjectBundleError(
                 f"bundle project exceeds supported size limit while reading: {archive_path}"
             )
@@ -738,7 +738,7 @@ def inspect_project_bundle(path: str | Path) -> dict[str, Any]:
                 project_path,
                 project_size,
                 project_sha256,
-                max_bytes=_MAX_PROJECT_MEMBER_BYTES,
+                max_bytes=PROJECT_FILE_MAX_BYTES,
             )
             for dependency in normalized_dependencies:
                 _verify_member(

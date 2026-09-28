@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased bounded project-file ingestion
+
+- Caps normal CleanroomX project JSON at 64 MiB before parsing and revision hashing, with bounded reads that detect growth beyond the ceiling.
+- Rejects invalid UTF-8 project bytes as project-format errors and refuses saves above the same limit.
+- Uses the same project-size authority for portable-bundle project members while preserving the existing bundle archive/member resource limits.
+- Bounds saved project-revision envelopes and embedded project bytes before expensive decoding/restoration.
+- Preserves project schema version 1 and all engineering equations, tolerances, units, and configured acceptance semantics.
+
 ## Unreleased portable project-bundle resource hardening
 
 - Bounds untrusted portable-bundle inspection and extraction with explicit archive, manifest, project-member, dependency-member/count, and aggregate-payload ceilings.

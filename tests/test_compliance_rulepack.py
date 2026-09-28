@@ -220,3 +220,24 @@ def test_non_numeric_evidence_fails_numeric_rule_instead_of_crashing() -> None:
     finding = next(item for item in result["findings"] if item["id"] == "ach")
     assert finding["status"] == "fail"
     assert finding["delta"] is None
+
+
+def test_evidence_digest_is_deterministic_and_changes_with_evidence() -> None:
+    payload = _payload()
+    first = analyze_compliance_check(compliance_check_from_dict(payload))
+
+    changed = copy.deepcopy(payload)
+    changed["evidence"]["rooms"]["Process"]["ach"] = 23.0
+    second = analyze_compliance_check(compliance_check_from_dict(changed))
+
+    assert first["evidence"]["canonicalization"] == "json-sort-keys-compact-utf8-v1"
+    assert len(first["evidence"]["sha256"]) == 64
+    assert first["evidence"]["sha256"] != second["evidence"]["sha256"]
+    assert first["rule_pack"]["sha256"] == second["rule_pack"]["sha256"]
+
+
+def test_markdown_reports_evidence_digest() -> None:
+    result = analyze_compliance_check(compliance_check_from_dict(_payload()))
+    report = markdown_compliance_report(result)
+
+    assert f"Evidence SHA-256: \`{result['evidence']['sha256']}\`" in report

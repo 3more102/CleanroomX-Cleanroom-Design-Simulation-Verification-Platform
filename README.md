@@ -18,6 +18,8 @@ The current stable release is **v0.102.1**.
 - Spatial integrity checks for invalid geometry, overlapping rooms, duplicate names, orphan assignments, and invalid device placement.
 - Project-wide transactional Undo/Redo.
 - Deterministic spatial editing and no-op suppression to avoid unnecessary history/autosave changes.
+- Validated, atomic property edits that keep devices attached when room coordinates change.
+- Room/device duplication with fresh IDs, synchronized views, and one-step Undo/Redo.
 
 ### Engineering verification
 

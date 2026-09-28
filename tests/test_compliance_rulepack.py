@@ -188,6 +188,81 @@ def test_invalid_json_pointer_escape_fails_closed() -> None:
         compliance_check_from_dict(payload)
 
 
+@pytest.mark.parametrize(
+    ("expected", "actual"),
+    [
+        (True, 1),
+        (False, 0),
+        ({"enabled": True}, {"enabled": 1}),
+        ([False], [0]),
+    ],
+)
+def test_equals_uses_json_type_semantics(expected: object, actual: object) -> None:
+    payload = _payload()
+    payload["rule_pack"]["rules"] = [
+        {
+            "id": "typed-equality",
+            "title": "Typed equality",
+            "evidence_path": "/value",
+            "operator": "equals",
+            "expected": expected,
+        }
+    ]
+    payload["evidence"] = {"value": actual}
+
+    result = analyze_compliance_check(compliance_check_from_dict(payload))
+
+    assert result["status"] == "fail"
+    assert result["findings"][0]["status"] == "fail"
+
+
+@pytest.mark.parametrize(
+    ("expected", "actual"),
+    [
+        ([1, 2], True),
+        ([0, 2], False),
+        ([{"enabled": 1}], {"enabled": True}),
+    ],
+)
+def test_one_of_does_not_conflate_json_booleans_and_numbers(
+    expected: object, actual: object
+) -> None:
+    payload = _payload()
+    payload["rule_pack"]["rules"] = [
+        {
+            "id": "typed-membership",
+            "title": "Typed membership",
+            "evidence_path": "/value",
+            "operator": "one_of",
+            "expected": expected,
+        }
+    ]
+    payload["evidence"] = {"value": actual}
+
+    result = analyze_compliance_check(compliance_check_from_dict(payload))
+
+    assert result["status"] == "fail"
+    assert result["findings"][0]["status"] == "fail"
+
+
+def test_json_numeric_int_and_float_remain_equivalent() -> None:
+    payload = _payload()
+    payload["rule_pack"]["rules"] = [
+        {
+            "id": "numeric-equivalence",
+            "title": "JSON numeric equivalence",
+            "evidence_path": "/value",
+            "operator": "one_of",
+            "expected": [1.0],
+        }
+    ]
+    payload["evidence"] = {"value": 1}
+
+    result = analyze_compliance_check(compliance_check_from_dict(payload))
+
+    assert result["status"] == "pass"
+
+
 def test_engine_is_deterministic_and_does_not_mutate_input() -> None:
     payload = _payload()
     before = copy.deepcopy(payload)

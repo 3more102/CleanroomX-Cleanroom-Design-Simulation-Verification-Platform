@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased hardening — compliance JSON equality — 2026-09-28
+
+- Makes `equals` and `one_of` use JSON-aware equality instead of Python container equality.
+- Prevents boolean evidence from matching numeric criteria such as `true == 1` or nested boolean/number equivalents.
+- Preserves normal JSON-number equivalence between integer and floating-point representations of the same value.
+- Adds focused regression coverage and documents the comparison semantics.
+
+
 ## Unreleased next-level Phase 1 — design assurance matrix — 2026-09-28
 
 - Adds a read-only `design_assurance` workflow that composes the canonical `design_consistency` result with one or more versioned `compliance_check` evaluations.

@@ -32,7 +32,7 @@ The historical `passed` boolean remains a no-failure predicate, while `complete`
 
 ## Traceability
 
-Each compliance component retains its rule-pack identity, version, declared source, and canonical SHA-256. The design-consistency component retains the underlying requirement and preliminary air-system evidence produced by its canonical analysis.
+Each compliance component retains its rule-pack identity, version, declared source, canonical rule-pack SHA-256, and canonical SHA-256 of the exact supplied evidence document. The design-consistency component retains the underlying requirement and preliminary air-system evidence produced by its canonical analysis.
 
 The matrix therefore provides a single audit artifact without flattening or rewriting the original evidence.
 

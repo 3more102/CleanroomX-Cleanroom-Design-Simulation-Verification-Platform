@@ -73,7 +73,7 @@ def test_unknown_top_level_field_fails_closed() -> None:
     payload = _payload()
     payload["implicit_standard"] = "not allowed"
 
-    with pytest.raises(ValueError, match="unknown field"):
+    with pytest.raises(ValueError, match="unsupported design assurance input field"):
         design_assurance_from_dict(payload)
 
 

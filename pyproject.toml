@@ -13,6 +13,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+bim = ["ifcopenshell"]
 
 [project.scripts]
 cleanroomx = "cleanroomx.cli:main"

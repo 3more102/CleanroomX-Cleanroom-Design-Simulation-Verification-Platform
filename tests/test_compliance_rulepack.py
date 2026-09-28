@@ -222,6 +222,7 @@ def test_markdown_escapes_user_controlled_content() -> None:
     )
 
     assert "Study \\| &lt;A&gt;" in report
+    assert "Evidence SHA-256:" in report
     assert "not a regulatory approval" in report
 
 

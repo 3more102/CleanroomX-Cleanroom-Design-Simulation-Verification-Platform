@@ -175,6 +175,7 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [Architecture](ARCHITECTURE.md)
 - [Design assurance matrix](docs/DESIGN_ASSURANCE.md)
 - [Design assurance snapshots](docs/ASSURANCE_SNAPSHOTS.md)
+- [Pressure design consistency](docs/PRESSURE_DESIGN_CONSISTENCY.md)
 - [Deployment](DEPLOYMENT.md)
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)

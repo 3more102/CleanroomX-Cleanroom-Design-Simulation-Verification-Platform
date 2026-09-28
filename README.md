@@ -39,6 +39,7 @@ CleanroomX includes engineering workflows for:
 - bounded uncertainty and numerical provenance analysis.
 - explicit design-requirements ↔ preliminary air-system consistency checks.
 - versioned compliance rule-pack evidence checks with explicit source/reference traceability.
+- design-assurance matrix composition across canonical consistency checks and versioned compliance evidence.
 
 ### Spatial ↔ engineering synchronization
 
@@ -161,6 +162,7 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [Application & GUI](docs/APPLICATION_GUI.md)
 - [2D + 3D spatial workspace](docs/LAYOUT_2D_3D.md)
 - [Architecture](ARCHITECTURE.md)
+- [Design assurance matrix](docs/DESIGN_ASSURANCE.md)
 - [Deployment](DEPLOYMENT.md)
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)

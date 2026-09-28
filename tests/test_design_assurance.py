@@ -23,6 +23,16 @@ def _payload() -> dict:
     )
 
 
+def _payload_with_pressure() -> dict:
+    payload = _payload()
+    payload["pressure_design_consistency"] = json.loads(
+        (EXAMPLES / "pressure_design_consistency_demo.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return payload
+
+
 def test_reference_case_passes_and_preserves_component_traceability() -> None:
     result = analyze_design_assurance(design_assurance_from_dict(_payload()))
 
@@ -42,6 +52,60 @@ def test_reference_case_passes_and_preserves_component_traceability() -> None:
     assert len(compliance_trace["result_sha256"]) == 64
     assert len(result["traceability_sha256"]) == 64
     json.dumps(result, sort_keys=True, allow_nan=False)
+
+
+def test_optional_pressure_evidence_is_aggregated_and_traceable() -> None:
+    result = analyze_design_assurance(
+        design_assurance_from_dict(_payload_with_pressure())
+    )
+
+    assert result["status"] == "pass"
+    assert result["complete"] is True
+    assert result["summary"]["component_count"] == 3
+    pressure = result["components"]["pressure_design_consistency"]
+    assert pressure["status"] == "pass"
+    pressure_trace = result["traceability"][1]
+    assert pressure_trace["component"] == "pressure_design_consistency"
+    assert pressure_trace["name"] == pressure["study"]
+    assert len(pressure_trace["result_sha256"]) == 64
+    assert result["traceability"][2]["component"] == "compliance_check"
+
+
+def test_pressure_failure_dominates_assurance_status() -> None:
+    payload = _payload_with_pressure()
+    payload["pressure_design_consistency"]["pressure_network"]["nodes"][0][
+        "supply_m3_h"
+    ] = 360.0
+
+    result = analyze_design_assurance(design_assurance_from_dict(payload))
+
+    assert result["components"]["design_consistency"]["status"] == "pass"
+    assert result["components"]["pressure_design_consistency"]["status"] == "fail"
+    assert result["components"]["compliance_checks"][0]["status"] == "pass"
+    assert result["status"] == "fail"
+    assert result["passed"] is False
+
+
+def test_pressure_component_requires_object_when_supplied() -> None:
+    payload = _payload()
+    payload["pressure_design_consistency"] = None
+
+    with pytest.raises(
+        ValueError,
+        match="pressure_design_consistency must be a pressure-design-consistency object",
+    ):
+        design_assurance_from_dict(payload)
+
+
+def test_pressure_component_is_rendered_in_markdown() -> None:
+    result = analyze_design_assurance(
+        design_assurance_from_dict(_payload_with_pressure())
+    )
+
+    report = markdown_design_assurance_report(result)
+
+    assert "Pressure design consistency" in report
+    assert result["traceability"][1]["result_sha256"] in report
 
 
 def test_traceability_digest_changes_with_compliance_evidence_revision() -> None:

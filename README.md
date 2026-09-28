@@ -40,7 +40,7 @@ CleanroomX includes engineering workflows for:
 - explicit design-requirements ↔ preliminary air-system consistency checks.
 - explicit design pressure-target ↔ solved pressure-network node/reference consistency checks.
 - versioned compliance rule-pack evidence checks with explicit source/reference traceability and SHA-256 binding for both criteria and supplied evidence revisions.
-- design-assurance matrix composition across canonical consistency checks and versioned compliance evidence, with tamper-evident component/traceability digests.
+- design-assurance matrix composition across canonical design consistency, optional explicit pressure-design consistency, and versioned compliance evidence, with tamper-evident component/traceability digests.
 
 ### Spatial ↔ engineering synchronization
 
@@ -61,7 +61,7 @@ Spatial and engineering data remain deliberately separated.
 - Deterministic project batch execution.
 - Project-wide read-only design/model diagnostics with spatial, synchronization, input-validity, and stale-evidence checks.
 - Portable project bundles and engineering reports.
-- Deterministic self-verifying design-assurance snapshots that bind exact source bytes, normalized results, and traceability digests.
+- Deterministic self-verifying design-assurance snapshots that bind exact source bytes, normalized results, optional pressure-design evidence, and traceability digests.
 - SHA-256 based numerical/provenance evidence for supported solver workflows.
 
 ## Quick start

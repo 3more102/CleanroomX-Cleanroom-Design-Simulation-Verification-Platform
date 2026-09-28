@@ -18,9 +18,21 @@ from .design_consistency import (
 )
 from .input_contracts import reject_unknown_fields
 from .markdown import markdown_text
+from .pressure_design_consistency import (
+    PressureDesignConsistencyStudy,
+    analyze_pressure_design_consistency,
+    pressure_design_consistency_from_dict,
+)
 
 
-_ALLOWED_INPUT_KEYS = frozenset({"name", "design_consistency", "compliance_checks"})
+_ALLOWED_INPUT_KEYS = frozenset(
+    {
+        "name",
+        "design_consistency",
+        "pressure_design_consistency",
+        "compliance_checks",
+    }
+)
 
 
 def _canonical_sha256(value: Any) -> str:
@@ -39,6 +51,7 @@ class DesignAssuranceStudy:
     name: str
     design_consistency: DesignConsistencyStudy
     compliance_checks: tuple[ComplianceCheck, ...]
+    pressure_design_consistency: PressureDesignConsistencyStudy | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -73,10 +86,21 @@ def design_assurance_from_dict(data: dict) -> DesignAssuranceStudy:
             raise ValueError(f"compliance_checks[{index}] must be an object")
         checks.append(compliance_check_from_dict(item))
 
+    pressure_study = None
+    if "pressure_design_consistency" in data:
+        pressure_data = data["pressure_design_consistency"]
+        if not isinstance(pressure_data, dict):
+            raise ValueError(
+                "pressure_design_consistency must be a "
+                "pressure-design-consistency object"
+            )
+        pressure_study = pressure_design_consistency_from_dict(pressure_data)
+
     return DesignAssuranceStudy(
         name=name,
         design_consistency=design_consistency_from_dict(consistency_data),
         compliance_checks=tuple(checks),
+        pressure_design_consistency=pressure_study,
     )
 
 
@@ -92,27 +116,80 @@ def _aggregate_status(statuses: list[str], complete: bool) -> str:
 
 def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
     design_result = analyze_design_consistency(study.design_consistency)
+    pressure_result = (
+        analyze_pressure_design_consistency(study.pressure_design_consistency)
+        if study.pressure_design_consistency is not None
+        else None
+    )
     compliance_results = [
         analyze_compliance_check(check) for check in study.compliance_checks
     ]
 
-    component_statuses = [design_result["status"]] + [
+    component_statuses = [design_result["status"]]
+    component_complete = [bool(design_result["complete"])]
+    if pressure_result is not None:
+        component_statuses.append(pressure_result["status"])
+        component_complete.append(bool(pressure_result["complete"]))
+    component_statuses.extend(
         result["status"] for result in compliance_results
-    ]
-    complete = bool(design_result["complete"]) and all(
-        result["complete"] for result in compliance_results
     )
-    fail_count = int(design_result["summary"]["fail_count"]) + sum(
-        int(result["summary"]["fail_count"]) for result in compliance_results
+    component_complete.extend(
+        bool(result["complete"]) for result in compliance_results
     )
-    not_checked_count = int(design_result["summary"]["not_checked_count"]) + sum(
-        int(result["summary"]["not_checked_count"]) for result in compliance_results
+    complete = all(component_complete)
+
+    pressure_fail_count = (
+        int(pressure_result["summary"]["fail_count"])
+        if pressure_result is not None
+        else 0
     )
-    pass_count = int(design_result["summary"]["pass_count"]) + sum(
-        int(result["summary"]["pass_count"]) for result in compliance_results
+    pressure_not_checked_count = (
+        int(pressure_result["summary"]["not_checked_count"])
+        if pressure_result is not None
+        else 0
     )
-    finding_count = int(design_result["summary"]["finding_count"]) + sum(
-        int(result["summary"]["rule_count"]) for result in compliance_results
+    pressure_pass_count = (
+        int(pressure_result["summary"]["pass_count"])
+        if pressure_result is not None
+        else 0
+    )
+    pressure_finding_count = (
+        int(pressure_result["summary"]["finding_count"])
+        if pressure_result is not None
+        else 0
+    )
+
+    fail_count = (
+        int(design_result["summary"]["fail_count"])
+        + pressure_fail_count
+        + sum(
+            int(result["summary"]["fail_count"])
+            for result in compliance_results
+        )
+    )
+    not_checked_count = (
+        int(design_result["summary"]["not_checked_count"])
+        + pressure_not_checked_count
+        + sum(
+            int(result["summary"]["not_checked_count"])
+            for result in compliance_results
+        )
+    )
+    pass_count = (
+        int(design_result["summary"]["pass_count"])
+        + pressure_pass_count
+        + sum(
+            int(result["summary"]["pass_count"])
+            for result in compliance_results
+        )
+    )
+    finding_count = (
+        int(design_result["summary"]["finding_count"])
+        + pressure_finding_count
+        + sum(
+            int(result["summary"]["rule_count"])
+            for result in compliance_results
+        )
     )
 
     traceability = [
@@ -125,6 +202,19 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
             "result_sha256": _canonical_sha256(design_result),
         }
     ]
+    if pressure_result is not None:
+        traceability.append(
+            {
+                "component": "pressure_design_consistency",
+                "name": pressure_result["study"],
+                "status": pressure_result["status"],
+                "complete": pressure_result["complete"],
+                "source": (
+                    "CleanroomX canonical pressure-design-consistency analysis"
+                ),
+                "result_sha256": _canonical_sha256(pressure_result),
+            }
+        )
     for result in compliance_results:
         traceability.append(
             {
@@ -140,34 +230,56 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
 
     status = _aggregate_status(component_statuses, complete)
     traceability_sha256 = _canonical_sha256(traceability)
+
+    components = {
+        "design_consistency": design_result,
+        "compliance_checks": compliance_results,
+    }
+    if pressure_result is not None:
+        components["pressure_design_consistency"] = pressure_result
+
+    engineering_note = (
+        "This assurance matrix composes existing CleanroomX design-consistency "
+        "and user-supplied compliance rule-pack evidence without adding new "
+        "engineering equations, standards limits, acceptance criteria, or hidden "
+        "semantic mappings. A complete pass means only that every included "
+        "component completed without a recorded failure. It is not regulatory "
+        "approval, cleanroom certification, CFD validation, commissioning/TAB "
+        "acceptance, or proof that the supplied rule packs are complete."
+    )
+    if pressure_result is not None:
+        engineering_note = (
+            "This assurance matrix composes existing CleanroomX design-consistency, "
+            "explicit pressure-design-consistency, and user-supplied compliance "
+            "rule-pack evidence without adding new engineering equations, standards "
+            "limits, acceptance criteria, or hidden semantic mappings. A complete "
+            "pass means only that every included component completed without a "
+            "recorded failure. It is not regulatory approval, cleanroom certification, "
+            "CFD validation, commissioning/TAB acceptance, or proof that the supplied "
+            "rule packs are complete."
+        )
+
     return {
         "study": study.name,
         "status": status,
         "complete": complete,
         "passed": fail_count == 0,
         "summary": {
-            "component_count": 1 + len(compliance_results),
+            "component_count": (
+                1
+                + len(compliance_results)
+                + (1 if pressure_result is not None else 0)
+            ),
             "compliance_check_count": len(compliance_results),
             "finding_count": finding_count,
             "pass_count": pass_count,
             "fail_count": fail_count,
             "not_checked_count": not_checked_count,
         },
-        "components": {
-            "design_consistency": design_result,
-            "compliance_checks": compliance_results,
-        },
+        "components": components,
         "traceability": traceability,
         "traceability_sha256": traceability_sha256,
-        "engineering_note": (
-            "This assurance matrix composes existing CleanroomX design-consistency "
-            "and user-supplied compliance rule-pack evidence without adding new "
-            "engineering equations, standards limits, acceptance criteria, or hidden "
-            "semantic mappings. A complete pass means only that every included "
-            "component completed without a recorded failure. It is not regulatory "
-            "approval, cleanroom certification, CFD validation, commissioning/TAB "
-            "acceptance, or proof that the supplied rule packs are complete."
-        ),
+        "engineering_note": engineering_note,
     }
 
 
@@ -221,9 +333,40 @@ def markdown_design_assurance_report(result: dict) -> str:
         + " |"
     )
 
+    pressure = result["components"].get("pressure_design_consistency")
+    if pressure is not None:
+        pressure_traceability = next(
+            entry
+            for entry in result["traceability"]
+            if entry["component"] == "pressure_design_consistency"
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    "Pressure design consistency",
+                    _md(pressure["status"]),
+                    _md(pressure["complete"]),
+                    _md(pressure["summary"]["pass_count"]),
+                    _md(pressure["summary"]["fail_count"]),
+                    _md(pressure["summary"]["not_checked_count"]),
+                    _md(
+                        f"{pressure['study']} / result "
+                        f"{pressure_traceability['result_sha256']}"
+                    ),
+                ]
+            )
+            + " |"
+        )
+
+    compliance_traceability = [
+        entry
+        for entry in result["traceability"]
+        if entry["component"] == "compliance_check"
+    ]
     for check, traceability in zip(
         result["components"]["compliance_checks"],
-        result["traceability"][1:],
+        compliance_traceability,
     ):
         pack = check["rule_pack"]
         trace = (
@@ -254,6 +397,13 @@ def markdown_design_assurance_report(result: dict) -> str:
                 f"- Design consistency / {_md(location)} / {_md(finding['code'])}: "
                 f"**{_md(finding['status'])}** — {_md(finding['message'])}"
             )
+    if pressure is not None:
+        for finding in pressure["findings"]:
+            if finding["status"] != "pass":
+                unresolved.append(
+                    f"- Pressure design consistency / {_md(finding['room'])}: "
+                    f"**{_md(finding['status'])}** — {_md(finding['message'])}"
+                )
     for check in result["components"]["compliance_checks"]:
         for finding in check["findings"]:
             if finding["status"] != "pass":

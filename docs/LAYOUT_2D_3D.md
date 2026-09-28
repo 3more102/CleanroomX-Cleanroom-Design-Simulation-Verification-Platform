@@ -34,6 +34,37 @@ selected room resizes its footprint. The property inspector can edit device Z el
 association, opening dimensions/orientation/wall side/swing, room floor elevation,
 classification text, and analysis-room linkage.
 
+Use **+ Device / opening** to choose a device type. Creation/editing, navigation,
+and view controls occupy separate compact rows so the editing commands remain
+accessible at the application's supported minimum window size.
+
+### Property editing and duplication
+
+**Apply** validates every relevant inspector field before committing the edit.
+Invalid numbers, blank required fields, non-positive dimensions, invalid wall
+sides, and missing room references produce an error without changing geometry
+or adding an undo entry. The entered text stays available for correction. Blank
+pressure clears the stored value; it does not create a zero-pressure reading.
+Changing a room's X/Y through the inspector moves all assigned devices by the
+same offset, just as dragging the room does. Device Z remains relative to its
+room's floor. Geometry warnings such as an existing device above a lowered
+ceiling remain visible through **Validate**.
+
+Select a room or device and choose **Duplicate**, or press **Ctrl+D** while a
+2D/3D canvas has focus. A room copy includes its assigned devices, uses new
+stable IDs and a unique room name, and is placed to the right of the layout.
+Room dimensions, classification, and device geometry are preserved. The copy
+has no stored pressure or explicit analysis-room link, and receives no copied
+synchronization baseline. Set pressure and link the new room to engineering
+inputs explicitly before using those data in analysis.
+
+A single-device copy retains its parent room and offsets by one grid step where
+space permits. Opening copies move along their assigned wall; a device at a
+room edge moves inward. In a room smaller than one grid step a copied anchor
+may coincide with the original and can be repositioned through the inspector.
+Duplication is one project undo/redo transaction, including the copied devices
+and selection. Both views and normal save/open use the same resulting layout.
+
 Pressure color uses explicit evidence only. A fresh completed verification result can be projected
 into the view without being persisted into spatial geometry; otherwise the explicitly stored spatial
 pressure is used. Relationship arrows are drawn only from the active analysis's explicit
@@ -59,8 +90,8 @@ rendered from the same device record used in 2D.
 
 ## Engineering synchronization
 
-Spatial editing does not silently alter engineering inputs. Use **Push dimensions to analysis**
-when the spatial layout is authoritative, or **Pull dimensions from analysis** when engineering
+Spatial editing does not silently alter engineering inputs. Use **Push to analysis**
+when the spatial layout is authoritative, or **Pull from analysis** when engineering
 geometry is authoritative. For room-verification and project-verification workflows, both
 directions synchronize only room length, width, and height. Spatial X/Y placement is preserved by
 pulls. Observed pressure and all other engineering evidence remain outside geometry synchronization.

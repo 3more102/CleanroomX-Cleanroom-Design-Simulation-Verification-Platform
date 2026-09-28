@@ -50,7 +50,14 @@ The CI release path validates the real Tk application under Xvfb on Python 3.13.
 sudo apt-get update
 sudo apt-get install -y xvfb tk
 xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
+xvfb-run -a python -m pytest -q tests/test_spatial_editing_gui.py
 ```
+
+The second command exercises room duplication, attached-device movement,
+property validation, project undo/redo, persistence, analysis execution, and
+toolbar visibility through real Tk widgets. It requires a source checkout and
+the development/test extra. Headless test runs skip these GUI cases; CI runs
+them explicitly under Xvfb and treats an unusable configured display as an error.
 
 ## Production-use boundary
 

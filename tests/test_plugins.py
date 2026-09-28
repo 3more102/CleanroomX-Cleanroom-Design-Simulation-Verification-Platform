@@ -27,7 +27,7 @@ class _FakeEntryPoint:
         loaded,
         *,
         distribution: _FakeDistribution | None = None,
-        load_error: Exception | None = None,
+        load_error: BaseException | None = None,
     ) -> None:
         self.name = name
         self.value = value
@@ -39,6 +39,18 @@ class _FakeEntryPoint:
         if self._load_error is not None:
             raise self._load_error
         return self._loaded
+
+
+class _UnreadableNameEntryPoint:
+    value = "pkg.unreadable:registration"
+    dist = None
+
+    @property
+    def name(self):
+        raise SystemExit("metadata aborted")
+
+    def load(self):
+        return _plugin("unreachable")
 
 
 def _parser(payload: dict) -> dict:
@@ -126,6 +138,93 @@ def test_plugin_discovery_isolates_invalid_and_incompatible_plugins():
     assert "unsupported plugin API version" in errors
     assert "import exploded" in errors
     assert "plugin key must match" in errors
+
+
+def test_plugin_discovery_isolates_system_exit_and_keeps_valid_plugins():
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[
+            _FakeEntryPoint(
+                "a-exit",
+                "pkg.exit:registration",
+                None,
+                load_error=SystemExit(23),
+            ),
+            _FakeEntryPoint(
+                "z-good",
+                "pkg.good:registration",
+                _plugin("good_plugin"),
+            ),
+        ],
+    )
+
+    assert [item.plugin.key for item in discovery.plugins] == ["good_plugin"]
+    assert len(discovery.issues) == 1
+    assert discovery.issues[0].entry_point_name == "a-exit"
+    assert discovery.issues[0].error == "SystemExit: 23"
+
+
+def test_plugin_discovery_isolates_unreadable_entry_point_identity():
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[_UnreadableNameEntryPoint()],
+    )
+
+    assert discovery.plugins == ()
+    assert len(discovery.issues) == 1
+    issue = discovery.issues[0]
+    assert issue.entry_point_name == "<unavailable>"
+    assert issue.entry_point_value == "pkg.unreadable:registration"
+    assert issue.error == "ValueError: entry point name is unavailable"
+
+
+def test_plugin_discovery_preserves_keyboard_interrupt():
+    with pytest.raises(KeyboardInterrupt):
+        discover_analysis_plugins(
+            set(),
+            entry_points=[
+                _FakeEntryPoint(
+                    "interrupt",
+                    "pkg.interrupt:registration",
+                    None,
+                    load_error=KeyboardInterrupt(),
+                )
+            ],
+        )
+
+
+def test_plugin_api_version_rejects_boolean_alias_for_integer_one():
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[
+            _FakeEntryPoint(
+                "bool-api",
+                "pkg.bool_api:registration",
+                _plugin("bool_api", api_version=True),
+            )
+        ],
+    )
+
+    assert discovery.plugins == ()
+    assert len(discovery.issues) == 1
+    assert "plugin API version must be an integer" in discovery.issues[0].error
+
+
+def test_plugin_key_rejects_silent_whitespace_normalization():
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[
+            _FakeEntryPoint(
+                "space-key",
+                "pkg.space_key:registration",
+                _plugin(" spaced_key "),
+            )
+        ],
+    )
+
+    assert discovery.plugins == ()
+    assert len(discovery.issues) == 1
+    assert "leading or trailing whitespace" in discovery.issues[0].error
 
 
 def test_plugin_discovery_disables_builtin_collision():

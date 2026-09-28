@@ -10,6 +10,12 @@ Desktop project and analysis inputs use strict JSON. Project loading rejects mal
 
 Application workflow bindings are fixed in `src/cleanroomx/application.py`. The v0.100 registry check rejects duplicate workflow keys, requires parser/runner targets for ordinary workflows, preserves explicit custom adapters for consistency and dossier, and verifies that every declared target resolves to a callable. Project files select a declared analysis kind rather than arbitrary Python modules or function names.
 
+Installed analysis plugins remain trusted executable Python packages, but plugin
+discovery is fail-isolated: malformed identity metadata, import/factory
+exceptions, and plugin-triggered `SystemExit` disable the affected extension
+instead of terminating built-in application startup. `KeyboardInterrupt`
+remains an operator cancellation signal and is not swallowed by discovery.
+
 ## File access
 
 Some workflows, including dossier and consistency, resolve user-supplied file references relative to the saved project directory. Treat project files and referenced engineering data as trusted local inputs and review their paths before execution.

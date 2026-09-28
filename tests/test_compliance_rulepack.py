@@ -77,7 +77,21 @@ def test_reference_case_passes_and_preserves_rule_pack_digest() -> None:
         "not_checked_count": 0,
     }
     assert len(result["rule_pack"]["sha256"]) == 64
+    assert len(result["evidence_sha256"]) == 64
     json.dumps(result, sort_keys=True, allow_nan=False)
+
+
+def test_evidence_digest_binds_the_exact_supplied_evidence_revision() -> None:
+    payload = _payload()
+    baseline = analyze_compliance_check(compliance_check_from_dict(payload))
+
+    changed = copy.deepcopy(payload)
+    changed["evidence"]["source_revision"] = "B"
+    revised = analyze_compliance_check(compliance_check_from_dict(changed))
+
+    assert baseline["status"] == revised["status"] == "pass"
+    assert baseline["rule_pack"]["sha256"] == revised["rule_pack"]["sha256"]
+    assert baseline["evidence_sha256"] != revised["evidence_sha256"]
 
 
 def test_missing_evidence_is_not_promoted_to_pass() -> None:
@@ -283,6 +297,7 @@ def test_markdown_escapes_user_controlled_content() -> None:
     )
 
     assert "Study \\| &lt;A&gt;" in report
+    assert "Evidence SHA-256:" in report
     assert "not a regulatory approval" in report
 
 

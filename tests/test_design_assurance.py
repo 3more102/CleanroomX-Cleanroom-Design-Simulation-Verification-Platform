@@ -32,10 +32,36 @@ def test_reference_case_passes_and_preserves_component_traceability() -> None:
     assert result["summary"]["component_count"] == 2
     assert result["summary"]["compliance_check_count"] == 1
     assert result["summary"]["fail_count"] == 0
-    pack = result["traceability"][1]["rule_pack"]
+    design_trace = result["traceability"][0]
+    compliance_trace = result["traceability"][1]
+    pack = compliance_trace["rule_pack"]
     assert pack["id"] == "project-urs-demo"
     assert len(pack["sha256"]) == 64
+    assert len(design_trace["result_sha256"]) == 64
+    assert len(compliance_trace["evidence_sha256"]) == 64
+    assert len(compliance_trace["result_sha256"]) == 64
+    assert len(result["traceability_sha256"]) == 64
     json.dumps(result, sort_keys=True, allow_nan=False)
+
+
+def test_traceability_digest_changes_with_compliance_evidence_revision() -> None:
+    payload = _payload()
+    baseline = analyze_design_assurance(design_assurance_from_dict(payload))
+
+    revised_payload = copy.deepcopy(payload)
+    revised_payload["compliance_checks"][0]["evidence"]["source_revision"] = "B"
+    revised = analyze_design_assurance(design_assurance_from_dict(revised_payload))
+
+    assert baseline["status"] == revised["status"] == "pass"
+    assert (
+        baseline["traceability"][1]["rule_pack"]["sha256"]
+        == revised["traceability"][1]["rule_pack"]["sha256"]
+    )
+    assert (
+        baseline["traceability"][1]["evidence_sha256"]
+        != revised["traceability"][1]["evidence_sha256"]
+    )
+    assert baseline["traceability_sha256"] != revised["traceability_sha256"]
 
 
 def test_missing_compliance_evidence_remains_visible_as_unchecked() -> None:

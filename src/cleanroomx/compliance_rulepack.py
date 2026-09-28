@@ -391,6 +391,7 @@ def _evaluate_rule(rule: ComplianceRule, actual: Any) -> tuple[bool, float | Non
 
 def analyze_compliance_check(check: ComplianceCheck) -> dict:
     pack_document = check.rule_pack.to_dict()
+    evidence_sha256 = _canonical_sha256(check.evidence)
     findings: list[dict] = []
 
     for rule in check.rule_pack.rules:
@@ -463,6 +464,7 @@ def analyze_compliance_check(check: ComplianceCheck) -> dict:
             "source": check.rule_pack.source,
             "sha256": _canonical_sha256(pack_document),
         },
+        "evidence_sha256": evidence_sha256,
         "summary": {
             "rule_count": len(findings),
             "pass_count": pass_count,
@@ -498,6 +500,7 @@ def markdown_compliance_report(result: dict) -> str:
         f"- Complete: **{_md(result['complete'])}**",
         f"- Rule pack: {_md(pack['title'])} ({_md(pack['id'])} v{_md(pack['version'])})",
         f"- Rule-pack SHA-256: `{_md(pack['sha256'])}`",
+        f"- Evidence SHA-256: `{_md(result['evidence_sha256'])}`",
         f"- Declared source: {_md(pack['source'])}",
         "",
         "| Rule | Status | Evidence path | Operator | Expected | Actual | Unit | Source | Reference |",

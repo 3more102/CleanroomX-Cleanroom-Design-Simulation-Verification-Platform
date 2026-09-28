@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import copy
+import hashlib
 import json
 from typing import Any
 
@@ -20,6 +21,17 @@ from .markdown import markdown_text
 
 
 _ALLOWED_INPUT_KEYS = frozenset({"name", "design_consistency", "compliance_checks"})
+
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        sort_keys=True,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -110,6 +122,7 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
             "status": design_result["status"],
             "complete": design_result["complete"],
             "source": "CleanroomX canonical design-consistency analysis",
+            "result_sha256": _canonical_sha256(design_result),
         }
     ]
     for result in compliance_results:
@@ -120,10 +133,13 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
                 "status": result["status"],
                 "complete": result["complete"],
                 "rule_pack": copy.deepcopy(result["rule_pack"]),
+                "evidence_sha256": result["evidence_sha256"],
+                "result_sha256": _canonical_sha256(result),
             }
         )
 
     status = _aggregate_status(component_statuses, complete)
+    traceability_sha256 = _canonical_sha256(traceability)
     return {
         "study": study.name,
         "status": status,
@@ -142,6 +158,7 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
             "compliance_checks": compliance_results,
         },
         "traceability": traceability,
+        "traceability_sha256": traceability_sha256,
         "engineering_note": (
             "This assurance matrix composes existing CleanroomX design-consistency "
             "and user-supplied compliance rule-pack evidence without adding new "
@@ -180,6 +197,8 @@ def markdown_design_assurance_report(result: dict) -> str:
         f"- Complete: **{_md(result['complete'])}**",
         f"- Findings: {summary['finding_count']}",
         f"- Pass / Fail / Not checked: {summary['pass_count']} / {summary['fail_count']} / {summary['not_checked_count']}",
+        f"- Traceability SHA-256: `{_md(result['traceability_sha256'])}`",
+        f"- Design-consistency result SHA-256: `{_md(result['traceability'][0]['result_sha256'])}`",
         "",
         "| Component | Status | Complete | Pass | Fail | Not checked | Traceability |",
         "| --- | --- | --- | ---: | ---: | ---: | --- |",
@@ -202,9 +221,15 @@ def markdown_design_assurance_report(result: dict) -> str:
         + " |"
     )
 
-    for check in result["components"]["compliance_checks"]:
+    for check, traceability in zip(
+        result["components"]["compliance_checks"],
+        result["traceability"][1:],
+    ):
         pack = check["rule_pack"]
-        trace = f"{pack['id']} v{pack['version']} / {pack['sha256']}"
+        trace = (
+            f"{pack['id']} v{pack['version']} / pack {pack['sha256']} / "
+            f"evidence {check['evidence_sha256']} / result {traceability['result_sha256']}"
+        )
         lines.append(
             "| "
             + " | ".join(

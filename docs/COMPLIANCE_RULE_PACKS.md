@@ -16,7 +16,7 @@ A rule pack uses:
 - a declared \`source\`;
 - uniquely identified rules.
 
-Every analysis result records the normalized rule-pack identity and a canonical SHA-256 digest so later evidence can be tied to the exact criteria evaluated.
+Every analysis result records the normalized rule-pack identity and its deterministic SHA-256 digest, plus an `evidence_sha256` digest over the exact supplied evidence document. This binds the result to both the criteria revision and the evidence revision that were evaluated.
 
 ## Supported deterministic operators
 
@@ -44,7 +44,7 @@ Aggregate status is:
 - \`pass_with_unchecked\` when no rule fails but some evidence is missing;
 - \`not_checked\` when all rule evidence is missing.
 
-Each finding retains rule identity, evidence path, operator, expected value, actual value, delta where meaningful, unit, tolerance, source, and reference.
+Each finding retains rule identity, evidence path, operator, expected value, actual value, delta where meaningful, unit, tolerance, source, and reference. Digests use CleanroomX deterministic strict-JSON serialization (sorted keys, UTF-8, compact separators, and no NaN/Infinity) before SHA-256 hashing.
 
 ## Regulatory boundary
 

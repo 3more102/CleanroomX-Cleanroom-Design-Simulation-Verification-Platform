@@ -7,7 +7,9 @@ import uuid
 from typing import Any, Callable
 
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk
+
+from .spatial_editing import duplicate_spatial_item, update_spatial_properties
 
 from .spatial_integrity import (
     DEVICE_TYPES,
@@ -1247,7 +1249,11 @@ class SpatialDesignWorkspace(ttk.Frame):
         toolbar = ttk.Frame(self, padding=(6, 6, 6, 3))
         toolbar.pack(fill="x")
 
-        ttk.Button(toolbar, text="+ Room", command=self.add_room).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="+ Room", width=8, command=self.add_room).pack(side="left", padx=2)
+        device_button = ttk.Menubutton(toolbar, text="+ Device / opening")
+        device_menu = tk.Menu(device_button, tearoff=False)
+        device_button.configure(menu=device_menu)
+        device_button.pack(side="left", padx=2)
         for device_type, label in (
             ("door", "+ Door"),
             ("window", "+ Window"),
@@ -1260,28 +1266,30 @@ class SpatialDesignWorkspace(ttk.Frame):
             ("sensor", "+ Sensor"),
             ("transfer", "+ Transfer"),
         ):
-            ttk.Button(
-                toolbar,
-                text=label,
+            device_menu.add_command(
+                label=label.removeprefix("+ "),
                 command=lambda t=device_type: self.add_device(t),
-            ).pack(side="left", padx=2)
+            )
+        ttk.Button(toolbar, text="Duplicate", command=self.duplicate_selected).pack(side="left", padx=2)
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6)
-        self._undo_button = ttk.Button(toolbar, text="Undo", command=self.undo_edit, state="disabled")
+        self._undo_button = ttk.Button(toolbar, text="Undo", width=6, command=self.undo_edit, state="disabled")
         self._undo_button.pack(side="left", padx=2)
-        self._redo_button = ttk.Button(toolbar, text="Redo", command=self.redo_edit, state="disabled")
+        self._redo_button = ttk.Button(toolbar, text="Redo", width=6, command=self.redo_edit, state="disabled")
         self._redo_button.pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Delete", command=self.delete_selected).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Fit", command=self.fit_views).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Reset 2D", command=self.reset_2d).pack(side="left", padx=2)
-        ttk.Button(toolbar, text="Floor…", command=self.edit_floor).pack(side="left", padx=2)
+        ttk.Button(toolbar, text="Delete", width=6, command=self.delete_selected).pack(side="left", padx=2)
+        navigation = ttk.Frame(self, padding=(6, 0, 6, 3))
+        navigation.pack(fill="x")
+        ttk.Button(navigation, text="Fit", width=5, command=self.fit_views).pack(side="left", padx=2)
+        ttk.Button(navigation, text="Reset 2D", width=8, command=self.reset_2d).pack(side="left", padx=2)
+        ttk.Button(navigation, text="Floor…", width=6, command=self.edit_floor).pack(side="left", padx=2)
         ttk.Button(
-            toolbar,
-            text="Push dimensions to analysis",
+            navigation,
+            text="Push to analysis",
             command=self._on_sync_requested,
         ).pack(side="right", padx=2)
         ttk.Button(
-            toolbar,
-            text="Pull dimensions from analysis",
+            navigation,
+            text="Pull from analysis",
             command=self._on_pull_requested or (lambda: None),
             state="normal" if self._on_pull_requested is not None else "disabled",
         ).pack(side="right", padx=2)
@@ -1308,10 +1316,12 @@ class SpatialDesignWorkspace(ttk.Frame):
         ttk.Button(viewbar, text="Validate", command=self.report_validation).pack(
             side="left", padx=(10, 2)
         )
-        ttk.Label(viewbar, textvariable=self._validation_var).pack(
+        summarybar = ttk.Frame(self, padding=(6, 0, 6, 3))
+        summarybar.pack(fill="x")
+        ttk.Label(summarybar, textvariable=self._validation_var).pack(
             side="left", padx=(8, 2)
         )
-        ttk.Label(viewbar, textvariable=self._sync_var).pack(
+        ttk.Label(summarybar, textvariable=self._sync_var, wraplength=420).pack(
             side="left", padx=(12, 2)
         )
 
@@ -1416,6 +1426,7 @@ class SpatialDesignWorkspace(ttk.Frame):
             canvas.bind("<Control-z>", self._on_undo_shortcut)
             canvas.bind("<Control-y>", self._on_redo_shortcut)
             canvas.bind("<Control-Shift-Z>", self._on_redo_shortcut)
+            canvas.bind("<Control-d>", self._on_duplicate_shortcut)
             canvas.bind("<Delete>", lambda event: self.delete_selected())
             canvas.bind("<Left>", lambda event: self._nudge_selected(-1, 0))
             canvas.bind("<Right>", lambda event: self._nudge_selected(1, 0))
@@ -1572,6 +1583,10 @@ class SpatialDesignWorkspace(ttk.Frame):
         self.redo_edit()
         return "break"
 
+    def _on_duplicate_shortcut(self, event=None):
+        self.duplicate_selected()
+        return "break"
+
     def _persist(
         self,
         message: str,
@@ -1694,64 +1709,51 @@ class SpatialDesignWorkspace(ttk.Frame):
         item = self._selected_object()
         if item is None:
             return
+        try:
+            candidate = update_spatial_properties(
+                self.layout,
+                self.selected.kind,
+                self.selected.item_id,
+                {key: variable.get() for key, variable in self._property_vars.items()},
+            )
+        except ValueError as exc:
+            messagebox.showerror("Invalid spatial properties", str(exc), parent=self)
+            self._status_setter("Properties not applied: " + str(exc))
+            return
         history_before = self._history_layout()
         selection_before = self._selection_state()
-        name = self._property_vars["name"].get().strip()
-        if name:
-            item["name"] = name
-        for key in ("x_m", "y_m"):
-            text = self._property_vars[key].get().strip()
-            if text:
-                item[key] = _finite_number(text, item.get(key, 0.0))
-        if self.selected and self.selected.kind == "room":
-            for key in ("length_m", "width_m", "height_m"):
-                text = self._property_vars[key].get().strip()
-                if text:
-                    item[key] = _positive(text, item[key])
-            floor_elevation = self._property_vars["floor_elevation_m"].get().strip()
-            if floor_elevation:
-                item["floor_elevation_m"] = _finite_number(
-                    floor_elevation, item.get("floor_elevation_m", 0.0)
-                )
-            pressure = self._property_vars["pressure_pa"].get().strip()
-            if pressure:
-                item["pressure_pa"] = _finite_number(pressure, item.get("pressure_pa", 0.0))
-            elif "pressure_pa" in item:
-                item.pop("pressure_pa", None)
-            for key in ("classification", "analysis_room_name"):
-                text = self._property_vars[key].get().strip()
-                if text:
-                    item[key] = text
-                else:
-                    item.pop(key, None)
-        elif self.selected and self.selected.kind == "device":
-            z_text = self._property_vars["z_m"].get().strip()
-            if z_text:
-                item["z_m"] = _finite_number(z_text, item.get("z_m", 0.0))
-            for key in ("width_m", "height_m"):
-                text = self._property_vars[key].get().strip()
-                if text:
-                    item[key] = _positive(text, item.get(key, 0.2))
-            orientation = self._property_vars["orientation_deg"].get().strip()
-            if orientation:
-                item["orientation_deg"] = _finite_number(
-                    orientation, item.get("orientation_deg", 0.0)
-                )
-            room_id = self._property_vars["room_id"].get().strip()
-            item["room_id"] = room_id or None
-            wall_side = self._property_vars["wall_side"].get().strip().lower()
-            if wall_side in {"north", "south", "east", "west"}:
-                item["wall_side"] = wall_side
-            else:
-                item.pop("wall_side", None)
-            swing = self._property_vars["swing"].get().strip()
-            if swing:
-                item["swing"] = swing
-            else:
-                item.pop("swing", None)
+        if candidate != self.layout:
+            self.layout = candidate
         self._load_property_panel()
         self._persist(
             "Spatial properties updated",
+            history_before=history_before,
+            selection_before=selection_before,
+        )
+
+    def duplicate_selected(self) -> None:
+        if self._selected_object() is None:
+            self._status_setter("Select a room or device to duplicate")
+            return
+        try:
+            candidate, item_id = duplicate_spatial_item(
+                self.layout, self.selected.kind, self.selected.item_id,
+            )
+        except ValueError as exc:
+            messagebox.showerror("Cannot duplicate selection", str(exc), parent=self)
+            return
+        history_before = self._history_layout()
+        selection_before = self._selection_state()
+        kind = self.selected.kind
+        self.layout = candidate
+        self.selected = _Hit(kind, item_id)
+        self._load_property_panel()
+        message = (
+            "Duplicated room and devices; enter pressure and link analysis for the new room"
+            if kind == "room" else "Duplicated device"
+        )
+        self._persist(
+            message,
             history_before=history_before,
             selection_before=selection_before,
         )

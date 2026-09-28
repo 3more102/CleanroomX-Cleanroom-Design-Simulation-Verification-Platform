@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — evidence identity hardening — 2026-09-28
+
+- Adds deterministic canonical SHA-256 identity for each compliance evidence document and propagates it into design-assurance traceability and Markdown reporting.
+- Keeps the rule-pack digest separate from the evidence digest so criteria identity and evidence revision can be audited independently.
+- Adds regression coverage proving evidence-only changes alter the evidence digest without altering the rule-pack digest.
+- Introduces no new engineering equations, standards limits, acceptance criteria, or project-schema changes.
+
 ## Unreleased next-level Phase 1 — design assurance matrix — 2026-09-28
 
 - Adds a read-only `design_assurance` workflow that composes the canonical `design_consistency` result with one or more versioned `compliance_check` evaluations.

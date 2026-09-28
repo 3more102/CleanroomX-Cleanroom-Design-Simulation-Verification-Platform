@@ -85,6 +85,29 @@ def test_signed_negative_pressure_target_is_preserved() -> None:
     assert result["findings"][0]["actual"] == pytest.approx(-2.0)
 
 
+def test_pressure_network_targets_remain_independent_evidence() -> None:
+    payload = _payload()
+    payload["pressure_network"]["targets"] = [
+        {
+            "name": "Stricter independent network target",
+            "high_node": "Process",
+            "low_node": "Corridor",
+            "minimum_delta_pa": 3.0,
+        }
+    ]
+
+    result = analyze_pressure_design_consistency(
+        pressure_design_consistency_from_dict(payload)
+    )
+
+    assert result["status"] == "pass"
+    assert result["findings"][0]["status"] == "pass"
+    assert result["source_analyses"]["pressure_network"]["status"] == (
+        "solved_with_target_violations"
+    )
+    assert result["source_analyses"]["pressure_network"]["target_summary"]["failed"] == 1
+
+
 def test_pressure_difference_outside_tolerance_fails() -> None:
     payload = _payload(target_pa=3.0)
     payload["pressure_abs_tolerance_pa"] = 0.25

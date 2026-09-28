@@ -2,7 +2,7 @@
 
 `cleanroomx-assurance-snapshot` creates deterministic, self-contained audit artifacts from the existing `design_assurance` workflow. The snapshot freezes the exact UTF-8 source bytes, the normalized CleanroomX result, the result digest, the design-assurance traceability digest, and the CleanroomX version that produced the artifact.
 
-The feature is a provenance and replay layer only. It does not add engineering equations, standards limits, acceptance thresholds, certification semantics, or hidden mappings.
+The feature is a provenance and replay layer only. If the design-assurance source includes optional `pressure_design_consistency` evidence, that complete normalized component and its result SHA-256 are automatically covered by the design-assurance traceability digest, the stored result digest, deterministic replay, and the whole-snapshot digest. It does not add engineering equations, standards limits, acceptance thresholds, certification semantics, or hidden mappings.
 
 ## Snapshot format
 
@@ -13,7 +13,7 @@ Each snapshot contains:
 - the exact source text, byte size, and SHA-256 of the supplied design-assurance input;
 - the full normalized design-assurance result;
 - the canonical SHA-256 of that result;
-- the design-assurance `traceability_sha256` that already binds component results, rule-pack revisions, and supplied evidence revisions;
+- the design-assurance `traceability_sha256` that already binds component results, optional pressure-design evidence, rule-pack revisions, and supplied evidence revisions;
 - the CleanroomX version used to create the snapshot;
 - one canonical snapshot SHA-256 over every field above.
 
@@ -51,7 +51,7 @@ Verification independently checks:
 4. the stored design-assurance traceability digest;
 5. the overall snapshot SHA-256;
 6. deterministic replay of the embedded source through the current canonical design-assurance parser and engine;
-7. equality of the replayed result, result digest, and traceability digest.
+7. equality of the replayed result, result digest, and traceability digest, including optional pressure-design evidence when present.
 
 A valid verification report exposes both `integrity_valid` and `replay_consistent`. The CLI exits `0` only when both are true. A structurally valid but tampered snapshot returns an `invalid` report and exit code `2`; malformed or unsupported snapshots also exit `2` with an error.
 

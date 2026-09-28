@@ -1,0 +1,50 @@
+{
+  "name": "CleanroomX Pressure Design Consistency Demo",
+  "requirements": {
+    "name": "Demo pressure requirements",
+    "rooms": [
+      {
+        "name": "Process",
+        "dimensions_m": {
+          "length": 6.0,
+          "width": 4.0,
+          "height": 3.0
+        },
+        "pressure_target_pa": 15.0
+      }
+    ]
+  },
+  "pressure_network": {
+    "name": "Demo pressure network",
+    "nodes": [
+      {
+        "name": "Process",
+        "supply_m3_h": 540.0
+      },
+      {
+        "name": "Corridor",
+        "fixed_pressure_pa": 0.0
+      }
+    ],
+    "paths": [
+      {
+        "name": "Process-Corridor leakage",
+        "start_node": "Process",
+        "end_node": "Corridor",
+        "kind": "crack",
+        "model": "power_law",
+        "coefficient_m3_s_pa_n": 0.01,
+        "exponent": 1.0
+      }
+    ]
+  },
+  "mappings": [
+    {
+      "room": "Process",
+      "node": "Process",
+      "reference_node": "Corridor"
+    }
+  ],
+  "pressure_abs_tolerance_pa": 0.01,
+  "require_all_configured_targets_mapped": true
+}

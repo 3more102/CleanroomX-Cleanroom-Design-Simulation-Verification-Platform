@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — pressure design consistency — 2026-09-28
+
+- Adds a deterministic read-only `pressure_design_consistency` workflow that composes the canonical design-requirements service with the canonical room pressure-network solver.
+- Requires explicit room → pressure-node/reference-node mappings and compares the signed solved difference `pressure(node) - pressure(reference_node)` only against the configured room `pressure_target_pa`.
+- Uses an explicit caller-supplied absolute pressure tolerance, preserves expected/actual/delta/unit/mapping/provenance evidence, and fails configured-but-unmapped pressure targets by default.
+- Keeps the pressure network's own configured target checks as separate surfaced evidence instead of silently translating them into requirements semantics.
+- Registers the workflow in the shared application/project execution boundary with a real example, full workflow-matrix coverage, focused regression tests, and dedicated documentation.
+- Introduces no new pressure equation, leakage assumption, standards limit, project-schema change, certification semantics, or hidden reference-room inference.
+
 ## Unreleased next-level Phase 1 — design assurance snapshots — 2026-09-28
 
 - Adds deterministic self-contained `cleanroomx.design-assurance-snapshot` artifacts that bind the exact UTF-8 source bytes, normalized design-assurance result, result SHA-256, traceability SHA-256, producing CleanroomX version, and a canonical whole-snapshot SHA-256.

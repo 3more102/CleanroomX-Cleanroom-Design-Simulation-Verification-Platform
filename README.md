@@ -38,6 +38,7 @@ CleanroomX includes engineering workflows for:
 - variable-friction network solving;
 - bounded uncertainty and numerical provenance analysis.
 - explicit design-requirements ↔ preliminary air-system consistency checks.
+- explicit design pressure-target ↔ solved pressure-network node/reference consistency checks.
 - versioned compliance rule-pack evidence checks with explicit source/reference traceability and SHA-256 binding for both criteria and supplied evidence revisions.
 - design-assurance matrix composition across canonical consistency checks and versioned compliance evidence, with tamper-evident component/traceability digests.
 
@@ -174,6 +175,7 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [Architecture](ARCHITECTURE.md)
 - [Design assurance matrix](docs/DESIGN_ASSURANCE.md)
 - [Design assurance snapshots](docs/ASSURANCE_SNAPSHOTS.md)
+- [Pressure design consistency](docs/PRESSURE_DESIGN_CONSISTENCY.md)
 - [Deployment](DEPLOYMENT.md)
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)

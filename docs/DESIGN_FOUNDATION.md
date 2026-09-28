@@ -1,11 +1,12 @@
 # CleanroomX Design Foundation
 
-CleanroomX Phase 1 now has three complementary engineering foundations plus an explicit cross-workflow consistency layer:
+CleanroomX Phase 1 now has three complementary engineering foundations plus two explicit cross-workflow consistency layers:
 
 1. the existing [room pressure / leakage network](PRESSURE_NETWORK.md);
 2. a traceable design-requirements engine;
 3. a preliminary cleanroom air-system designer;
-4. a read-only design-requirements ↔ air-system consistency analysis.
+4. a read-only design-requirements ↔ air-system consistency analysis;
+5. a read-only design pressure-target ↔ pressure-network consistency analysis.
 
 They are registered through the same application parser/runner/reporter boundary as existing analyses, so the desktop application, saved projects, deterministic project batch execution, run provenance, and reporting can reuse the engineering services without a second execution stack.
 
@@ -63,13 +64,15 @@ It compares only quantities represented explicitly on both sides:
 
 Every numeric comparison uses a caller-supplied absolute tolerance (default `0`), and each finding retains expected value, actual value, delta, unit, tolerance, status, and applicable requirement provenance. Missing requirement evidence remains `not_checked`; a configured requirement missing from the air-system input fails the corresponding comparison. Aggregate status uses the same `pass` / `fail` / `pass_with_unchecked` / `not_checked` semantics as CleanroomX verification.
 
-Relative humidity, pressure targets, recovery targets, filtration text, contamination assumptions, operating mode, and free-text supply/return strategy are deliberately not inferred across workflows. The result lists those boundaries explicitly so a consistency pass cannot be mistaken for a pressure-network, filtration, contamination-control, CFD, commissioning/TAB, certification, or regulatory verdict.
+Relative humidity, pressure targets, recovery targets, filtration text, contamination assumptions, operating mode, and free-text supply/return strategy are deliberately not inferred inside this air-system consistency workflow. Pressure-target comparison is handled separately by the explicit-mapping `pressure_design_consistency` workflow described below. The result lists those boundaries explicitly so an air-system consistency pass cannot be mistaken for a pressure-network, filtration, contamination-control, CFD, commissioning/TAB, certification, or regulatory verdict.
 
 ## Pressure-network integration
 
 The pressure/leakage network remains the stronger implementation already present on `main`, with strict input parsing, CLI support, fixed-pressure boundaries, explicit power-law/orifice paths, damped-Newton continuity solving, target checks, residual/convergence evidence, and its own documentation.
 
-The design-requirements and air-system workflows are intentionally separate services so future phases can connect them through explicit mappings rather than duplicating pressure physics.
+Phase 1 now adds a read-only `pressure_design_consistency` composer. It requires an explicit mapping from each compared requirements room to a pressure-network node and reference node, then compares the configured signed `pressure_target_pa` only with `pressure(node) - pressure(reference_node)` using a caller-supplied absolute tolerance. It never infers a reference room or converts the pressure network's own target definitions into requirements semantics. Missing configured mappings fail by default and can only be left unresolved by explicitly disabling complete mapping.
+
+The design-requirements, air-system, and pressure-network workflows remain separate canonical services so composition adds traceability without duplicating pressure physics.
 
 ## Engineering boundary
 

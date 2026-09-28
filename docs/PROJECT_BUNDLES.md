@@ -12,6 +12,8 @@ A bundle uses the `.cleanroomx.zip` extension and contains only:
 
 The bundled project is a copy. Its external references are rewritten to relative paths under `dependencies/`; the live project in memory and the original saved project are not modified.
 
+Portable bundles are intentionally bounded engineering-data containers rather than arbitrary bulk-file archives. The exporter applies the same payload limits as the verifier so CleanroomX does not create a bundle that the same build cannot later inspect or extract.
+
 The bundle format is `cleanroomx.project-bundle`, schema version 1. Project schema version 1 remains unchanged.
 
 ## Integrity and determinism
@@ -22,6 +24,12 @@ All entries use stored ZIP members with fixed metadata and deterministic orderin
 
 Verification rejects:
 
+- archives larger than 1,040 MiB before archive hashing;
+- manifests larger than 1 MiB;
+- bundled project documents larger than 64 MiB;
+- individual dependencies larger than 512 MiB;
+- aggregate project-plus-dependency payloads larger than 1 GiB;
+- more than 1,024 dependencies (1,026 total members including manifest and project);
 - invalid or unsupported bundle schemas;
 - duplicate or undeclared archive members;
 - absolute paths, parent traversal, Windows drive-style path components, and backslash paths;

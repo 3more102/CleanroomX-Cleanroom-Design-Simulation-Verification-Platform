@@ -160,6 +160,114 @@ def test_bundle_deduplicates_same_dependency_and_preserves_reference_map(tmp_pat
     ]
 
 
+def test_bundle_export_rejects_oversized_dependency_without_replacing_target(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    dependency = _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    target = tmp_path / "bounded.cleanroomx.zip"
+    target.write_bytes(b"previous verified bundle")
+    previous = target.read_bytes()
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_MAX_DEPENDENCY_MEMBER_BYTES",
+        dependency.stat().st_size - 1,
+    )
+
+    with pytest.raises(ProjectBundleError, match="dependency exceeds supported size limit"):
+        export_project_bundle(target, _consistency_project(), source_base=source)
+
+    assert target.read_bytes() == previous
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+
+
+def test_bundle_verifier_rejects_oversized_archive_before_hashing(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "portable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_MAX_BUNDLE_ARCHIVE_BYTES",
+        bundle.stat().st_size - 1,
+    )
+
+    def unexpected_hash(_path):
+        raise AssertionError("oversized archive must be rejected before hashing")
+
+    monkeypatch.setattr(bundle_module, "stable_file_sha256", unexpected_hash)
+
+    with pytest.raises(ProjectBundleError, match="archive exceeds supported size limit"):
+        inspect_project_bundle(bundle)
+
+
+def test_bundle_verifier_rejects_project_member_over_resource_limit(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "portable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+    report = inspect_project_bundle(bundle)
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_MAX_PROJECT_MEMBER_BYTES",
+        report["project_size_bytes"] - 1,
+    )
+
+    with pytest.raises(ProjectBundleError, match="project exceeds supported size limit"):
+        inspect_project_bundle(bundle)
+
+
+def test_bundle_verifier_rejects_total_payload_over_resource_limit(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "portable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+    report = inspect_project_bundle(bundle)
+    payload_bytes = report["project_size_bytes"] + report["dependency_bytes"]
+
+    monkeypatch.setattr(
+        bundle_module,
+        "_MAX_TOTAL_PAYLOAD_BYTES",
+        payload_bytes - 1,
+    )
+
+    with pytest.raises(ProjectBundleError, match="payload exceeds supported total size limit"):
+        inspect_project_bundle(bundle)
+
+
+def test_bundle_verifier_rejects_member_count_over_resource_limit(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    _copy_example(source, "facility_project.json")
+    _copy_example(source, "consistency_hvac_demo.json")
+    bundle = tmp_path / "portable.cleanroomx.zip"
+    export_project_bundle(bundle, _consistency_project(), source_base=source)
+
+    monkeypatch.setattr(bundle_module, "_MAX_DEPENDENCY_COUNT", 1)
+
+    with pytest.raises(ProjectBundleError, match="member count exceeds supported limit"):
+        inspect_project_bundle(bundle)
+
+
 def test_bundle_export_rejects_missing_dependency_without_publishing(tmp_path):
     project = ProjectDocument(
         name="Missing",

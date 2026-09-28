@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased portable project-bundle resource hardening
+
+- Bounds untrusted portable-bundle inspection and extraction with explicit archive, manifest, project-member, dependency-member/count, and aggregate-payload ceilings.
+- Rejects oversized archive files before SHA-256 hashing and bounds member streaming so malformed inputs cannot silently expand beyond declared/accepted sizes during verification or extraction.
+- Applies the same project/dependency/manifest limits to export, preventing CleanroomX from publishing a portable bundle that this build would reject on re-open.
+- Preserves project schema version 1, bundle schema version 1, deterministic stored-ZIP format, solver behavior, and engineering acceptance semantics.
+
 ## Unreleased next-level Phase 1 — project diagnostics
 
 - Adds a deterministic read-only project diagnostics service that composes existing spatial validation, analysis parser validation, persisted engineering synchronization state, and run-history/application provenance instead of duplicating those authorities.

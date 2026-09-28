@@ -68,7 +68,10 @@ class TerminalCapacity:
 
     @property
     def design_airflow_m3_h(self) -> float:
-        return self.rated_airflow_m3_h * self.design_utilization
+        return _positive(
+            self.rated_airflow_m3_h * self.design_utilization,
+            f"{self.name} design_airflow_m3_h",
+        )
 
 
 @dataclass(frozen=True)
@@ -213,8 +216,18 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
     total_outdoor = 0.0
 
     for room in design.rooms:
-        volume = room.length_m * room.width_m * room.height_m
-        ach_airflow = None if room.min_ach is None else volume * room.min_ach
+        volume = _positive(
+            room.length_m * room.width_m * room.height_m,
+            f"room {room.name!r} volume_m3",
+        )
+        ach_airflow = (
+            None
+            if room.min_ach is None
+            else _positive(
+                volume * room.min_ach,
+                f"room {room.name!r} minimum_ach_airflow_m3_h",
+            )
+        )
         sensible_airflow = None
         sensible_equation = None
         room_warnings: list[str] = []
@@ -225,10 +238,15 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
                 )
             else:
                 delta_t = room.room_air_temp_c - room.supply_air_temp_c
-                sensible_airflow = (
-                    room.sensible_load_w
-                    / (design.air_properties.density_kg_m3 * design.air_properties.specific_heat_j_kg_k * delta_t)
-                    * 3600.0
+                sensible_denominator = _positive(
+                    design.air_properties.density_kg_m3
+                    * design.air_properties.specific_heat_j_kg_k
+                    * delta_t,
+                    f"room {room.name!r} sensible_airflow_denominator",
+                )
+                sensible_airflow = _finite(
+                    room.sensible_load_w / sensible_denominator * 3600.0,
+                    f"room {room.name!r} sensible_airflow_m3_h",
                 )
                 sensible_equation = "Q_sensible / (rho × cp × (T_room - T_supply)) × 3600"
 
@@ -245,12 +263,15 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
         # This is an engineering sizing constraint, not merely a post-solve
         # warning: omitting it can publish a design that cannot meet its own
         # configured pressure/surplus intent.
-        air_balance_airflow = max(
-            0.0,
-            room.exhaust_airflow_m3_h
-            + room.transfer_out_airflow_m3_h
-            + room.minimum_surplus_m3_h
-            - room.transfer_in_airflow_m3_h,
+        air_balance_airflow = _finite(
+            max(
+                0.0,
+                room.exhaust_airflow_m3_h
+                + room.transfer_out_airflow_m3_h
+                + room.minimum_surplus_m3_h
+                - room.transfer_in_airflow_m3_h,
+            ),
+            f"room {room.name!r} air_balance_airflow_m3_h",
         )
 
         drivers: list[tuple[str, float]] = []
@@ -269,34 +290,47 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
             )
         governing_basis, governing_airflow = max(drivers, key=lambda item: (item[1], item[0]))
 
-        raw_proposed_return = (
+        raw_proposed_return = _finite(
             governing_airflow
             + room.transfer_in_airflow_m3_h
             - room.exhaust_airflow_m3_h
             - room.transfer_out_airflow_m3_h
-            - room.minimum_surplus_m3_h
+            - room.minimum_surplus_m3_h,
+            f"room {room.name!r} proposed_return_airflow_m3_h",
         )
-        balance_scale = max(
-            1.0,
-            governing_airflow,
-            room.transfer_in_airflow_m3_h,
-            room.exhaust_airflow_m3_h + room.transfer_out_airflow_m3_h + room.minimum_surplus_m3_h,
+        balance_scale = _positive(
+            max(
+                1.0,
+                governing_airflow,
+                room.transfer_in_airflow_m3_h,
+                room.exhaust_airflow_m3_h
+                + room.transfer_out_airflow_m3_h
+                + room.minimum_surplus_m3_h,
+            ),
+            f"room {room.name!r} air_balance_scale_m3_h",
         )
-        balance_tolerance = 1e-12 * balance_scale
+        balance_tolerance = _positive(
+            1e-12 * balance_scale,
+            f"room {room.name!r} air_balance_tolerance_m3_h",
+        )
         if raw_proposed_return < -balance_tolerance:
             raise RuntimeError(
                 f"room {room.name!r} air-balance sizing invariant failed: proposed return would be "
                 f"{raw_proposed_return} m^3/h"
             )
         proposed_return = max(0.0, raw_proposed_return)
-        achieved_surplus = (
+        achieved_surplus = _finite(
             governing_airflow
             + room.transfer_in_airflow_m3_h
             - proposed_return
             - room.exhaust_airflow_m3_h
-            - room.transfer_out_airflow_m3_h
+            - room.transfer_out_airflow_m3_h,
+            f"room {room.name!r} achieved_surplus_m3_h",
         )
-        surplus_margin = achieved_surplus - room.minimum_surplus_m3_h
+        surplus_margin = _finite(
+            achieved_surplus - room.minimum_surplus_m3_h,
+            f"room {room.name!r} surplus_margin_m3_h",
+        )
         if surplus_margin < -balance_tolerance:
             raise RuntimeError(
                 f"room {room.name!r} air-balance sizing invariant failed: achieved surplus "
@@ -304,9 +338,14 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
             )
         if abs(surplus_margin) <= balance_tolerance:
             surplus_margin = 0.0
-        makeup_airflow = max(
-            room.minimum_outdoor_air_m3_h,
-            room.exhaust_airflow_m3_h + room.transfer_out_airflow_m3_h - room.transfer_in_airflow_m3_h,
+        makeup_airflow = _finite(
+            max(
+                room.minimum_outdoor_air_m3_h,
+                room.exhaust_airflow_m3_h
+                + room.transfer_out_airflow_m3_h
+                - room.transfer_in_airflow_m3_h,
+            ),
+            f"room {room.name!r} preliminary_makeup_airflow_m3_h",
         )
 
         counts = {
@@ -319,10 +358,22 @@ def analyze_air_system_design(design: AirSystemDesign) -> dict:
             room_warnings.append("FFU ceiling strategy selected but no filter_unit capacity is configured.")
 
         overall_warnings.extend(f"{room.name}: {warning}" for warning in room_warnings)
-        total_supply += governing_airflow
-        total_return += proposed_return
-        total_exhaust += room.exhaust_airflow_m3_h
-        total_outdoor += makeup_airflow
+        total_supply = _finite(
+            total_supply + governing_airflow,
+            "total_supply_airflow_m3_h",
+        )
+        total_return = _finite(
+            total_return + proposed_return,
+            "total_return_airflow_m3_h",
+        )
+        total_exhaust = _finite(
+            total_exhaust + room.exhaust_airflow_m3_h,
+            "total_exhaust_airflow_m3_h",
+        )
+        total_outdoor = _finite(
+            total_outdoor + makeup_airflow,
+            "total_outdoor_airflow_m3_h",
+        )
         rooms.append(
             {
                 "name": room.name,

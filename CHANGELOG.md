@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — design consistency — 2026-09-26
+
+- Adds a deterministic read-only `design_consistency` workflow that composes the canonical design-requirements and preliminary air-system engines rather than introducing a competing room or calculation model.
+- Cross-checks room-set identity, dimensions, minimum ACH, ACH-derived supply airflow, explicitly entered sensible load, and room-air temperature against the configured requirement range.
+- Requires explicit absolute comparison tolerances, retains expected/actual/delta/unit/provenance evidence, and preserves missing requirement evidence as `not_checked` instead of promoting it to pass.
+- Lists pressure, relative-humidity, recovery, filtration, contamination, operating-mode, and free-text strategy semantics as deliberately outside this cross-check instead of inventing mappings.
+- Integrates through the existing application parser/runner/reporter boundary with a real example and focused regression coverage.
+- Preserves project schema version 1, v0.102.1 release identity, existing solver equations/tolerances, and configured engineering acceptance criteria.
+
 ## Unreleased bounded project-file ingestion
 
 - Caps normal CleanroomX project JSON at 64 MiB before parsing and revision hashing, with bounded reads that detect growth beyond the ceiling.

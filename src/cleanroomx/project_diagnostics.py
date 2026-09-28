@@ -382,16 +382,29 @@ def _run_history_issues(
             )
             continue
 
-        same_input_record = None
-        same_input_run = None
+        current_record = None
+        stale_dependency_record = None
         for record in reversed(candidates):
             run = _analysis_run_from_record(record)
-            if analysis_run_matches_input(run, analysis.kind, analysis.input):
-                same_input_record = record
-                same_input_run = run
+            if not analysis_run_matches_input(
+                run,
+                analysis.kind,
+                analysis.input,
+            ):
+                continue
+            if analysis_run_external_dependencies_current(
+                run,
+                base_dir=base_dir,
+            ):
+                current_record = record
                 break
+            if stale_dependency_record is None:
+                stale_dependency_record = record
 
-        if same_input_record is None or same_input_run is None:
+        if current_record is not None:
+            continue
+
+        if stale_dependency_record is None:
             latest = candidates[-1]
             issues.append(
                 _issue(
@@ -414,35 +427,31 @@ def _run_history_issues(
             )
             continue
 
-        provenance = same_input_record["execution_provenance"]
+        provenance = stale_dependency_record["execution_provenance"]
         dependency_count = provenance.get("external_dependency_count", 0)
-        if not analysis_run_external_dependencies_current(
-            same_input_run,
-            base_dir=base_dir,
-        ):
-            issues.append(
-                _issue(
-                    rule="run_history.external_dependency_stale",
-                    category="traceability",
-                    severity="warning",
-                    element_type="analysis",
-                    element_id=analysis.id,
-                    element_name=analysis.name,
-                    message=(
-                        "A retained run matches the current analysis input, but one or more "
-                        "file-backed engineering dependencies no longer match the recorded revision."
-                    ),
-                    suggested_action=(
-                        "Review the changed/missing dependency and re-run the analysis against the "
-                        "intended source revision."
-                    ),
-                    details={
-                        "analysis_kind": analysis.kind,
-                        "retained_sequence": same_input_record["sequence"],
-                        "external_dependency_count": dependency_count,
-                    },
-                )
+        issues.append(
+            _issue(
+                rule="run_history.external_dependency_stale",
+                category="traceability",
+                severity="warning",
+                element_type="analysis",
+                element_id=analysis.id,
+                element_name=analysis.name,
+                message=(
+                    "Retained runs match the current analysis input, but their file-backed "
+                    "engineering dependencies no longer match any recorded revision."
+                ),
+                suggested_action=(
+                    "Review the changed/missing dependency and re-run the analysis against the "
+                    "intended source revision."
+                ),
+                details={
+                    "analysis_kind": analysis.kind,
+                    "retained_sequence": stale_dependency_record["sequence"],
+                    "external_dependency_count": dependency_count,
+                },
             )
+        )
     return issues
 
 

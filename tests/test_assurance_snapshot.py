@@ -23,6 +23,27 @@ EXAMPLES = ROOT / "examples"
 DEMO = EXAMPLES / "design_assurance_demo.json"
 
 
+PRESSURE_DEMO = EXAMPLES / "pressure_design_consistency_demo.json"
+
+
+def _write_pressure_assurance_source(path: Path) -> None:
+    payload = json.loads(DEMO.read_text(encoding="utf-8"))
+    payload["pressure_design_consistency"] = json.loads(
+        PRESSURE_DEMO.read_text(encoding="utf-8")
+    )
+    path.write_text(
+        json.dumps(
+            payload,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_snapshot_is_deterministic_and_self_verifying(
     tmp_path: Path,
 ) -> None:
@@ -51,6 +72,26 @@ def test_snapshot_is_deterministic_and_self_verifying(
     assert report["source"]["size_match"] is True
     assert report["source"]["sha256_match"] is True
     assert report["analysis"]["stored_result_digest_match"] is True
+    assert report["analysis"]["replay_match"] is True
+    assert report["analysis"]["replayed_traceability_match"] is True
+
+
+def test_snapshot_binds_optional_pressure_assurance_evidence(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "pressure-assurance.json"
+    _write_pressure_assurance_source(source)
+
+    snapshot = create_assurance_snapshot(source)
+    result = snapshot["analysis"]["result"]
+
+    assert result["status"] == "pass"
+    assert result["summary"]["component_count"] == 3
+    assert result["traceability"][1]["component"] == "pressure_design_consistency"
+    assert len(result["traceability"][1]["result_sha256"]) == 64
+
+    report = verify_assurance_snapshot(snapshot)
+    assert report["valid"] is True
     assert report["analysis"]["replay_match"] is True
     assert report["analysis"]["replayed_traceability_match"] is True
 

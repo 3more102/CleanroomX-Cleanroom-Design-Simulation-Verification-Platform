@@ -33,6 +33,7 @@ The report:
 - contains no external scripts, stylesheets, fonts, images, or network resources;
 - HTML-escapes project, analysis, Markdown, input, result, and diagnostic presentation text;
 - encodes the embedded JSON so user data cannot terminate the non-executable JSON script element;
+- routes project/analysis metadata and custom limitations through the shared Markdown structure-escaping boundary in the portable Markdown renderer, so embedded newlines, table delimiters, emphasis markers, and HTML remain text rather than report structure;
 - validates the deterministic payload digest before rendering;
 - serializes JSON with `allow_nan=False`;
 - is written by the desktop through the existing atomic export path.

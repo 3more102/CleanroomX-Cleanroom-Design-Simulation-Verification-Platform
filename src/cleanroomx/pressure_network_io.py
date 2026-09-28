@@ -26,6 +26,50 @@ def _objects(value: object, field_name: str) -> list[dict]:
     ]
 
 
+def _strict_numeric_fields(
+    item: dict,
+    field_name: str,
+    numeric_fields: frozenset[str],
+) -> dict:
+    normalized = dict(item)
+    for key in numeric_fields:
+        if key not in normalized or normalized[key] is None:
+            continue
+        value = normalized[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(
+                f"{field_name}.{key} must be a finite number"
+            )
+    return normalized
+
+
+_NODE_NUMERIC_FIELDS = frozenset(
+    {
+        "supply_m3_h",
+        "return_m3_h",
+        "exhaust_m3_h",
+        "fixed_pressure_pa",
+    }
+)
+_PATH_NUMERIC_FIELDS = frozenset(
+    {
+        "coefficient_m3_s_pa_n",
+        "exponent",
+        "discharge_coefficient",
+        "area_m2",
+        "air_density_kg_m3",
+        "pressure_offset_pa",
+        "linearization_pressure_pa",
+    }
+)
+_TARGET_NUMERIC_FIELDS = frozenset(
+    {
+        "minimum_delta_pa",
+        "maximum_delta_pa",
+    }
+)
+
+
 def pressure_network_from_dict(data: dict) -> RoomPressureNetwork:
     payload = _object(data, "pressure network")
     try:
@@ -45,16 +89,40 @@ def pressure_network_from_dict(data: dict) -> RoomPressureNetwork:
 
     try:
         nodes = tuple(
-            PressureNode(**item)
-            for item in _objects(node_data, "nodes")
+            PressureNode(
+                **_strict_numeric_fields(
+                    item,
+                    f"nodes[{index}]",
+                    _NODE_NUMERIC_FIELDS,
+                )
+            )
+            for index, item in enumerate(
+                _objects(node_data, "nodes")
+            )
         )
         paths = tuple(
-            PressurePath(**item)
-            for item in _objects(path_data, "paths")
+            PressurePath(
+                **_strict_numeric_fields(
+                    item,
+                    f"paths[{index}]",
+                    _PATH_NUMERIC_FIELDS,
+                )
+            )
+            for index, item in enumerate(
+                _objects(path_data, "paths")
+            )
         )
         targets = tuple(
-            PressureTarget(**item)
-            for item in _objects(target_data, "targets")
+            PressureTarget(
+                **_strict_numeric_fields(
+                    item,
+                    f"targets[{index}]",
+                    _TARGET_NUMERIC_FIELDS,
+                )
+            )
+            for index, item in enumerate(
+                _objects(target_data, "targets")
+            )
         )
     except TypeError as exc:
         raise ValueError(

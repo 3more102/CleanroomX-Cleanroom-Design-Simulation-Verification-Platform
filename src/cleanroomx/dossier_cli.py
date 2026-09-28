@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
-from .strict_json import load_strict_json
+from .cli_output import dumps_strict_json
+from .strict_json import StrictJSONError, load_strict_json
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
@@ -40,7 +40,15 @@ def main() -> int:
         return 3
 
     result = run.result
-    text = json.dumps(result, indent=2) if args.format == "json" else run.markdown
+    try:
+        text = dumps_strict_json(result) if args.format == "json" else run.markdown
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-dossier: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.output:
         atomic_write_text(args.output, text)
     else:

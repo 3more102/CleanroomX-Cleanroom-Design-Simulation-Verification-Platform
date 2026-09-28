@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
+from .cli_output import dumps_strict_json
 from .project import atomic_write_text
 from .recovery_io import load_recovery_test
 from .recovery_report import markdown_recovery_report
 from .recovery_test import analyze_recovery_test
+from .strict_json import StrictJSONError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -23,11 +25,20 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     result = analyze_recovery_test(load_recovery_test(args.test))
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_recovery_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_recovery_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            "cleanroomx-recovery-test: error: "
+            f"analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.output:
         atomic_write_text(args.output, text)
     else:

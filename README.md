@@ -38,6 +38,7 @@ CleanroomX includes engineering workflows for:
 - variable-friction network solving;
 - bounded uncertainty and numerical provenance analysis.
 - explicit design-requirements ↔ preliminary air-system consistency checks.
+- versioned compliance rule-pack evidence checks with explicit source/reference traceability.
 
 ### Spatial ↔ engineering synchronization
 

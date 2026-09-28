@@ -49,3 +49,8 @@ Each finding retains rule identity, evidence path, operator, expected value, act
 A CleanroomX rule-pack result evaluates only the supplied evidence against the supplied criteria. It is not by itself a regulatory approval, cleanroom certification, commissioning/TAB acceptance, or proof that the supplied pack completely represents an external standard.
 
 The repository intentionally does not ship copyrighted standards clauses or universal numerical cleanroom limits. See [Standards and source policy](STANDARDS.md).
+
+## Application integration
+
+The built-in application workflow key is \`compliance_check\`. It uses the same parser/runner/reporter boundary as other direct CleanroomX analyses, so desktop projects, deterministic project batch execution, immutable run snapshots, input SHA-256 provenance, report export, and application-registry validation reuse the existing execution path rather than a separate compliance engine.
+

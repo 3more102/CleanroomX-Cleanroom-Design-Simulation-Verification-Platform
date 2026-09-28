@@ -55,7 +55,7 @@ def _validate_json_value(value: Any, field_name: str) -> Any:
         return copy.deepcopy(value)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if not math.isfinite(float(value)):
-            raise ValueError(f"{field_name} must not contain non-finite numbers")
+            raise ValueError(f"{field_name} must be a finite JSON number")
         return copy.deepcopy(value)
     if isinstance(value, list):
         return [
@@ -442,7 +442,7 @@ def analyze_compliance_check(check: ComplianceCheck) -> dict:
         "findings": findings,
         "engineering_note": (
             "This result evaluates only the supplied evidence against the supplied rule pack. "
-            "It is not, by itself, a regulatory approval, cleanroom certification, commissioning "
+            "It is not a regulatory approval, cleanroom certification, commissioning "
             "acceptance, or statement that the rule pack completely represents an external standard."
         ),
     }
@@ -467,7 +467,7 @@ def markdown_compliance_report(result: dict) -> str:
         f"- Status: **{_md(result['status'])}**",
         f"- Complete: **{_md(result['complete'])}**",
         f"- Rule pack: {_md(pack['title'])} ({_md(pack['id'])} v{_md(pack['version'])})",
-        f"- Rule-pack SHA-256: \`{_md(pack['sha256'])}\`",
+        f"- Rule-pack SHA-256: `{_md(pack['sha256'])}`",
         f"- Declared source: {_md(pack['source'])}",
         "",
         "| Rule | Status | Evidence path | Operator | Expected | Actual | Unit | Source | Reference |",

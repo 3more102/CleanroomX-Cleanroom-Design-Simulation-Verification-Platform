@@ -31,6 +31,8 @@ The initial engine supports:
 
 Evidence is addressed with RFC 6901 JSON Pointer paths. Numeric tolerances are explicit absolute tolerances; no implicit tolerance is added by the software.
 
+For `equals` and `one_of`, comparisons follow JSON type semantics: booleans are distinct from numbers even though Python considers `True == 1` and `False == 0`. The same distinction is preserved recursively inside arrays and objects. JSON integer and floating-point representations of the same numeric value remain numerically equivalent.
+
 ## Evidence semantics
 
 A present value is evaluated as pass or fail. A missing evidence path is \`not_checked\`, never silently promoted to pass.

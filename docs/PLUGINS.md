@@ -48,8 +48,10 @@ registration = AnalysisPlugin(
 ```
 
 Plugin keys are persistent project identifiers. They must match
-`^[a-z][a-z0-9_]*$` and therefore should never be renamed after projects use
-them.
+`^[a-z][a-z0-9_]*$` exactly, with no leading or trailing whitespace, and
+therefore should never be renamed after projects use them. `api_version` must
+be a real integer value; boolean aliases such as `True` are rejected even
+though Python normally compares `True == 1`.
 
 ## Discovery and failure behavior
 
@@ -59,18 +61,22 @@ CleanroomX after installing, removing, or upgrading a plugin.
 CleanroomX sorts entry points deterministically before discovery. A plugin is
 disabled when it:
 
-- cannot be imported or constructed;
+- cannot be imported or constructed, including a plugin import/factory that
+  calls `sys.exit()`;
+- exposes unreadable or invalid entry-point identity metadata;
 - declares an unsupported API version;
 - has invalid metadata or non-callable parser/runner/reporter bindings;
 - collides with a built-in analysis key; or
 - duplicates another installed plugin key. For duplicate plugin keys, every
   contender is disabled rather than selecting one based on installation order.
 
-A broken plugin does not remove built-in workflows. Run
-`cleanroomx-gui --check` for machine-readable discovery diagnostics. Normal GUI
-startup also reports disabled plugins. If a project references an unavailable
-plugin analysis, project loading fails closed with an actionable error rather
-than silently substituting a different workflow.
+A broken plugin does not remove built-in workflows. Discovery isolates ordinary
+plugin exceptions and `SystemExit`; an operator `KeyboardInterrupt` is still
+propagated so explicit cancellation is not swallowed. Run `cleanroomx-gui
+--check` for machine-readable discovery diagnostics. Normal GUI startup also
+reports disabled plugins. If a project references an unavailable plugin
+analysis, project loading fails closed with an actionable error rather than
+silently substituting a different workflow.
 
 ## Execution boundary
 

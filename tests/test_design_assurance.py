@@ -35,6 +35,10 @@ def test_reference_case_passes_and_preserves_component_traceability() -> None:
     pack = result["traceability"][1]["rule_pack"]
     assert pack["id"] == "project-urs-demo"
     assert len(pack["sha256"]) == 64
+    evidence = result["traceability"][1]["evidence"]
+    assert evidence["canonicalization"] == "json-sort-keys-compact-utf8-v1"
+    assert len(evidence["sha256"]) == 64
+    assert evidence == result["components"]["compliance_checks"][0]["evidence"]
     json.dumps(result, sort_keys=True, allow_nan=False)
 
 
@@ -118,3 +122,17 @@ def test_markdown_escapes_user_controlled_content() -> None:
     assert "\\`code\\`" in report
     assert "\\[link\\]\\\\path<br>next" in report
     assert "not regulatory approval" in report
+
+
+def test_assurance_traceability_changes_when_compliance_evidence_changes() -> None:
+    payload = _payload()
+    first = analyze_design_assurance(design_assurance_from_dict(payload))
+
+    changed = copy.deepcopy(payload)
+    changed["compliance_checks"][0]["evidence"]["rooms"]["Process"]["ach"] = 31
+    second = analyze_design_assurance(design_assurance_from_dict(changed))
+
+    first_trace = first["traceability"][1]
+    second_trace = second["traceability"][1]
+    assert first_trace["rule_pack"]["sha256"] == second_trace["rule_pack"]["sha256"]
+    assert first_trace["evidence"]["sha256"] != second_trace["evidence"]["sha256"]

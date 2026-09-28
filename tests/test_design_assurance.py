@@ -50,6 +50,23 @@ def test_missing_compliance_evidence_remains_visible_as_unchecked() -> None:
     assert result["summary"]["not_checked_count"] >= 1
 
 
+def test_all_unchecked_components_aggregate_to_not_checked() -> None:
+    payload = _payload()
+    payload["design_consistency"]["requirements"]["rooms"][0]["name"] = "Requirements only"
+    payload["design_consistency"]["air_system"]["rooms"][0]["name"] = "Air system only"
+    payload["design_consistency"]["require_same_room_set"] = False
+    payload["compliance_checks"][0]["evidence"] = {}
+
+    result = analyze_design_assurance(design_assurance_from_dict(payload))
+
+    assert result["status"] == "not_checked"
+    assert result["complete"] is False
+    assert result["passed"] is True
+    assert result["summary"]["pass_count"] == 0
+    assert result["summary"]["fail_count"] == 0
+    assert result["summary"]["not_checked_count"] == result["summary"]["finding_count"]
+
+
 def test_design_consistency_failure_dominates_aggregate_status() -> None:
     payload = _payload()
     payload["design_consistency"]["air_system"]["rooms"][0]["min_ach"] = 25

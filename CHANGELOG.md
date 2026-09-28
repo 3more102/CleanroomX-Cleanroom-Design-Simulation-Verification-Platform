@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased next-level Phase 1 — design assurance snapshots — 2026-09-28
+
+- Adds deterministic self-contained `cleanroomx.design-assurance-snapshot` artifacts that bind the exact UTF-8 source bytes, normalized design-assurance result, result SHA-256, traceability SHA-256, producing CleanroomX version, and a canonical whole-snapshot SHA-256.
+- Adds independent snapshot verification that checks byte count/digest, embedded result digest, traceability linkage, whole-snapshot integrity, and deterministic replay through the canonical design-assurance parser/engine.
+- Adds strict JSON, duplicate-key rejection, stable-file reads, 16 MiB source and 64 MiB snapshot limits, atomic output persistence, source/output alias protection, tamper regression coverage, and an installed `cleanroomx-assurance-snapshot` CLI.
+- Keeps content digests explicitly separate from digital signatures or source-authenticity claims and introduces no engineering equation, standards limit, acceptance criterion, project-schema change, or certification semantics.
+
 ## Unreleased hardening — compliance JSON equality — 2026-09-28
 
 - Makes `equals` and `one_of` use JSON-aware equality instead of Python container equality.

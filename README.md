@@ -60,6 +60,7 @@ Spatial and engineering data remain deliberately separated.
 - Deterministic project batch execution.
 - Project-wide read-only design/model diagnostics with spatial, synchronization, input-validity, and stale-evidence checks.
 - Portable project bundles and engineering reports.
+- Deterministic self-verifying design-assurance snapshots that bind exact source bytes, normalized results, and traceability digests.
 - SHA-256 based numerical/provenance evidence for supported solver workflows.
 
 ## Quick start
@@ -121,6 +122,15 @@ Create or verify portable project evidence:
 cleanroomx-project-bundle --help
 ```
 
+Freeze and independently replay design-assurance evidence:
+
+```bash
+cleanroomx-assurance-snapshot create examples/design_assurance_demo.json design_assurance.snapshot.json
+cleanroomx-assurance-snapshot verify design_assurance.snapshot.json
+```
+
+See [Design Assurance Snapshots](docs/ASSURANCE_SNAPSHOTS.md) for schema, integrity, replay, and security boundaries.
+
 Run a project-wide model/provenance health check:
 
 ```bash
@@ -163,6 +173,7 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 - [2D + 3D spatial workspace](docs/LAYOUT_2D_3D.md)
 - [Architecture](ARCHITECTURE.md)
 - [Design assurance matrix](docs/DESIGN_ASSURANCE.md)
+- [Design assurance snapshots](docs/ASSURANCE_SNAPSHOTS.md)
 - [Deployment](DEPLOYMENT.md)
 - [Migration notes](MIGRATIONS.md)
 - [Security](SECURITY.md)

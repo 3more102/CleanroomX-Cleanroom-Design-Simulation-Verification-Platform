@@ -355,6 +355,51 @@ def test_project_diagnostics_cli_refuses_existing_same_file_output_alias(
     assert "output path must be different from the project source" in capsys.readouterr().err
 
 
+def test_diagnostics_alias_check_allows_missing_distinct_protected_path(tmp_path):
+    protected = tmp_path / "missing-dependency.json"
+    output = tmp_path / "diagnostics.json"
+    output.write_text("previous-report\n", encoding="utf-8")
+
+    assert diagnostics_cli._paths_alias(protected, output) is False
+
+
+def test_project_diagnostics_cli_refuses_to_overwrite_external_dependency(tmp_path):
+    verification = tmp_path / "facility_project.json"
+    dependency = tmp_path / "consistency_hvac_demo.json"
+    verification.write_bytes((ROOT / "examples" / "facility_project.json").read_bytes())
+    dependency.write_bytes(
+        (ROOT / "examples" / "consistency_hvac_demo.json").read_bytes()
+    )
+    original_dependency = dependency.read_bytes()
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(
+            name="Protect external dependency",
+            analyses=[
+                AnalysisDocument(
+                    id="consistency",
+                    name="Consistency",
+                    kind="consistency",
+                    input={
+                        "verification_project": verification.name,
+                        "hvac_project": dependency.name,
+                        "room_airflow_abs_tolerance_m3_h": 0.0,
+                        "require_same_room_set": True,
+                    },
+                )
+            ],
+            active_analysis_id="consistency",
+        ),
+    )
+
+    exit_code = diagnostics_main(
+        [str(project_path), "--output", str(dependency)]
+    )
+
+    assert exit_code == 2
+    assert dependency.read_bytes() == original_dependency
+
+
 def test_project_diagnostics_cli_discards_output_if_source_changes_during_check(
     tmp_path, monkeypatch
 ):

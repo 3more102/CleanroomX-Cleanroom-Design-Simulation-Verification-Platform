@@ -120,6 +120,7 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
                 "status": result["status"],
                 "complete": result["complete"],
                 "rule_pack": copy.deepcopy(result["rule_pack"]),
+                "evidence": copy.deepcopy(result["evidence"]),
             }
         )
 
@@ -204,7 +205,11 @@ def markdown_design_assurance_report(result: dict) -> str:
 
     for check in result["components"]["compliance_checks"]:
         pack = check["rule_pack"]
-        trace = f"{pack['id']} v{pack['version']} / {pack['sha256']}"
+        evidence = check["evidence"]
+        trace = (
+            f"{pack['id']} v{pack['version']} / pack {pack['sha256']} / "
+            f"evidence {evidence['sha256']}"
+        )
         lines.append(
             "| "
             + " | ".join(

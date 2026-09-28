@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from .application import _external_dependency_references, _resolve_relative
 from .project import (
     atomic_write_text,
     capture_project_file_revision,
@@ -54,26 +55,62 @@ def _attach_source_evidence(result: dict, path: Path, revision) -> dict:
     return output
 
 
+def _paths_alias(protected: Path, output: str | Path) -> bool:
+    """Return whether output refers to a protected input path."""
+    protected = protected.expanduser().resolve(strict=False)
+    destination = Path(output).expanduser()
+    try:
+        if destination.resolve(strict=False) == protected:
+            return True
+    except (OSError, RuntimeError) as exc:
+        raise OSError(
+            f"could not verify diagnostics output path: {destination}"
+        ) from exc
+    try:
+        if not destination.exists() or not protected.exists():
+            return False
+        return destination.samefile(protected)
+    except FileNotFoundError:
+        # A path disappearing between the existence and identity checks cannot
+        # still be the existing file that would be overwritten. Lexical aliases
+        # were already caught by the resolved-path equality check above.
+        return False
+    except OSError as exc:
+        raise OSError(
+            f"could not verify diagnostics output path against protected input: {destination}"
+        ) from exc
+
+
 def _assert_output_is_distinct_from_source(
     source: Path,
     output: str | Path,
 ) -> None:
     """Reject report destinations that could replace the checked project file."""
-    destination = Path(output)
-    if destination.resolve(strict=False) == source:
+    if _paths_alias(source, output):
         raise ValueError(
             "diagnostics output path must be different from the project source"
         )
-    try:
-        aliases_source = destination.exists() and destination.samefile(source)
-    except OSError as exc:
-        raise OSError(
-            f"could not verify diagnostics output path against project source: {destination}"
-        ) from exc
-    if aliases_source:
-        raise ValueError(
-            "diagnostics output path must be different from the project source"
-        )
+
+
+def _assert_output_is_distinct_from_dependencies(
+    project,
+    *,
+    base_dir: Path,
+    output: str | Path,
+) -> None:
+    """Reject report destinations that could replace declared engineering inputs."""
+    for analysis in project.analyses:
+        for field, declared_path in _external_dependency_references(
+            analysis.kind,
+            analysis.input,
+        ):
+            dependency = _resolve_relative(base_dir, declared_path)
+            if _paths_alias(dependency, output):
+                raise ValueError(
+                    "diagnostics output path must be different from external dependency "
+                    f"{field!r} for analysis {analysis.id!r}: "
+                    f"{dependency.expanduser().resolve(strict=False)}"
+                )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -83,6 +120,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         project, revision_before = load_project_document_with_revision(source)
         if args.output:
             _assert_output_is_distinct_from_source(source, args.output)
+            _assert_output_is_distinct_from_dependencies(
+                project,
+                base_dir=source.parent,
+                output=args.output,
+            )
         result = analyze_project_diagnostics(project, base_dir=source.parent)
         revision_after = capture_project_file_revision(source)
         if not project_file_revision_matches(revision_before, revision_after):

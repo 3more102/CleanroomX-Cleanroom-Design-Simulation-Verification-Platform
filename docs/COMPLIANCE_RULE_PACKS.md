@@ -16,7 +16,7 @@ A rule pack uses:
 - a declared \`source\`;
 - uniquely identified rules.
 
-Every analysis result records the normalized rule-pack identity and a canonical SHA-256 digest so later evidence can be tied to the exact criteria evaluated.
+Every analysis result records the normalized rule-pack identity and a canonical SHA-256 digest so later evidence can be tied to the exact criteria evaluated. It also records a canonical SHA-256 digest of the supplied evidence document using deterministic sorted-key compact UTF-8 JSON serialization, allowing the result to be tied to the exact evidence revision without embedding a second mutable provenance layer.
 
 ## Supported deterministic operators
 

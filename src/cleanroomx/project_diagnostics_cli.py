@@ -54,11 +54,35 @@ def _attach_source_evidence(result: dict, path: Path, revision) -> dict:
     return output
 
 
+def _assert_output_is_distinct_from_source(
+    source: Path,
+    output: str | Path,
+) -> None:
+    """Reject report destinations that could replace the checked project file."""
+    destination = Path(output)
+    if destination.resolve(strict=False) == source:
+        raise ValueError(
+            "diagnostics output path must be different from the project source"
+        )
+    try:
+        aliases_source = destination.exists() and destination.samefile(source)
+    except OSError as exc:
+        raise OSError(
+            f"could not verify diagnostics output path against project source: {destination}"
+        ) from exc
+    if aliases_source:
+        raise ValueError(
+            "diagnostics output path must be different from the project source"
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source = Path(args.project).expanduser().resolve(strict=False)
     try:
         project, revision_before = load_project_document_with_revision(source)
+        if args.output:
+            _assert_output_is_distinct_from_source(source, args.output)
         result = analyze_project_diagnostics(project, base_dir=source.parent)
         revision_after = capture_project_file_revision(source)
         if not project_file_revision_matches(revision_before, revision_after):

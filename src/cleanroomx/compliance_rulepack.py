@@ -470,6 +470,7 @@ def markdown_compliance_report(result: dict) -> str:
         f"- Complete: **{_md(result['complete'])}**",
         f"- Rule pack: {_md(pack['title'])} ({_md(pack['id'])} v{_md(pack['version'])})",
         f"- Rule-pack SHA-256: `{_md(pack['sha256'])}`",
+        f"- Evidence SHA-256: `{_md(result['evidence_sha256'])}`",
         f"- Declared source: {_md(pack['source'])}",
         "",
         "| Rule | Status | Evidence path | Operator | Expected | Actual | Unit | Source | Reference |",

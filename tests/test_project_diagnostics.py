@@ -318,6 +318,43 @@ def test_project_diagnostics_cli_writes_revision_bound_strict_json(tmp_path):
     json.dumps(payload, allow_nan=False)
 
 
+def test_project_diagnostics_cli_refuses_project_source_as_output(tmp_path, capsys):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Protected source"),
+    )
+    before = project_path.read_bytes()
+
+    exit_code = diagnostics_main(
+        [str(project_path), "--output", str(project_path)]
+    )
+
+    assert exit_code == 2
+    assert project_path.read_bytes() == before
+    assert "output path must be different from the project source" in capsys.readouterr().err
+
+
+def test_project_diagnostics_cli_refuses_existing_same_file_output_alias(
+    tmp_path, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="Protected hardlink"),
+    )
+    alias_path = tmp_path / "project-output-alias.json"
+    alias_path.hardlink_to(project_path)
+    before = project_path.read_bytes()
+
+    exit_code = diagnostics_main(
+        [str(project_path), "--output", str(alias_path)]
+    )
+
+    assert exit_code == 2
+    assert project_path.read_bytes() == before
+    assert alias_path.read_bytes() == before
+    assert "output path must be different from the project source" in capsys.readouterr().err
+
+
 def test_project_diagnostics_cli_discards_output_if_source_changes_during_check(
     tmp_path, monkeypatch
 ):

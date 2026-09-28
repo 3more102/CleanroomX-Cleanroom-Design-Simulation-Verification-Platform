@@ -222,7 +222,7 @@ def test_bundle_verifier_rejects_project_member_over_resource_limit(
 
     monkeypatch.setattr(
         bundle_module,
-        "_MAX_PROJECT_MEMBER_BYTES",
+        "PROJECT_FILE_MAX_BYTES",
         report["project_size_bytes"] - 1,
     )
 

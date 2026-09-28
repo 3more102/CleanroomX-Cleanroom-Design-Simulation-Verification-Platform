@@ -26,3 +26,10 @@ CleanroomX separates standards-defined classification from engineering airflow a
 The software does not infer a universal fixed ACH from an ISO cleanliness class. Numeric project requirements remain explicit inputs.
 
 Copyrighted standards text is not bundled with the repository. Detailed rule packs should be implemented only from appropriately licensed material, public authoritative requirements, or user-entered project criteria.
+
+## Rule-pack implementation
+
+The deterministic compliance rule-pack foundation is documented in [COMPLIANCE_RULE_PACKS.md](COMPLIANCE_RULE_PACKS.md). It records explicit rule-pack identity, version, source, rule references, evidence paths, evaluation status, and a canonical SHA-256 digest.
+
+Rule packs do not change this source policy: CleanroomX does not ship proprietary standards clauses or infer universal limits. Criteria must come from authorized, public, licensed, or user-entered project sources.
+

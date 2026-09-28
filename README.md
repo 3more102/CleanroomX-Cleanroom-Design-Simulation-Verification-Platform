@@ -38,8 +38,8 @@ CleanroomX includes engineering workflows for:
 - variable-friction network solving;
 - bounded uncertainty and numerical provenance analysis.
 - explicit design-requirements ↔ preliminary air-system consistency checks.
-- versioned compliance rule-pack evidence checks with explicit source/reference traceability.
-- design-assurance matrix composition across canonical consistency checks and versioned compliance evidence.
+- versioned compliance rule-pack evidence checks with explicit source/reference traceability and SHA-256 binding for both criteria and supplied evidence revisions.
+- design-assurance matrix composition across canonical consistency checks and versioned compliance evidence, with tamper-evident component/traceability digests.
 
 ### Spatial ↔ engineering synchronization
 

@@ -319,6 +319,36 @@ def _actual_number(value: Any) -> float | None:
     return result
 
 
+def _json_equal(left: Any, right: Any) -> bool:
+    """Compare JSON values without conflating booleans with numbers."""
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if (
+        isinstance(left, (int, float))
+        and not isinstance(left, bool)
+        and isinstance(right, (int, float))
+        and not isinstance(right, bool)
+    ):
+        return left == right
+    if isinstance(left, list) or isinstance(right, list):
+        return (
+            isinstance(left, list)
+            and isinstance(right, list)
+            and len(left) == len(right)
+            and all(_json_equal(a, b) for a, b in zip(left, right))
+        )
+    if isinstance(left, dict) or isinstance(right, dict):
+        return (
+            isinstance(left, dict)
+            and isinstance(right, dict)
+            and left.keys() == right.keys()
+            and all(_json_equal(left[key], right[key]) for key in left)
+        )
+    if type(left) is not type(right):
+        return False
+    return left == right
+
+
 def _evaluate_rule(rule: ComplianceRule, actual: Any) -> tuple[bool, float | None]:
     if rule.operator == "exists":
         return True, None
@@ -332,9 +362,9 @@ def _evaluate_rule(rule: ComplianceRule, actual: Any) -> tuple[bool, float | Non
                 return False, None
             expected = float(rule.expected)
             return abs(number - expected) <= rule.tolerance, number - expected
-        return actual == rule.expected, None
+        return _json_equal(actual, rule.expected), None
     if rule.operator == "one_of":
-        return actual in rule.expected, None
+        return any(_json_equal(actual, candidate) for candidate in rule.expected), None
 
     number = _actual_number(actual)
     if number is None:

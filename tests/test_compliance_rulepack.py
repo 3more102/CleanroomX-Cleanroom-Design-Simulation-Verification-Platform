@@ -240,4 +240,4 @@ def test_markdown_reports_evidence_digest() -> None:
     result = analyze_compliance_check(compliance_check_from_dict(_payload()))
     report = markdown_compliance_report(result)
 
-    assert f"Evidence SHA-256: \`{result['evidence']['sha256']}\`" in report
+    assert f"Evidence SHA-256: `{result['evidence']['sha256']}`" in report

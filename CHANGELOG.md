@@ -3,7 +3,7 @@
 ## Unreleased next-level Phase 1 — design assurance matrix — 2026-09-28
 
 - Adds a read-only `design_assurance` workflow that composes the canonical `design_consistency` result with one or more versioned `compliance_check` evaluations.
-- Preserves complete component results plus compliance rule-pack identity, declared source, version, and canonical SHA-256 instead of flattening or reinterpreting evidence.
+- Preserves complete component results plus compliance rule-pack identity, declared source, version, criteria SHA-256, exact supplied-evidence SHA-256, normalized component-result digests, and a deterministic traceability-manifest SHA-256 instead of flattening or reinterpreting evidence.
 - Aggregates only explicit pass/fail/not-checked evidence into `pass`, `fail`, `not_checked`, or `pass_with_unchecked`; unresolved evidence is never promoted to a complete pass.
 - Integrates through the shared application parser/runner/reporter boundary with a real example, focused regression coverage, full workflow-matrix coverage, and dedicated documentation.
 - Introduces no new HVAC equations, standards limits, certification claims, implicit semantic mappings, project-schema changes, or engineering acceptance criteria.

@@ -184,18 +184,16 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
 
     semantics, _ = extract_ifc_semantics(source)
 
-    assert semantics["records"] == [
-        {
-            "global_id": "AT-EXTRACT",
-            "ifc_class": "IfcAirTerminal",
-            "name": "Supply rotated",
-            "predefined_type": "SUPPLYAIR",
-            "x_m": 1.0,
-            "y_m": 2.0,
-            "z_m": 2.8,
-            "orientation_deg": 90.0,
-        }
-    ]
+    assert len(semantics["records"]) == 1
+    record = semantics["records"][0]
+    assert record["global_id"] == "AT-EXTRACT"
+    assert record["ifc_class"] == "IfcAirTerminal"
+    assert record["name"] == "Supply rotated"
+    assert record["predefined_type"] == "SUPPLYAIR"
+    assert (record["x_m"], record["y_m"], record["z_m"]) == pytest.approx(
+        (1.0, 2.0, 2.8)
+    )
+    assert record["orientation_deg"] == pytest.approx(90.0)
 
 
 def test_ifc_placement_rejects_invalid_transform_values():

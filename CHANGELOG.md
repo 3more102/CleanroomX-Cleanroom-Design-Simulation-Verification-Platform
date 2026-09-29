@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased ProofGraph integration — IFC/BIM design evidence — 2026-09-29
+
+- Adds a dedicated IFC-to-ProofGraph bridge that revalidates normalized IFC semantics and optional semantic SHA-256 identity before emitting design evidence.
+- Binds IFC evidence to the original source filename/SHA-256, normalized semantic SHA-256, IFC GlobalId, exact semantic field, and deterministic evidence identity.
+- Preserves per-space dimension provenance so explicit IFC quantities and verified IfcOpenShell geometry fallback remain distinguishable in ProofGraph.
+- Carries storey identity, spatial containment links, device orientation, coordinates, classification, and explicit CleanroomX space metadata as evidence without inventing compliance requirements.
+- Adds immutable evidence attachment to an existing ProofGraph while preserving its requirement set, checks, findings, verdicts, actions, and verification runs.
+- Adds strict digest-tamper, duplicate-attachment, round-trip, device/storey, and dimension-provenance regressions.
+
 ## Unreleased ProofGraph integration — pressure design evidence chain — 2026-09-29
 
 - Bridges the canonical pressure-design-consistency workflow into ProofGraph without adding a second solver path.

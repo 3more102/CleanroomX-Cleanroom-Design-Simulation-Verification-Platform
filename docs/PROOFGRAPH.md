@@ -168,3 +168,30 @@ The design-requirements object, pressure-network object, and mapping policy each
 receive deterministic revision digests. Confidence remains unset because the
 canonical pressure consistency service does not itself provide a confidence
 probability.
+
+
+## IFC/BIM design-evidence integration
+
+Verified normalized IFC semantics can now be converted into ProofGraph design
+evidence with ifc_design_evidence_bundle, or attached immutably to an existing
+graph with proofgraph_with_ifc_design_evidence.
+
+The adapter re-normalizes the supplied semantic records and verifies any supplied
+semantic SHA-256 before producing evidence. The caller must also provide the
+explicit original IFC source filename and SHA-256.
+
+Each normalized semantic field is retained as a separate DesignEvidence record
+bound to the IFC GlobalId. Evidence keeps the semantic SHA-256 as its version and
+the original IFC source digest as the evidence-source revision. Space
+length/width/height evidence preserves the explicit dimension_source method, so
+ifc_quantities and ifcopenshell_geometry remain distinguishable in the evidence
+chain.
+
+Storey identity, room containment links, placement coordinates, device
+orientation, classification, and explicit CleanroomX space metadata remain
+available as traceable design evidence without turning them into compliance
+requirements automatically.
+
+Attaching IFC evidence does not modify existing checks, findings, verdicts, or
+verification runs. Later requirement integrations must explicitly reference the
+IFC evidence they use.

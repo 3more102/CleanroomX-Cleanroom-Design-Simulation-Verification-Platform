@@ -845,7 +845,7 @@ def test_ifc_reimport_surfaces_semantic_only_source_change():
     old_record_digest = old_binding["record_sha256"]
 
     changed_records = _records()
-    changed_records[1]["ifc_class"] = "IfcFlowTerminal"
+    changed_records[1]["predefined_type"] = "DIFFUSER"
     changed = normalize_ifc_semantic_records(changed_records)
 
     plan = plan_ifc_semantic_reimport(
@@ -875,7 +875,7 @@ def test_ifc_reimport_surfaces_semantic_only_source_change():
         for item in project.metadata[IFC_LINK_METADATA_KEY]["bindings"]
         if item["global_id"] == "AT-001"
     )
-    assert new_binding["ifc_class"] == "IfcFlowTerminal"
+    assert new_binding["ifc_class"] == "IfcAirTerminal"
     assert new_binding["record_sha256"] != old_record_digest
 
 
@@ -896,7 +896,7 @@ def test_ifc_semantic_only_source_change_does_not_conflict_with_local_spatial_ed
     supply["z_m"] = 2.6
 
     changed_records = _records()
-    changed_records[1]["ifc_class"] = "IfcFlowTerminal"
+    changed_records[1]["predefined_type"] = "DIFFUSER"
     changed = normalize_ifc_semantic_records(changed_records)
 
     plan = plan_ifc_semantic_reimport(

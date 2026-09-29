@@ -105,6 +105,47 @@ def test_ifc_placement_uses_full_ifcopenshell_transform_matrix():
     ) == pytest.approx((1.2, 0.7, 0.3))
 
 
+def test_ifc_device_placement_pose_preserves_plan_rotation():
+    entity = types.SimpleNamespace(
+        GlobalId="AT-ROTATED",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (0.0, -1.0, 0.0, 1200.0),
+                (1.0, 0.0, 0.0, 700.0),
+                (0.0, 0.0, 1.0, 300.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    assert bim_ifc_module._placement_pose_m(
+        entity, 0.001, PlacementUtil
+    ) == pytest.approx((1.2, 0.7, 0.3, 90.0))
+
+
+def test_ifc_device_placement_pose_rejects_unusable_plan_orientation():
+    entity = types.SimpleNamespace(
+        GlobalId="AT-BAD-ROTATION",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (0.0, 0.0, 1.0, 0.0),
+                (0.0, 0.0, 0.0, 0.0),
+                (1.0, 1.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    with pytest.raises(IfcImportError, match="no usable XY orientation"):
+        bim_ifc_module._placement_pose_m(entity, 1.0, PlacementUtil)
+
+
 def test_ifc_placement_rejects_invalid_transform_values():
     entity = types.SimpleNamespace(
         GlobalId="SPACE-BAD",
@@ -180,6 +221,49 @@ def test_ifc_space_container_resolution_prefers_explicit_space_relation():
         bim_ifc_module._containing_space_global_id(entity, ElementUtil)
         == "SPACE-DIRECT"
     )
+
+
+def test_ifc_extraction_preserves_device_plan_orientation(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    device = types.SimpleNamespace(
+        GlobalId="AT-ROTATED",
+        Name="Supply rotated",
+        PredefinedType="SUPPLYAIR",
+        ObjectPlacement=object(),
+        ContainedInStructure=(),
+        OverallWidth=None,
+        OverallHeight=None,
+    )
+
+    class Model:
+        def by_type(self, ifc_class):
+            if ifc_class == "IfcAirTerminal":
+                return [device]
+            return []
+
+    sys.modules["ifcopenshell"].open = lambda _path: Model()
+    sys.modules["ifcopenshell.util.element"].get_container = (
+        lambda *_args, **_kwargs: None
+    )
+    sys.modules["ifcopenshell.util.placement"].get_local_placement = (
+        lambda _placement: (
+            (0.0, -1.0, 0.0, 2.0),
+            (1.0, 0.0, 0.0, 3.0),
+            (0.0, 0.0, 1.0, 2.8),
+            (0.0, 0.0, 0.0, 1.0),
+        )
+    )
+    monkeypatch.setattr(bim_ifc_module, "_file_sha256", lambda _path: "a" * 64)
+
+    semantics, _provenance = extract_ifc_semantics(tmp_path / "facility.ifc")
+
+    assert len(semantics["records"]) == 1
+    assert semantics["records"][0]["global_id"] == "AT-ROTATED"
+    assert semantics["records"][0]["orientation_deg"] == pytest.approx(90.0)
+
+    layout = layout_from_ifc_semantics(semantics)
+    assert layout["devices"][0]["orientation_deg"] == pytest.approx(90.0)
 
 
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):

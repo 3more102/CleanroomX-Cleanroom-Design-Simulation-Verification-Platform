@@ -44,6 +44,11 @@ The importer currently supports:
   does not define Length or Width, native extraction falls back to IfcOpenShell
   world-space geometry and accepts only a complete axis-aligned rectangular-prism
   corner topology rather than approximating arbitrary space geometry
+- per-space `dimension_source` provenance in normalized semantics:
+  `ifc_quantities` when all three dimensions came from explicit source
+  quantities, or `ifcopenshell_geometry` when the verified rectangular-prism
+  fallback supplied them; integrations that omit this optional field remain
+  backward compatible
 - explicit and indirect spatial-containment resolution from supported devices to
   `IfcSpace` through IfcOpenShell, without geometric room inference
 - explicit `IfcBuildingStorey` identity on imported spaces, including storey name
@@ -174,6 +179,10 @@ The resulting project receives:
 The link schema is version 2. Its per-element bindings include the source semantic
 record digest and source-derived spatial-object digest. A canonical
 `bindings_sha256` protects the identity table against silent metadata edits.
+Because an imported space's optional `dimension_source` is part of its normalized
+semantic record, switching between authored quantities and verified geometry is
+auditable as a semantic-only re-import change when the resulting room geometry is
+otherwise identical.
 
 ## Conflict-aware re-import
 

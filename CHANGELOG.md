@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level BIM — standards-aligned IFC space geometry fallback — 2026-09-29
+
+- Stops requiring non-standard \`Length\` and \`Width\` values to be present in \`Qto_SpaceBaseQuantities\` for every native \`IfcSpace\` import.
+- Preserves the existing quantity path when positive Length / Width / Height values are explicitly supplied by the source.
+- Falls back to IfcOpenShell world-space vertices when those quantities are incomplete and accepts only complete axis-aligned rectangular-prism geometry that the current room contract can represent exactly.
+- Rejects rotated arbitrary-angle, tilted, incomplete, and non-rectangular geometry instead of converting it to a misleading generic bounding box.
+- Adds helper- and extraction-level regression coverage without changing engineering solvers, project schema, numerical tolerances, or acceptance semantics.
+
 ## Unreleased next-level BIM — orthogonal IFC space footprint fidelity — 2026-09-29
 
 - Preserves rectangular `IfcSpace` world-space footprints for 0°/90°/180°/270° plan rotations by transforming all four local rectangle corners.

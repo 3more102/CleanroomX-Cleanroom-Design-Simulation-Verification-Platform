@@ -3,8 +3,8 @@
 ## Unreleased next-level IFC re-import integrity — 2026-09-29
 
 - Persists IFC `GlobalId` -> CleanroomX room/device ID bindings so entity renames do not churn spatial identity across re-imports.
-- Binds each successful IFC import to a deterministic spatial-layout SHA-256.
-- Fails closed when the currently linked spatial layout has local edits, preventing a later IFC import from silently overwriting reviewed workspace changes.
+- Binds each successful IFC import to a deterministic IFC-managed spatial-layout SHA-256 while excluding transient view/camera state.
+- Fails closed when the currently linked IFC-managed spatial state has local edits, while preserving view/camera preferences across safe re-imports.
 - Allows replacement only through the explicit `allow_local_changes=True` opt-in and adds regression coverage for stable identity and conflict detection.
 - Preserves legacy IFC-linked projects that do not yet contain the new additive provenance fields; their next successful import records the stronger metadata.
 

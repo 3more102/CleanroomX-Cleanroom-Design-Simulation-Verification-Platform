@@ -121,6 +121,8 @@ def test_ifc_import_binds_source_and_semantics_to_project_metadata():
     assert link["source_name"] == "facility.ifc"
     assert link["source_sha256"] == "a" * 64
     assert link["semantic_sha256"] == semantics["semantic_sha256"]
+    assert len(link["layout_sha256"]) == 64
+    assert link["entity_bindings"]["SPACE-001"] == "iso-7-process"
     assert link["room_count"] == 1
     assert link["device_count"] == 2
     assert project.metadata["spatial_layout"] == layout
@@ -141,3 +143,65 @@ def test_ifc_import_rejects_invalid_source_digest():
             source_name="facility.ifc",
             source_sha256="not-a-digest",
         )
+
+
+def test_ifc_reimport_preserves_spatial_ids_across_entity_renames():
+    project = new_project("IFC Project")
+    first = normalize_ifc_semantic_records(_records())
+    first_layout = apply_ifc_semantics_to_project(
+        project,
+        first,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    room_id = first_layout["rooms"][0]["id"]
+    device_ids = {
+        device["type"]: device["id"] for device in first_layout["devices"]
+    }
+
+    changed = _records()
+    changed[0]["name"] = "Renamed Process Room"
+    changed[1]["name"] = "Renamed Supply"
+    changed[2]["name"] = "Renamed Sensor"
+    second = normalize_ifc_semantic_records(changed)
+    second_layout = apply_ifc_semantics_to_project(
+        project,
+        second,
+        source_name="facility.ifc",
+        source_sha256="b" * 64,
+    )
+
+    assert second_layout["rooms"][0]["id"] == room_id
+    assert {
+        device["type"]: device["id"] for device in second_layout["devices"]
+    } == device_ids
+
+
+def test_ifc_reimport_rejects_local_layout_edits_unless_explicitly_allowed():
+    project = new_project("IFC Project")
+    semantics = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+
+    project.metadata["spatial_layout"]["rooms"][0]["x_m"] += 0.5
+
+    with pytest.raises(IfcImportError, match="local changes"):
+        apply_ifc_semantics_to_project(
+            project,
+            semantics,
+            source_name="facility.ifc",
+            source_sha256="b" * 64,
+        )
+
+    layout = apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="b" * 64,
+        allow_local_changes=True,
+    )
+    assert layout["rooms"][0]["x_m"] == 1.0

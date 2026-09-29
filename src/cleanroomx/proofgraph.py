@@ -4,6 +4,8 @@ from .proofgraph_adapters import (
     proofgraph_from_compliance_check,
     proofgraph_from_pressure_design_consistency,
 )
+from .proofgraph_ach import proofgraph_from_ach_design
+from .proofgraph_airflow import proofgraph_from_air_balance
 from .proofgraph_io import proofgraph_from_dict
 from .proofgraph_ifc import (
     ifc_design_evidence_bundle,
@@ -53,6 +55,8 @@ __all__ = [
     "VerificationRun",
     "proofgraph_from_compliance_check",
     "proofgraph_from_pressure_design_consistency",
+    "proofgraph_from_ach_design",
+    "proofgraph_from_air_balance",
     "proofgraph_from_dict",
     "ifc_design_evidence_bundle",
     "proofgraph_with_ifc_design_evidence",

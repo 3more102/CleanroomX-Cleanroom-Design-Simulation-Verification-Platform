@@ -57,6 +57,26 @@ project edit between load and save is rejected instead of overwritten. Successfu
 JSON output includes the IFC source digest plus the project revision digest before
 and after the write.
 
+## Desktop workflow
+
+The desktop application exposes the same identity-preserving IFC workflow from the
+**BIM** menu:
+
+- **Import IFC Spatial Layout...** establishes the first IFC identity baseline;
+- **Review IFC Re-import...** opens a read-only per-entity change plan;
+- **Apply IFC Re-import...** applies only a conflict-free reviewed candidate.
+
+The review window shows each IFC `GlobalId`, the mapped CleanroomX spatial ID,
+the planned action, and whether the local project and IFC source changed relative
+to the prior import baseline. A two-sided divergent edit blocks application.
+
+Initial desktop import requires explicit confirmation before replacing an existing
+unlinked spatial layout. Import and re-import modify the in-memory project only;
+the normal CleanroomX Save command remains responsible for persistence, so existing
+external-revision checks, save locking, revision history, and recovery behavior
+remain authoritative. IFC operations do not silently synchronize engineering
+analysis inputs.
+
 ## API
 
 ```python

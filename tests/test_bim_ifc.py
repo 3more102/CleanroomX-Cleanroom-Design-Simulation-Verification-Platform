@@ -289,9 +289,13 @@ def test_ifc_storey_metadata_uses_world_storey_elevation():
 
     class ElementUtil:
         @staticmethod
-        def get_container(entity, *, should_get_direct, ifc_class):
-            calls.append((entity, should_get_direct, ifc_class))
-            return storey
+        def get_aggregate(entity):
+            calls.append(entity)
+            return storey if entity is space else None
+
+        @staticmethod
+        def get_container(*_args, **_kwargs):
+            raise AssertionError("aggregate hierarchy should resolve the storey")
 
     class PlacementUtil:
         @staticmethod
@@ -315,7 +319,7 @@ def test_ifc_storey_metadata_uses_world_storey_elevation():
         "storey_name": "Level 1",
         "storey_elevation_m": 3.0,
     }
-    assert calls == [(space, False, "IfcBuildingStorey")]
+    assert calls == [space]
 
 
 def test_ifc_semantics_promote_one_explicit_storey_to_layout_floor():
@@ -333,7 +337,7 @@ def test_ifc_semantics_promote_one_explicit_storey_to_layout_floor():
     layout = layout_from_ifc_semantics(semantics)
 
     assert layout["floor"] == {
-        "id": "level-1",
+        "id": "storey-01",
         "name": "Level 1",
         "elevation_m": 3.0,
         "default_ceiling_height_m": 3.0,
@@ -387,13 +391,13 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
         }
     }
 
-    def get_container(entity, *, should_get_direct, ifc_class):
-        assert entity is space
-        assert should_get_direct is False
-        assert ifc_class == "IfcBuildingStorey"
-        return storey
+    def get_aggregate(entity):
+        if entity is space:
+            return storey
+        return None
 
-    element.get_container = get_container
+    element.get_aggregate = get_aggregate
+    element.get_container = lambda *_args, **_kwargs: None
     placement = sys.modules["ifcopenshell.util.placement"]
 
     def get_local_placement(value):

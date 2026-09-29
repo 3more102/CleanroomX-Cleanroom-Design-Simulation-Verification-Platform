@@ -35,6 +35,7 @@ from .bim_ifc import (
     IfcImportError,
     apply_ifc_semantics_to_project,
     extract_ifc_semantics,
+    layout_from_ifc_semantics,
     plan_ifc_semantic_reimport,
     reimport_ifc_semantics_to_project,
 )
@@ -1491,6 +1492,18 @@ class CleanroomXApp:
         if callable(wait_window):
             wait_window(dialog)
 
+    def _extract_ifc_candidate(
+        self,
+        source: Path,
+    ) -> tuple[dict, dict[str, str]]:
+        """Extract an IFC candidate and bind provenance to the selected filename."""
+        semantics, provenance = extract_ifc_semantics(source)
+        if provenance.get("source_name") != source.name:
+            raise IfcImportError(
+                "IFC provenance source name does not match the selected file"
+            )
+        return semantics, provenance
+
     def _revalidate_reviewed_ifc_source(
         self,
         source: Path,
@@ -1499,7 +1512,7 @@ class CleanroomXApp:
         expected_provenance: dict[str, str],
     ) -> tuple[dict, dict[str, str]]:
         """Reject review-to-apply IFC source drift before project mutation."""
-        semantics, provenance = extract_ifc_semantics(source)
+        semantics, provenance = self._extract_ifc_candidate(source)
         if (
             provenance.get("source_sha256")
             != expected_provenance.get("source_sha256")
@@ -1545,22 +1558,50 @@ class CleanroomXApp:
         if not self._prepare_project_history_action("import IFC spatial data"):
             return False
 
-        if SPATIAL_METADATA_KEY in self.project.metadata:
-            replace = messagebox.askyesno(
-                "Replace existing spatial layout?",
-                (
-                    "This project already contains an unlinked spatial layout. The IFC "
-                    "import will replace that spatial layout and establish a new IFC "
-                    "identity baseline. Engineering analysis inputs are not changed "
-                    "automatically.\n\nContinue?"
-                ),
-                parent=self.root,
+        try:
+            semantics, provenance = self._extract_ifc_candidate(source)
+            preview = layout_from_ifc_semantics(semantics)
+        except Exception as exc:
+            self.status_var.set("IFC import failed")
+            messagebox.showerror("IFC import failed", str(exc), parent=self.root)
+            return False
+
+        existing_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
+        has_existing_layout = bool(
+            isinstance(existing_layout, dict)
+            and (existing_layout.get("rooms") or existing_layout.get("devices"))
+        )
+        if has_existing_layout:
+            warning = (
+                "This project already contains an unlinked spatial layout. The IFC "
+                "import will replace that spatial layout and establish a new IFC "
+                "identity baseline."
             )
-            if not replace:
-                return False
+        else:
+            warning = "This will establish the project's first IFC identity baseline."
+
+        confirmed = messagebox.askyesno(
+            "Import IFC spatial layout?",
+            (
+                f"{warning}\n\n"
+                f"Source: {provenance['source_name']}\n"
+                f"Rooms: {len(preview['rooms'])}\n"
+                f"Devices: {len(preview['devices'])}\n"
+                f"Source SHA-256: {provenance['source_sha256']}\n\n"
+                "Engineering analysis inputs are not changed automatically. Continue?"
+            ),
+            parent=self.root,
+        )
+        if not confirmed:
+            self.status_var.set("IFC import cancelled")
+            return False
 
         try:
-            semantics, provenance = extract_ifc_semantics(source)
+            semantics, provenance = self._revalidate_reviewed_ifc_source(
+                source,
+                expected_semantics=semantics,
+                expected_provenance=provenance,
+            )
             layout = self._perform_project_edit(
                 "Import IFC spatial layout",
                 lambda: apply_ifc_semantics_to_project(

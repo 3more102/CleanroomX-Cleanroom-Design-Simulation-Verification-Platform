@@ -878,29 +878,36 @@ def reimport_ifc_semantics_to_project(
     return report
 
 
-def _placement_xyz_m(entity: Any, unit_scale: float) -> tuple[float, float, float]:
-    """Resolve nested IfcLocalPlacement translations into metres."""
-    x = y = z = 0.0
+def _placement_xyz_m(
+    entity: Any,
+    unit_scale: float,
+    placement_util: Any,
+) -> tuple[float, float, float]:
+    """Resolve an IFC object's full nested local-placement transform into metres."""
     placement = getattr(entity, "ObjectPlacement", None)
-    visited: set[int] = set()
-    while placement is not None:
-        marker = id(placement)
-        if marker in visited:
-            raise IfcImportError("cyclic IFC object placement detected")
-        visited.add(marker)
-        relative = getattr(placement, "RelativePlacement", None)
-        location = getattr(relative, "Location", None)
-        coordinates = getattr(location, "Coordinates", None)
-        if coordinates:
-            values = list(coordinates)
-            if len(values) > 0:
-                x += float(values[0]) * unit_scale
-            if len(values) > 1:
-                y += float(values[1]) * unit_scale
-            if len(values) > 2:
-                z += float(values[2]) * unit_scale
-        placement = getattr(placement, "PlacementRelTo", None)
-    return x, y, z
+    if placement is None:
+        return 0.0, 0.0, 0.0
+
+    try:
+        matrix = placement_util.get_local_placement(placement)
+        x = _finite_number(
+            matrix[0][3], field=f"{getattr(entity, 'GlobalId', '?')}.placement_x"
+        )
+        y = _finite_number(
+            matrix[1][3], field=f"{getattr(entity, 'GlobalId', '?')}.placement_y"
+        )
+        z = _finite_number(
+            matrix[2][3], field=f"{getattr(entity, 'GlobalId', '?')}.placement_z"
+        )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to resolve IFC local placement for "
+            f"{getattr(entity, 'GlobalId', '?')!r}"
+        ) from exc
+
+    return x * unit_scale, y * unit_scale, z * unit_scale
 
 
 def _space_dimensions_m(
@@ -939,7 +946,8 @@ def _space_dimensions_m(
         ) from exc
 
 
-def _containing_space_global_id(entity: Any) -> str:
+def _containing_space_global_id(entity: Any, element_util: Any) -> str:
+    """Resolve an explicit or indirect IfcSpace container without geometric inference."""
     for relation in getattr(entity, "ContainedInStructure", ()) or ():
         structure = getattr(relation, "RelatingStructure", None)
         try:
@@ -948,7 +956,29 @@ def _containing_space_global_id(entity: Any) -> str:
             is_space = False
         if is_space:
             return _non_empty_text(getattr(structure, "GlobalId", ""))
-    return ""
+
+    get_container = getattr(element_util, "get_container", None)
+    if not callable(get_container):
+        return ""
+    try:
+        structure = get_container(
+            entity,
+            should_get_direct=False,
+            ifc_class="IfcSpace",
+        )
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to resolve IFC spatial container for "
+            f"{getattr(entity, 'GlobalId', '?')!r}"
+        ) from exc
+    if structure is None:
+        return ""
+    try:
+        if not structure.is_a("IfcSpace"):
+            return ""
+    except Exception:
+        return ""
+    return _non_empty_text(getattr(structure, "GlobalId", ""))
 
 
 def _file_sha256(path: Path) -> str:
@@ -973,6 +1003,7 @@ def extract_ifc_semantics(
     try:
         import ifcopenshell  # type: ignore[import-not-found]
         import ifcopenshell.util.element as element_util  # type: ignore[import-not-found]
+        import ifcopenshell.util.placement as placement_util  # type: ignore[import-not-found]
         import ifcopenshell.util.unit as unit_util  # type: ignore[import-not-found]
     except ImportError as exc:
         raise IfcImportError(
@@ -985,11 +1016,14 @@ def extract_ifc_semantics(
     except Exception as exc:
         raise IfcImportError(f"unable to open IFC file {source}") from exc
 
-    unit_scale = float(unit_util.calculate_unit_scale(model))
+    unit_scale = _positive_number(
+        unit_util.calculate_unit_scale(model),
+        field="IFC length unit scale",
+    )
     records: list[dict[str, Any]] = []
 
     for entity in model.by_type("IfcSpace"):
-        x, y, z = _placement_xyz_m(entity, unit_scale)
+        x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
         length, width, height = _space_dimensions_m(
             entity, unit_scale, element_util
         )
@@ -1022,7 +1056,7 @@ def extract_ifc_semantics(
             if not global_id or global_id in seen:
                 continue
             seen.add(global_id)
-            x, y, z = _placement_xyz_m(entity, unit_scale)
+            x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
             record: dict[str, Any] = {
                 "global_id": global_id,
                 "ifc_class": ifc_class,
@@ -1033,7 +1067,7 @@ def extract_ifc_semantics(
                 "y_m": y,
                 "z_m": z,
             }
-            room_global_id = _containing_space_global_id(entity)
+            room_global_id = _containing_space_global_id(entity, element_util)
             if room_global_id:
                 record["room_global_id"] = room_global_id
             predefined_type = _non_empty_text(

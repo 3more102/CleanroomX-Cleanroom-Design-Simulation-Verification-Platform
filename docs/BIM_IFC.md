@@ -20,9 +20,11 @@ The importer currently supports:
 - `IfcFlowController`, `IfcUnitaryEquipment`, `IfcFan`, `IfcPump`, and
   `IfcFurnishingElement` -> equipment
 - IFC unit scaling to metres through IfcOpenShell
-- nested local-placement translation origins
+- full nested local-placement transforms for element origins through IfcOpenShell,
+  including parent rotation and translation
 - space Length / Width / Height base quantities
-- containment links from supported devices to `IfcSpace`
+- explicit and indirect spatial-containment resolution from supported devices to
+  `IfcSpace` through IfcOpenShell, without geometric room inference
 - deterministic normalized semantic records
 - duplicate `GlobalId` and dangling-space rejection
 - semantic SHA-256 and original IFC source SHA-256 provenance
@@ -182,11 +184,19 @@ This is a semantic and quantity-based interoperability layer, not a full IFC
 geometric kernel.
 
 The current CleanroomX spatial contract is axis-aligned. The bridge therefore
-uses room Length / Width / Height quantities and placement origins. Parent
-translations are resolved, but arbitrary parent rotation, B-Rep tessellation,
-complex solids, curved boundaries, multi-storey decomposition, door/window
-void geometry, and automatic engineering-analysis reconciliation are not yet
-claimed.
+uses room Length / Width / Height quantities and transformed placement origins.
+IfcOpenShell's full nested local-placement transform is used for those origins,
+so rotated parent placements no longer lose their translated world position.
+However, CleanroomX still does not rotate the axis-aligned room footprint or
+reconstruct arbitrary room/device solids. B-Rep tessellation, complex solids,
+curved boundaries, multi-storey decomposition, door/window void geometry, and
+automatic engineering-analysis reconciliation are not yet claimed.
+
+Device-to-room linkage uses explicit `IfcSpace` containment first and then
+IfcOpenShell's indirect spatial-container resolution. It does not infer room
+membership from coordinates, bounding boxes, or proximity. If no `IfcSpace`
+container is established by the IFC relationship graph, the imported device
+remains unassigned rather than being guessed into a room.
 
 Those limitations are explicit so imported data cannot silently imply geometric
 precision that the current model does not preserve.
@@ -195,11 +205,10 @@ precision that the current model does not preserve.
 
 The bridge establishes stable IFC identity and provenance needed for later work:
 
-1. geometry/tessellation and rotated-coordinate support;
+1. geometry/tessellation and rotated room/device footprint support;
 2. explicit IFC storey/floor mapping;
 3. IFC property-set mapping to cleanroom classifications and engineering inputs;
-4. GUI import/review workflow;
-5. bidirectional synchronization and digital-twin/CFD integration.
+4. bidirectional synchronization and digital-twin/CFD integration.
 
 No IFC-derived engineering value is currently written directly into a solver
 input without an explicit future synchronization step.

@@ -69,16 +69,117 @@ def _install_empty_ifcopenshell(monkeypatch):
     util = types.ModuleType("ifcopenshell.util")
     util.__path__ = []
     element = types.ModuleType("ifcopenshell.util.element")
+    placement = types.ModuleType("ifcopenshell.util.placement")
     unit = types.ModuleType("ifcopenshell.util.unit")
     unit.calculate_unit_scale = lambda _model: 1.0
 
     ifcopenshell.util = util
     util.element = element
+    util.placement = placement
     util.unit = unit
     monkeypatch.setitem(sys.modules, "ifcopenshell", ifcopenshell)
     monkeypatch.setitem(sys.modules, "ifcopenshell.util", util)
     monkeypatch.setitem(sys.modules, "ifcopenshell.util.element", element)
+    monkeypatch.setitem(sys.modules, "ifcopenshell.util.placement", placement)
     monkeypatch.setitem(sys.modules, "ifcopenshell.util.unit", unit)
+
+
+def test_ifc_placement_uses_full_ifcopenshell_transform_matrix():
+    entity = types.SimpleNamespace(
+        GlobalId="SPACE-ROTATED",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (0.0, -1.0, 0.0, 1200.0),
+                (1.0, 0.0, 0.0, 700.0),
+                (0.0, 0.0, 1.0, 300.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    assert bim_ifc_module._placement_xyz_m(
+        entity, 0.001, PlacementUtil
+    ) == pytest.approx((1.2, 0.7, 0.3))
+
+
+def test_ifc_placement_rejects_invalid_transform_values():
+    entity = types.SimpleNamespace(
+        GlobalId="SPACE-BAD",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (1.0, 0.0, 0.0, float("nan")),
+                (0.0, 1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    with pytest.raises(IfcImportError, match="placement_x must be a finite number"):
+        bim_ifc_module._placement_xyz_m(entity, 1.0, PlacementUtil)
+
+
+def test_ifc_space_container_resolution_uses_indirect_ifcopenshell_container():
+    class Space:
+        GlobalId = "SPACE-INDIRECT"
+
+        @staticmethod
+        def is_a(name):
+            return name == "IfcSpace"
+
+    calls = []
+
+    class ElementUtil:
+        @staticmethod
+        def get_container(entity, *, should_get_direct, ifc_class):
+            calls.append((entity, should_get_direct, ifc_class))
+            return Space()
+
+    entity = types.SimpleNamespace(
+        GlobalId="AT-INDIRECT",
+        ContainedInStructure=(),
+    )
+
+    assert (
+        bim_ifc_module._containing_space_global_id(entity, ElementUtil)
+        == "SPACE-INDIRECT"
+    )
+    assert calls == [(entity, False, "IfcSpace")]
+
+
+def test_ifc_space_container_resolution_prefers_explicit_space_relation():
+    class Space:
+        def __init__(self, global_id):
+            self.GlobalId = global_id
+
+        @staticmethod
+        def is_a(name):
+            return name == "IfcSpace"
+
+    direct = Space("SPACE-DIRECT")
+
+    class ElementUtil:
+        @staticmethod
+        def get_container(*_args, **_kwargs):
+            raise AssertionError("fallback container lookup should not be used")
+
+    entity = types.SimpleNamespace(
+        GlobalId="AT-DIRECT",
+        ContainedInStructure=(
+            types.SimpleNamespace(RelatingStructure=direct),
+        ),
+    )
+
+    assert (
+        bim_ifc_module._containing_space_global_id(entity, ElementUtil)
+        == "SPACE-DIRECT"
+    )
 
 
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):

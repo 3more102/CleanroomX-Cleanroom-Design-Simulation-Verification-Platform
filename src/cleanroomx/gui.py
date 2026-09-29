@@ -1899,6 +1899,26 @@ class CleanroomXApp:
         self.root.wait_window(dialog)
         return bool(dialog.result)
 
+    def _revalidate_ifc_candidate(
+        self,
+        path: Path,
+        *,
+        expected_semantics: dict,
+        expected_provenance: dict[str, str],
+    ) -> tuple[dict, dict[str, str]]:
+        """Fail closed if the reviewed IFC source changed before mutation."""
+        semantics, provenance = self._extract_ifc_candidate(path)
+        if (
+            provenance.get("source_sha256") != expected_provenance.get("source_sha256")
+            or semantics.get("semantic_sha256")
+            != expected_semantics.get("semantic_sha256")
+        ):
+            raise IfcImportError(
+                "IFC source changed after it was reviewed; no project changes were "
+                "applied. Review the current IFC file again."
+            )
+        return semantics, provenance
+
     def import_ifc_layout(self) -> bool:
         if not self._prepare_ifc_project_state("import IFC spatial data"):
             return False
@@ -1963,6 +1983,11 @@ class CleanroomXApp:
             return False
 
         try:
+            semantics, provenance = self._revalidate_ifc_candidate(
+                path,
+                expected_semantics=semantics,
+                expected_provenance=provenance,
+            )
             layout = self._perform_project_edit(
                 f"Import IFC spatial layout from {path.name}",
                 lambda: apply_ifc_semantics_to_project(
@@ -2056,6 +2081,11 @@ class CleanroomXApp:
             return False
 
         try:
+            semantics, provenance = self._revalidate_ifc_candidate(
+                path,
+                expected_semantics=semantics,
+                expected_provenance=provenance,
+            )
             applied_report = self._perform_project_edit(
                 f"Apply IFC re-import from {path.name}",
                 lambda: reimport_ifc_semantics_to_project(

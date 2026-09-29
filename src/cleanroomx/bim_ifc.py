@@ -1278,7 +1278,7 @@ def _space_rectangular_prism_bounds_from_geometry_m(
     def clustered(values: list[float]) -> tuple[float, ...]:
         groups: list[list[float]] = []
         for value in sorted(values):
-            if not groups or abs(value - groups[-1][-1]) > tolerance:
+            if not groups or abs(value - groups[-1][0]) > tolerance:
                 groups.append([value])
             else:
                 groups[-1].append(value)
@@ -1503,7 +1503,7 @@ def extract_ifc_semantics(
             length, width, height = _space_dimensions_m(
                 entity, unit_scale, element_util
             )
-        except IfcImportError as quantity_error:
+        except IfcImportError:
             try:
                 x, y, z, length, width, height = (
                     _space_rectangular_prism_bounds_from_geometry_m(entity)

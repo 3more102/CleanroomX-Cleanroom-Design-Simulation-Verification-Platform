@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased next-level BIM — IFC source stability — 2026-09-29
+
+- Streams SHA-256 before and after native IFC semantic extraction and fails closed if the source changes or disappears while IfcOpenShell is reading it.
+- Re-extracts a desktop re-import candidate after review/confirmation and requires both source and semantic digests to remain identical before project mutation.
+- Adds focused regressions for stable extraction, extraction-time source drift, and review-to-apply source drift without changing IFC mapping or engineering semantics.
+
 ## Unreleased next-level BIM — desktop IFC review workflow — 2026-09-29
 
 - Adds a dedicated BIM menu to the desktop application for initial IFC spatial import, read-only re-import review, and guarded application of conflict-free IFC revisions.

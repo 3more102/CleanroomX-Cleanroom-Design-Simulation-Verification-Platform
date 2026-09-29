@@ -22,6 +22,9 @@ The importer currently supports:
 - IFC unit scaling to metres through IfcOpenShell
 - full nested local-placement transforms for element origins through IfcOpenShell,
   including parent rotation and translation
+- world-space plan yaw extraction for supported devices from the transformed local
+  X axis, persisted as CleanroomX `orientation_deg`; unsupported/undefined plan
+  orientation fails closed instead of silently becoming 0°
 - space Length / Width / Height base quantities
 - explicit and indirect spatial-containment resolution from supported devices to
   `IfcSpace` through IfcOpenShell, without geometric room inference

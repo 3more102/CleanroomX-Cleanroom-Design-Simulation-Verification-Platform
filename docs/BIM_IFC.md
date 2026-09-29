@@ -26,6 +26,8 @@ The importer currently supports:
 - deterministic normalized semantic records
 - duplicate `GlobalId` and dangling-space rejection
 - semantic SHA-256 and original IFC source SHA-256 provenance
+- persisted IFC GlobalId -> CleanroomX spatial-ID bindings for stable re-import
+- imported-layout SHA-256 binding so local spatial edits are detected before re-import
 
 The base CleanroomX installation still has no mandatory third-party runtime
 dependencies. Install the optional BIM dependency to read native `.ifc` files:
@@ -55,7 +57,8 @@ The resulting project receives:
 
 - `project.metadata["spatial_layout"]`: validated CleanroomX spatial data
 - `project.metadata["ifc_link"]`: source file name, source SHA-256, normalized
-  semantic SHA-256, and imported room/device counts
+  semantic SHA-256, imported-layout SHA-256, persisted entity-ID bindings, and
+  imported room/device counts
 
 The semantic normalization API is also public. Integrations can provide already
 extracted IFC records without installing IfcOpenShell:
@@ -69,6 +72,30 @@ from cleanroomx.bim_ifc import (
 semantics = normalize_ifc_semantic_records(records)
 layout = layout_from_ifc_semantics(semantics)
 ```
+
+## Safe re-import
+
+When a project already contains an IFC-linked layout, re-import reuses persisted
+IFC `GlobalId` bindings so room and device IDs remain stable even if IFC names
+change. CleanroomX also compares the current spatial layout with the SHA-256 of
+the layout produced by the previous import. If the layout has been edited
+locally, re-import fails closed rather than silently overwriting those changes.
+
+Callers that have intentionally reviewed and accepted replacement of local
+spatial edits can opt in explicitly:
+
+```python
+apply_ifc_semantics_to_project(
+    project,
+    semantics,
+    source_name=provenance["source_name"],
+    source_sha256=provenance["source_sha256"],
+    allow_local_changes=True,
+)
+```
+
+Older IFC links that predate the stored layout digest remain loadable; the next
+successful import records the stronger re-import metadata.
 
 ## Intentional limitations
 
@@ -92,8 +119,8 @@ The bridge establishes stable IFC identity and provenance needed for later work:
 1. geometry/tessellation and rotated-coordinate support;
 2. explicit IFC storey/floor mapping;
 3. IFC property-set mapping to cleanroom classifications and engineering inputs;
-4. conflict-aware re-import using persisted IFC `GlobalId` identity;
-5. GUI import/review workflow;
+4. GUI import/review workflow with an explicit conflict-resolution surface;
+5. property-set mapping to reviewed engineering synchronization proposals;
 6. bidirectional synchronization and digital-twin/CFD integration.
 
 No IFC-derived engineering value is currently written directly into a solver

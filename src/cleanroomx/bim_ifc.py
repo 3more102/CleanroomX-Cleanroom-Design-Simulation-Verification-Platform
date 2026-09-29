@@ -321,7 +321,7 @@ def layout_from_ifc_semantics(semantics: dict[str, Any]) -> dict[str, Any]:
         if len(storey_names) <= 1 and len(storey_elevations) <= 1:
             storey_name = next(iter(storey_names), storey_global_id)
             layout["floor"]["id"] = _slug(
-                storey_name, fallback=_slug(storey_global_id, fallback="ifc-storey")
+                storey_global_id, fallback="ifc-storey"
             )
             layout["floor"]["name"] = storey_name
             if len(storey_elevations) == 1:
@@ -1090,28 +1090,53 @@ def _containing_storey_metadata(
     placement_util: Any,
 ) -> dict[str, Any]:
     """Return explicit IfcBuildingStorey identity for a space when available."""
-    get_container = getattr(element_util, "get_container", None)
-    if not callable(get_container):
-        return {}
+    storey = None
 
-    try:
-        storey = get_container(
-            entity,
-            should_get_direct=False,
-            ifc_class="IfcBuildingStorey",
-        )
-    except Exception as exc:
-        raise IfcImportError(
-            f"unable to resolve IFC building storey for "
-            f"{getattr(entity, 'GlobalId', '?')!r}"
-        ) from exc
+    get_aggregate = getattr(element_util, "get_aggregate", None)
+    if callable(get_aggregate):
+        current = entity
+        seen_entities: set[int] = set()
+        while current is not None and id(current) not in seen_entities:
+            seen_entities.add(id(current))
+            try:
+                parent = get_aggregate(current)
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to resolve IFC aggregate hierarchy for "
+                    f"{getattr(entity, 'GlobalId', '?')!r}"
+                ) from exc
+            if parent is None:
+                break
+            try:
+                if parent.is_a("IfcBuildingStorey"):
+                    storey = parent
+                    break
+            except Exception:
+                pass
+            current = parent
+
     if storey is None:
-        return {}
+        get_container = getattr(element_util, "get_container", None)
+        if callable(get_container):
+            try:
+                candidate = get_container(
+                    entity,
+                    should_get_direct=False,
+                    ifc_class="IfcBuildingStorey",
+                )
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to resolve IFC building storey for "
+                    f"{getattr(entity, 'GlobalId', '?')!r}"
+                ) from exc
+            if candidate is not None:
+                try:
+                    if candidate.is_a("IfcBuildingStorey"):
+                        storey = candidate
+                except Exception:
+                    storey = None
 
-    try:
-        if not storey.is_a("IfcBuildingStorey"):
-            return {}
-    except Exception:
+    if storey is None:
         return {}
 
     storey_global_id = _non_empty_text(getattr(storey, "GlobalId", ""))
@@ -1143,7 +1168,6 @@ def _containing_storey_metadata(
                 * unit_scale
             )
     return metadata
-
 
 def _file_sha256(path: Path) -> str:
     digest = sha256()

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level BIM — conflict-aware IFC re-import — 2026-09-29
+
+- Upgrades IFC link metadata to schema v2 with deterministic GlobalId-to-spatial-ID bindings, source-record digests, source-derived spatial-object digests, and a canonical binding-table SHA-256.
+- Adds a read-only re-import planner that classifies unchanged, source-only, local-only, converged, added, removed, and conflicting IFC/spatial changes without mutating the project.
+- Adds transactional re-import that preserves stable CleanroomX spatial IDs, keeps unbound local items, applies conflict-free source changes, and refuses two-sided conflicts or spatially invalid merged candidates.
+- Keeps engineering solvers and analysis inputs untouched; IFC synchronization remains isolated to the existing spatial metadata boundary.
+- Adds regression coverage for stable identity, local-edit preservation, source add/remove, transactional conflict handling, and binding tamper detection.
+
 ## Unreleased next-level Phase 1 — pressure evidence in design assurance — 2026-09-28
 
 - Extends `design_assurance` with an optional canonical `pressure_design_consistency` component while keeping legacy assurance inputs/results unchanged when the field is absent.

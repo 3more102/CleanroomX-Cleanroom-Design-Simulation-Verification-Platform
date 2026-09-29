@@ -105,6 +105,97 @@ def test_ifc_placement_uses_full_ifcopenshell_transform_matrix():
     ) == pytest.approx((1.2, 0.7, 0.3))
 
 
+def test_ifc_device_orientation_uses_world_placement_yaw():
+    entity = types.SimpleNamespace(
+        GlobalId="AT-ROTATED",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (0.0, -1.0, 0.0, 1200.0),
+                (1.0, 0.0, 0.0, 700.0),
+                (0.0, 0.0, 1.0, 300.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    assert bim_ifc_module._placement_orientation_deg(
+        entity, PlacementUtil
+    ) == pytest.approx(90.0)
+
+
+def test_ifc_device_orientation_rejects_undefined_plan_axis():
+    entity = types.SimpleNamespace(
+        GlobalId="AT-VERTICAL-X",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (0.0, 1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0, 0.0),
+                (1.0, 0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    with pytest.raises(IfcImportError, match="no usable plan orientation"):
+        bim_ifc_module._placement_orientation_deg(entity, PlacementUtil)
+
+
+def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    entity = types.SimpleNamespace(
+        GlobalId="AT-EXTRACT",
+        Name="Supply rotated",
+        PredefinedType="SUPPLYAIR",
+        ObjectPlacement=object(),
+        ContainedInStructure=(),
+        OverallWidth=None,
+        OverallHeight=None,
+    )
+
+    class Model:
+        def by_type(self, ifc_class):
+            if ifc_class == "IfcAirTerminal":
+                return [entity]
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+    placement = sys.modules["ifcopenshell.util.placement"]
+    placement.get_local_placement = lambda _placement: (
+        (0.0, -1.0, 0.0, 1000.0),
+        (1.0, 0.0, 0.0, 2000.0),
+        (0.0, 0.0, 1.0, 2800.0),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+    element = sys.modules["ifcopenshell.util.element"]
+    element.get_container = lambda *_args, **_kwargs: None
+    unit = sys.modules["ifcopenshell.util.unit"]
+    unit.calculate_unit_scale = lambda _model: 0.001
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+
+    assert len(semantics["records"]) == 1
+    record = semantics["records"][0]
+    assert record["global_id"] == "AT-EXTRACT"
+    assert record["ifc_class"] == "IfcAirTerminal"
+    assert record["name"] == "Supply rotated"
+    assert record["predefined_type"] == "SUPPLYAIR"
+    assert (record["x_m"], record["y_m"], record["z_m"]) == pytest.approx(
+        (1.0, 2.0, 2.8)
+    )
+    assert record["orientation_deg"] == pytest.approx(90.0)
+
+
 def test_ifc_placement_rejects_invalid_transform_values():
     entity = types.SimpleNamespace(
         GlobalId="SPACE-BAD",

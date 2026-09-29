@@ -119,9 +119,13 @@ mutated.
 
 **Apply IFC Re-import...** always presents that deterministic plan before mutation.
 The Apply button is available only when the candidate is conflict-free and spatially
-valid. Accepted re-imports use the canonical transactional backend, preserve stable
-identity, keep valid local-only edits, refresh the synchronized 2D/3D workspace, and
-enter the same application-wide Undo/Redo history as native design edits.
+valid. Immediately before an accepted import or re-import mutates the project, the
+desktop re-reads the IFC source and verifies both its source SHA-256 and normalized
+semantic SHA-256 still match the reviewed candidate; a changed source fails closed
+and must be reviewed again. Accepted re-imports use the canonical transactional
+backend, preserve stable identity, keep valid local-only edits, refresh the synchronized
+2D/3D workspace, and enter the same application-wide Undo/Redo history as native
+design edits.
 
 Desktop IFC mutations remain unsaved until the operator explicitly saves the
 project, so normal guarded-save revision protection still applies. IFC ingestion

@@ -23,8 +23,8 @@ The importer currently supports:
 - full nested local-placement transforms for element origins through IfcOpenShell,
   including parent rotation and translation
 - world-space plan yaw extraction for supported devices from the transformed local
-  X axis, persisted as CleanroomX `orientation_deg`; unsupported/undefined plan
-  orientation fails closed instead of silently becoming 0°
+  X axis, persisted as CleanroomX `orientation_deg`; a degenerate transformed
+  plan axis is rejected instead of being silently treated as 0°
 - space Length / Width / Height base quantities
 - explicit and indirect spatial-containment resolution from supported devices to
   `IfcSpace` through IfcOpenShell, without geometric room inference

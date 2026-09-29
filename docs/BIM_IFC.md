@@ -85,6 +85,13 @@ command remains responsible for persistence, so existing external-revision check
 save locking, revision history, and recovery behavior remain authoritative. IFC
 operations do not silently synchronize engineering analysis inputs.
 
+Native IFC extraction also hashes the source before and after IfcOpenShell semantic
+extraction. If the bytes change, disappear, or become unreadable during that
+window, extraction is discarded instead of returning semantics bound to stale
+provenance. Together with the review-to-apply re-read above, this protects the full
+source-to-mutation provenance boundary without changing IFC mapping rules,
+engineering inputs, solver equations, or acceptance criteria.
+
 ## API
 
 ```python

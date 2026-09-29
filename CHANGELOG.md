@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased next-level BIM — IFC initial-import review integrity — 2026-09-29
+
+- Adds a source-bound desktop preview before initial IFC mutation, showing the selected filename, extracted room/device counts, and source SHA-256.
+- Requires explicit confirmation when establishing the first IFC identity baseline as well as when replacing an existing unlinked spatial layout.
+- Re-extracts the selected IFC after confirmation and requires both source and semantic SHA-256 values to match the reviewed candidate before project mutation.
+- Rejects provenance whose extracted source filename does not match the operator-selected file.
+- Adds focused GUI regressions for preview-before-mutation, review-to-apply source drift, and selected-file provenance mismatch without changing engineering inputs or acceptance semantics.
+
+
 ## Unreleased next-level BIM — IFC placement and containment fidelity — 2026-09-29
 
 - Uses IfcOpenShell's full nested local-placement transform for imported element origins instead of translation-only accumulation, preserving world-position coordinates across rotated parent placements.

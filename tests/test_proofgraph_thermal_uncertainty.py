@@ -146,7 +146,9 @@ def test_thermal_adapter_preserves_missing_input_provenance_as_traceability_gap(
     traceability = document["verification_runs"][0]["metadata"]["traceability"]
     assert traceability["complete"] is False
     assert "internal_latent_kw" in traceability["missing_provenance"]
-    assert document["verdicts"][0]["status"] == "pass"
+    assert document["verification_runs"][0]["metadata"]["canonical_overall_status"] == "pass"
+    assert document["verdicts"][0]["status"] == "unknown"
+    assert "cannot issue a verified capacity verdict" in document["verdicts"][0]["reason"]
 
 
 def test_thermal_graph_round_trips_and_is_deterministic() -> None:

@@ -6,6 +6,7 @@
 - Requires an import preview/confirmation that surfaces IFC room/device counts and the exact source SHA-256 before creating or replacing the spatial baseline.
 - Surfaces stable IFC GlobalId → CleanroomX spatial identity, local/source change state, proposed actions, conflicts, and candidate validation before re-import.
 - Disables re-import application unless the canonical planner reports a conflict-free, spatially valid candidate.
+- Re-reads the IFC source immediately before accepted desktop import/re-import mutation and rejects review-to-apply source or semantic digest drift.
 - Records accepted IFC mutations in the existing project-wide Undo/Redo transaction stream, refreshes the synchronized 2D/3D workspace, and leaves persistence to the normal guarded project save.
 - Does not reset an existing IFC identity baseline, alter solver equations, change configured engineering acceptance criteria, or silently synchronize engineering inputs.
 

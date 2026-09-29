@@ -30,6 +30,15 @@ from .application import (
     validate_analysis_input,
     validate_application_registry,
 )
+from .bim_ifc import (
+    IFC_LINK_METADATA_KEY,
+    IfcImportError,
+    apply_ifc_semantics_to_project,
+    extract_ifc_semantics,
+    layout_from_ifc_semantics,
+    plan_ifc_semantic_reimport,
+    reimport_ifc_semantics_to_project,
+)
 from .engineering_report import engineering_report_html
 from .persistence import atomic_write_text
 from .project import (
@@ -311,6 +320,118 @@ class RunHistoryDialog(tk.Toplevel):
         self.detail.configure(state="disabled")
 
 
+class IfcReimportPlanDialog(tk.Toplevel):
+    """Review a deterministic IFC re-import plan before any project mutation."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        report: dict,
+        *,
+        allow_apply: bool = False,
+    ):
+        super().__init__(parent)
+        self.title("IFC Re-import Plan")
+        self.geometry("1120x620")
+        self.minsize(860, 460)
+        self.transient(parent)
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.result = False
+
+        summary = report.get("summary", {})
+        summary_text = ", ".join(
+            f"{key}: {summary[key]}" for key in sorted(summary)
+        ) or "No element changes"
+        can_apply = bool(report.get("can_apply"))
+        conflict_count = int(report.get("conflict_count", 0) or 0)
+        validation_error = report.get("candidate_validation_error")
+
+        header = ttk.Frame(self, padding=(10, 10, 10, 4))
+        header.pack(fill="x")
+        ttk.Label(
+            header,
+            text=(
+                f"Source: {report.get('source_name', '')}   "
+                f"Semantic SHA-256: {report.get('semantic_sha256', '')}"
+            ),
+        ).pack(anchor="w")
+        ttk.Label(
+            header,
+            text=(
+                f"Changes: {summary_text}   Conflicts: {conflict_count}   "
+                f"Applicable: {'yes' if can_apply else 'no'}"
+            ),
+        ).pack(anchor="w", pady=(4, 0))
+        if validation_error:
+            ttk.Label(
+                header,
+                text=f"Candidate validation error: {validation_error}",
+            ).pack(anchor="w", pady=(4, 0))
+
+        frame = ttk.Frame(self, padding=(10, 4, 10, 4))
+        frame.pack(fill="both", expand=True)
+        self.tree = ttk.Treeview(
+            frame,
+            columns=(
+                "ifc_class",
+                "kind",
+                "spatial_id",
+                "action",
+                "local_changed",
+                "source_changed",
+            ),
+            show="tree headings",
+        )
+        self.tree.heading("#0", text="IFC GlobalId")
+        self.tree.heading("ifc_class", text="IFC class")
+        self.tree.heading("kind", text="Kind")
+        self.tree.heading("spatial_id", text="CleanroomX ID")
+        self.tree.heading("action", text="Action")
+        self.tree.heading("local_changed", text="Local changed")
+        self.tree.heading("source_changed", text="IFC changed")
+        self.tree.column("#0", width=200)
+        self.tree.column("ifc_class", width=150)
+        self.tree.column("kind", width=90, stretch=False)
+        self.tree.column("spatial_id", width=180)
+        self.tree.column("action", width=130, stretch=False)
+        self.tree.column("local_changed", width=100, stretch=False)
+        self.tree.column("source_changed", width=100, stretch=False)
+        scroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        for item in report.get("changes", []):
+            self.tree.insert(
+                "",
+                "end",
+                text=str(item.get("global_id", "")),
+                values=(
+                    item.get("ifc_class", ""),
+                    item.get("kind", ""),
+                    item.get("spatial_id", ""),
+                    item.get("action", ""),
+                    "yes" if item.get("local_changed") else "no",
+                    "yes" if item.get("source_changed") else "no",
+                ),
+            )
+
+        buttons = ttk.Frame(self, padding=(10, 4, 10, 10))
+        buttons.pack(fill="x")
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+        if allow_apply and can_apply:
+            ttk.Button(
+                buttons,
+                text="Apply Re-import",
+                command=self._accept,
+            ).pack(side="right", padx=(0, 6))
+
+    def _accept(self) -> None:
+        self.result = True
+        self.destroy()
+
+
 class CleanroomXApp:
     def __init__(
         self,
@@ -420,6 +541,22 @@ class CleanroomXApp:
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Run History...", command=self.show_run_history)
         menubar.add_cascade(label="Analysis", menu=analysis_menu)
+
+        bim_menu = tk.Menu(menubar, tearoff=False)
+        bim_menu.add_command(
+            label="Import IFC Spatial Layout...",
+            command=self.import_ifc_layout,
+        )
+        bim_menu.add_separator()
+        bim_menu.add_command(
+            label="Plan IFC Re-import...",
+            command=self.plan_ifc_reimport,
+        )
+        bim_menu.add_command(
+            label="Apply IFC Re-import...",
+            command=self.apply_ifc_reimport,
+        )
+        menubar.add_cascade(label="BIM", menu=bim_menu)
 
         self.edit_menu = tk.Menu(menubar, tearoff=False)
         self.edit_menu.add_command(
@@ -1708,6 +1845,247 @@ class CleanroomXApp:
                 self.load_project_path(path)
             except Exception as exc:
                 messagebox.showerror("Open failed", str(exc), parent=self.root)
+
+    def _prepare_ifc_project_state(self, action: str) -> bool:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before changing IFC spatial data.",
+                parent=self.root,
+            )
+            return False
+        try:
+            if self._editor_analysis() is not None:
+                self._commit_editor()
+            else:
+                self._sync_metadata()
+        except Exception as exc:
+            messagebox.showerror(
+                f"Cannot {action}",
+                (
+                    "The current project fields and analysis input must be valid "
+                    f"before IFC data can be changed.\n\n{exc}"
+                ),
+                parent=self.root,
+            )
+            return False
+        return True
+
+    def _choose_ifc_path(self, title: str) -> Path | None:
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title=title,
+            filetypes=[
+                ("Industry Foundation Classes", "*.ifc"),
+                ("All files", "*.*"),
+            ],
+        )
+        return Path(path) if path else None
+
+    def _extract_ifc_candidate(self, path: Path) -> tuple[dict, dict[str, str]]:
+        semantics, provenance = extract_ifc_semantics(path)
+        if provenance.get("source_name") != path.name:
+            raise IfcImportError(
+                "IFC provenance source name does not match the selected file"
+            )
+        return semantics, provenance
+
+    def _show_ifc_plan(self, report: dict, *, allow_apply: bool) -> bool:
+        dialog = IfcReimportPlanDialog(
+            self.root,
+            report,
+            allow_apply=allow_apply,
+        )
+        self.root.wait_window(dialog)
+        return bool(dialog.result)
+
+    def import_ifc_layout(self) -> bool:
+        if not self._prepare_ifc_project_state("import IFC spatial data"):
+            return False
+
+        link = self.project.metadata.get(IFC_LINK_METADATA_KEY)
+        if link is not None:
+            messagebox.showwarning(
+                "IFC project already linked",
+                (
+                    "This project already contains IFC identity metadata. Initial "
+                    "import cannot reset that baseline. Use Plan IFC Re-import and "
+                    "Apply IFC Re-import so element identity and conflicts are "
+                    "reviewed safely."
+                ),
+                parent=self.root,
+            )
+            return False
+
+        path = self._choose_ifc_path("Import IFC spatial layout")
+        if path is None:
+            return False
+        try:
+            semantics, provenance = self._extract_ifc_candidate(path)
+            preview = layout_from_ifc_semantics(semantics)
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.status_var.set("IFC import failed")
+            messagebox.showerror(
+                "IFC import failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        existing_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
+        has_spatial_content = bool(
+            isinstance(existing_layout, dict)
+            and (existing_layout.get("rooms") or existing_layout.get("devices"))
+        )
+        if has_spatial_content:
+            warning = (
+                "This project already contains an unlinked spatial layout. Initial "
+                "IFC import will replace that layout and create the IFC identity "
+                "baseline."
+            )
+        else:
+            warning = "This will create the project's IFC-linked spatial layout."
+
+        confirmed = messagebox.askyesno(
+            "Import IFC spatial layout",
+            (
+                f"{warning}\n\n"
+                f"Source: {provenance['source_name']}\n"
+                f"Rooms: {len(preview['rooms'])}\n"
+                f"Devices: {len(preview['devices'])}\n"
+                f"Source SHA-256: {provenance['source_sha256']}\n\n"
+                "The accepted import is recorded as one project edit. Continue?"
+            ),
+            parent=self.root,
+        )
+        if not confirmed:
+            self.status_var.set("IFC import cancelled")
+            return False
+
+        try:
+            layout = self._perform_project_edit(
+                f"Import IFC spatial layout from {path.name}",
+                lambda: apply_ifc_semantics_to_project(
+                    self.project,
+                    semantics,
+                    source_name=provenance["source_name"],
+                    source_sha256=provenance["source_sha256"],
+                ),
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.status_var.set("IFC import failed")
+            messagebox.showerror(
+                "IFC import failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        self.spatial_workspace.refresh()
+        self._update_title()
+        self.status_var.set(
+            f"Imported IFC spatial layout — {len(layout['rooms'])} room(s), "
+            f"{len(layout['devices'])} device(s). Save the project to persist it."
+        )
+        return True
+
+    def plan_ifc_reimport(self) -> bool:
+        if not self._prepare_ifc_project_state("plan IFC re-import"):
+            return False
+        path = self._choose_ifc_path("Plan IFC re-import")
+        if path is None:
+            return False
+        try:
+            semantics, provenance = self._extract_ifc_candidate(path)
+            report = plan_ifc_semantic_reimport(
+                self.project,
+                semantics,
+                source_name=provenance["source_name"],
+                source_sha256=provenance["source_sha256"],
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.status_var.set("IFC re-import planning failed")
+            messagebox.showerror(
+                "IFC re-import planning failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        self._show_ifc_plan(report, allow_apply=False)
+        if report["can_apply"]:
+            self.status_var.set(
+                "IFC re-import plan is conflict-free and can be applied."
+            )
+        else:
+            self.status_var.set(
+                f"IFC re-import plan blocked — {report['conflict_count']} conflict(s)."
+            )
+        return True
+
+    def apply_ifc_reimport(self) -> bool:
+        if not self._prepare_ifc_project_state("apply IFC re-import"):
+            return False
+        path = self._choose_ifc_path("Review and apply IFC re-import")
+        if path is None:
+            return False
+        try:
+            semantics, provenance = self._extract_ifc_candidate(path)
+            report = plan_ifc_semantic_reimport(
+                self.project,
+                semantics,
+                source_name=provenance["source_name"],
+                source_sha256=provenance["source_sha256"],
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.status_var.set("IFC re-import planning failed")
+            messagebox.showerror(
+                "IFC re-import planning failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        if not self._show_ifc_plan(report, allow_apply=True):
+            if not report["can_apply"]:
+                self.status_var.set(
+                    "IFC re-import was not applied because the candidate is blocked."
+                )
+            else:
+                self.status_var.set("IFC re-import cancelled after review.")
+            return False
+
+        try:
+            applied_report = self._perform_project_edit(
+                f"Apply IFC re-import from {path.name}",
+                lambda: reimport_ifc_semantics_to_project(
+                    self.project,
+                    semantics,
+                    source_name=provenance["source_name"],
+                    source_sha256=provenance["source_sha256"],
+                ),
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.status_var.set("IFC re-import failed")
+            messagebox.showerror(
+                "IFC re-import failed",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        self.spatial_workspace.refresh()
+        self._update_title()
+        changed = sum(
+            count
+            for action, count in applied_report["summary"].items()
+            if action not in {"unchanged", "preserve_local"}
+        )
+        self.status_var.set(
+            f"Applied IFC re-import — {changed} source-driven change(s). "
+            "Save the project to persist it."
+        )
+        return True
 
     def open_portable_project_bundle(self) -> None:
         if self._running:

@@ -7,8 +7,24 @@ import pytest
 
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
-from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.bim_ifc import (
+    IFC_LINK_METADATA_KEY,
+    apply_ifc_semantics_to_project,
+    normalize_ifc_semantic_records,
+)
+from cleanroomx.gui import (
+    CleanroomXApp,
+    _strict_json_loads,
+    flatten_json,
+    main,
+    unit_hint,
+)
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    load_project_document,
+    new_project,
+)
 from cleanroomx.run_history import (
     RUN_HISTORY_METADATA_KEY,
     append_run_history_record,
@@ -18,6 +34,32 @@ from cleanroomx.run_history import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _ifc_gui_records():
+    return [
+        {
+            "global_id": "SPACE-001",
+            "ifc_class": "IfcSpace",
+            "name": "ISO 7 Process",
+            "x_m": 1.0,
+            "y_m": 2.0,
+            "z_m": 0.0,
+            "length_m": 6.0,
+            "width_m": 5.0,
+            "height_m": 3.0,
+        },
+        {
+            "global_id": "AT-001",
+            "ifc_class": "IfcAirTerminal",
+            "name": "Supply 01",
+            "room_global_id": "SPACE-001",
+            "predefined_type": "SUPPLYAIR",
+            "x_m": 2.0,
+            "y_m": 3.0,
+            "z_m": 2.8,
+        },
+    ]
 
 
 def test_unit_hint_recognizes_engineering_units():
@@ -711,6 +753,255 @@ def test_import_input_json_preserves_source_file_reference_context(tmp_path, mon
         assert (project_dir / analysis.input[key]).resolve() == (
             import_dir / filename
         ).resolve()
+
+
+def test_gui_initial_ifc_import_previews_counts_and_refreshes_workspace(
+    tmp_path, monkeypatch
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Workspace:
+        def __init__(self):
+            self.refresh_count = 0
+
+        def refresh(self):
+            self.refresh_count += 1
+
+    project = new_project("GUI IFC")
+    semantics = normalize_ifc_semantic_records(_ifc_gui_records())
+    source = tmp_path / "facility.ifc"
+    source.write_text("placeholder", encoding="utf-8")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app.spatial_workspace = Workspace()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: source
+    app._extract_ifc_candidate = lambda path: (
+        semantics,
+        {"source_name": source.name, "source_sha256": "a" * 64},
+    )
+    app._perform_project_edit = lambda description, mutation: mutation()
+    app._update_title = lambda: None
+
+    confirmations = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda title, message, parent=None: confirmations.append(
+            (title, message)
+        )
+        or True,
+    )
+
+    assert app.import_ifc_layout() is True
+
+    assert confirmations
+    assert "Rooms: 1" in confirmations[0][1]
+    assert "Devices: 1" in confirmations[0][1]
+    assert f"Source SHA-256: {'a' * 64}" in confirmations[0][1]
+    assert project.metadata[IFC_LINK_METADATA_KEY]["schema_version"] == 2
+    assert project.metadata["spatial_layout"]["rooms"][0]["id"] == "iso-7-process"
+    assert app.spatial_workspace.refresh_count == 1
+    assert "Imported IFC" in app.status_var.value
+
+
+def test_gui_initial_ifc_import_refuses_to_reset_current_identity_link(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project = new_project("GUI IFC")
+    semantics = normalize_ifc_semantic_records(_ifc_gui_records())
+    apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: (_ for _ in ()).throw(
+        AssertionError("current IFC link must be rejected before choosing a source")
+    )
+
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    assert app.import_ifc_layout() is False
+    assert warnings
+    assert warnings[0][0] == "IFC project already linked"
+
+
+
+def test_gui_initial_ifc_import_refuses_to_reset_legacy_identity_link(monkeypatch):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project = new_project("GUI IFC legacy")
+    project.metadata[IFC_LINK_METADATA_KEY] = {
+        "schema": "cleanroomx.ifc-link",
+        "schema_version": 1,
+        "source_name": "legacy.ifc",
+        "source_sha256": "a" * 64,
+        "semantic_sha256": "b" * 64,
+    }
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: (_ for _ in ()).throw(
+        AssertionError("legacy IFC identity must not be reset by initial import")
+    )
+
+    warnings = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showwarning",
+        lambda title, message, parent=None: warnings.append((title, message)),
+    )
+
+    before = json.loads(json.dumps(project.metadata))
+    assert app.import_ifc_layout() is False
+    assert project.metadata == before
+    assert warnings
+    assert "cannot reset" in warnings[0][1].lower()
+
+def test_gui_ifc_reimport_conflict_review_does_not_mutate_project(tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project = new_project("GUI IFC")
+    original = normalize_ifc_semantic_records(_ifc_gui_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    project.metadata["spatial_layout"]["rooms"][0]["length_m"] = 6.25
+    before = json.loads(json.dumps(project.metadata))
+
+    revised_records = _ifc_gui_records()
+    revised_records[0]["length_m"] = 6.75
+    revised = normalize_ifc_semantic_records(revised_records)
+    source = tmp_path / "facility-v2.ifc"
+    source.write_text("placeholder", encoding="utf-8")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: source
+    app._extract_ifc_candidate = lambda path: (
+        revised,
+        {"source_name": source.name, "source_sha256": "b" * 64},
+    )
+    reviewed = []
+    app._show_ifc_plan = lambda report, allow_apply: reviewed.append(
+        (report, allow_apply)
+    ) or False
+    app._perform_project_edit = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("conflicting re-import must not mutate the project")
+    )
+
+    assert app.apply_ifc_reimport() is False
+
+    assert project.metadata == before
+    assert reviewed
+    report, allow_apply = reviewed[0]
+    assert allow_apply is True
+    assert report["can_apply"] is False
+    assert report["conflict_count"] == 1
+    conflict = next(
+        item for item in report["changes"] if item["action"] == "conflict"
+    )
+    assert conflict["global_id"] == "SPACE-001"
+    assert "blocked" in app.status_var.value.lower()
+
+
+def test_gui_ifc_reimport_applies_reviewed_conflict_free_plan(tmp_path):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    class Workspace:
+        def __init__(self):
+            self.refresh_count = 0
+
+        def refresh(self):
+            self.refresh_count += 1
+
+    project = new_project("GUI IFC")
+    original = normalize_ifc_semantic_records(_ifc_gui_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    room_id = project.metadata["spatial_layout"]["rooms"][0]["id"]
+
+    revised_records = _ifc_gui_records()
+    revised_records[0]["name"] = "Renamed Process"
+    revised_records[0]["length_m"] = 7.0
+    revised = normalize_ifc_semantic_records(revised_records)
+    source = tmp_path / "facility-v2.ifc"
+    source.write_text("placeholder", encoding="utf-8")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app.spatial_workspace = Workspace()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: source
+    app._extract_ifc_candidate = lambda path: (
+        revised,
+        {"source_name": source.name, "source_sha256": "b" * 64},
+    )
+    reviewed = []
+    app._show_ifc_plan = lambda report, allow_apply: reviewed.append(
+        (report, allow_apply)
+    ) or True
+    edits = []
+
+    def perform(description, mutation):
+        edits.append(description)
+        return mutation()
+
+    app._perform_project_edit = perform
+    app._update_title = lambda: None
+
+    assert app.apply_ifc_reimport() is True
+
+    room = project.metadata["spatial_layout"]["rooms"][0]
+    assert room["id"] == room_id
+    assert room["name"] == "Renamed Process"
+    assert room["length_m"] == 7.0
+    assert edits == ["Apply IFC re-import from facility-v2.ifc"]
+    assert reviewed
+    assert reviewed[0][0]["summary"]["update"] >= 1
+    assert reviewed[0][1] is True
+    assert app.spatial_workspace.refresh_count == 1
+    assert "applied" in app.status_var.value.lower()
 
 
 def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_path):

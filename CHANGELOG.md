@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased desktop BIM review — 2026-09-29
+
+- Adds a dedicated desktop **BIM** menu for initial IFC spatial import, read-only re-import planning, and reviewed re-import application.
+- Requires an import preview/confirmation that surfaces IFC room/device counts and the exact source SHA-256 before creating or replacing the spatial baseline.
+- Surfaces stable IFC GlobalId → CleanroomX spatial identity, local/source change state, proposed actions, conflicts, and candidate validation before re-import.
+- Disables re-import application unless the canonical planner reports a conflict-free, spatially valid candidate.
+- Records accepted IFC mutations in the existing project-wide Undo/Redo transaction stream, refreshes the synchronized 2D/3D workspace, and leaves persistence to the normal guarded project save.
+- Does not reset an existing IFC identity baseline, alter solver equations, change configured engineering acceptance criteria, or silently synchronize engineering inputs.
+
 ## Unreleased next-level BIM — conflict-aware IFC re-import — 2026-09-29
 
 - Upgrades IFC link metadata to schema v2 with deterministic GlobalId-to-spatial-ID bindings, source-record digests, source-derived spatial-object digests, and a canonical binding-table SHA-256.

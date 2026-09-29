@@ -100,6 +100,34 @@ The **Abandon** action suppresses the pending result but does not force-terminat
 
 Removing an analysis also clears any retained result owned by that analysis, preventing stale result/report export after deletion.
 
+## IFC import and reviewed re-import
+
+The dedicated **BIM** menu exposes the canonical IFC semantic bridge without
+duplicating synchronization logic in the desktop layer.
+
+**Import IFC Spatial Layout...** reads a native `.ifc` source through the optional
+`cleanroomx[bim]` dependency and first shows the extracted room/device counts plus
+the exact source SHA-256. The operator must explicitly confirm before any mutation.
+If spatial metadata already exists, the same preview states that it will be
+replaced. An existing IFC identity baseline cannot be reset through initial import;
+linked projects must use the reviewed re-import workflow.
+
+**Plan IFC Re-import...** is read-only. It shows each IFC `GlobalId`, its stable
+CleanroomX spatial ID, the proposed action, whether the local and IFC sides changed,
+the conflict count, and candidate spatial-validation status. The project is not
+mutated.
+
+**Apply IFC Re-import...** always presents that deterministic plan before mutation.
+The Apply button is available only when the candidate is conflict-free and spatially
+valid. Accepted re-imports use the canonical transactional backend, preserve stable
+identity, keep valid local-only edits, refresh the synchronized 2D/3D workspace, and
+enter the same application-wide Undo/Redo history as native design edits.
+
+Desktop IFC mutations remain unsaved until the operator explicitly saves the
+project, so normal guarded-save revision protection still applies. IFC ingestion
+remains a semantic/quantity bridge rather than a full geometric kernel, and it does
+not silently rewrite engineering-analysis inputs.
+
 ## Supported workflows
 
 The application catalog is built from the shared backend registry and includes room/project verification, HVAC analysis, recovery qualification, room/qualification/thermal/psychrometric uncertainty, parallel/loop/variable-friction networks, fan operating-point and speed studies, fan-network integrations, fan/loop uncertainty, nonlinear fan/variable-friction loop analysis and uncertainty, damper studies, cross-module consistency, and engineering dossiers.

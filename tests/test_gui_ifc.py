@@ -7,6 +7,7 @@ import cleanroomx.gui as gui_module
 from cleanroomx.bim_ifc import (
     IFC_LINK_METADATA_KEY,
     apply_ifc_semantics_to_project,
+    layout_from_ifc_semantics,
     normalize_ifc_semantic_records,
 )
 from cleanroomx.gui import CleanroomXApp
@@ -114,7 +115,7 @@ def test_gui_ifc_initial_import_establishes_identity_without_touching_analyses(
 def test_gui_ifc_initial_import_requires_explicit_layout_replacement(monkeypatch):
     project = new_project("IFC GUI")
     original = normalize_ifc_semantic_records(_records())
-    project.metadata["spatial_layout"] = gui_module.layout_from_ifc_semantics(original)
+    project.metadata["spatial_layout"] = layout_from_ifc_semantics(original)
     before = copy.deepcopy(project.to_dict())
     app = _app(project)
     _install_source(monkeypatch, _records(), "a" * 64)

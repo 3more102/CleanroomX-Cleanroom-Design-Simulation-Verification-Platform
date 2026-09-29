@@ -72,8 +72,14 @@ The review window shows each IFC `GlobalId`, the mapped CleanroomX spatial ID,
 the planned action, and whether the local project and IFC source changed relative
 to the prior import baseline. A two-sided divergent edit blocks application.
 
-Initial desktop import requires explicit confirmation before replacing an existing
-unlinked spatial layout. Import and re-import modify the in-memory project only;
+Initial desktop import always presents a source-bound preview before project
+mutation, including the selected IFC filename, extracted room/device counts, and
+source SHA-256. It requires explicit confirmation both when establishing the first
+IFC baseline and when replacing an existing unlinked spatial layout. After
+confirmation, CleanroomX re-extracts the selected IFC and requires both source and
+semantic SHA-256 values to remain unchanged before applying the import.
+
+Import and re-import modify the in-memory project only;
 the normal CleanroomX Save command remains responsible for persistence, so existing
 external-revision checks, save locking, revision history, and recovery behavior
 remain authoritative. IFC operations do not silently synchronize engineering
@@ -86,11 +92,13 @@ extraction. If the bytes change, disappear, or become unreadable during that
 window, extraction is discarded instead of returning semantics bound to stale
 provenance.
 
-The desktop **Apply IFC Re-import...** path adds a second boundary around human
-review: after the operator reviews a conflict-free plan and confirms application,
-CleanroomX re-extracts the selected IFC file and requires both the source SHA-256
-and normalized semantic SHA-256 to match the reviewed candidate before any project
-mutation occurs. A changed file must be reviewed again.
+Desktop import/apply paths add a second boundary around human review. After the
+operator reviews the initial-import preview or a conflict-free re-import plan and
+confirms application, CleanroomX re-extracts the selected IFC file and requires
+both the source SHA-256 and normalized semantic SHA-256 to match the reviewed
+candidate before any project mutation occurs. The extracted provenance filename
+must also match the file selected by the operator. A changed or mismatched file
+must be reviewed again.
 
 These checks protect provenance identity only. They do not alter IFC mapping rules,
 engineering inputs, solver equations, or acceptance criteria.

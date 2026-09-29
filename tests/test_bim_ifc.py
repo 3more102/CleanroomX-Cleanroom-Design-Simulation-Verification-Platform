@@ -1,11 +1,16 @@
 import copy
+import sys
+import types
 
 import pytest
+
+import cleanroomx.bim_ifc as bim_ifc_module
 
 from cleanroomx.bim_ifc import (
     IFC_LINK_METADATA_KEY,
     IfcImportError,
     apply_ifc_semantics_to_project,
+    extract_ifc_semantics,
     layout_from_ifc_semantics,
     normalize_ifc_semantic_records,
     plan_ifc_semantic_reimport,
@@ -49,6 +54,63 @@ def _records():
             "z_m": 1.5,
         },
     ]
+
+
+
+def _install_empty_ifcopenshell(monkeypatch):
+    class Model:
+        def by_type(self, _ifc_class):
+            return []
+
+    ifcopenshell = types.ModuleType("ifcopenshell")
+    ifcopenshell.__path__ = []
+    ifcopenshell.open = lambda _path: Model()
+
+    util = types.ModuleType("ifcopenshell.util")
+    util.__path__ = []
+    element = types.ModuleType("ifcopenshell.util.element")
+    unit = types.ModuleType("ifcopenshell.util.unit")
+    unit.calculate_unit_scale = lambda _model: 1.0
+
+    ifcopenshell.util = util
+    util.element = element
+    util.unit = unit
+    monkeypatch.setitem(sys.modules, "ifcopenshell", ifcopenshell)
+    monkeypatch.setitem(sys.modules, "ifcopenshell.util", util)
+    monkeypatch.setitem(sys.modules, "ifcopenshell.util.element", element)
+    monkeypatch.setitem(sys.modules, "ifcopenshell.util.unit", unit)
+
+
+def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+    digests = iter(["a" * 64, "b" * 64])
+    monkeypatch.setattr(
+        bim_ifc_module,
+        "_file_sha256",
+        lambda _path: next(digests),
+    )
+
+    with pytest.raises(IfcImportError, match="changed while it was being read"):
+        extract_ifc_semantics(tmp_path / "facility.ifc")
+
+
+def test_ifc_extraction_binds_digest_only_after_stable_read(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        bim_ifc_module,
+        "_file_sha256",
+        lambda path: calls.append(path) or "a" * 64,
+    )
+
+    semantics, provenance = extract_ifc_semantics(tmp_path / "facility.ifc")
+
+    assert semantics["records"] == []
+    assert provenance == {
+        "source_name": "facility.ifc",
+        "source_sha256": "a" * 64,
+    }
+    assert len(calls) == 2
 
 
 def test_ifc_semantics_are_deterministic_across_record_order():

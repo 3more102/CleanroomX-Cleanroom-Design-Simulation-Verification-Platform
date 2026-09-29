@@ -910,6 +910,43 @@ def _placement_xyz_m(
     return x * unit_scale, y * unit_scale, z * unit_scale
 
 
+def _placement_orientation_deg(
+    entity: Any,
+    placement_util: Any,
+) -> float:
+    """Resolve an IFC object's world-space plan yaw from its local placement."""
+    placement = getattr(entity, "ObjectPlacement", None)
+    if placement is None:
+        return 0.0
+
+    try:
+        matrix = placement_util.get_local_placement(placement)
+        axis_x = _finite_number(
+            matrix[0][0],
+            field=f"{getattr(entity, 'GlobalId', '?')}.placement_axis_x",
+        )
+        axis_y = _finite_number(
+            matrix[1][0],
+            field=f"{getattr(entity, 'GlobalId', '?')}.placement_axis_y",
+        )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to resolve IFC local placement orientation for "
+            f"{getattr(entity, 'GlobalId', '?')!r}"
+        ) from exc
+
+    if math.hypot(axis_x, axis_y) <= 1e-12:
+        raise IfcImportError(
+            f"IFC local placement for {getattr(entity, 'GlobalId', '?')!r} "
+            "has no usable plan orientation"
+        )
+
+    orientation = math.degrees(math.atan2(axis_y, axis_x))
+    return 0.0 if abs(orientation) <= 1e-12 else orientation
+
+
 def _space_dimensions_m(
     entity: Any,
     unit_scale: float,
@@ -1057,6 +1094,7 @@ def extract_ifc_semantics(
                 continue
             seen.add(global_id)
             x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
+            orientation_deg = _placement_orientation_deg(entity, placement_util)
             record: dict[str, Any] = {
                 "global_id": global_id,
                 "ifc_class": ifc_class,
@@ -1066,6 +1104,7 @@ def extract_ifc_semantics(
                 "x_m": x,
                 "y_m": y,
                 "z_m": z,
+                "orientation_deg": orientation_deg,
             }
             room_global_id = _containing_space_global_id(entity, element_util)
             if room_global_id:

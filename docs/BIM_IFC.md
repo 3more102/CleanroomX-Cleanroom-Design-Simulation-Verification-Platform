@@ -14,12 +14,19 @@ The importer currently supports:
 - `IfcSpace` -> CleanroomX room
 - `IfcDoor` -> door
 - `IfcWindow` -> window
-- `IfcAirTerminal` / `IfcFlowTerminal` -> supply, return, or exhaust only when
-  the semantic type identifies that airflow role; ambiguous `IfcAirTerminal`
-  types such as `GRILLE`, `REGISTER`, `LOUVRE`, `USERDEFINED`, and
-  `NOTDEFINED` remain generic equipment instead of being guessed as supply.
-  `DIFFUSER` (and legacy diffuser variants) maps to supply because IFC defines
-  diffuser terminals as supply-air outlets
+- `IfcAirTerminal` -> supply, return, or exhaust only when the semantic
+  type identifies that airflow role; ambiguous types such as `GRILLE`,
+  `REGISTER`, `LOUVRE`, `USERDEFINED`, and `NOTDEFINED` remain generic
+  equipment instead of being guessed as supply. `DIFFUSER` (and legacy
+  diffuser variants) maps to supply because IFC defines diffuser terminals as
+  supply-air outlets
+- direct generic `IfcFlowTerminal` occurrences -> equipment. Native extraction
+  queries this superclass without subtypes so unrelated terminal families (for
+  example sanitary or electrical terminals) are not pulled into the cleanroom
+  device model. CleanroomX does not infer an HVAC airflow role from a generic
+  terminal occurrence, even if an implementation supplies an air-like text
+  token; explicit `IfcAirTerminal` semantics are required for
+  supply/return/exhaust classification
 - `IfcSensor` -> sensor
 - `IfcFlowController`, `IfcUnitaryEquipment`, `IfcFan`, `IfcPump`, and
   `IfcFurnishingElement` -> equipment

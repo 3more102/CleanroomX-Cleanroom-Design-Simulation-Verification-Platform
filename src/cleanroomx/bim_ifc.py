@@ -97,6 +97,13 @@ def _canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def _ifc_managed_layout_sha256(layout: Any) -> str:
+    if not isinstance(layout, dict):
+        raise IfcImportError("IFC-linked spatial layout must be an object")
+    managed = {key: value for key, value in layout.items() if key != "view"}
+    return sha256(_canonical_json(managed)).hexdigest()
+
+
 def _device_type(ifc_class: str, predefined_type: str = "") -> str:
     if ifc_class == "IfcAirTerminal":
         token = predefined_type.upper()
@@ -390,8 +397,11 @@ def apply_ifc_semantics_to_project(
     source_sha256 = _non_empty_text(source_sha256).lower()
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise IfcImportError("source_sha256 must be a SHA-256 hex digest")
+    if not isinstance(allow_local_changes, bool):
+        raise IfcImportError("allow_local_changes must be a boolean")
 
     previous_link = metadata.get(IFC_LINK_METADATA_KEY)
+    current_layout = metadata.get(SPATIAL_METADATA_KEY)
     id_bindings: dict[str, str] = {}
     if isinstance(previous_link, dict):
         raw_bindings = previous_link.get("entity_bindings")
@@ -405,12 +415,9 @@ def apply_ifc_semantics_to_project(
         expected_layout_digest = _non_empty_text(
             previous_link.get("layout_sha256")
         ).lower()
-        current_layout = metadata.get(SPATIAL_METADATA_KEY)
         if expected_layout_digest and current_layout is not None:
             try:
-                current_layout_digest = sha256(
-                    _canonical_json(current_layout)
-                ).hexdigest()
+                current_layout_digest = _ifc_managed_layout_sha256(current_layout)
             except (TypeError, ValueError) as exc:
                 if not allow_local_changes:
                     raise IfcImportError(
@@ -428,6 +435,12 @@ def apply_ifc_semantics_to_project(
                     )
 
     layout = layout_from_ifc_semantics(semantics, id_bindings=id_bindings)
+    if isinstance(previous_link, dict) and isinstance(current_layout, dict):
+        current_view = current_layout.get("view")
+        if isinstance(current_view, dict):
+            layout["view"] = dict(current_view)
+            validate_spatial_layout_document(layout)
+
     checked = normalize_ifc_semantic_records(semantics["records"])
 
     spaces = [
@@ -446,7 +459,7 @@ def apply_ifc_semantics_to_project(
             for item, device in zip(devices, layout["devices"])
         }
     )
-    layout_sha256 = sha256(_canonical_json(layout)).hexdigest()
+    layout_sha256 = _ifc_managed_layout_sha256(layout)
 
     metadata[SPATIAL_METADATA_KEY] = layout
     metadata[IFC_LINK_METADATA_KEY] = {

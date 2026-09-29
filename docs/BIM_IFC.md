@@ -158,8 +158,9 @@ if plan["can_apply"]:
 Re-import compares each bound IFC object against the source-derived spatial
 baseline from the prior import:
 
-- source-only changes are applied while preserving the existing CleanroomX ID;
-- local-only spatial edits are preserved when the IFC object is unchanged;
+- source-only spatial changes are applied while preserving the existing CleanroomX ID;
+- semantic-only IFC record changes are surfaced explicitly as `semantic_update` and refresh provenance without forcing a spatial overwrite;
+- local-only spatial edits are preserved when the source-derived spatial object is unchanged, even when non-spatial IFC semantics changed;
 - source additions and unchanged source deletions are applied;
 - matching two-sided edits are treated as converged;
 - different local and source edits to the same bound object are explicit

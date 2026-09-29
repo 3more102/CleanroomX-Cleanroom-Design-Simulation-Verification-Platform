@@ -176,6 +176,8 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
     )
     element = sys.modules["ifcopenshell.util.element"]
     element.get_container = lambda *_args, **_kwargs: None
+    unit = sys.modules["ifcopenshell.util.unit"]
+    unit.calculate_unit_scale = lambda _model: 0.001
 
     source = tmp_path / "facility.ifc"
     source.write_text("IFC", encoding="utf-8")

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased BIM auditability — IFC space dimension provenance — 2026-09-29
+
+- Records whether each natively extracted `IfcSpace` received Length/Width/Height from explicit IFC quantities (`ifc_quantities`) or the conservative IfcOpenShell rectangular-prism fallback (`ifcopenshell_geometry`).
+- Preserves that optional provenance in normalized IFC semantics and semantic SHA-256 identity while keeping older integration records without the field valid.
+- Makes a source-method change auditable as a semantic-only IFC re-import change when the resulting CleanroomX room geometry is otherwise unchanged.
+- Rejects invented/unknown `dimension_source` values instead of silently accepting ambiguous provenance.
+- Adds normalization, native extraction, and conflict-aware re-import regressions without changing spatial layout schema, solver equations, tolerances, or engineering acceptance semantics.
 ## Unreleased next-level BIM — standards-aligned IFC space geometry fallback — 2026-09-29
 
 - Stops requiring non-standard \`Length\` and \`Width\` values to be present in \`Qto_SpaceBaseQuantities\` for every native \`IfcSpace\` import.

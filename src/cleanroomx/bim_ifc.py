@@ -46,6 +46,10 @@ class IfcImportError(ValueError):
     """Raised when IFC data cannot be converted into a safe CleanroomX layout."""
 
 
+class _IfcSpaceQuantitiesUnavailable(IfcImportError):
+    """Raised when rectangular space dimensions are absent from IFC quantities."""
+
+
 def _non_empty_text(value: Any, fallback: str = "") -> str:
     text = str(value).strip() if value is not None else ""
     return text or fallback
@@ -1176,34 +1180,40 @@ def _space_dimensions_m(
     element_util: Any,
 ) -> tuple[float, float, float]:
     quantities = element_util.get_psets(entity, qtos_only=True)
-    candidates: dict[str, float] = {}
+    raw_candidates: dict[str, Any] = {}
     if isinstance(quantities, dict):
         for values in quantities.values():
             if not isinstance(values, dict):
                 continue
             for key, value in values.items():
-                if key in {"Length", "Width", "Height"} and isinstance(
-                    value, (int, float)
-                ):
-                    candidates.setdefault(key, float(value) * unit_scale)
-    try:
-        return (
-            _positive_number(
-                candidates.get("Length"), field=f"{entity.GlobalId}.Length"
-            ),
-            _positive_number(
-                candidates.get("Width"), field=f"{entity.GlobalId}.Width"
-            ),
-            _positive_number(
-                candidates.get("Height"), field=f"{entity.GlobalId}.Height"
-            ),
+                if key in {"Length", "Width", "Height"}:
+                    raw_candidates.setdefault(key, value)
+
+    missing = [
+        key for key in ("Length", "Width", "Height")
+        if key not in raw_candidates
+    ]
+    if missing:
+        raise _IfcSpaceQuantitiesUnavailable(
+            f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} is missing "
+            f"{', '.join(missing)} quantity data"
         )
-    except IfcImportError as exc:
-        raise IfcImportError(
-            f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} needs positive "
-            "Length, Width, and Height base quantities for the current "
-            "CleanroomX axis-aligned IFC bridge"
-        ) from exc
+
+    dimensions: list[float] = []
+    for key in ("Length", "Width", "Height"):
+        value = raw_candidates[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise IfcImportError(
+                f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} {key} "
+                "quantity must be a finite number"
+            )
+        dimensions.append(
+            _positive_number(
+                float(value) * unit_scale,
+                field=f"{getattr(entity, 'GlobalId', '?')}.{key}",
+            )
+        )
+    return dimensions[0], dimensions[1], dimensions[2]
 
 
 def _space_rectangular_prism_bounds_from_geometry_m(
@@ -1273,7 +1283,7 @@ def _space_rectangular_prism_bounds_from_geometry_m(
         1.0,
         *(abs(component) for point in points for component in point),
     )
-    tolerance = max(1e-7, magnitude * 1e-9)
+    tolerance = max(1e-6, magnitude * 1e-9)
 
     def clustered(values: list[float]) -> tuple[float, ...]:
         groups: list[list[float]] = []
@@ -1332,6 +1342,27 @@ def _space_rectangular_prism_bounds_from_geometry_m(
     length_m = _positive_number(xs[1] - xs[0], field=f"{global_id}.geometry_length")
     width_m = _positive_number(ys[1] - ys[0], field=f"{global_id}.geometry_width")
     height_m = _positive_number(zs[1] - zs[0], field=f"{global_id}.geometry_height")
+    expected_volume_m3 = length_m * width_m * height_m
+    try:
+        geometry_volume_m3 = _finite_number(
+            shape_util.get_volume(geometry),
+            field=f"{global_id}.geometry_volume",
+        )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry volume could not be verified"
+        ) from exc
+    volume_tolerance_m3 = max(1e-9, expected_volume_m3 * 1e-8)
+    if (
+        geometry_volume_m3 <= 0
+        or abs(geometry_volume_m3 - expected_volume_m3) > volume_tolerance_m3
+    ):
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry does not fill its rectangular-prism "
+            "bounds exactly enough for the current CleanroomX room model"
+        )
     return xs[0], ys[0], zs[0], length_m, width_m, height_m
 
 
@@ -1470,8 +1501,9 @@ def extract_ifc_semantics(
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Read an IFC file through optional IfcOpenShell.
 
-    This stage consumes semantic entities, space base quantities, and placement
-    origins. It does not claim complete B-Rep/tessellation interoperability.
+    This stage consumes semantic entities, explicit space dimensions when present,
+    and a conservative rectangular-prism geometry fallback when those dimensions
+    are absent. It does not claim general B-Rep/tessellation interoperability.
     """
     source = Path(path)
     source_digest = _file_sha256(source)
@@ -1503,7 +1535,7 @@ def extract_ifc_semantics(
             length, width, height = _space_dimensions_m(
                 entity, unit_scale, element_util
             )
-        except IfcImportError:
+        except _IfcSpaceQuantitiesUnavailable:
             try:
                 x, y, z, length, width, height = (
                     _space_rectangular_prism_bounds_from_geometry_m(entity)

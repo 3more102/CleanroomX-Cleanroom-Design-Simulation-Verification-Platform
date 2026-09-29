@@ -59,7 +59,7 @@ def _records():
 
 def _install_empty_ifcopenshell(monkeypatch):
     class Model:
-        def by_type(self, _ifc_class):
+        def by_type(self, _ifc_class, include_subtypes=True):
             return []
 
     ifcopenshell = types.ModuleType("ifcopenshell")
@@ -113,6 +113,28 @@ def test_ifc_air_terminal_role_mapping_is_fail_closed(
 def test_ambiguous_ifc_air_terminal_stays_generic_equipment():
     records = _records()
     records[1]["predefined_type"] = "GRILLE"
+
+    semantics = normalize_ifc_semantic_records(records)
+    layout = layout_from_ifc_semantics(semantics)
+
+    assert layout["devices"][0]["type"] == "equipment"
+
+
+@pytest.mark.parametrize(
+    "predefined_type",
+    ["", "SUPPLYAIR", "RETURNAIR", "EXHAUSTAIR", "DIFFUSER", "USERDEFINED"],
+)
+def test_generic_ifc_flow_terminal_role_mapping_is_fail_closed(predefined_type):
+    assert (
+        bim_ifc_module._device_type("IfcFlowTerminal", predefined_type)
+        == "equipment"
+    )
+
+
+def test_generic_ifc_flow_terminal_stays_generic_equipment_in_layout():
+    records = _records()
+    records[1]["ifc_class"] = "IfcFlowTerminal"
+    records[1]["predefined_type"] = "SUPPLYAIR"
 
     semantics = normalize_ifc_semantic_records(records)
     layout = layout_from_ifc_semantics(semantics)
@@ -215,6 +237,30 @@ def test_ifc_cleanroomx_space_pset_rejects_malformed_payload():
 
     with pytest.raises(IfcImportError, match="must be a property mapping"):
         bim_ifc_module._cleanroomx_space_metadata(space, ElementUtil)
+
+
+def test_ifc_extraction_queries_generic_flow_terminal_without_subtypes(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+    calls = []
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            calls.append((ifc_class, include_subtypes))
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+
+    assert semantics["records"] == []
+    assert ("IfcAirTerminal", True) in calls
+    assert ("IfcFlowTerminal", False) in calls
 
 
 def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path):

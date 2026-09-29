@@ -24,7 +24,7 @@ IFC_SEMANTICS_SCHEMA_VERSION = 1
 _IFC_DEVICE_TYPES = {
     "IfcDoor": "door",
     "IfcWindow": "window",
-    "IfcAirTerminal": "supply",
+    "IfcAirTerminal": "equipment",
     "IfcFlowTerminal": "supply",
     "IfcSensor": "sensor",
     "IfcFlowController": "equipment",
@@ -114,7 +114,12 @@ def _device_type(ifc_class: str, predefined_type: str = "") -> str:
             return "return"
         if "EXHAUST" in token:
             return "exhaust"
-        if "SUPPLY" in token:
+        if "SUPPLY" in token or token in {
+            "DIFFUSER",
+            "EYEBALL",
+            "IRIS",
+            "LINEARDIFFUSER",
+        }:
             return "supply"
     return _IFC_DEVICE_TYPES.get(ifc_class, "equipment")
 

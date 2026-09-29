@@ -480,11 +480,48 @@ def test_ifc_space_geometry_fallback_accepts_only_rectangular_prism():
                 (1.0, 8.0, 3.3),
             ]
 
+        @staticmethod
+        def get_volume(_geometry):
+            return 90.0
+
     assert bim_ifc_module._space_rectangular_prism_bounds_from_geometry_m(
         entity,
         geom_module=Geom,
         shape_util=ShapeUtil,
     ) == pytest.approx((-4.0, 2.0, 0.3, 5.0, 6.0, 3.0))
+
+
+def test_ifc_space_geometry_fallback_rejects_non_box_volume():
+    entity = types.SimpleNamespace(GlobalId="SPACE-NONBOX-VOLUME")
+
+    class Geom:
+        class settings:
+            pass
+
+        @staticmethod
+        def create_shape(_settings, _entity):
+            return types.SimpleNamespace(geometry=object())
+
+    class ShapeUtil:
+        @staticmethod
+        def get_shape_vertices(_shape, _geometry):
+            return [
+                (x, y, z)
+                for x in (0.0, 5.0)
+                for y in (0.0, 6.0)
+                for z in (0.0, 3.0)
+            ]
+
+        @staticmethod
+        def get_volume(_geometry):
+            return 45.0
+
+    with pytest.raises(IfcImportError, match="does not fill its rectangular-prism"):
+        bim_ifc_module._space_rectangular_prism_bounds_from_geometry_m(
+            entity,
+            geom_module=Geom,
+            shape_util=ShapeUtil,
+        )
 
 
 def test_ifc_space_geometry_fallback_rejects_rotated_non_axis_aligned_prism():
@@ -517,6 +554,30 @@ def test_ifc_space_geometry_fallback_rejects_rotated_non_axis_aligned_prism():
             geom_module=Geom,
             shape_util=ShapeUtil,
         )
+
+
+def test_ifc_space_invalid_explicit_quantities_do_not_become_geometry_fallback():
+    entity = types.SimpleNamespace(GlobalId="SPACE-BAD-QTO")
+
+    class ElementUtil:
+        @staticmethod
+        def get_psets(_entity, qtos_only):
+            assert qtos_only is True
+            return {
+                "VendorDimensions": {
+                    "Length": -5.0,
+                    "Width": 6.0,
+                    "Height": 3.0,
+                }
+            }
+
+    with pytest.raises(IfcImportError, match="Length must be greater than zero") as exc:
+        bim_ifc_module._space_dimensions_m(entity, 1.0, ElementUtil)
+
+    assert not isinstance(
+        exc.value,
+        bim_ifc_module._IfcSpaceQuantitiesUnavailable,
+    )
 
 
 def test_ifc_extraction_falls_back_to_geometry_without_length_width_qto(

@@ -46,6 +46,10 @@ class IfcImportError(ValueError):
     """Raised when IFC data cannot be converted into a safe CleanroomX layout."""
 
 
+class _IfcSpaceQuantitiesUnavailable(IfcImportError):
+    """Raised when rectangular space dimensions are absent from IFC quantities."""
+
+
 def _non_empty_text(value: Any, fallback: str = "") -> str:
     text = str(value).strip() if value is not None else ""
     return text or fallback
@@ -1176,34 +1180,190 @@ def _space_dimensions_m(
     element_util: Any,
 ) -> tuple[float, float, float]:
     quantities = element_util.get_psets(entity, qtos_only=True)
-    candidates: dict[str, float] = {}
+    raw_candidates: dict[str, Any] = {}
     if isinstance(quantities, dict):
         for values in quantities.values():
             if not isinstance(values, dict):
                 continue
             for key, value in values.items():
-                if key in {"Length", "Width", "Height"} and isinstance(
-                    value, (int, float)
-                ):
-                    candidates.setdefault(key, float(value) * unit_scale)
-    try:
-        return (
-            _positive_number(
-                candidates.get("Length"), field=f"{entity.GlobalId}.Length"
-            ),
-            _positive_number(
-                candidates.get("Width"), field=f"{entity.GlobalId}.Width"
-            ),
-            _positive_number(
-                candidates.get("Height"), field=f"{entity.GlobalId}.Height"
-            ),
+                if key in {"Length", "Width", "Height"}:
+                    raw_candidates.setdefault(key, value)
+
+    missing = [
+        key for key in ("Length", "Width", "Height")
+        if key not in raw_candidates
+    ]
+    if missing:
+        raise _IfcSpaceQuantitiesUnavailable(
+            f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} is missing "
+            f"{', '.join(missing)} quantity data"
         )
-    except IfcImportError as exc:
+
+    dimensions: list[float] = []
+    for key in ("Length", "Width", "Height"):
+        value = raw_candidates[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise IfcImportError(
+                f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} {key} "
+                "quantity must be a finite number"
+            )
+        dimensions.append(
+            _positive_number(
+                float(value) * unit_scale,
+                field=f"{getattr(entity, 'GlobalId', '?')}.{key}",
+            )
+        )
+    return dimensions[0], dimensions[1], dimensions[2]
+
+
+def _space_rectangular_prism_bounds_from_geometry_m(
+    entity: Any,
+    *,
+    geom_module: Any | None = None,
+    shape_util: Any | None = None,
+) -> tuple[float, float, float, float, float, float]:
+    """Return exact world-space bounds for a rectangular-prism IfcSpace.
+
+    IfcOpenShell's shape helper exposes vertices in global coordinates and metres.
+    CleanroomX intentionally accepts only a cuboid vertex topology here; geometry
+    with additional plan coordinates, tilt, or non-rectangular features fails
+    closed instead of being reduced to a misleading bounding box.
+    """
+    global_id = getattr(entity, "GlobalId", "?")
+    if geom_module is None or shape_util is None:
+        try:
+            import ifcopenshell.geom as geom_module
+            import ifcopenshell.util.shape as shape_util
+        except Exception as exc:
+            raise IfcImportError(
+                f"IfcSpace {global_id!r} has no usable Length/Width quantities "
+                "and IfcOpenShell geometry support is unavailable"
+            ) from exc
+
+    try:
+        settings = geom_module.settings()
+        shape = geom_module.create_shape(settings, entity)
+        geometry = getattr(shape, "geometry", None)
+        vertices = shape_util.get_shape_vertices(shape, geometry)
+    except Exception as exc:
         raise IfcImportError(
-            f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} needs positive "
-            "Length, Width, and Height base quantities for the current "
-            "CleanroomX axis-aligned IFC bridge"
+            f"unable to tessellate IfcSpace {global_id!r} for rectangular "
+            "geometry fallback"
         ) from exc
+
+    points: list[tuple[float, float, float]] = []
+    try:
+        for index, vertex in enumerate(vertices):
+            points.append(
+                (
+                    _finite_number(
+                        vertex[0], field=f"{global_id}.geometry[{index}].x"
+                    ),
+                    _finite_number(
+                        vertex[1], field=f"{global_id}.geometry[{index}].y"
+                    ),
+                    _finite_number(
+                        vertex[2], field=f"{global_id}.geometry[{index}].z"
+                    ),
+                )
+            )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry did not expose usable XYZ vertices"
+        ) from exc
+
+    if len(points) < 8:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry is not a complete rectangular prism"
+        )
+
+    magnitude = max(
+        1.0,
+        *(abs(component) for point in points for component in point),
+    )
+    tolerance = max(1e-6, magnitude * 1e-9)
+
+    def clustered(values: list[float]) -> tuple[float, ...]:
+        groups: list[list[float]] = []
+        for value in sorted(values):
+            if not groups or abs(value - groups[-1][0]) > tolerance:
+                groups.append([value])
+            else:
+                groups[-1].append(value)
+        return tuple(sum(group) / len(group) for group in groups)
+
+    xs = clustered([point[0] for point in points])
+    ys = clustered([point[1] for point in points])
+    zs = clustered([point[2] for point in points])
+    if len(xs) != 2 or len(ys) != 2 or len(zs) != 2:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry is not an axis-aligned rectangular "
+            "prism representable by the current CleanroomX room model"
+        )
+
+    def cluster_index(value: float, centers: tuple[float, ...]) -> int:
+        distance, index = min(
+            (abs(value - center), index)
+            for index, center in enumerate(centers)
+        )
+        if distance > tolerance:
+            raise IfcImportError(
+                f"IfcSpace {global_id!r} geometry exceeds rectangular-prism "
+                "coordinate tolerance"
+            )
+        return index
+
+    occupied = {
+        (
+            cluster_index(x, xs),
+            cluster_index(y, ys),
+            cluster_index(z, zs),
+        )
+        for x, y, z in points
+    }
+    expected = {
+        (0, 0, 0),
+        (0, 0, 1),
+        (0, 1, 0),
+        (0, 1, 1),
+        (1, 0, 0),
+        (1, 0, 1),
+        (1, 1, 0),
+        (1, 1, 1),
+    }
+    if occupied != expected:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry does not contain exactly the "
+            "rectangular-prism corner topology required by CleanroomX"
+        )
+
+    length_m = _positive_number(xs[1] - xs[0], field=f"{global_id}.geometry_length")
+    width_m = _positive_number(ys[1] - ys[0], field=f"{global_id}.geometry_width")
+    height_m = _positive_number(zs[1] - zs[0], field=f"{global_id}.geometry_height")
+    expected_volume_m3 = length_m * width_m * height_m
+    try:
+        geometry_volume_m3 = _finite_number(
+            shape_util.get_volume(geometry),
+            field=f"{global_id}.geometry_volume",
+        )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry volume could not be verified"
+        ) from exc
+    volume_tolerance_m3 = max(1e-9, expected_volume_m3 * 1e-8)
+    if (
+        geometry_volume_m3 <= 0
+        or abs(geometry_volume_m3 - expected_volume_m3) > volume_tolerance_m3
+    ):
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} geometry does not fill its rectangular-prism "
+            "bounds exactly enough for the current CleanroomX room model"
+        )
+    return xs[0], ys[0], zs[0], length_m, width_m, height_m
 
 
 def _containing_space_global_id(entity: Any, element_util: Any) -> str:
@@ -1341,8 +1501,9 @@ def extract_ifc_semantics(
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Read an IFC file through optional IfcOpenShell.
 
-    This stage consumes semantic entities, space base quantities, and placement
-    origins. It does not claim complete B-Rep/tessellation interoperability.
+    This stage consumes semantic entities, explicit space dimensions when present,
+    and a conservative rectangular-prism geometry fallback when those dimensions
+    are absent. It does not claim general B-Rep/tessellation interoperability.
     """
     source = Path(path)
     source_digest = _file_sha256(source)
@@ -1370,16 +1531,29 @@ def extract_ifc_semantics(
     records: list[dict[str, Any]] = []
 
     for entity in model.by_type("IfcSpace"):
-        length, width, height = _space_dimensions_m(
-            entity, unit_scale, element_util
-        )
-        x, y, z, length, width = _space_axis_aligned_bounds_m(
-            entity,
-            length,
-            width,
-            unit_scale,
-            placement_util,
-        )
+        try:
+            length, width, height = _space_dimensions_m(
+                entity, unit_scale, element_util
+            )
+        except _IfcSpaceQuantitiesUnavailable:
+            try:
+                x, y, z, length, width, height = (
+                    _space_rectangular_prism_bounds_from_geometry_m(entity)
+                )
+            except IfcImportError as geometry_error:
+                raise IfcImportError(
+                    f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} cannot be "
+                    "represented safely: provide positive Length/Width/Height "
+                    "quantities or an axis-aligned rectangular-prism geometry"
+                ) from geometry_error
+        else:
+            x, y, z, length, width = _space_axis_aligned_bounds_m(
+                entity,
+                length,
+                width,
+                unit_scale,
+                placement_util,
+            )
         global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
         record: dict[str, Any] = {
             "global_id": global_id,

@@ -25,7 +25,7 @@ _IFC_DEVICE_TYPES = {
     "IfcDoor": "door",
     "IfcWindow": "window",
     "IfcAirTerminal": "equipment",
-    "IfcFlowTerminal": "supply",
+    "IfcFlowTerminal": "equipment",
     "IfcSensor": "sensor",
     "IfcFlowController": "equipment",
     "IfcUnitaryEquipment": "equipment",
@@ -1319,7 +1319,11 @@ def extract_ifc_semantics(
     seen = {item["global_id"] for item in records}
     for ifc_class in _IFC_DEVICE_TYPES:
         try:
-            entities = model.by_type(ifc_class)
+            if ifc_class == "IfcFlowTerminal":
+                # IfcOpenShell includes subtypes by default; keep this generic query exact.
+                entities = model.by_type(ifc_class, include_subtypes=False)
+            else:
+                entities = model.by_type(ifc_class)
         except Exception:
             continue
         for entity in entities:

@@ -119,6 +119,28 @@ def test_ambiguous_ifc_air_terminal_stays_generic_equipment():
 
     assert layout["devices"][0]["type"] == "equipment"
 
+@pytest.mark.parametrize(
+    "predefined_type",
+    ["", "SUPPLYAIR", "RETURNAIR", "EXHAUSTAIR", "DIFFUSER", "USERDEFINED"],
+)
+def test_generic_ifc_flow_terminal_role_mapping_is_fail_closed(predefined_type):
+    assert (
+        bim_ifc_module._device_type("IfcFlowTerminal", predefined_type)
+        == "equipment"
+    )
+
+
+def test_generic_ifc_flow_terminal_stays_generic_equipment_in_layout():
+    records = _records()
+    records[1]["ifc_class"] = "IfcFlowTerminal"
+    records[1]["predefined_type"] = "SUPPLYAIR"
+
+    semantics = normalize_ifc_semantic_records(records)
+    layout = layout_from_ifc_semantics(semantics)
+
+    assert layout["devices"][0]["type"] == "equipment"
+
+
 def test_ifc_placement_uses_full_ifcopenshell_transform_matrix():
     entity = types.SimpleNamespace(
         GlobalId="SPACE-ROTATED",
@@ -265,6 +287,66 @@ def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path
         (1.0, 2.0, 2.8)
     )
     assert record["orientation_deg"] == pytest.approx(90.0)
+
+
+def test_ifc_extraction_queries_generic_flow_terminal_without_subtypes(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    generic_terminal = types.SimpleNamespace(
+        GlobalId="FT-GENERIC",
+        Name="Generic terminal",
+        PredefinedType=None,
+        ObjectPlacement=object(),
+        ContainedInStructure=(),
+        OverallWidth=None,
+        OverallHeight=None,
+    )
+    unrelated_subtype = types.SimpleNamespace(
+        GlobalId="SANITARY-001",
+        Name="Sink",
+        PredefinedType=None,
+        ObjectPlacement=object(),
+        ContainedInStructure=(),
+        OverallWidth=None,
+        OverallHeight=None,
+    )
+    calls = []
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            calls.append((ifc_class, include_subtypes))
+            if ifc_class == "IfcFlowTerminal":
+                if include_subtypes:
+                    return [generic_terminal, unrelated_subtype]
+                return [generic_terminal]
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+    placement = sys.modules["ifcopenshell.util.placement"]
+    placement.get_local_placement = lambda _placement: (
+        (1.0, 0.0, 0.0, 1000.0),
+        (0.0, 1.0, 0.0, 2000.0),
+        (0.0, 0.0, 1.0, 2500.0),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+    element = sys.modules["ifcopenshell.util.element"]
+    element.get_container = lambda *_args, **_kwargs: None
+    unit = sys.modules["ifcopenshell.util.unit"]
+    unit.calculate_unit_scale = lambda _model: 0.001
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+
+    assert ("IfcFlowTerminal", False) in calls
+    assert [record["global_id"] for record in semantics["records"]] == [
+        "FT-GENERIC"
+    ]
+    assert semantics["records"][0]["ifc_class"] == "IfcFlowTerminal"
 
 
 def test_ifc_placement_rejects_invalid_transform_values():
@@ -799,7 +881,7 @@ def test_ifc_reimport_surfaces_semantic_only_source_change():
     old_record_digest = old_binding["record_sha256"]
 
     changed_records = _records()
-    changed_records[1]["ifc_class"] = "IfcFlowTerminal"
+    changed_records[1]["predefined_type"] = "DIFFUSER"
     changed = normalize_ifc_semantic_records(changed_records)
 
     plan = plan_ifc_semantic_reimport(
@@ -829,7 +911,7 @@ def test_ifc_reimport_surfaces_semantic_only_source_change():
         for item in project.metadata[IFC_LINK_METADATA_KEY]["bindings"]
         if item["global_id"] == "AT-001"
     )
-    assert new_binding["ifc_class"] == "IfcFlowTerminal"
+    assert new_binding["ifc_class"] == "IfcAirTerminal"
     assert new_binding["record_sha256"] != old_record_digest
 
 
@@ -850,7 +932,7 @@ def test_ifc_semantic_only_source_change_does_not_conflict_with_local_spatial_ed
     supply["z_m"] = 2.6
 
     changed_records = _records()
-    changed_records[1]["ifc_class"] = "IfcFlowTerminal"
+    changed_records[1]["predefined_type"] = "DIFFUSER"
     changed = normalize_ifc_semantic_records(changed_records)
 
     plan = plan_ifc_semantic_reimport(

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level BIM — generic IFC flow-terminal role safety — 2026-09-29
+
+- Stops treating generic `IfcFlowTerminal` occurrences as supply-air devices.
+- Maps generic flow terminals to equipment regardless of air-like free-text/predefined tokens; supply/return/exhaust classification remains limited to explicit `IfcAirTerminal` semantics.
+- Native extraction requests direct `IfcFlowTerminal` occurrences without subtypes, preventing unrelated terminal families from being imported through the generic superclass query.
+- Aligns the importer with buildingSMART's generic flow-terminal definition, which spans multiple distribution domains rather than HVAC supply only.
+- Adds helper-level, layout-level, and native-extraction regressions without changing engineering solvers, numerical tolerances, acceptance criteria, or analysis synchronization.
+
 ## Unreleased next-level BIM — explicit IFC cleanroom semantics — 2026-09-29
 
 - Reads the project-defined `CleanroomX_Space` IFC user property set on `IfcSpace` entities.

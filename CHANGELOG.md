@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased next-level BIM — IFC placement and containment fidelity — 2026-09-29
+
+- Uses IfcOpenShell's full nested local-placement transform for imported element origins instead of translation-only accumulation, preserving world-position coordinates across rotated parent placements.
+- Resolves supported device-to-room links through explicit `IfcSpace` containment first and then IfcOpenShell's indirect spatial-container lookup, without geometric proximity inference.
+- Validates the IFC length-unit scale and transformed coordinates as finite/positive inputs and fails closed when placement or containment resolution is invalid.
+- Adds focused regressions for transformed coordinates, invalid placement values, indirect space containment, and direct-relation precedence.
+- Keeps the CleanroomX room footprint axis-aligned and does not change IFC geometry semantics, engineering inputs, solver equations, tolerances, or acceptance criteria.
+
+
 ## Unreleased next-level BIM — IFC source stability — 2026-09-29
 
 - Streams SHA-256 before and after native IFC semantic extraction and fails closed if the source changes or disappears while IfcOpenShell is reading it.

@@ -8,6 +8,8 @@ from cleanroomx.bim_ifc import (
     apply_ifc_semantics_to_project,
     layout_from_ifc_semantics,
     normalize_ifc_semantic_records,
+    plan_ifc_semantic_reimport,
+    reimport_ifc_semantics_to_project,
 )
 from cleanroomx.project import new_project, project_from_dict
 
@@ -140,4 +142,225 @@ def test_ifc_import_rejects_invalid_source_digest():
             semantics,
             source_name="facility.ifc",
             source_sha256="not-a-digest",
+        )
+
+
+def test_ifc_import_persists_global_id_bindings_for_future_reimport():
+    project = new_project("IFC Project")
+    semantics = normalize_ifc_semantic_records(_records())
+
+    apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+
+    link = project.metadata[IFC_LINK_METADATA_KEY]
+    assert link["schema_version"] == 2
+    assert len(link["bindings"]) == 3
+    assert len(link["bindings_sha256"]) == 64
+    by_global_id = {item["global_id"]: item for item in link["bindings"]}
+    assert by_global_id["SPACE-001"]["kind"] == "room"
+    assert by_global_id["SPACE-001"]["spatial_id"] == "iso-7-process"
+    assert len(by_global_id["SPACE-001"]["source_spatial_sha256"]) == 64
+
+
+def test_ifc_reimport_updates_source_change_without_changing_spatial_identity():
+    project = new_project("IFC Project")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    room_id = project.metadata["spatial_layout"]["rooms"][0]["id"]
+
+    changed_records = _records()
+    changed_records[0]["name"] = "ISO 7 Process Revised"
+    changed_records[0]["length_m"] = 6.5
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    assert plan["can_apply"] is True
+    space_change = next(
+        item for item in plan["changes"] if item["global_id"] == "SPACE-001"
+    )
+    assert space_change["action"] == "update"
+
+    report = reimport_ifc_semantics_to_project(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    assert report["can_apply"] is True
+    room = project.metadata["spatial_layout"]["rooms"][0]
+    assert room["id"] == room_id
+    assert room["name"] == "ISO 7 Process Revised"
+    assert room["length_m"] == 6.5
+    assert project.metadata[IFC_LINK_METADATA_KEY]["source_sha256"] == "b" * 64
+
+
+def test_ifc_reimport_preserves_local_only_edit_when_source_is_unchanged():
+    project = new_project("IFC Project")
+    semantics = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    project.metadata["spatial_layout"]["rooms"][0]["classification"] = "Local review"
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    space_change = next(
+        item for item in plan["changes"] if item["global_id"] == "SPACE-001"
+    )
+    assert space_change["action"] == "preserve_local"
+    assert plan["can_apply"] is True
+
+    reimport_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    assert (
+        project.metadata["spatial_layout"]["rooms"][0]["classification"]
+        == "Local review"
+    )
+
+
+def test_ifc_reimport_detects_two_sided_conflict_and_is_transactional():
+    project = new_project("IFC Project")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    project.metadata["spatial_layout"]["rooms"][0]["length_m"] = 6.25
+    before = copy.deepcopy(project.metadata)
+
+    changed_records = _records()
+    changed_records[0]["length_m"] = 6.75
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    space_change = next(
+        item for item in plan["changes"] if item["global_id"] == "SPACE-001"
+    )
+    assert space_change["action"] == "conflict"
+    assert plan["conflict_count"] == 1
+    assert plan["can_apply"] is False
+
+    with pytest.raises(IfcImportError, match="1 conflict"):
+        reimport_ifc_semantics_to_project(
+            project,
+            changed,
+            source_name="facility-v2.ifc",
+            source_sha256="b" * 64,
+        )
+    assert project.metadata == before
+
+
+def test_ifc_reimport_adds_and_removes_source_entities_without_losing_local_items():
+    project = new_project("IFC Project")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    project.metadata["spatial_layout"]["devices"].append(
+        {
+            "id": "local-note-sensor",
+            "type": "sensor",
+            "name": "Local note sensor",
+            "room_id": "iso-7-process",
+            "x_m": 4.0,
+            "y_m": 4.0,
+            "z_m": 1.2,
+            "orientation_deg": 0.0,
+        }
+    )
+
+    changed_records = [
+        record for record in _records() if record["global_id"] != "SENSOR-001"
+    ]
+    changed_records.append(
+        {
+            "global_id": "AT-002",
+            "ifc_class": "IfcAirTerminal",
+            "name": "Return 02",
+            "room_global_id": "SPACE-001",
+            "predefined_type": "RETURNAIR",
+            "x_m": 5.0,
+            "y_m": 4.0,
+            "z_m": 2.8,
+        }
+    )
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="c" * 64,
+    )
+    actions = {item["global_id"]: item["action"] for item in plan["changes"]}
+    assert actions["SENSOR-001"] == "remove"
+    assert actions["AT-002"] == "add"
+    assert plan["can_apply"] is True
+
+    reimport_ifc_semantics_to_project(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="c" * 64,
+    )
+    devices = {
+        item["name"]: item for item in project.metadata["spatial_layout"]["devices"]
+    }
+    assert "DP Sensor" not in devices
+    assert devices["Return 02"]["type"] == "return"
+    assert "Local note sensor" in devices
+
+
+def test_ifc_reimport_rejects_tampered_identity_bindings():
+    project = new_project("IFC Project")
+    semantics = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    project.metadata[IFC_LINK_METADATA_KEY]["bindings"][0]["spatial_id"] = "tampered"
+
+    with pytest.raises(IfcImportError, match="binding digest"):
+        plan_ifc_semantic_reimport(
+            project,
+            semantics,
+            source_name="facility.ifc",
+            source_sha256="a" * 64,
         )

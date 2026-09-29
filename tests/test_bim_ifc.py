@@ -604,6 +604,23 @@ def test_ifc_semantics_map_spaces_and_devices_into_spatial_layout():
     assert by_name["DP Sensor"]["type"] == "sensor"
 
 
+@pytest.mark.parametrize(
+    "ifc_class",
+    ["IfcWall", "IfcBeam", "IfcBuildingElementProxy"],
+)
+def test_ifc_semantics_reject_unsupported_ifc_classes(ifc_class):
+    records = _records()
+    records[1]["ifc_class"] = ifc_class
+
+    with pytest.raises(IfcImportError, match="is not supported"):
+        normalize_ifc_semantic_records(records)
+
+
+def test_device_type_rejects_unknown_ifc_device_class():
+    with pytest.raises(IfcImportError, match="unsupported IFC device class"):
+        bim_ifc_module._device_type("IfcWall")
+
+
 def test_ifc_semantics_reject_duplicate_ids_and_dangling_space_links():
     records = _records()
     records.append(copy.deepcopy(records[0]))

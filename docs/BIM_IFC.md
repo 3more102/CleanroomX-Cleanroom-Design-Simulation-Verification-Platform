@@ -205,6 +205,10 @@ GlobalId bindings.
 The semantic normalization API is also public. Integrations can provide already
 extracted IFC records without installing IfcOpenShell:
 
+That boundary is fail-closed: semantic records are accepted only for `IfcSpace`
+and the explicitly supported device entity classes listed above. Unknown IFC
+classes are rejected instead of being silently represented as generic equipment.
+
 ```python
 from cleanroomx.bim_ifc import (
     layout_from_ifc_semantics,

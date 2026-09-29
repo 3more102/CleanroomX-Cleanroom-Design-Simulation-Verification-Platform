@@ -354,6 +354,36 @@ def test_ifc_storey_metadata_requires_storey_global_id():
         normalize_ifc_semantic_records(records)
 
 
+def test_ifc_semantics_reject_inconsistent_storey_metadata():
+    records = _records()
+    second_space = copy.deepcopy(records[0])
+    second_space.update(
+        {
+            "global_id": "SPACE-002",
+            "name": "ISO 8 Support",
+            "storey_global_id": "STOREY-01",
+            "storey_name": "Level One",
+            "storey_elevation_m": 3.0,
+        }
+    )
+    records[0].update(
+        {
+            "storey_global_id": "STOREY-01",
+            "storey_name": "Level 1",
+            "storey_elevation_m": 3.0,
+        }
+    )
+    records.append(second_space)
+
+    with pytest.raises(IfcImportError, match="inconsistent storey_name"):
+        normalize_ifc_semantic_records(records)
+
+    records[-1]["storey_name"] = "Level 1"
+    records[-1]["storey_elevation_m"] = 3.2
+    with pytest.raises(IfcImportError, match="inconsistent storey_elevation_m"):
+        normalize_ifc_semantic_records(records)
+
+
 def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
 

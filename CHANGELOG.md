@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased ProofGraph foundation — continuous compliance evidence model — 2026-09-29
+
+- Adds GUI-independent typed ProofGraph domain records for requirements, evidence sources/layers, provenance, confidence/uncertainty, checks, findings, verdicts, corrective actions, and verification runs.
+- Adds strict schema-v1 serialization/deserialization with deterministic whole-graph SHA-256 identity, finite-JSON validation, duplicate-ID rejection, and fail-closed cross-reference validation.
+- Adds explicit design, calculation, simulation, commissioning, and operational evidence layers while retaining a neutral declared layer when the lifecycle source is not known.
+- Bridges the existing deterministic compliance rule-pack engine into ProofGraph without changing its engineering semantics; missing rule-pack evidence maps to UNKNOWN and no evidence value is fabricated.
+- Encodes the future corrective-action safety boundary by requiring user approval on every modeled action.
+- Adds focused regression coverage and ProofGraph architecture documentation without changing GUI behavior, project persistence, standards limits, or existing solver equations.
+
 ## Unreleased BIM auditability — IFC space dimension provenance — 2026-09-29
 
 - Records whether each natively extracted `IfcSpace` received Length/Width/Height from explicit IFC quantities (`ifc_quantities`) or the conservative IfcOpenShell rectangular-prism fallback (`ifcopenshell_geometry`).

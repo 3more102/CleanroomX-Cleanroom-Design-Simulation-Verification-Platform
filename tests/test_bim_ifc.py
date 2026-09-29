@@ -406,6 +406,108 @@ def test_ifc_reimport_preserves_local_only_edit_when_source_is_unchanged():
     )
 
 
+def test_ifc_reimport_surfaces_semantic_only_source_change():
+    project = new_project("IFC Project")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    before_layout = copy.deepcopy(project.metadata["spatial_layout"])
+    old_binding = next(
+        item
+        for item in project.metadata[IFC_LINK_METADATA_KEY]["bindings"]
+        if item["global_id"] == "AT-001"
+    )
+    old_record_digest = old_binding["record_sha256"]
+
+    changed_records = _records()
+    changed_records[1]["ifc_class"] = "IfcFlowTerminal"
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    terminal_change = next(
+        item for item in plan["changes"] if item["global_id"] == "AT-001"
+    )
+    assert terminal_change["action"] == "semantic_update"
+    assert terminal_change["source_changed"] is True
+    assert terminal_change["source_semantic_changed"] is True
+    assert terminal_change["source_spatial_changed"] is False
+    assert plan["can_apply"] is True
+
+    reimport_ifc_semantics_to_project(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    assert project.metadata["spatial_layout"] == before_layout
+    new_binding = next(
+        item
+        for item in project.metadata[IFC_LINK_METADATA_KEY]["bindings"]
+        if item["global_id"] == "AT-001"
+    )
+    assert new_binding["ifc_class"] == "IfcFlowTerminal"
+    assert new_binding["record_sha256"] != old_record_digest
+
+
+def test_ifc_semantic_only_source_change_does_not_conflict_with_local_spatial_edit():
+    project = new_project("IFC Project")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    supply = next(
+        item
+        for item in project.metadata["spatial_layout"]["devices"]
+        if item["name"] == "Supply 01"
+    )
+    supply["z_m"] = 2.6
+
+    changed_records = _records()
+    changed_records[1]["ifc_class"] = "IfcFlowTerminal"
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    terminal_change = next(
+        item for item in plan["changes"] if item["global_id"] == "AT-001"
+    )
+    assert terminal_change["action"] == "preserve_local"
+    assert terminal_change["local_changed"] is True
+    assert terminal_change["source_changed"] is True
+    assert terminal_change["source_semantic_changed"] is True
+    assert terminal_change["source_spatial_changed"] is False
+    assert plan["can_apply"] is True
+
+    reimport_ifc_semantics_to_project(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    supply = next(
+        item
+        for item in project.metadata["spatial_layout"]["devices"]
+        if item["name"] == "Supply 01"
+    )
+    assert supply["z_m"] == 2.6
+
+
 def test_ifc_reimport_detects_two_sided_conflict_and_is_transactional():
     project = new_project("IFC Project")
     original = normalize_ifc_semantic_records(_records())

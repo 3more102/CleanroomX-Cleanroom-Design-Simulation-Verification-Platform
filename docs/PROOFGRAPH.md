@@ -242,7 +242,6 @@ inputs and links the final margin to both net surplus and the configured minimum
 This adapter intentionally does not infer leakage that was not modeled and does
 not calculate or claim room pressure. The verification-run metadata preserves
 that boundary explicitly.
-\n
 
 ## Thermal uncertainty capacity evidence integration
 
@@ -276,7 +275,12 @@ Input provenance supplied through `UncertainValue` is retained as deterministic
 evidence sources. Missing provenance remains visible in the canonical
 traceability payload and is never converted into a confidence percentage.
 
+If any canonical thermal input that participates in the traceability payload lacks
+provenance, ProofGraph fails closed to UNKNOWN even when the underlying
+engineering calculation returns PASS, FAIL, or INDETERMINATE. The canonical
+thermal status remains in verification-run metadata so the engineering result is
+not lost, but an unverifiable input chain is never promoted to a verified verdict.
+
 This remains conservative engineering screening. It does not claim equipment
 selection, hourly load simulation, statistical uncertainty, certification, or
 any external standard requirement.
-\n

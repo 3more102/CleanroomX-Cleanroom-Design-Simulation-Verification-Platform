@@ -1,6 +1,9 @@
 """ProofGraph typed evidence and verification foundation."""
 
-from .proofgraph_adapters import proofgraph_from_compliance_check
+from .proofgraph_adapters import (
+    proofgraph_from_compliance_check,
+    proofgraph_from_pressure_design_consistency,
+)
 from .proofgraph_io import proofgraph_from_dict
 from .proofgraph_models import (
     PROOFGRAPH_SCHEMA,
@@ -45,5 +48,6 @@ __all__ = [
     "SimulationEvidence",
     "VerificationRun",
     "proofgraph_from_compliance_check",
+    "proofgraph_from_pressure_design_consistency",
     "proofgraph_from_dict",
 ]

@@ -140,3 +140,31 @@ parallel evidence representation:
 ProofGraph does not itself establish regulatory approval, cleanroom
 certification, commissioning acceptance, or completeness of an external
 standard.
+
+
+## Pressure design evidence integration
+
+The pressure-design adapter is the first direct engineering-to-ProofGraph bridge.
+proofgraph_from_pressure_design_consistency reuses the canonical
+pressure_design_consistency service and does not solve pressure through a second
+path.
+
+For each configured room pressure target it creates:
+
+- a Requirement retaining the explicit target, tolerance, and room/node/reference
+  mapping;
+- DesignEvidence for the configured pressure_target_pa and its design-requirement
+  origin;
+- CalculationEvidence for the solved signed node-to-reference pressure difference
+  when that calculation exists;
+- a ComplianceCheck requiring both design and calculation evidence;
+- a finding and verdict that preserve the canonical pass/fail/not_checked result.
+
+not_checked maps to ProofGraph unknown. A required missing mapping remains fail,
+matching the source service. When no pressure target exists, the adapter does not
+invent a requirement merely because a solved pressure observation is available.
+
+The design-requirements object, pressure-network object, and mapping policy each
+receive deterministic revision digests. Confidence remains unset because the
+canonical pressure consistency service does not itself provide a confidence
+probability.

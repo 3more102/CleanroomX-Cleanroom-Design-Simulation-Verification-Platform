@@ -22,6 +22,8 @@ The importer currently supports:
 - IFC unit scaling to metres through IfcOpenShell
 - full nested local-placement transforms for element origins through IfcOpenShell,
   including parent rotation and translation
+- deterministic device plan orientation from the transformed IFC local X/Y axes,
+  preserved as CleanroomX `orientation_deg`
 - space Length / Width / Height base quantities
 - explicit and indirect spatial-containment resolution from supported devices to
   `IfcSpace` through IfcOpenShell, without geometric room inference
@@ -195,10 +197,14 @@ The current CleanroomX spatial contract is axis-aligned. The bridge therefore
 uses room Length / Width / Height quantities and transformed placement origins.
 IfcOpenShell's full nested local-placement transform is used for those origins,
 so rotated parent placements no longer lose their translated world position.
-However, CleanroomX still does not rotate the axis-aligned room footprint or
-reconstruct arbitrary room/device solids. B-Rep tessellation, complex solids,
-curved boundaries, multi-storey decomposition, door/window void geometry, and
-automatic engineering-analysis reconciliation are not yet claimed.
+Device plan yaw is preserved from the transformed local placement and normalized
+to `[0, 360)` degrees. This is a 2D plan-orientation mapping only; arbitrary 3D
+tilt is not represented as a CleanroomX device solid.
+
+CleanroomX still does not rotate the axis-aligned room footprint or reconstruct
+arbitrary room/device solids. B-Rep tessellation, complex solids, curved
+boundaries, multi-storey decomposition, door/window void geometry, and automatic
+engineering-analysis reconciliation are not yet claimed.
 
 Device-to-room linkage uses explicit `IfcSpace` containment first and then
 IfcOpenShell's indirect spatial-container resolution. It does not infer room
@@ -213,7 +219,7 @@ precision that the current model does not preserve.
 
 The bridge establishes stable IFC identity and provenance needed for later work:
 
-1. geometry/tessellation and rotated room/device footprint support;
+1. geometry/tessellation and rotated room-footprint support;
 2. explicit IFC storey/floor mapping;
 3. IFC property-set mapping to cleanroom classifications and engineering inputs;
 4. bidirectional synchronization and digital-twin/CFD integration.

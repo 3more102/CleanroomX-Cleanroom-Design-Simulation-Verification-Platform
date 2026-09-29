@@ -32,8 +32,10 @@ from .application import (
 )
 from .bim_ifc import (
     IFC_LINK_METADATA_KEY,
+    IfcImportError,
     apply_ifc_semantics_to_project,
     extract_ifc_semantics,
+    layout_from_ifc_semantics,
     plan_ifc_semantic_reimport,
     reimport_ifc_semantics_to_project,
 )
@@ -1490,6 +1492,35 @@ class CleanroomXApp:
         if callable(wait_window):
             wait_window(dialog)
 
+    def _extract_ifc_candidate(self, source: Path) -> tuple[dict, dict[str, str]]:
+        semantics, provenance = extract_ifc_semantics(source)
+        if provenance.get("source_name") != source.name:
+            raise IfcImportError(
+                "IFC provenance source name does not match the selected file"
+            )
+        return semantics, provenance
+
+    def _revalidate_ifc_candidate(
+        self,
+        source: Path,
+        *,
+        expected_semantics: dict,
+        expected_provenance: dict[str, str],
+    ) -> tuple[dict, dict[str, str]]:
+        """Fail closed if the reviewed IFC source changes before mutation."""
+        semantics, provenance = self._extract_ifc_candidate(source)
+        if (
+            provenance.get("source_sha256")
+            != expected_provenance.get("source_sha256")
+            or semantics.get("semantic_sha256")
+            != expected_semantics.get("semantic_sha256")
+        ):
+            raise IfcImportError(
+                "IFC source changed after it was reviewed; no project changes were "
+                "applied. Review the current IFC file again."
+            )
+        return semantics, provenance
+
     def _refresh_after_ifc_edit(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
@@ -1523,22 +1554,49 @@ class CleanroomXApp:
         if not self._prepare_project_history_action("import IFC spatial data"):
             return False
 
-        if SPATIAL_METADATA_KEY in self.project.metadata:
-            replace = messagebox.askyesno(
-                "Replace existing spatial layout?",
-                (
-                    "This project already contains an unlinked spatial layout. The IFC "
-                    "import will replace that spatial layout and establish a new IFC "
-                    "identity baseline. Engineering analysis inputs are not changed "
-                    "automatically.\n\nContinue?"
-                ),
-                parent=self.root,
+        try:
+            semantics, provenance = self._extract_ifc_candidate(source)
+            preview = layout_from_ifc_semantics(semantics)
+        except Exception as exc:
+            self.status_var.set("IFC import failed")
+            messagebox.showerror("IFC import failed", str(exc), parent=self.root)
+            return False
+
+        existing_layout = self.project.metadata.get(SPATIAL_METADATA_KEY)
+        has_existing_layout = bool(
+            isinstance(existing_layout, dict)
+            and (existing_layout.get("rooms") or existing_layout.get("devices"))
+        )
+        if has_existing_layout:
+            warning = (
+                "This project already contains an unlinked spatial layout. The IFC "
+                "import will replace that spatial layout and establish a new IFC "
+                "identity baseline."
             )
-            if not replace:
-                return False
+        else:
+            warning = "This will establish the project's first IFC identity baseline."
+
+        if not messagebox.askyesno(
+            "Import IFC spatial layout?",
+            (
+                f"{warning}\n\n"
+                f"Source: {provenance['source_name']}\n"
+                f"Rooms: {len(preview['rooms'])}\n"
+                f"Devices: {len(preview['devices'])}\n"
+                f"Source SHA-256: {provenance['source_sha256']}\n\n"
+                "Engineering analysis inputs are not changed automatically. Continue?"
+            ),
+            parent=self.root,
+        ):
+            self.status_var.set("IFC import cancelled")
+            return False
 
         try:
-            semantics, provenance = extract_ifc_semantics(source)
+            semantics, provenance = self._revalidate_ifc_candidate(
+                source,
+                expected_semantics=semantics,
+                expected_provenance=provenance,
+            )
             layout = self._perform_project_edit(
                 "Import IFC spatial layout",
                 lambda: apply_ifc_semantics_to_project(
@@ -1558,17 +1616,6 @@ class CleanroomXApp:
             f"Imported IFC spatial layout — {len(layout['rooms'])} room(s), "
             f"{len(layout['devices'])} device(s); save the project to persist it."
         )
-        messagebox.showinfo(
-            "IFC spatial layout imported",
-            (
-                f"Source: {provenance['source_name']}\n"
-                f"Rooms: {len(layout['rooms'])}\n"
-                f"Devices: {len(layout['devices'])}\n"
-                f"SHA-256: {provenance['source_sha256']}\n\n"
-                "Engineering analysis inputs were not changed automatically."
-            ),
-            parent=self.root,
-        )
         return True
 
     def review_ifc_reimport(self) -> dict | None:
@@ -1584,7 +1631,7 @@ class CleanroomXApp:
         if source is None:
             return None
         try:
-            semantics, provenance = extract_ifc_semantics(source)
+            semantics, provenance = self._extract_ifc_candidate(source)
             report = plan_ifc_semantic_reimport(
                 self.project,
                 semantics,
@@ -1633,7 +1680,7 @@ class CleanroomXApp:
             return False
 
         try:
-            semantics, provenance = extract_ifc_semantics(source)
+            semantics, provenance = self._extract_ifc_candidate(source)
             report = plan_ifc_semantic_reimport(
                 self.project,
                 semantics,
@@ -1677,6 +1724,11 @@ class CleanroomXApp:
             return False
 
         try:
+            semantics, provenance = self._revalidate_ifc_candidate(
+                source,
+                expected_semantics=semantics,
+                expected_provenance=provenance,
+            )
             self._perform_project_edit(
                 "Apply IFC re-import",
                 lambda: reimport_ifc_semantics_to_project(

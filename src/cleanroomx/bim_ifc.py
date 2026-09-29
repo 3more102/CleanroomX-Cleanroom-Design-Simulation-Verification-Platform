@@ -234,6 +234,24 @@ def normalize_ifc_semantic_records(
                 f"{room_global_id!r}"
             )
 
+    storey_metadata: dict[str, dict[str, Any]] = {}
+    for item in normalized:
+        if item["ifc_class"] != "IfcSpace":
+            continue
+        storey_global_id = item.get("storey_global_id")
+        if not storey_global_id:
+            continue
+        prior = storey_metadata.setdefault(storey_global_id, {})
+        for field in ("storey_name", "storey_elevation_m"):
+            value = item.get(field)
+            if value is None:
+                continue
+            if field in prior and prior[field] != value:
+                raise IfcImportError(
+                    f"IFC storey {storey_global_id!r} has inconsistent {field}"
+                )
+            prior[field] = value
+
     document = {
         "schema": IFC_SEMANTICS_SCHEMA,
         "schema_version": IFC_SEMANTICS_SCHEMA_VERSION,

@@ -242,4 +242,45 @@ inputs and links the final margin to both net surplus and the configured minimum
 This adapter intentionally does not infer leakage that was not modeled and does
 not calculate or claim room pressure. The verification-run metadata preserves
 that boundary explicitly.
-\n
+
+## Thermal uncertainty capacity evidence integration
+
+`proofgraph_from_thermal_uncertainty` bridges the canonical
+`analyze_thermal_uncertainty` workflow into ProofGraph without duplicating
+psychrometric, load, airflow, or capacity equations.
+
+The adapter creates requirements only when an available cooling or heating
+capacity is explicitly configured in the project input. Missing equipment
+capacity therefore remains absent rather than becoming an invented requirement.
+
+The evidence chain retains explicit uncertain inputs, fixed room/outdoor
+air-state inputs, capacity margin, configured available capacity, internal and
+makeup-air load intervals, net-load interval, sensible-load airflow interval,
+governing airflow, and conservative cooling/heating capacity intervals. Derived
+records link to their direct upstream evidence and identify
+`analyze_thermal_uncertainty` as the originating calculation.
+
+Canonical complete-interval semantics are preserved:
+
+- PASS when the configured available capacity covers the full required interval;
+- FAIL when the full required interval exceeds available capacity;
+- INDETERMINATE when available capacity lies inside the required interval.
+
+ProofGraph now accepts explicit `indeterminate` and `not_checked` verdict
+states instead of forcing those conditions into PASS/FAIL. The thermal adapter
+does not emit `not_checked` requirements for unconfigured capacities; it records
+them as unconfigured in verification-run metadata.
+
+Input provenance supplied through `UncertainValue` is retained as deterministic
+evidence sources. Missing provenance remains visible in the canonical
+traceability payload and is never converted into a confidence percentage.
+
+If any canonical thermal input that participates in the traceability payload lacks
+provenance, ProofGraph fails closed to UNKNOWN even when the underlying
+engineering calculation returns PASS, FAIL, or INDETERMINATE. The canonical
+thermal status remains in verification-run metadata so the engineering result is
+not lost, but an unverifiable input chain is never promoted to a verified verdict.
+
+This remains conservative engineering screening. It does not claim equipment
+selection, hourly load simulation, statistical uncertainty, certification, or
+any external standard requirement.

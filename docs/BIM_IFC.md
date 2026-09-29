@@ -39,7 +39,11 @@ The importer currently supports:
 - world-space plan yaw extraction for supported devices from the transformed local
   X axis, persisted as CleanroomX `orientation_deg`; a degenerate transformed
   plan axis is rejected instead of being silently treated as 0°
-- space Length / Width / Height base quantities
+- positive space Length / Width / Height quantities when explicitly supplied by
+  the IFC source; because buildingSMART's standard \`Qto_SpaceBaseQuantities\`
+  does not define Length or Width, native extraction falls back to IfcOpenShell
+  world-space geometry and accepts only a complete axis-aligned rectangular-prism
+  corner topology rather than approximating arbitrary space geometry
 - explicit and indirect spatial-containment resolution from supported devices to
   `IfcSpace` through IfcOpenShell, without geometric room inference
 - explicit `IfcBuildingStorey` identity on imported spaces, including storey name
@@ -235,20 +239,27 @@ This is a semantic and quantity-based interoperability layer, not a full IFC
 geometric kernel.
 
 The current CleanroomX spatial contract is axis-aligned and exposes one active
-floor metadata object. The bridge therefore uses room Length / Width / Height
-quantities and transformed placement origins. IFC storey identity is preserved in
-the normalized semantic record for each space, and a single shared storey is
-promoted to the active CleanroomX floor. Multi-storey imports keep each room's
-world-space elevation but are not represented as multiple editable floor objects.
-IfcOpenShell's full nested local-placement transform is used for those origins.
-Rectangular spaces with quarter-turn plan rotations are converted to exact
-world-space axis-aligned bounds, including the translated minimum corner and
-length/width swap when required. Arbitrary-angle rotation, tilt, reflection, or
-skew cannot be represented by the current room contract and is rejected instead
-of being silently approximated. CleanroomX still does not reconstruct arbitrary
-room/device solids. B-Rep tessellation, complex solids, curved boundaries,
-multi-storey decomposition, door/window void geometry, and automatic
-engineering-analysis reconciliation are not yet claimed.
+floor metadata object. When an IFC source explicitly supplies positive Length /
+Width / Height quantities, the bridge keeps the existing quantity-plus-placement
+path. The buildingSMART \`Qto_SpaceBaseQuantities\` standard does not define
+Length or Width, so native extraction no longer requires those non-standard
+quantities: when they are absent, CleanroomX asks IfcOpenShell for world-space
+geometry and accepts only a complete axis-aligned rectangular-prism corner
+topology. It does not turn arbitrary geometry into a generic bounding box.
+
+IFC storey identity is preserved in the normalized semantic record for each
+space, and a single shared storey is promoted to the active CleanroomX floor.
+Multi-storey imports keep each room's world-space elevation but are not
+represented as multiple editable floor objects. IfcOpenShell's full nested
+local-placement transform is used by the quantity path. Rectangular spaces with
+quarter-turn plan rotations are converted to exact world-space axis-aligned
+bounds, including the translated minimum corner and length/width swap when
+required. The geometry fallback independently accepts only space geometry already
+representable by the same axis-aligned room contract. Arbitrary-angle rotation,
+tilt, non-rectangular geometry, and complex solids are rejected rather than
+silently approximated. CleanroomX still does not reconstruct arbitrary
+room/device solids, curved boundaries, multi-storey decomposition, door/window
+void geometry, or automatic engineering-analysis reconciliation.
 
 Device-to-room linkage uses explicit `IfcSpace` containment first and then
 IfcOpenShell's indirect spatial-container resolution. It does not infer room

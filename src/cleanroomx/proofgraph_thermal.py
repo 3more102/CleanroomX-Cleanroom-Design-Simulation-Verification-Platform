@@ -410,10 +410,21 @@ def proofgraph_from_thermal_uncertainty(
         if available is None:
             continue
         capacity_result = result[f"{mode}_capacity_kw"]
-        status = capacity_result["status"]
-        if status not in {"pass", "fail", "indeterminate"}:
+        canonical_status = capacity_result["status"]
+        if canonical_status not in {"pass", "fail", "indeterminate"}:
             raise ValueError(
-                f"unexpected canonical {mode} capacity status: {status!r}"
+                f"unexpected canonical {mode} capacity status: {canonical_status!r}"
+            )
+        if result["traceability"]["complete"]:
+            status = canonical_status
+            reason = capacity_result["message"]
+        else:
+            status = "unknown"
+            missing = ", ".join(result["traceability"]["missing_provenance"])
+            reason = (
+                f"Canonical {mode} capacity status is {canonical_status.upper()}, "
+                f"but input provenance is incomplete for: {missing}. "
+                "ProofGraph cannot issue a verified capacity verdict."
             )
 
         requirement_id = f"available-{mode}-capacity:{design.name}"
@@ -455,7 +466,7 @@ def proofgraph_from_thermal_uncertainty(
                 check_id=check_id,
                 requirement_id=requirement_id,
                 status=status,
-                reason=capacity_result["message"],
+                reason=reason,
                 evidence_ids=evidence_ids,
                 evidence_present=True,
                 expected=available,
@@ -474,7 +485,7 @@ def proofgraph_from_thermal_uncertainty(
                 requirement_id=requirement_id,
                 status=status,
                 finding_ids=(finding_id,),
-                reason=capacity_result["message"],
+                reason=reason,
             )
         )
 
@@ -496,6 +507,10 @@ def proofgraph_from_thermal_uncertainty(
             "calculation_service": "analyze_thermal_uncertainty",
             "method": result["method"],
             "canonical_overall_status": result["overall_status"],
+            "canonical_capacity_statuses": {
+                mode: result[f"{mode}_capacity_kw"]["status"]
+                for mode in ("cooling", "heating")
+            },
             "traceability": result["traceability"],
             "engineering_note": result["engineering_note"],
             "unconfigured_capacities": [

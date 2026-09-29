@@ -455,6 +455,131 @@ def test_ifc_extraction_preserves_quarter_turn_space_footprint(monkeypatch, tmp_
     assert record["height_m"] == pytest.approx(3.0)
 
 
+def test_ifc_space_geometry_fallback_accepts_only_rectangular_prism():
+    entity = types.SimpleNamespace(GlobalId="SPACE-GEOMETRY")
+
+    class Geom:
+        class settings:
+            pass
+
+        @staticmethod
+        def create_shape(_settings, _entity):
+            return types.SimpleNamespace(geometry=object())
+
+    class ShapeUtil:
+        @staticmethod
+        def get_shape_vertices(_shape, _geometry):
+            return [
+                (-4.0, 2.0, 0.3),
+                (-4.0, 2.0, 3.3),
+                (-4.0, 8.0, 0.3),
+                (-4.0, 8.0, 3.3),
+                (1.0, 2.0, 0.3),
+                (1.0, 2.0, 3.3),
+                (1.0, 8.0, 0.3),
+                (1.0, 8.0, 3.3),
+            ]
+
+    assert bim_ifc_module._space_rectangular_prism_bounds_from_geometry_m(
+        entity,
+        geom_module=Geom,
+        shape_util=ShapeUtil,
+    ) == pytest.approx((-4.0, 2.0, 0.3, 5.0, 6.0, 3.0))
+
+
+def test_ifc_space_geometry_fallback_rejects_rotated_non_axis_aligned_prism():
+    entity = types.SimpleNamespace(GlobalId="SPACE-ROTATED-GEOMETRY")
+
+    class Geom:
+        class settings:
+            pass
+
+        @staticmethod
+        def create_shape(_settings, _entity):
+            return types.SimpleNamespace(geometry=object())
+
+    class ShapeUtil:
+        @staticmethod
+        def get_shape_vertices(_shape, _geometry):
+            plan = [(0.0, 0.0), (1.0, 1.0), (0.0, 2.0), (-1.0, 1.0)]
+            return [
+                (x, y, z)
+                for x, y in plan
+                for z in (0.0, 3.0)
+            ]
+
+    with pytest.raises(
+        IfcImportError,
+        match="not an axis-aligned rectangular prism",
+    ):
+        bim_ifc_module._space_rectangular_prism_bounds_from_geometry_m(
+            entity,
+            geom_module=Geom,
+            shape_util=ShapeUtil,
+        )
+
+
+def test_ifc_extraction_falls_back_to_geometry_without_length_width_qto(
+    monkeypatch, tmp_path
+):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    space = types.SimpleNamespace(
+        GlobalId="SPACE-STANDARD-QTO",
+        LongName="Standard quantity space",
+        Name="Standard quantity space",
+        ObjectPlacement=object(),
+    )
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcSpace":
+                return [space]
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+    element = sys.modules["ifcopenshell.util.element"]
+    element.get_psets = lambda *_args, **_kwargs: {
+        "Qto_SpaceBaseQuantities": {
+            "Height": 3000.0,
+            "GrossFloorArea": 30_000_000.0,
+        }
+    }
+    element.get_pset = lambda *_args, **_kwargs: {}
+    element.get_aggregate = lambda *_args, **_kwargs: None
+    element.get_container = lambda *_args, **_kwargs: None
+    placement = sys.modules["ifcopenshell.util.placement"]
+    placement.get_local_placement = lambda _placement: (
+        (1.0, 0.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+    unit = sys.modules["ifcopenshell.util.unit"]
+    unit.calculate_unit_scale = lambda _model: 0.001
+
+    monkeypatch.setattr(
+        bim_ifc_module,
+        "_space_rectangular_prism_bounds_from_geometry_m",
+        lambda _entity: (-4.0, 2.0, 0.3, 5.0, 6.0, 3.0),
+    )
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+    record = semantics["records"][0]
+
+    assert record["global_id"] == "SPACE-STANDARD-QTO"
+    assert (record["x_m"], record["y_m"], record["z_m"]) == pytest.approx(
+        (-4.0, 2.0, 0.3)
+    )
+    assert (record["length_m"], record["width_m"], record["height_m"]) == pytest.approx(
+        (5.0, 6.0, 3.0)
+    )
+
+
 def test_ifc_placement_rejects_invalid_transform_values():
     entity = types.SimpleNamespace(
         GlobalId="SPACE-BAD",

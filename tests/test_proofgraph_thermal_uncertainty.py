@@ -53,6 +53,7 @@ def cooling_design(
             0.1,
             with_provenance=latent_with_provenance,
         ),
+        makeup_airflow_m3_h=uv(0.0, "m3/h"),
         supply_air_temp_c=uv(16.0, "C", 1.0),
         capacity_margin_percent=10.0,
         available_cooling_capacity_kw=available_cooling_capacity_kw,
@@ -63,6 +64,7 @@ def cooling_design(
 def test_thermal_adapter_preserves_capacity_interval_and_dependencies() -> None:
     document = proofgraph_from_thermal_uncertainty(cooling_design()).to_dict()
 
+    assert document["verification_runs"][0]["metadata"]["traceability"]["complete"] is True
     assert document["verdicts"][0]["status"] == "pass"
     by_property = {item["property_name"]: item for item in document["evidence"]}
     cooling = by_property["cooling_capacity_kw"]

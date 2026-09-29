@@ -77,6 +77,22 @@ external-revision checks, save locking, revision history, and recovery behavior
 remain authoritative. IFC operations do not silently synchronize engineering
 analysis inputs.
 
+## Source-stability guard
+
+Native IFC extraction now hashes the source before and after IfcOpenShell semantic
+extraction. If the bytes change, disappear, or become unreadable during that
+window, extraction is discarded instead of returning semantics bound to stale
+provenance.
+
+The desktop **Apply IFC Re-import...** path adds a second boundary around human
+review: after the operator reviews a conflict-free plan and confirms application,
+CleanroomX re-extracts the selected IFC file and requires both the source SHA-256
+and normalized semantic SHA-256 to match the reviewed candidate before any project
+mutation occurs. A changed file must be reviewed again.
+
+These checks protect provenance identity only. They do not alter IFC mapping rules,
+engineering inputs, solver equations, or acceptance criteria.
+
 ## API
 
 ```python

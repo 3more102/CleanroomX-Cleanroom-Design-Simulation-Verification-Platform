@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level IFC re-import integrity — 2026-09-29
+
+- Persists IFC `GlobalId` -> CleanroomX room/device ID bindings so entity renames do not churn spatial identity across re-imports.
+- Binds each successful IFC import to a deterministic spatial-layout SHA-256.
+- Fails closed when the currently linked spatial layout has local edits, preventing a later IFC import from silently overwriting reviewed workspace changes.
+- Allows replacement only through the explicit `allow_local_changes=True` opt-in and adds regression coverage for stable identity and conflict detection.
+- Preserves legacy IFC-linked projects that do not yet contain the new additive provenance fields; their next successful import records the stronger metadata.
+
 ## Unreleased next-level Phase 1 — pressure evidence in design assurance — 2026-09-28
 
 - Extends `design_assurance` with an optional canonical `pressure_design_consistency` component while keeping legacy assurance inputs/results unchanged when the field is absent.

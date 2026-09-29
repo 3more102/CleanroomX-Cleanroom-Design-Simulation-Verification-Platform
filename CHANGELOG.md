@@ -7,6 +7,7 @@
 - Preserves conservative nominal/lower/upper capacity intervals, direct upstream evidence dependencies, deterministic source revisions, and originating-calculation identity.
 - Extends ProofGraph's explicit verdict vocabulary with `indeterminate` and `not_checked`, preserving overlap and non-evaluation states instead of collapsing them into PASS/FAIL.
 - Retains user-supplied input provenance, exposes missing provenance through verification metadata, and avoids manufactured confidence scores.
+- Fails closed to `unknown` when canonical thermal inputs lack provenance while retaining the underlying thermal status in verification metadata.
 - Adds pass/fail/indeterminate, heating-only, missing-requirement, provenance-gap, strict round-trip, and determinism regressions.
 
 ## Unreleased ProofGraph integration — airflow-balance evidence chain — 2026-09-29

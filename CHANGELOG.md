@@ -3,6 +3,7 @@
 ## Unreleased next-level BIM — IFC storey semantic fidelity — 2026-09-29
 
 - Preserves explicit `IfcBuildingStorey` identity, name, and world-space elevation on normalized `IfcSpace` semantic records.
+- Rejects conflicting name/elevation metadata for the same storey `GlobalId` instead of normalizing ambiguous provenance.
 - Promotes the shared storey into CleanroomX floor metadata when every imported space belongs to the same IFC storey.
 - Keeps multi-storey behavior conservative: room world elevations remain intact while the current single-floor UI does not fabricate multiple editable floor objects.
 - Adds focused normalization, layout-mapping, and native-extraction regressions without changing engineering inputs, solver equations, tolerances, or acceptance semantics.

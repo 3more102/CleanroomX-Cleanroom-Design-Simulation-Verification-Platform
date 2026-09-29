@@ -290,3 +290,16 @@ The bridge establishes stable IFC identity and provenance needed for later work:
 
 No IFC-derived engineering value is currently written directly into a solver
 input without an explicit future synchronization step.
+
+
+## ProofGraph design-evidence bridge
+
+Normalized IFC semantic records can be exported into the ProofGraph evidence
+layer without changing the existing IFC import/re-import workflow. The bridge
+binds each evidence value to the original IFC source SHA-256, normalized semantic
+SHA-256, IFC GlobalId, source filename, and normalized semantic field. Space
+dimension evidence preserves dimension_source, allowing explicit IFC quantities
+and verified IfcOpenShell geometry fallback values to remain distinguishable.
+
+The bridge is evidence-only: it does not infer a regulatory requirement or change
+an existing ProofGraph verdict simply because IFC data is attached.

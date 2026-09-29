@@ -5,6 +5,10 @@ from .proofgraph_adapters import (
     proofgraph_from_pressure_design_consistency,
 )
 from .proofgraph_io import proofgraph_from_dict
+from .proofgraph_ifc import (
+    ifc_design_evidence_bundle,
+    proofgraph_with_ifc_design_evidence,
+)
 from .proofgraph_models import (
     PROOFGRAPH_SCHEMA,
     PROOFGRAPH_SCHEMA_VERSION,
@@ -50,4 +54,6 @@ __all__ = [
     "proofgraph_from_compliance_check",
     "proofgraph_from_pressure_design_consistency",
     "proofgraph_from_dict",
+    "ifc_design_evidence_bundle",
+    "proofgraph_with_ifc_design_evidence",
 ]

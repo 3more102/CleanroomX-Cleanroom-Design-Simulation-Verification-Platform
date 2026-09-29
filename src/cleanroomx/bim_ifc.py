@@ -606,6 +606,9 @@ def _plan_ifc_semantic_reimport(
         current_layout=current_layout,
     )
     incoming_by_global_id = {**incoming_rooms, **incoming_devices}
+    incoming_records_by_global_id = {
+        item["global_id"]: item for item in checked_semantics["records"]
+    }
 
     current_rooms = {room["id"]: room for room in current_layout["rooms"]}
     current_devices = {
@@ -621,25 +624,35 @@ def _plan_ifc_semantic_reimport(
         global_id = binding["global_id"]
         current = current_by_kind[binding["kind"]].get(binding["spatial_id"])
         incoming = incoming_by_global_id.get(global_id)
+        incoming_record = incoming_records_by_global_id.get(global_id)
         baseline_digest = binding["source_spatial_sha256"]
         local_changed = (
             current is None or _canonical_sha256(current) != baseline_digest
         )
-        source_changed = (
+        source_spatial_changed = (
             incoming is None or _canonical_sha256(incoming) != baseline_digest
         )
+        source_semantic_changed = (
+            incoming_record is None
+            or _canonical_sha256(incoming_record) != binding["record_sha256"]
+        )
+        source_changed = source_spatial_changed or source_semantic_changed
 
         if current is None and incoming is None:
             action = "removed_both"
         elif current is None:
-            action = "conflict" if source_changed else "preserve_local_deletion"
+            action = (
+                "conflict"
+                if source_spatial_changed
+                else "preserve_local_deletion"
+            )
         elif incoming is None:
             action = "conflict" if local_changed else "remove"
-        elif not local_changed and not source_changed:
-            action = "unchanged"
-        elif not local_changed and source_changed:
+        elif not local_changed and not source_spatial_changed:
+            action = "semantic_update" if source_semantic_changed else "unchanged"
+        elif not local_changed and source_spatial_changed:
             action = "update"
-        elif local_changed and not source_changed:
+        elif local_changed and not source_spatial_changed:
             action = "preserve_local"
         elif _canonical_sha256(current) == _canonical_sha256(incoming):
             action = "converged"
@@ -654,6 +667,8 @@ def _plan_ifc_semantic_reimport(
             "action": action,
             "local_changed": local_changed,
             "source_changed": source_changed,
+            "source_spatial_changed": source_spatial_changed,
+            "source_semantic_changed": source_semantic_changed,
         }
         changes.append(item)
         action_by_global_id[global_id] = action

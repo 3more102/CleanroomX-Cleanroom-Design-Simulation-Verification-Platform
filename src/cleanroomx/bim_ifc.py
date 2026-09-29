@@ -34,6 +34,12 @@ _IFC_DEVICE_TYPES = {
     "IfcFurnishingElement": "equipment",
 }
 
+_CLEANROOMX_SPACE_PROPERTY_SET = "CleanroomX_Space"
+_CLEANROOMX_SPACE_PROPERTIES = {
+    "classification": "Classification",
+    "analysis_room_name": "AnalysisRoomName",
+}
+
 
 class IfcImportError(ValueError):
     """Raised when IFC data cannot be converted into a safe CleanroomX layout."""
@@ -1030,6 +1036,44 @@ def _placement_orientation_deg(
     return 0.0 if abs(orientation) <= 1e-12 else orientation
 
 
+def _cleanroomx_space_metadata(
+    entity: Any,
+    element_util: Any,
+) -> dict[str, str]:
+    """Read explicit CleanroomX-owned semantic fields from an IFC space."""
+    get_pset = getattr(element_util, "get_pset", None)
+    if not callable(get_pset):
+        return {}
+
+    try:
+        properties = get_pset(
+            entity,
+            _CLEANROOMX_SPACE_PROPERTY_SET,
+            psets_only=True,
+            should_inherit=True,
+        )
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to read {_CLEANROOMX_SPACE_PROPERTY_SET!r} for "
+            f"{getattr(entity, 'GlobalId', '?')!r}"
+        ) from exc
+
+    if properties is None:
+        return {}
+    if not isinstance(properties, dict):
+        raise IfcImportError(
+            f"{_CLEANROOMX_SPACE_PROPERTY_SET!r} for "
+            f"{getattr(entity, 'GlobalId', '?')!r} must be a property mapping"
+        )
+
+    metadata: dict[str, str] = {}
+    for field, property_name in _CLEANROOMX_SPACE_PROPERTIES.items():
+        value = _non_empty_text(properties.get(property_name))
+        if value:
+            metadata[field] = value
+    return metadata
+
+
 def _space_dimensions_m(
     entity: Any,
     unit_scale: float,
@@ -1249,6 +1293,7 @@ def extract_ifc_semantics(
             "width_m": width,
             "height_m": height,
         }
+        record.update(_cleanroomx_space_metadata(entity, element_util))
         record.update(
             _containing_storey_metadata(
                 entity,

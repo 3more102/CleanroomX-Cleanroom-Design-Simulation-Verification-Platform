@@ -31,9 +31,27 @@ The importer currently supports:
 - explicit `IfcBuildingStorey` identity on imported spaces, including storey name
   and world-space elevation when available; when every imported space belongs to
   one storey, that storey is promoted into CleanroomX floor metadata
+- explicit CleanroomX-owned `CleanroomX_Space` user property-set mapping:
+  `Classification` -> room `classification` and `AnalysisRoomName` ->
+  room `analysis_room_name`; unrelated property sets are not inferred or mapped
 - deterministic normalized semantic records
 - duplicate `GlobalId`, dangling-space, and conflicting repeated storey-metadata rejection
 - semantic SHA-256 and original IFC source SHA-256 provenance
+
+## CleanroomX-owned space semantics
+
+For explicit project metadata, an `IfcSpace` may carry a user-defined property
+set named `CleanroomX_Space`. CleanroomX reads only these two properties:
+
+- `Classification` -> `classification`
+- `AnalysisRoomName` -> `analysis_room_name`
+
+This is a CleanroomX convention, not a buildingSMART-standard property set.
+The custom set deliberately does not use the reserved `Pset_` prefix. No
+classification, cleanroom grade, or engineering input is inferred from unrelated
+IFC property sets. IfcOpenShell type inheritance is enabled, so the same explicit
+property set may be attached to an occurrence or inherited from its applicable
+type.
 
 The base CleanroomX installation still has no mandatory third-party runtime
 dependencies. Install the optional BIM dependency to read native `.ifc` files:

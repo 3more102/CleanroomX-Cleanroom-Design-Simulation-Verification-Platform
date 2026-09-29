@@ -453,6 +453,7 @@ def test_ifc_extraction_preserves_quarter_turn_space_footprint(monkeypatch, tmp_
     assert record["length_m"] == pytest.approx(5.0)
     assert record["width_m"] == pytest.approx(6.0)
     assert record["height_m"] == pytest.approx(3.0)
+    assert record["dimension_source"] == "ifc_quantities"
 
 
 def test_ifc_space_geometry_fallback_accepts_only_rectangular_prism():
@@ -639,6 +640,7 @@ def test_ifc_extraction_falls_back_to_geometry_without_length_width_qto(
     assert (record["length_m"], record["width_m"], record["height_m"]) == pytest.approx(
         (5.0, 6.0, 3.0)
     )
+    assert record["dimension_source"] == "ifcopenshell_geometry"
 
 
 def test_ifc_placement_rejects_invalid_transform_values():
@@ -954,6 +956,29 @@ def test_ifc_semantics_are_deterministic_across_record_order():
     assert len(forward["semantic_sha256"]) == 64
 
 
+def test_ifc_semantics_preserve_optional_space_dimension_source():
+    records = _records()
+    records[0]["dimension_source"] = "ifcopenshell_geometry"
+
+    semantics = normalize_ifc_semantic_records(records)
+
+    space = next(
+        item for item in semantics["records"] if item["global_id"] == "SPACE-001"
+    )
+    assert space["dimension_source"] == "ifcopenshell_geometry"
+
+
+def test_ifc_semantics_reject_unknown_space_dimension_source():
+    records = _records()
+    records[0]["dimension_source"] = "guessed_bbox"
+
+    with pytest.raises(
+        IfcImportError,
+        match="SPACE-001.dimension_source must be one of",
+    ):
+        normalize_ifc_semantic_records(records)
+
+
 def test_ifc_semantics_map_spaces_and_devices_into_spatial_layout():
     semantics = normalize_ifc_semantic_records(_records())
     layout = layout_from_ifc_semantics(semantics)
@@ -1205,6 +1230,47 @@ def test_ifc_reimport_surfaces_semantic_only_source_change():
     )
     assert new_binding["ifc_class"] == "IfcAirTerminal"
     assert new_binding["record_sha256"] != old_record_digest
+
+
+def test_ifc_reimport_surfaces_space_dimension_provenance_change():
+    project = new_project("IFC Project")
+    original_records = _records()
+    original_records[0]["dimension_source"] = "ifc_quantities"
+    original = normalize_ifc_semantic_records(original_records)
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    before_layout = copy.deepcopy(project.metadata["spatial_layout"])
+
+    changed_records = _records()
+    changed_records[0]["dimension_source"] = "ifcopenshell_geometry"
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    plan = plan_ifc_semantic_reimport(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    room_change = next(
+        item for item in plan["changes"] if item["global_id"] == "SPACE-001"
+    )
+
+    assert room_change["action"] == "semantic_update"
+    assert room_change["source_semantic_changed"] is True
+    assert room_change["source_spatial_changed"] is False
+    assert plan["can_apply"] is True
+
+    reimport_ifc_semantics_to_project(
+        project,
+        changed,
+        source_name="facility-v2.ifc",
+        source_sha256="b" * 64,
+    )
+    assert project.metadata["spatial_layout"] == before_layout
 
 
 def test_ifc_semantic_only_source_change_does_not_conflict_with_local_spatial_edit():

@@ -33,6 +33,7 @@ _IFC_DEVICE_TYPES = {
     "IfcPump": "equipment",
     "IfcFurnishingElement": "equipment",
 }
+_SUPPORTED_IFC_CLASSES = frozenset({"IfcSpace", *_IFC_DEVICE_TYPES})
 
 _CLEANROOMX_SPACE_PROPERTY_SET = "CleanroomX_Space"
 _CLEANROOMX_SPACE_PROPERTIES = {
@@ -121,7 +122,9 @@ def _device_type(ifc_class: str, predefined_type: str = "") -> str:
             "LINEARDIFFUSER",
         }:
             return "supply"
-    return _IFC_DEVICE_TYPES.get(ifc_class, "equipment")
+    if ifc_class not in _IFC_DEVICE_TYPES:
+        raise IfcImportError(f"unsupported IFC device class {ifc_class!r}")
+    return _IFC_DEVICE_TYPES[ifc_class]
 
 
 def normalize_ifc_semantic_records(
@@ -148,6 +151,10 @@ def normalize_ifc_semantic_records(
         if not ifc_class.startswith("Ifc"):
             raise IfcImportError(
                 f"IFC semantic record {index}.ifc_class must be an IFC entity name"
+            )
+        if ifc_class not in _SUPPORTED_IFC_CLASSES:
+            raise IfcImportError(
+                f"IFC semantic record {index}.ifc_class {ifc_class!r} is not supported"
             )
 
         global_id = _non_empty_text(raw.get("global_id"))

@@ -195,3 +195,51 @@ requirements automatically.
 Attaching IFC evidence does not modify existing checks, findings, verdicts, or
 verification runs. Later requirement integrations must explicitly reference the
 IFC evidence they use.
+
+## ACH design evidence integration
+
+`proofgraph_from_ach_design` maps configured project minimum-ACH requirements to
+traceable design-calculation evidence without introducing another airflow or ACH
+solver. The adapter reuses the canonical preliminary `air_system_design` result
+for governing supply airflow and the canonical `verify_room` path for room
+volume, nominal supply ACH, and the configured minimum-ACH pass/fail semantics.
+
+For each room with an explicit minimum ACH requirement it records:
+
+- DesignEvidence for the configured minimum ACH and its requirement origin;
+- DesignEvidence for requirement-side and air-system room dimensions;
+- CalculationEvidence for room volume, governing design supply airflow, and
+  nominal supply ACH;
+- explicit upstream dependencies from room dimensions to volume and from volume
+  plus governing supply airflow to calculated ACH;
+- PASS/FAIL only when an exactly matched room has geometry established as
+  consistent by the canonical design-consistency workflow.
+
+A missing matching air-system room, missing usable calculation evidence, or a
+room-geometry mismatch produces UNKNOWN rather than PASS. The existing
+`design_consistency.ach_abs_tolerance_1_h` is not repurposed as a compliance
+allowance: the canonical ACH verifier currently uses the exact project rule
+`actual ACH >= configured minimum ACH`, so the ProofGraph criterion records a
+zero ACH compliance tolerance.
+
+This evidence remains a design/calculation layer. It is not commissioning,
+operational, certification, or external-standard evidence.
+
+## Airflow-balance evidence integration
+
+`proofgraph_from_air_balance` maps the canonical steady-state room airflow
+balance into ProofGraph without adding another balance equation. The adapter
+retains explicit design inputs for supply, return, exhaust, transfer-in,
+transfer-out, and minimum surplus, then reuses `calculate_air_balance` for net
+surplus and surplus-margin calculation evidence.
+
+The configured minimum surplus becomes the explicit project requirement. The
+calculated net surplus is compared with that requirement using the canonical
+`passes_minimum_surplus` result, and the signed surplus margin is retained as the
+finding delta. Calculation provenance links the net-surplus result to all flow
+inputs and links the final margin to both net surplus and the configured minimum.
+
+This adapter intentionally does not infer leakage that was not modeled and does
+not calculate or claim room pressure. The verification-run metadata preserves
+that boundary explicitly.
+\n

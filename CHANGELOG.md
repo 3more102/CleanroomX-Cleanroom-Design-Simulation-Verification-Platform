@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased ProofGraph integration — airflow-balance evidence chain — 2026-09-29
+
+- Bridges the canonical steady-state room airflow-balance calculation into ProofGraph without introducing a duplicate balance equation.
+- Preserves explicit supply, return, exhaust, transfer-in, transfer-out, and minimum-surplus design inputs plus calculated net surplus and signed surplus margin.
+- Adds explicit upstream evidence dependencies from flow inputs to net surplus and from net surplus/minimum surplus to the final margin.
+- Preserves the canonical minimum-surplus PASS/FAIL result and explicitly records that the airflow-balance calculation does not calculate room pressure or invent unmodeled leakage.
+- Adds focused pass/fail, dependency, no-pressure-claim, strict round-trip, and determinism regressions.
+
+## Unreleased ProofGraph integration — ACH design evidence chain — 2026-09-29
+
+- Bridges configured project minimum-ACH requirements into ProofGraph without adding a second airflow or ACH solver.
+- Reuses the canonical preliminary air-system design for governing supply airflow and the canonical room verification path for room volume, nominal supply ACH, and exact minimum-ACH pass/fail semantics.
+- Records requirement origin, room dimensions, room volume, governing supply airflow, calculated ACH, deterministic source revisions, and explicit upstream evidence dependencies.
+- Fails closed to UNKNOWN when the matching air-system room is absent or canonical design-consistency does not establish matching room geometry; missing/ambiguous evidence is never promoted to PASS.
+- Keeps design-consistency input tolerances separate from ACH compliance semantics and adds focused pass/fail/unknown, geometry-mismatch, strict round-trip, and determinism regressions.
+
 ## Unreleased ProofGraph integration — IFC/BIM design evidence — 2026-09-29
 
 - Adds a dedicated IFC-to-ProofGraph bridge that revalidates normalized IFC semantics and optional semantic SHA-256 identity before emitting design evidence.

@@ -177,6 +177,24 @@ def normalize_ifc_semantic_records(
                 value = _non_empty_text(raw.get(field))
                 if value:
                     record[field] = value
+
+            storey_global_id = _non_empty_text(raw.get("storey_global_id"))
+            storey_name = _non_empty_text(raw.get("storey_name"))
+            raw_storey_elevation = raw.get("storey_elevation_m")
+            if storey_global_id:
+                record["storey_global_id"] = storey_global_id
+                if storey_name:
+                    record["storey_name"] = storey_name
+                if raw_storey_elevation is not None:
+                    record["storey_elevation_m"] = _finite_number(
+                        raw_storey_elevation,
+                        field=f"{global_id}.storey_elevation_m",
+                    )
+            elif storey_name or raw_storey_elevation is not None:
+                raise IfcImportError(
+                    f"{global_id}.storey_global_id is required when IFC storey "
+                    "metadata is supplied"
+                )
         else:
             room_global_id = _non_empty_text(raw.get("room_global_id"))
             if room_global_id:
@@ -215,6 +233,24 @@ def normalize_ifc_semantic_records(
                 f"IFC entity {item['global_id']!r} references missing space "
                 f"{room_global_id!r}"
             )
+
+    storey_metadata: dict[str, dict[str, Any]] = {}
+    for item in normalized:
+        if item["ifc_class"] != "IfcSpace":
+            continue
+        storey_global_id = item.get("storey_global_id")
+        if not storey_global_id:
+            continue
+        prior = storey_metadata.setdefault(storey_global_id, {})
+        for field in ("storey_name", "storey_elevation_m"):
+            value = item.get(field)
+            if value is None:
+                continue
+            if field in prior and prior[field] != value:
+                raise IfcImportError(
+                    f"IFC storey {storey_global_id!r} has inconsistent {field}"
+                )
+            prior[field] = value
 
     document = {
         "schema": IFC_SEMANTICS_SCHEMA,
@@ -277,6 +313,38 @@ def layout_from_ifc_semantics(semantics: dict[str, Any]) -> dict[str, Any]:
     spaces = [
         item for item in checked["records"] if item["ifc_class"] == "IfcSpace"
     ]
+    storey_ids = {
+        item.get("storey_global_id")
+        for item in spaces
+        if item.get("storey_global_id")
+    }
+    all_spaces_share_storey = bool(spaces) and all(
+        item.get("storey_global_id") for item in spaces
+    ) and len(storey_ids) == 1
+    if all_spaces_share_storey:
+        storey_global_id = next(iter(storey_ids))
+        storey_records = [
+            item for item in spaces if item.get("storey_global_id") == storey_global_id
+        ]
+        storey_names = {
+            item.get("storey_name")
+            for item in storey_records
+            if item.get("storey_name")
+        }
+        storey_elevations = {
+            item.get("storey_elevation_m")
+            for item in storey_records
+            if item.get("storey_elevation_m") is not None
+        }
+        if len(storey_names) <= 1 and len(storey_elevations) <= 1:
+            storey_name = next(iter(storey_names), storey_global_id)
+            layout["floor"]["id"] = _slug(
+                storey_global_id, fallback="ifc-storey"
+            )
+            layout["floor"]["name"] = storey_name
+            if len(storey_elevations) == 1:
+                layout["floor"]["elevation_m"] = float(next(iter(storey_elevations)))
+
     for index, item in enumerate(spaces):
         room_id = _unique_id(
             item["name"], used_room_ids, fallback=f"ifc-space-{index + 1}"
@@ -1033,6 +1101,93 @@ def _containing_space_global_id(entity: Any, element_util: Any) -> str:
     return _non_empty_text(getattr(structure, "GlobalId", ""))
 
 
+def _containing_storey_metadata(
+    entity: Any,
+    unit_scale: float,
+    element_util: Any,
+    placement_util: Any,
+) -> dict[str, Any]:
+    """Return explicit IfcBuildingStorey identity for a space when available."""
+    storey = None
+
+    get_aggregate = getattr(element_util, "get_aggregate", None)
+    if callable(get_aggregate):
+        current = entity
+        seen_entities: set[int] = set()
+        while current is not None and id(current) not in seen_entities:
+            seen_entities.add(id(current))
+            try:
+                parent = get_aggregate(current)
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to resolve IFC aggregate hierarchy for "
+                    f"{getattr(entity, 'GlobalId', '?')!r}"
+                ) from exc
+            if parent is None:
+                break
+            try:
+                if parent.is_a("IfcBuildingStorey"):
+                    storey = parent
+                    break
+            except Exception:
+                pass
+            current = parent
+
+    if storey is None:
+        get_container = getattr(element_util, "get_container", None)
+        if callable(get_container):
+            try:
+                candidate = get_container(
+                    entity,
+                    should_get_direct=False,
+                    ifc_class="IfcBuildingStorey",
+                )
+            except Exception as exc:
+                raise IfcImportError(
+                    f"unable to resolve IFC building storey for "
+                    f"{getattr(entity, 'GlobalId', '?')!r}"
+                ) from exc
+            if candidate is not None:
+                try:
+                    if candidate.is_a("IfcBuildingStorey"):
+                        storey = candidate
+                except Exception:
+                    storey = None
+
+    if storey is None:
+        return {}
+
+    storey_global_id = _non_empty_text(getattr(storey, "GlobalId", ""))
+    if not storey_global_id:
+        raise IfcImportError(
+            f"IfcBuildingStorey containing {getattr(entity, 'GlobalId', '?')!r} "
+            "has no GlobalId"
+        )
+
+    metadata: dict[str, Any] = {
+        "storey_global_id": storey_global_id,
+        "storey_name": _non_empty_text(
+            getattr(storey, "LongName", None),
+            _non_empty_text(getattr(storey, "Name", None), storey_global_id),
+        ),
+    }
+
+    if getattr(storey, "ObjectPlacement", None) is not None:
+        _, _, elevation_m = _placement_xyz_m(storey, unit_scale, placement_util)
+        metadata["storey_elevation_m"] = elevation_m
+    else:
+        elevation = getattr(storey, "Elevation", None)
+        if elevation is not None:
+            metadata["storey_elevation_m"] = (
+                _finite_number(
+                    elevation,
+                    field=f"{storey_global_id}.Elevation",
+                )
+                * unit_scale
+            )
+    return metadata
+
+
 def _file_sha256(path: Path) -> str:
     digest = sha256()
     with path.open("rb") as stream:
@@ -1080,22 +1235,29 @@ def extract_ifc_semantics(
             entity, unit_scale, element_util
         )
         global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
-        records.append(
-            {
-                "global_id": global_id,
-                "ifc_class": "IfcSpace",
-                "name": _non_empty_text(
-                    getattr(entity, "LongName", None),
-                    _non_empty_text(getattr(entity, "Name", None), global_id),
-                ),
-                "x_m": x,
-                "y_m": y,
-                "z_m": z,
-                "length_m": length,
-                "width_m": width,
-                "height_m": height,
-            }
+        record: dict[str, Any] = {
+            "global_id": global_id,
+            "ifc_class": "IfcSpace",
+            "name": _non_empty_text(
+                getattr(entity, "LongName", None),
+                _non_empty_text(getattr(entity, "Name", None), global_id),
+            ),
+            "x_m": x,
+            "y_m": y,
+            "z_m": z,
+            "length_m": length,
+            "width_m": width,
+            "height_m": height,
+        }
+        record.update(
+            _containing_storey_metadata(
+                entity,
+                unit_scale,
+                element_util,
+                placement_util,
+            )
         )
+        records.append(record)
 
     seen = {item["global_id"] for item in records}
     for ifc_class in _IFC_DEVICE_TYPES:

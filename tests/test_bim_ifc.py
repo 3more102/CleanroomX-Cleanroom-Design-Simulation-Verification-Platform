@@ -273,6 +273,196 @@ def test_ifc_space_container_resolution_prefers_explicit_space_relation():
     )
 
 
+def test_ifc_storey_metadata_uses_world_storey_elevation():
+    space = types.SimpleNamespace(
+        GlobalId="SPACE-LEVEL-1",
+    )
+    storey = types.SimpleNamespace(
+        GlobalId="STOREY-01",
+        Name="Level 1",
+        LongName=None,
+        ObjectPlacement=object(),
+        Elevation=None,
+        is_a=lambda name: name == "IfcBuildingStorey",
+    )
+    calls = []
+
+    class ElementUtil:
+        @staticmethod
+        def get_aggregate(entity):
+            calls.append(entity)
+            return storey if entity is space else None
+
+        @staticmethod
+        def get_container(*_args, **_kwargs):
+            raise AssertionError("aggregate hierarchy should resolve the storey")
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (1.0, 0.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0, 3000.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    metadata = bim_ifc_module._containing_storey_metadata(
+        space,
+        0.001,
+        ElementUtil,
+        PlacementUtil,
+    )
+
+    assert metadata == {
+        "storey_global_id": "STOREY-01",
+        "storey_name": "Level 1",
+        "storey_elevation_m": 3.0,
+    }
+    assert calls == [space]
+
+
+def test_ifc_semantics_promote_one_explicit_storey_to_layout_floor():
+    records = _records()
+    records[0].update(
+        {
+            "z_m": 3.0,
+            "storey_global_id": "STOREY-01",
+            "storey_name": "Level 1",
+            "storey_elevation_m": 3.0,
+        }
+    )
+
+    semantics = normalize_ifc_semantic_records(records)
+    layout = layout_from_ifc_semantics(semantics)
+
+    assert layout["floor"] == {
+        "id": "storey-01",
+        "name": "Level 1",
+        "elevation_m": 3.0,
+        "default_ceiling_height_m": 3.0,
+        "units": "m",
+    }
+    assert layout["rooms"][0]["floor_elevation_m"] == 3.0
+
+
+def test_ifc_storey_metadata_requires_storey_global_id():
+    records = _records()
+    records[0]["storey_name"] = "Level 1"
+
+    with pytest.raises(IfcImportError, match="storey_global_id is required"):
+        normalize_ifc_semantic_records(records)
+
+
+def test_ifc_semantics_reject_inconsistent_storey_metadata():
+    records = _records()
+    second_space = copy.deepcopy(records[0])
+    second_space.update(
+        {
+            "global_id": "SPACE-002",
+            "name": "ISO 8 Support",
+            "storey_global_id": "STOREY-01",
+            "storey_name": "Level One",
+            "storey_elevation_m": 3.0,
+        }
+    )
+    records[0].update(
+        {
+            "storey_global_id": "STOREY-01",
+            "storey_name": "Level 1",
+            "storey_elevation_m": 3.0,
+        }
+    )
+    records.append(second_space)
+
+    with pytest.raises(IfcImportError, match="inconsistent storey_name"):
+        normalize_ifc_semantic_records(records)
+
+    records[-1]["storey_name"] = "Level 1"
+    records[-1]["storey_elevation_m"] = 3.2
+    with pytest.raises(IfcImportError, match="inconsistent storey_elevation_m"):
+        normalize_ifc_semantic_records(records)
+
+
+def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    space_placement = object()
+    storey_placement = object()
+    space = types.SimpleNamespace(
+        GlobalId="SPACE-LEVEL-1",
+        LongName="Process",
+        Name="Process",
+        ObjectPlacement=space_placement,
+    )
+    storey = types.SimpleNamespace(
+        GlobalId="STOREY-01",
+        LongName=None,
+        Name="Level 1",
+        ObjectPlacement=storey_placement,
+        Elevation=None,
+        is_a=lambda name: name == "IfcBuildingStorey",
+    )
+
+    class Model:
+        def by_type(self, ifc_class):
+            if ifc_class == "IfcSpace":
+                return [space]
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+    element = sys.modules["ifcopenshell.util.element"]
+    element.get_psets = lambda *_args, **_kwargs: {
+        "Qto_SpaceBaseQuantities": {
+            "Length": 6000.0,
+            "Width": 5000.0,
+            "Height": 3000.0,
+        }
+    }
+
+    def get_aggregate(entity):
+        if entity is space:
+            return storey
+        return None
+
+    element.get_aggregate = get_aggregate
+    element.get_container = lambda *_args, **_kwargs: None
+    placement = sys.modules["ifcopenshell.util.placement"]
+
+    def get_local_placement(value):
+        if value is space_placement:
+            return (
+                (1.0, 0.0, 0.0, 1000.0),
+                (0.0, 1.0, 0.0, 2000.0),
+                (0.0, 0.0, 1.0, 3000.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+        if value is storey_placement:
+            return (
+                (1.0, 0.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0, 3000.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+        raise AssertionError("unexpected placement")
+
+    placement.get_local_placement = get_local_placement
+    unit = sys.modules["ifcopenshell.util.unit"]
+    unit.calculate_unit_scale = lambda _model: 0.001
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+
+    space_record = semantics["records"][0]
+    assert space_record["global_id"] == "SPACE-LEVEL-1"
+    assert space_record["storey_global_id"] == "STOREY-01"
+    assert space_record["storey_name"] == "Level 1"
+    assert space_record["storey_elevation_m"] == pytest.approx(3.0)
+
+
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
     digests = iter(["a" * 64, "b" * 64])

@@ -28,8 +28,11 @@ The importer currently supports:
 - space Length / Width / Height base quantities
 - explicit and indirect spatial-containment resolution from supported devices to
   `IfcSpace` through IfcOpenShell, without geometric room inference
+- explicit `IfcBuildingStorey` identity on imported spaces, including storey name
+  and world-space elevation when available; when every imported space belongs to
+  one storey, that storey is promoted into CleanroomX floor metadata
 - deterministic normalized semantic records
-- duplicate `GlobalId` and dangling-space rejection
+- duplicate `GlobalId`, dangling-space, and conflicting repeated storey-metadata rejection
 - semantic SHA-256 and original IFC source SHA-256 provenance
 
 The base CleanroomX installation still has no mandatory third-party runtime
@@ -195,8 +198,12 @@ layout = layout_from_ifc_semantics(semantics)
 This is a semantic and quantity-based interoperability layer, not a full IFC
 geometric kernel.
 
-The current CleanroomX spatial contract is axis-aligned. The bridge therefore
-uses room Length / Width / Height quantities and transformed placement origins.
+The current CleanroomX spatial contract is axis-aligned and exposes one active
+floor metadata object. The bridge therefore uses room Length / Width / Height
+quantities and transformed placement origins. IFC storey identity is preserved in
+the normalized semantic record for each space, and a single shared storey is
+promoted to the active CleanroomX floor. Multi-storey imports keep each room's
+world-space elevation but are not represented as multiple editable floor objects.
 IfcOpenShell's full nested local-placement transform is used for those origins,
 so rotated parent placements no longer lose their translated world position.
 However, CleanroomX still does not rotate the axis-aligned room footprint or
@@ -218,7 +225,7 @@ precision that the current model does not preserve.
 The bridge establishes stable IFC identity and provenance needed for later work:
 
 1. geometry/tessellation and rotated room/device footprint support;
-2. explicit IFC storey/floor mapping;
+2. native multi-floor editing/view selection built on preserved IFC storey identity;
 3. IFC property-set mapping to cleanroom classifications and engineering inputs;
 4. bidirectional synchronization and digital-twin/CFD integration.
 

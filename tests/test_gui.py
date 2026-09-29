@@ -882,6 +882,113 @@ def test_gui_initial_ifc_import_refuses_to_reset_legacy_identity_link(monkeypatc
     assert warnings
     assert "cannot reset" in warnings[0][1].lower()
 
+def test_gui_initial_ifc_import_rejects_source_change_after_preview(
+    tmp_path, monkeypatch
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project = new_project("GUI IFC changing source")
+    reviewed = normalize_ifc_semantic_records(_ifc_gui_records())
+    changed_records = _ifc_gui_records()
+    changed_records[0]["length_m"] = 7.0
+    changed = normalize_ifc_semantic_records(changed_records)
+    source = tmp_path / "facility.ifc"
+    source.write_text("placeholder", encoding="utf-8")
+
+    candidates = [
+        (reviewed, {"source_name": source.name, "source_sha256": "a" * 64}),
+        (changed, {"source_name": source.name, "source_sha256": "b" * 64}),
+    ]
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: source
+    app._extract_ifc_candidate = lambda path: candidates.pop(0)
+    app._perform_project_edit = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("changed IFC source must not mutate the project")
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    assert app.import_ifc_layout() is False
+
+    assert project.metadata == {}
+    assert errors
+    assert "changed after it was reviewed" in errors[0][1]
+
+
+def test_gui_ifc_reimport_rejects_source_change_after_review(
+    tmp_path, monkeypatch
+):
+    class Status:
+        def set(self, value):
+            self.value = value
+
+    project = new_project("GUI IFC changing re-import")
+    original = normalize_ifc_semantic_records(_ifc_gui_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+
+    reviewed_records = _ifc_gui_records()
+    reviewed_records[0]["length_m"] = 7.0
+    reviewed = normalize_ifc_semantic_records(reviewed_records)
+    changed_records = _ifc_gui_records()
+    changed_records[0]["length_m"] = 8.0
+    changed = normalize_ifc_semantic_records(changed_records)
+    source = tmp_path / "facility-v2.ifc"
+    source.write_text("placeholder", encoding="utf-8")
+
+    candidates = [
+        (reviewed, {"source_name": source.name, "source_sha256": "b" * 64}),
+        (changed, {"source_name": source.name, "source_sha256": "c" * 64}),
+    ]
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = project
+    app.status_var = Status()
+    app._prepare_ifc_project_state = lambda action: True
+    app._choose_ifc_path = lambda title: source
+    app._extract_ifc_candidate = lambda path: candidates.pop(0)
+    app._show_ifc_plan = lambda report, allow_apply: True
+    app._perform_project_edit = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("changed IFC source must not mutate the project")
+    )
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+
+    before = json.loads(json.dumps(project.metadata))
+    assert app.apply_ifc_reimport() is False
+
+    assert project.metadata == before
+    assert errors
+    assert "changed after it was reviewed" in errors[0][1]
+
+
 def test_gui_ifc_reimport_conflict_review_does_not_mutate_project(tmp_path):
     class Status:
         def set(self, value):

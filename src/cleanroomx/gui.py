@@ -32,6 +32,7 @@ from .application import (
 )
 from .bim_ifc import (
     IFC_LINK_METADATA_KEY,
+    IfcImportError,
     apply_ifc_semantics_to_project,
     extract_ifc_semantics,
     plan_ifc_semantic_reimport,
@@ -1490,6 +1491,27 @@ class CleanroomXApp:
         if callable(wait_window):
             wait_window(dialog)
 
+    def _revalidate_reviewed_ifc_source(
+        self,
+        source: Path,
+        *,
+        expected_semantics: dict,
+        expected_provenance: dict[str, str],
+    ) -> tuple[dict, dict[str, str]]:
+        """Reject review-to-apply IFC source drift before project mutation."""
+        semantics, provenance = extract_ifc_semantics(source)
+        if (
+            provenance.get("source_sha256")
+            != expected_provenance.get("source_sha256")
+            or semantics.get("semantic_sha256")
+            != expected_semantics.get("semantic_sha256")
+        ):
+            raise IfcImportError(
+                "IFC source changed after review; no project changes were applied. "
+                "Review the current IFC file again before applying it."
+            )
+        return semantics, provenance
+
     def _refresh_after_ifc_edit(self) -> None:
         workspace = getattr(self, "spatial_workspace", None)
         if workspace is not None:
@@ -1677,6 +1699,11 @@ class CleanroomXApp:
             return False
 
         try:
+            semantics, provenance = self._revalidate_reviewed_ifc_source(
+                source,
+                expected_semantics=semantics,
+                expected_provenance=provenance,
+            )
             self._perform_project_edit(
                 "Apply IFC re-import",
                 lambda: reimport_ifc_semantics_to_project(

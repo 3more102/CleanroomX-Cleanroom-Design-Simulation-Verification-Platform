@@ -951,6 +951,14 @@ def _containing_space_global_id(entity: Any) -> str:
     return ""
 
 
+def _file_sha256(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def extract_ifc_semantics(
     path: str | Path,
 ) -> tuple[dict[str, Any], dict[str, str]]:
@@ -960,8 +968,7 @@ def extract_ifc_semantics(
     origins. It does not claim complete B-Rep/tessellation interoperability.
     """
     source = Path(path)
-    payload = source.read_bytes()
-    source_digest = sha256(payload).hexdigest()
+    source_digest = _file_sha256(source)
 
     try:
         import ifcopenshell  # type: ignore[import-not-found]
@@ -1042,6 +1049,18 @@ def extract_ifc_semantics(
                 if isinstance(value, (int, float)) and float(value) > 0:
                     record[target_field] = float(value) * unit_scale
             records.append(record)
+
+    try:
+        final_source_digest = _file_sha256(source)
+    except OSError as exc:
+        raise IfcImportError(
+            "IFC source became unavailable while it was being read; extraction "
+            "was discarded"
+        ) from exc
+    if final_source_digest != source_digest:
+        raise IfcImportError(
+            "IFC source changed while it was being read; extraction was discarded"
+        )
 
     semantics = normalize_ifc_semantic_records(records)
     return semantics, {

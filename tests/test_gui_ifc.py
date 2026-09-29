@@ -112,6 +112,76 @@ def test_gui_ifc_initial_import_establishes_identity_without_touching_analyses(
     assert "save the project" in app.status_var.value.lower()
 
 
+def test_gui_ifc_initial_import_previews_provenance_before_mutation(monkeypatch):
+    project = new_project("IFC GUI preview")
+    app = _app(project)
+    _install_source(monkeypatch, _records(), "a" * 64)
+
+    confirmations = []
+    monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "showwarning", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "showerror", lambda *a, **k: None)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda title, message, **kwargs: confirmations.append((title, message)) or True,
+    )
+
+    def perform(_description, mutation):
+        assert confirmations, "IFC provenance preview must precede project mutation"
+        return mutation()
+
+    app._perform_project_edit = perform
+
+    assert app.import_ifc_spatial_layout() is True
+
+    assert len(confirmations) == 1
+    title, message = confirmations[0]
+    assert title == "Import IFC spatial layout?"
+    assert "Source: facility.ifc" in message
+    assert "Rooms: 1" in message
+    assert "Devices: 1" in message
+    assert f"Source SHA-256: {'a' * 64}" in message
+
+
+def test_gui_ifc_initial_import_rejects_review_to_apply_source_drift(monkeypatch):
+    project = new_project("IFC GUI source drift")
+    app = _app(project)
+
+    reviewed = normalize_ifc_semantic_records(_records())
+    changed_records = _records()
+    changed_records[0]["length_m"] = 7.0
+    changed = normalize_ifc_semantic_records(changed_records)
+    candidates = [
+        (copy.deepcopy(reviewed), {"source_name": "facility.ifc", "source_sha256": "a" * 64}),
+        (copy.deepcopy(changed), {"source_name": "facility.ifc", "source_sha256": "b" * 64}),
+    ]
+    monkeypatch.setattr(
+        gui_module,
+        "extract_ifc_semantics",
+        lambda _path: candidates.pop(0),
+    )
+    monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "showwarning", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "askyesno", lambda *a, **k: True)
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+    app._perform_project_edit = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("source drift must be rejected before project mutation")
+    )
+
+    before = copy.deepcopy(project.to_dict())
+    assert app.import_ifc_spatial_layout() is False
+
+    assert project.to_dict() == before
+    assert errors
+    assert "changed after it was reviewed" in errors[0][1]
+
+
 def test_gui_ifc_initial_import_requires_explicit_layout_replacement(monkeypatch):
     project = new_project("IFC GUI")
     original = normalize_ifc_semantic_records(_records())
@@ -184,6 +254,55 @@ def test_gui_ifc_apply_preserves_global_id_spatial_identity(monkeypatch):
     assert room["length_m"] == 7.0
     assert reviewed[0]["can_apply"] is True
     assert app.spatial_workspace.refresh_count == 1
+
+
+def test_gui_ifc_apply_rejects_review_to_apply_source_drift(monkeypatch):
+    project = new_project("IFC GUI re-import drift")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+
+    reviewed_records = _records()
+    reviewed_records[0]["length_m"] = 7.0
+    reviewed = normalize_ifc_semantic_records(reviewed_records)
+    changed_records = _records()
+    changed_records[0]["length_m"] = 8.0
+    changed = normalize_ifc_semantic_records(changed_records)
+
+    app = _app(project)
+    candidates = [
+        (copy.deepcopy(reviewed), {"source_name": "facility.ifc", "source_sha256": "b" * 64}),
+        (copy.deepcopy(changed), {"source_name": "facility.ifc", "source_sha256": "c" * 64}),
+    ]
+    monkeypatch.setattr(
+        gui_module,
+        "extract_ifc_semantics",
+        lambda _path: candidates.pop(0),
+    )
+    monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "showwarning", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "askyesno", lambda *a, **k: True)
+    errors = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+    app._perform_project_edit = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("source drift must be rejected before project mutation")
+    )
+
+    before = copy.deepcopy(project.to_dict())
+    assert app.apply_ifc_reimport() is False
+
+    assert project.to_dict() == before
+    assert app.spatial_workspace.refresh_count == 0
+    assert errors
+    assert "changed after it was reviewed" in errors[0][1]
 
 
 def test_gui_ifc_apply_blocks_conflict_without_mutating_project(monkeypatch):

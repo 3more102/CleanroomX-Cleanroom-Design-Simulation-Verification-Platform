@@ -84,6 +84,41 @@ def _install_empty_ifcopenshell(monkeypatch):
     monkeypatch.setitem(sys.modules, "ifcopenshell.util.unit", unit)
 
 
+
+@pytest.mark.parametrize(
+    ("predefined_type", "expected"),
+    [
+        ("DIFFUSER", "supply"),
+        ("LINEARDIFFUSER", "supply"),
+        ("SUPPLYAIR", "supply"),
+        ("RETURNAIR", "return"),
+        ("EXHAUSTAIR", "exhaust"),
+        ("GRILLE", "equipment"),
+        ("REGISTER", "equipment"),
+        ("LOUVRE", "equipment"),
+        ("USERDEFINED", "equipment"),
+        ("NOTDEFINED", "equipment"),
+        ("", "equipment"),
+    ],
+)
+def test_ifc_air_terminal_role_mapping_is_fail_closed(
+    predefined_type, expected
+):
+    assert (
+        bim_ifc_module._device_type("IfcAirTerminal", predefined_type)
+        == expected
+    )
+
+
+def test_ambiguous_ifc_air_terminal_stays_generic_equipment():
+    records = _records()
+    records[1]["predefined_type"] = "GRILLE"
+
+    semantics = normalize_ifc_semantic_records(records)
+    layout = layout_from_ifc_semantics(semantics)
+
+    assert layout["devices"][0]["type"] == "equipment"
+
 def test_ifc_placement_uses_full_ifcopenshell_transform_matrix():
     entity = types.SimpleNamespace(
         GlobalId="SPACE-ROTATED",

@@ -25,7 +25,7 @@ _IFC_DEVICE_TYPES = {
     "IfcDoor": "door",
     "IfcWindow": "window",
     "IfcAirTerminal": "equipment",
-    "IfcFlowTerminal": "supply",
+    "IfcFlowTerminal": "equipment",
     "IfcSensor": "sensor",
     "IfcFlowController": "equipment",
     "IfcUnitaryEquipment": "equipment",
@@ -1319,7 +1319,13 @@ def extract_ifc_semantics(
     seen = {item["global_id"] for item in records}
     for ifc_class in _IFC_DEVICE_TYPES:
         try:
-            entities = model.by_type(ifc_class)
+            if ifc_class == "IfcFlowTerminal":
+                # by_type() includes subtypes by default. Query the generic
+                # superclass exactly so sanitary/electrical/etc. terminals are
+                # never re-labeled as a generic CleanroomX flow terminal.
+                entities = model.by_type(ifc_class, include_subtypes=False)
+            else:
+                entities = model.by_type(ifc_class)
         except Exception:
             continue
         for entity in entities:

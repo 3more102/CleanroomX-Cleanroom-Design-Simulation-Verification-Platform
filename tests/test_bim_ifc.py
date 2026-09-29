@@ -177,7 +177,7 @@ def test_ifc_reimport_preserves_spatial_ids_across_entity_renames():
     } == device_ids
 
 
-def test_ifc_reimport_rejects_local_layout_edits_unless_explicitly_allowed():
+def test_ifc_reimport_preserves_view_but_rejects_local_layout_edits():
     project = new_project("IFC Project")
     semantics = normalize_ifc_semantic_records(_records())
     apply_ifc_semantics_to_project(
@@ -187,6 +187,15 @@ def test_ifc_reimport_rejects_local_layout_edits_unless_explicitly_allowed():
         source_sha256="a" * 64,
     )
 
+    project.metadata["spatial_layout"]["view"]["zoom_2d"] = 1.75
+    layout = apply_ifc_semantics_to_project(
+        project,
+        semantics,
+        source_name="facility.ifc",
+        source_sha256="b" * 64,
+    )
+    assert layout["view"]["zoom_2d"] == 1.75
+
     project.metadata["spatial_layout"]["rooms"][0]["x_m"] += 0.5
 
     with pytest.raises(IfcImportError, match="local changes"):
@@ -194,14 +203,29 @@ def test_ifc_reimport_rejects_local_layout_edits_unless_explicitly_allowed():
             project,
             semantics,
             source_name="facility.ifc",
-            source_sha256="b" * 64,
+            source_sha256="c" * 64,
         )
 
     layout = apply_ifc_semantics_to_project(
         project,
         semantics,
         source_name="facility.ifc",
-        source_sha256="b" * 64,
+        source_sha256="c" * 64,
         allow_local_changes=True,
     )
     assert layout["rooms"][0]["x_m"] == 1.0
+    assert layout["view"]["zoom_2d"] == 1.75
+
+
+def test_ifc_reimport_override_requires_real_boolean():
+    project = new_project("IFC Project")
+    semantics = normalize_ifc_semantic_records(_records())
+
+    with pytest.raises(IfcImportError, match="allow_local_changes"):
+        apply_ifc_semantics_to_project(
+            project,
+            semantics,
+            source_name="facility.ifc",
+            source_sha256="a" * 64,
+            allow_local_changes="false",
+        )

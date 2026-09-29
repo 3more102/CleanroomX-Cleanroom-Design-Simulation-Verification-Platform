@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased ProofGraph integration — thermal uncertainty capacity evidence — 2026-09-29
+
+- Bridges canonical thermal uncertainty analysis into ProofGraph without duplicating psychrometric, load, airflow, or capacity equations.
+- Creates cooling/heating capacity requirements only for explicitly configured available capacities; missing capacity is not invented as a requirement.
+- Preserves conservative nominal/lower/upper capacity intervals, direct upstream evidence dependencies, deterministic source revisions, and originating-calculation identity.
+- Extends ProofGraph's explicit verdict vocabulary with `indeterminate` and `not_checked`, preserving overlap and non-evaluation states instead of collapsing them into PASS/FAIL.
+- Retains user-supplied input provenance, exposes missing provenance through verification metadata, and avoids manufactured confidence scores.
+- Adds pass/fail/indeterminate, heating-only, missing-requirement, provenance-gap, strict round-trip, and determinism regressions.
+
 ## Unreleased ProofGraph integration — airflow-balance evidence chain — 2026-09-29
 
 - Bridges the canonical steady-state room airflow-balance calculation into ProofGraph without introducing a duplicate balance equation.

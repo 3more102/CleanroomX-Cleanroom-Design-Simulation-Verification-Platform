@@ -27,7 +27,7 @@ The importer currently supports:
 - duplicate `GlobalId` and dangling-space rejection
 - semantic SHA-256 and original IFC source SHA-256 provenance
 - persisted IFC GlobalId -> CleanroomX spatial-ID bindings for stable re-import
-- imported-layout SHA-256 binding so local spatial edits are detected before re-import
+- imported-layout SHA-256 binding so local IFC-managed spatial edits are detected before re-import
 
 The base CleanroomX installation still has no mandatory third-party runtime
 dependencies. Install the optional BIM dependency to read native `.ifc` files:
@@ -77,9 +77,11 @@ layout = layout_from_ifc_semantics(semantics)
 
 When a project already contains an IFC-linked layout, re-import reuses persisted
 IFC `GlobalId` bindings so room and device IDs remain stable even if IFC names
-change. CleanroomX also compares the current spatial layout with the SHA-256 of
-the layout produced by the previous import. If the layout has been edited
-locally, re-import fails closed rather than silently overwriting those changes.
+change. CleanroomX also compares the current IFC-managed spatial state with the SHA-256
+recorded by the previous import. View/camera preferences are excluded from this
+conflict digest and are preserved across re-import. If imported room/device or
+other managed spatial state has been edited locally, re-import fails closed
+rather than silently overwriting those changes.
 
 Callers that have intentionally reviewed and accepted replacement of local
 spatial edits can opt in explicitly:

@@ -34,6 +34,29 @@ dependencies. Install the optional BIM dependency to read native `.ifc` files:
 pip install "cleanroomx[bim]"
 ```
 
+## CLI workflow
+
+Native IFC ingestion is also available through the installed `cleanroomx-ifc`
+command:
+
+```bash
+cleanroomx-ifc import project.cleanroomx.json facility.ifc
+cleanroomx-ifc plan project.cleanroomx.json facility-v2.ifc
+cleanroomx-ifc reimport project.cleanroomx.json facility-v2.ifc
+```
+
+The initial `import` refuses to overwrite existing unlinked `spatial_layout`
+metadata unless `--replace-existing-layout` is supplied. It never resets an
+existing IFC identity link; linked projects must use `plan` and `reimport`.
+
+`plan` is read-only and returns exit code 0 when the candidate can be applied,
+1 when conflicts or spatial validation block application, and 2 for operational
+or input errors. `reimport` applies only conflict-free candidates. Mutating
+commands use the project revision guard and persistent save lock, so an external
+project edit between load and save is rejected instead of overwritten. Successful
+JSON output includes the IFC source digest plus the project revision digest before
+and after the write.
+
 ## API
 
 ```python

@@ -21,6 +21,10 @@ IFC_LINK_SCHEMA_VERSION = 2
 IFC_SEMANTICS_SCHEMA = "cleanroomx.ifc-semantics"
 IFC_SEMANTICS_SCHEMA_VERSION = 1
 
+_IFC_SPACE_DIMENSION_SOURCES = frozenset(
+    {"ifc_quantities", "ifcopenshell_geometry"}
+)
+
 _IFC_DEVICE_TYPES = {
     "IfcDoor": "door",
     "IfcWindow": "window",
@@ -195,6 +199,14 @@ def normalize_ifc_semantic_records(
             record["height_m"] = _positive_number(
                 raw.get("height_m"), field=f"{global_id}.height_m"
             )
+            dimension_source = _non_empty_text(raw.get("dimension_source"))
+            if dimension_source:
+                if dimension_source not in _IFC_SPACE_DIMENSION_SOURCES:
+                    allowed = ", ".join(sorted(_IFC_SPACE_DIMENSION_SOURCES))
+                    raise IfcImportError(
+                        f"{global_id}.dimension_source must be one of: {allowed}"
+                    )
+                record["dimension_source"] = dimension_source
             for field in ("classification", "analysis_room_name"):
                 value = _non_empty_text(raw.get(field))
                 if value:
@@ -1540,6 +1552,7 @@ def extract_ifc_semantics(
                 x, y, z, length, width, height = (
                     _space_rectangular_prism_bounds_from_geometry_m(entity)
                 )
+                dimension_source = "ifcopenshell_geometry"
             except IfcImportError as geometry_error:
                 raise IfcImportError(
                     f"IfcSpace {getattr(entity, 'GlobalId', '?')!r} cannot be "
@@ -1554,6 +1567,7 @@ def extract_ifc_semantics(
                 unit_scale,
                 placement_util,
             )
+            dimension_source = "ifc_quantities"
         global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
         record: dict[str, Any] = {
             "global_id": global_id,
@@ -1568,6 +1582,7 @@ def extract_ifc_semantics(
             "length_m": length,
             "width_m": width,
             "height_m": height,
+            "dimension_source": dimension_source,
         }
         record.update(_cleanroomx_space_metadata(entity, element_util))
         record.update(

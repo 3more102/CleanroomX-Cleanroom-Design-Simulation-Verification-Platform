@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level BIM — desktop IFC review workflow — 2026-09-29
+
+- Adds a dedicated BIM menu to the desktop application for initial IFC spatial import, read-only re-import review, and guarded application of conflict-free IFC revisions.
+- Adds a per-entity review dialog showing IFC GlobalId, stable CleanroomX spatial identity, action classification, and local/source change state.
+- Requires explicit confirmation before replacing an existing unlinked spatial layout and refuses to reset an established IFC identity baseline through the initial-import path.
+- Keeps engineering inputs unsynchronized by default and leaves project persistence to the existing guarded Save workflow, preserving external-revision checks, save locking, revisions, autosave/recovery, and undo history.
+- Adds focused regression coverage for initial import, explicit replacement consent, read-only conflict review, stable-identity re-import, and conflict-blocked application.
+
 ## Unreleased next-level BIM — conflict-aware IFC re-import — 2026-09-29
 
 - Upgrades IFC link metadata to schema v2 with deterministic GlobalId-to-spatial-ID bindings, source-record digests, source-derived spatial-object digests, and a canonical binding-table SHA-256.

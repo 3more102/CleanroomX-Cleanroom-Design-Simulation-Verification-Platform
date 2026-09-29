@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level BIM — IFC device orientation fidelity — 2026-09-29
+
+- Preserves supported IFC device world-space plan orientation instead of defaulting every imported device to 0°.
+- Derives yaw from IfcOpenShell's full nested local-placement transform, so parent rotations are reflected in CleanroomX `orientation_deg`.
+- Rejects placements whose transformed local X axis has no usable XY projection rather than fabricating a plan orientation.
+- Adds focused unit and extraction regressions without changing room geometry assumptions, engineering inputs, solver equations, tolerances, or acceptance semantics.
+
+
 ## Unreleased next-level BIM — IFC initial-import review integrity — 2026-09-29
 
 - Adds a source-bound desktop preview before initial IFC mutation, showing the selected filename, extracted room/device counts, and source SHA-256.

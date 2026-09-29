@@ -5,6 +5,7 @@
 - Adds a dedicated BIM menu to the desktop application for initial IFC spatial import, read-only re-import review, and guarded application of conflict-free IFC revisions.
 - Adds a per-entity review dialog showing IFC GlobalId, stable CleanroomX spatial identity, action classification, and local/source change state.
 - Requires explicit confirmation before replacing an existing unlinked spatial layout and refuses to reset an established IFC identity baseline through the initial-import path.
+- Shows the selected IFC source, extracted room/device counts, and exact source SHA-256 before mutation, then re-reads the source immediately before accepted import/re-import and rejects raw or semantic digest drift.
 - Keeps engineering inputs unsynchronized by default and leaves project persistence to the existing guarded Save workflow, preserving external-revision checks, save locking, revisions, autosave/recovery, and undo history.
 - Adds focused regression coverage for initial import, explicit replacement consent, read-only conflict review, stable-identity re-import, and conflict-blocked application.
 

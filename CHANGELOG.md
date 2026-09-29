@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased ProofGraph integration — pressure design evidence chain — 2026-09-29
+
+- Bridges the canonical pressure-design-consistency workflow into ProofGraph without adding a second solver path.
+- Records configured room pressure targets as DesignEvidence and solved signed node-to-reference differences as CalculationEvidence with separate deterministic source-revision digests.
+- Preserves explicit room/node/reference mappings, absolute tolerance, expected/actual/delta values, design-requirement origin, and pressure-network calculation provenance.
+- Preserves source semantics: required missing mappings remain FAIL, intentionally unchecked mappings become UNKNOWN, and rooms with no configured pressure target are never converted into invented requirements.
+- Adds strict ProofGraph round-trip, failure, negative-pressure, missing-mapping, and determinism regressions plus documentation updates.
+
 ## Unreleased ProofGraph foundation — continuous compliance evidence model — 2026-09-29
 
 - Adds GUI-independent typed ProofGraph domain records for requirements, evidence sources/layers, provenance, confidence/uncertainty, checks, findings, verdicts, corrective actions, and verification runs.

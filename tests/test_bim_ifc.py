@@ -146,6 +146,42 @@ def test_ifc_device_orientation_rejects_undefined_plan_axis():
         bim_ifc_module._placement_orientation_deg(entity, PlacementUtil)
 
 
+def test_ifc_cleanroomx_space_pset_maps_only_explicit_semantic_fields():
+    space = types.SimpleNamespace(GlobalId="SPACE-PSET")
+    calls = []
+
+    class ElementUtil:
+        @staticmethod
+        def get_pset(entity, name, *, psets_only, should_inherit):
+            calls.append((entity, name, psets_only, should_inherit))
+            return {
+                "Classification": "ISO 7",
+                "AnalysisRoomName": "Process",
+                "Unrelated": "ignored",
+                "id": 42,
+            }
+
+    metadata = bim_ifc_module._cleanroomx_space_metadata(space, ElementUtil)
+
+    assert metadata == {
+        "classification": "ISO 7",
+        "analysis_room_name": "Process",
+    }
+    assert calls == [(space, "CleanroomX_Space", True, True)]
+
+
+def test_ifc_cleanroomx_space_pset_rejects_malformed_payload():
+    space = types.SimpleNamespace(GlobalId="SPACE-PSET-BAD")
+
+    class ElementUtil:
+        @staticmethod
+        def get_pset(*_args, **_kwargs):
+            return "not-a-property-mapping"
+
+    with pytest.raises(IfcImportError, match="must be a property mapping"):
+        bim_ifc_module._cleanroomx_space_metadata(space, ElementUtil)
+
+
 def test_ifc_extraction_preserves_device_world_orientation(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
 
@@ -420,6 +456,10 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
             "Height": 3000.0,
         }
     }
+    element.get_pset = lambda *_args, **_kwargs: {
+        "Classification": "ISO 7",
+        "AnalysisRoomName": "Process",
+    }
 
     def get_aggregate(entity):
         if entity is space:
@@ -461,6 +501,8 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     assert space_record["storey_global_id"] == "STOREY-01"
     assert space_record["storey_name"] == "Level 1"
     assert space_record["storey_elevation_m"] == pytest.approx(3.0)
+    assert space_record["classification"] == "ISO 7"
+    assert space_record["analysis_room_name"] == "Process"
 
 
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):

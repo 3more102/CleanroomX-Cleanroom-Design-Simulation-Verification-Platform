@@ -910,6 +910,57 @@ def _placement_xyz_m(
     return x * unit_scale, y * unit_scale, z * unit_scale
 
 
+def _placement_pose_m(
+    entity: Any,
+    unit_scale: float,
+    placement_util: Any,
+) -> tuple[float, float, float, float]:
+    """Resolve world XYZ plus deterministic plan yaw for an IFC object."""
+    placement = getattr(entity, "ObjectPlacement", None)
+    if placement is None:
+        return 0.0, 0.0, 0.0, 0.0
+
+    global_id = getattr(entity, "GlobalId", "?")
+    try:
+        matrix = placement_util.get_local_placement(placement)
+        x = _finite_number(matrix[0][3], field=f"{global_id}.placement_x")
+        y = _finite_number(matrix[1][3], field=f"{global_id}.placement_y")
+        z = _finite_number(matrix[2][3], field=f"{global_id}.placement_z")
+        x_axis_x = _finite_number(
+            matrix[0][0], field=f"{global_id}.placement_x_axis_x"
+        )
+        x_axis_y = _finite_number(
+            matrix[1][0], field=f"{global_id}.placement_x_axis_y"
+        )
+        y_axis_x = _finite_number(
+            matrix[0][1], field=f"{global_id}.placement_y_axis_x"
+        )
+        y_axis_y = _finite_number(
+            matrix[1][1], field=f"{global_id}.placement_y_axis_y"
+        )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to resolve IFC local placement for {global_id!r}"
+        ) from exc
+
+    epsilon = 1e-12
+    if math.hypot(x_axis_x, x_axis_y) > epsilon:
+        yaw_rad = math.atan2(x_axis_y, x_axis_x)
+    elif math.hypot(y_axis_x, y_axis_y) > epsilon:
+        yaw_rad = math.atan2(y_axis_y, y_axis_x) - (math.pi / 2.0)
+    else:
+        raise IfcImportError(
+            f"IFC local placement for {global_id!r} has no usable XY orientation"
+        )
+
+    orientation_deg = math.degrees(yaw_rad) % 360.0
+    if math.isclose(orientation_deg, 0.0, abs_tol=1e-12):
+        orientation_deg = 0.0
+    return x * unit_scale, y * unit_scale, z * unit_scale, orientation_deg
+
+
 def _space_dimensions_m(
     entity: Any,
     unit_scale: float,
@@ -1056,7 +1107,9 @@ def extract_ifc_semantics(
             if not global_id or global_id in seen:
                 continue
             seen.add(global_id)
-            x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
+            x, y, z, orientation_deg = _placement_pose_m(
+                entity, unit_scale, placement_util
+            )
             record: dict[str, Any] = {
                 "global_id": global_id,
                 "ifc_class": ifc_class,
@@ -1066,6 +1119,7 @@ def extract_ifc_semantics(
                 "x_m": x,
                 "y_m": y,
                 "z_m": z,
+                "orientation_deg": orientation_deg,
             }
             room_global_id = _containing_space_global_id(entity, element_util)
             if room_global_id:

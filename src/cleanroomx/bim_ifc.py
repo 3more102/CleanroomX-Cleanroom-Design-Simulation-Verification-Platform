@@ -221,8 +221,16 @@ def normalize_ifc_semantic_records(
     return document
 
 
-def layout_from_ifc_semantics(semantics: dict[str, Any]) -> dict[str, Any]:
-    """Convert a verified semantic bridge document into a CleanroomX layout."""
+def layout_from_ifc_semantics(
+    semantics: dict[str, Any],
+    *,
+    id_bindings: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Convert a verified semantic bridge document into a CleanroomX layout.
+
+    id_bindings may bind IFC GlobalId values to existing CleanroomX spatial IDs.
+    Re-import uses this to avoid identity churn when IFC entities are renamed.
+    """
     if not isinstance(semantics, dict):
         raise IfcImportError("IFC semantics must be an object")
     if semantics.get("schema") != IFC_SEMANTICS_SCHEMA:
@@ -233,6 +241,16 @@ def layout_from_ifc_semantics(semantics: dict[str, Any]) -> dict[str, Any]:
     records = semantics.get("records")
     if not isinstance(records, list):
         raise IfcImportError("IFC semantics records must be an array")
+    if id_bindings is None:
+        id_bindings = {}
+    elif not isinstance(id_bindings, dict):
+        raise IfcImportError("IFC id_bindings must be an object")
+    else:
+        id_bindings = {
+            _non_empty_text(global_id): _non_empty_text(spatial_id)
+            for global_id, spatial_id in id_bindings.items()
+            if _non_empty_text(global_id) and _non_empty_text(spatial_id)
+        }
 
     checked = normalize_ifc_semantic_records(records)
     expected_digest = semantics.get("semantic_sha256")
@@ -268,14 +286,34 @@ def layout_from_ifc_semantics(semantics: dict[str, Any]) -> dict[str, Any]:
         },
     }
 
+    def bound_or_unique_id(
+        global_id: str,
+        preferred: str,
+        used: set[str],
+        *,
+        fallback: str,
+    ) -> str:
+        bound = id_bindings.get(global_id, "")
+        if bound:
+            if bound in used:
+                raise IfcImportError(
+                    f"IFC id binding {bound!r} is assigned to more than one entity"
+                )
+            used.add(bound)
+            return bound
+        return _unique_id(preferred, used, fallback=fallback)
+
     used_room_ids: set[str] = set()
     room_id_by_global_id: dict[str, str] = {}
     spaces = [
         item for item in checked["records"] if item["ifc_class"] == "IfcSpace"
     ]
     for index, item in enumerate(spaces):
-        room_id = _unique_id(
-            item["name"], used_room_ids, fallback=f"ifc-space-{index + 1}"
+        room_id = bound_or_unique_id(
+            item["global_id"],
+            item["name"],
+            used_room_ids,
+            fallback=f"ifc-space-{index + 1}",
         )
         room_id_by_global_id[item["global_id"]] = room_id
         room = {
@@ -304,7 +342,8 @@ def layout_from_ifc_semantics(semantics: dict[str, Any]) -> dict[str, Any]:
         if device_type not in DEVICE_TYPES:
             device_type = "equipment"
         device = {
-            "id": _unique_id(
+            "id": bound_or_unique_id(
+                item["global_id"],
                 item["name"],
                 used_device_ids,
                 fallback=f"ifc-device-{index + 1}",
@@ -333,8 +372,14 @@ def apply_ifc_semantics_to_project(
     *,
     source_name: str,
     source_sha256: str,
+    allow_local_changes: bool = False,
 ) -> dict[str, Any]:
-    """Replace project spatial data with a verified, provenance-bound IFC import."""
+    """Replace project spatial data with a verified, provenance-bound IFC import.
+
+    Re-import preserves CleanroomX spatial IDs for IFC entities that retain the
+    same GlobalId. Once an IFC-linked layout has a recorded import digest, local
+    spatial edits are rejected by default instead of being overwritten silently.
+    """
     metadata = getattr(project, "metadata", None)
     if not isinstance(metadata, dict):
         raise IfcImportError("project metadata must be an object")
@@ -346,8 +391,63 @@ def apply_ifc_semantics_to_project(
     if not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
         raise IfcImportError("source_sha256 must be a SHA-256 hex digest")
 
-    layout = layout_from_ifc_semantics(semantics)
+    previous_link = metadata.get(IFC_LINK_METADATA_KEY)
+    id_bindings: dict[str, str] = {}
+    if isinstance(previous_link, dict):
+        raw_bindings = previous_link.get("entity_bindings")
+        if isinstance(raw_bindings, dict):
+            id_bindings = {
+                _non_empty_text(global_id): _non_empty_text(spatial_id)
+                for global_id, spatial_id in raw_bindings.items()
+                if _non_empty_text(global_id) and _non_empty_text(spatial_id)
+            }
+
+        expected_layout_digest = _non_empty_text(
+            previous_link.get("layout_sha256")
+        ).lower()
+        current_layout = metadata.get(SPATIAL_METADATA_KEY)
+        if expected_layout_digest and current_layout is not None:
+            try:
+                current_layout_digest = sha256(
+                    _canonical_json(current_layout)
+                ).hexdigest()
+            except (TypeError, ValueError) as exc:
+                if not allow_local_changes:
+                    raise IfcImportError(
+                        "existing IFC-linked spatial layout has local changes; "
+                        "re-import would overwrite them"
+                    ) from exc
+            else:
+                if (
+                    current_layout_digest != expected_layout_digest
+                    and not allow_local_changes
+                ):
+                    raise IfcImportError(
+                        "existing IFC-linked spatial layout has local changes; "
+                        "re-import would overwrite them"
+                    )
+
+    layout = layout_from_ifc_semantics(semantics, id_bindings=id_bindings)
     checked = normalize_ifc_semantic_records(semantics["records"])
+
+    spaces = [
+        item for item in checked["records"] if item["ifc_class"] == "IfcSpace"
+    ]
+    devices = [
+        item for item in checked["records"] if item["ifc_class"] != "IfcSpace"
+    ]
+    entity_bindings = {
+        item["global_id"]: room["id"]
+        for item, room in zip(spaces, layout["rooms"])
+    }
+    entity_bindings.update(
+        {
+            item["global_id"]: device["id"]
+            for item, device in zip(devices, layout["devices"])
+        }
+    )
+    layout_sha256 = sha256(_canonical_json(layout)).hexdigest()
+
     metadata[SPATIAL_METADATA_KEY] = layout
     metadata[IFC_LINK_METADATA_KEY] = {
         "schema": IFC_LINK_SCHEMA,
@@ -355,6 +455,8 @@ def apply_ifc_semantics_to_project(
         "source_name": source_name,
         "source_sha256": source_sha256,
         "semantic_sha256": checked["semantic_sha256"],
+        "layout_sha256": layout_sha256,
+        "entity_bindings": entity_bindings,
         "room_count": len(layout["rooms"]),
         "device_count": len(layout["devices"]),
     }

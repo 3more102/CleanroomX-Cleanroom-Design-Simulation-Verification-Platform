@@ -21,7 +21,9 @@ EVIDENCE_KINDS = frozenset(
         "operational",
     }
 )
-VERDICT_STATUSES = frozenset(\n    {"pass", "warning", "fail", "unknown", "indeterminate", "not_checked"}\n)
+VERDICT_STATUSES = frozenset(
+    {"pass", "warning", "fail", "unknown", "indeterminate", "not_checked"}
+)
 
 
 def _nonempty(value: Any, field_name: str) -> str:

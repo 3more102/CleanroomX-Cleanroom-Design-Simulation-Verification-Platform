@@ -162,6 +162,58 @@ def test_ifc_placement_uses_full_ifcopenshell_transform_matrix():
     ) == pytest.approx((1.2, 0.7, 0.3))
 
 
+def test_ifc_space_bounds_preserve_quarter_turn_rotation():
+    entity = types.SimpleNamespace(
+        GlobalId="SPACE-QUARTER-TURN",
+        ObjectPlacement=object(),
+    )
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (0.0, -1.0, 0.0, 1000.0),
+                (1.0, 0.0, 0.0, 2000.0),
+                (0.0, 0.0, 1.0, 300.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    assert bim_ifc_module._space_axis_aligned_bounds_m(
+        entity,
+        6.0,
+        5.0,
+        0.001,
+        PlacementUtil,
+    ) == pytest.approx((-4.0, 2.0, 0.3, 5.0, 6.0))
+
+
+def test_ifc_space_bounds_reject_arbitrary_plan_rotation():
+    entity = types.SimpleNamespace(
+        GlobalId="SPACE-45-DEG",
+        ObjectPlacement=object(),
+    )
+    root_half = 2 ** -0.5
+
+    class PlacementUtil:
+        @staticmethod
+        def get_local_placement(_placement):
+            return (
+                (root_half, -root_half, 0.0, 1000.0),
+                (root_half, root_half, 0.0, 2000.0),
+                (0.0, 0.0, 1.0, 0.0),
+                (0.0, 0.0, 0.0, 1.0),
+            )
+
+    with pytest.raises(IfcImportError, match="only 0/90/180/270 degree"):
+        bim_ifc_module._space_axis_aligned_bounds_m(
+            entity,
+            6.0,
+            5.0,
+            0.001,
+            PlacementUtil,
+        )
+
+
 def test_ifc_device_orientation_uses_world_placement_yaw():
     entity = types.SimpleNamespace(
         GlobalId="AT-ROTATED",
@@ -347,6 +399,60 @@ def test_ifc_extraction_queries_generic_flow_terminal_without_subtypes(
         "FT-GENERIC"
     ]
     assert semantics["records"][0]["ifc_class"] == "IfcFlowTerminal"
+
+
+def test_ifc_extraction_preserves_quarter_turn_space_footprint(monkeypatch, tmp_path):
+    _install_empty_ifcopenshell(monkeypatch)
+
+    space = types.SimpleNamespace(
+        GlobalId="SPACE-ROTATED-90",
+        LongName="Rotated process",
+        Name="Rotated process",
+        ObjectPlacement=object(),
+    )
+
+    class Model:
+        def by_type(self, ifc_class, include_subtypes=True):
+            if ifc_class == "IfcSpace":
+                return [space]
+            return []
+
+    ifcopenshell = sys.modules["ifcopenshell"]
+    ifcopenshell.open = lambda _path: Model()
+    element = sys.modules["ifcopenshell.util.element"]
+    element.get_psets = lambda *_args, **_kwargs: {
+        "Qto_SpaceBaseQuantities": {
+            "Length": 6000.0,
+            "Width": 5000.0,
+            "Height": 3000.0,
+        }
+    }
+    element.get_pset = lambda *_args, **_kwargs: {}
+    element.get_aggregate = lambda *_args, **_kwargs: None
+    element.get_container = lambda *_args, **_kwargs: None
+    placement = sys.modules["ifcopenshell.util.placement"]
+    placement.get_local_placement = lambda _placement: (
+        (0.0, -1.0, 0.0, 1000.0),
+        (1.0, 0.0, 0.0, 2000.0),
+        (0.0, 0.0, 1.0, 300.0),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+    unit = sys.modules["ifcopenshell.util.unit"]
+    unit.calculate_unit_scale = lambda _model: 0.001
+
+    source = tmp_path / "facility.ifc"
+    source.write_text("IFC", encoding="utf-8")
+
+    semantics, _ = extract_ifc_semantics(source)
+    record = semantics["records"][0]
+
+    assert record["global_id"] == "SPACE-ROTATED-90"
+    assert (record["x_m"], record["y_m"], record["z_m"]) == pytest.approx(
+        (-4.0, 2.0, 0.3)
+    )
+    assert record["length_m"] == pytest.approx(5.0)
+    assert record["width_m"] == pytest.approx(6.0)
+    assert record["height_m"] == pytest.approx(3.0)
 
 
 def test_ifc_placement_rejects_invalid_transform_values():

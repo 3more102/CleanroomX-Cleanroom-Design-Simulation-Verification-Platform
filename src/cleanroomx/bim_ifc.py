@@ -1169,6 +1169,7 @@ def _containing_storey_metadata(
             )
     return metadata
 
+
 def _file_sha256(path: Path) -> str:
     digest = sha256()
     with path.open("rb") as stream:

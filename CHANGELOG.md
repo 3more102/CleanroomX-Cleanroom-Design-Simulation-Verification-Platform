@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased next-level BIM — orthogonal IFC space footprint fidelity — 2026-09-29
+
+- Preserves rectangular `IfcSpace` world-space footprints for 0°/90°/180°/270° plan rotations by transforming all four local rectangle corners.
+- Correctly shifts the imported room origin to the world-space minimum corner and swaps length/width when a quarter-turn requires it.
+- Rejects arbitrary-angle, tilted, reflected, or skewed `IfcSpace` placements instead of silently flattening them into misleading axis-aligned room geometry.
+- Adds helper- and native-extraction regression coverage without changing engineering solvers, numerical tolerances, acceptance criteria, project schema, or analysis synchronization.
+
+
 ## Unreleased next-level BIM — generic IFC flow-terminal role safety — 2026-09-29
 
 - Stops treating generic `IfcFlowTerminal` occurrences as supply-air devices.

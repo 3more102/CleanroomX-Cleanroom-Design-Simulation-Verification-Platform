@@ -1048,6 +1048,90 @@ def _placement_orientation_deg(
     return 0.0 if abs(orientation) <= 1e-12 else orientation
 
 
+def _space_axis_aligned_bounds_m(
+    entity: Any,
+    length_m: float,
+    width_m: float,
+    unit_scale: float,
+    placement_util: Any,
+) -> tuple[float, float, float, float, float]:
+    """Resolve an IfcSpace rectangular footprint into exact world-space AABB data.
+
+    The current spatial contract is axis-aligned, so quarter-turn plan rotations
+    can be represented exactly. Arbitrary plan rotations, tilt, reflection, or
+    skew are rejected instead of being silently approximated.
+    """
+    placement = getattr(entity, "ObjectPlacement", None)
+    if placement is None:
+        return 0.0, 0.0, 0.0, length_m, width_m
+
+    global_id = getattr(entity, "GlobalId", "?")
+    try:
+        matrix = placement_util.get_local_placement(placement)
+        tx = _finite_number(matrix[0][3], field=f"{global_id}.placement_x")
+        ty = _finite_number(matrix[1][3], field=f"{global_id}.placement_y")
+        tz = _finite_number(matrix[2][3], field=f"{global_id}.placement_z")
+        local_x = (
+            _finite_number(matrix[0][0], field=f"{global_id}.placement_x_axis_x"),
+            _finite_number(matrix[1][0], field=f"{global_id}.placement_x_axis_y"),
+            _finite_number(matrix[2][0], field=f"{global_id}.placement_x_axis_z"),
+        )
+        local_y = (
+            _finite_number(matrix[0][1], field=f"{global_id}.placement_y_axis_x"),
+            _finite_number(matrix[1][1], field=f"{global_id}.placement_y_axis_y"),
+            _finite_number(matrix[2][1], field=f"{global_id}.placement_y_axis_z"),
+        )
+    except IfcImportError:
+        raise
+    except Exception as exc:
+        raise IfcImportError(
+            f"unable to resolve IFC room footprint placement for {global_id!r}"
+        ) from exc
+
+    tolerance = 1e-9
+
+    def snap_component(value: float) -> float | None:
+        for target in (-1.0, 0.0, 1.0):
+            if abs(value - target) <= tolerance:
+                return target
+        return None
+
+    snapped_x = tuple(snap_component(value) for value in local_x)
+    snapped_y = tuple(snap_component(value) for value in local_y)
+    supported_axes = {
+        ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        ((0.0, 1.0, 0.0), (-1.0, 0.0, 0.0)),
+        ((-1.0, 0.0, 0.0), (0.0, -1.0, 0.0)),
+        ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)),
+    }
+    if (snapped_x, snapped_y) not in supported_axes:
+        raise IfcImportError(
+            f"IfcSpace {global_id!r} has a rotated, tilted, reflected, or skewed "
+            "footprint that the current CleanroomX axis-aligned room model cannot "
+            "represent; only 0/90/180/270 degree plan rotations are supported"
+        )
+
+    x_m = tx * unit_scale
+    y_m = ty * unit_scale
+    z_m = tz * unit_scale
+    axis_x = snapped_x
+    axis_y = snapped_y
+    corners = (
+        (x_m, y_m),
+        (x_m + axis_x[0] * length_m, y_m + axis_x[1] * length_m),
+        (x_m + axis_y[0] * width_m, y_m + axis_y[1] * width_m),
+        (
+            x_m + axis_x[0] * length_m + axis_y[0] * width_m,
+            y_m + axis_x[1] * length_m + axis_y[1] * width_m,
+        ),
+    )
+    xs = [point[0] for point in corners]
+    ys = [point[1] for point in corners]
+    min_x = min(xs)
+    min_y = min(ys)
+    return min_x, min_y, z_m, max(xs) - min_x, max(ys) - min_y
+
+
 def _cleanroomx_space_metadata(
     entity: Any,
     element_util: Any,
@@ -1286,9 +1370,15 @@ def extract_ifc_semantics(
     records: list[dict[str, Any]] = []
 
     for entity in model.by_type("IfcSpace"):
-        x, y, z = _placement_xyz_m(entity, unit_scale, placement_util)
         length, width, height = _space_dimensions_m(
             entity, unit_scale, element_util
+        )
+        x, y, z, length, width = _space_axis_aligned_bounds_m(
+            entity,
+            length,
+            width,
+            unit_scale,
+            placement_util,
         )
         global_id = _non_empty_text(getattr(entity, "GlobalId", ""))
         record: dict[str, Any] = {

@@ -33,6 +33,9 @@ The importer currently supports:
 - IFC unit scaling to metres through IfcOpenShell
 - full nested local-placement transforms for element origins through IfcOpenShell,
   including parent rotation and translation
+- exact world-space axis-aligned bounds for rectangular `IfcSpace` footprints
+  under 0°, 90°, 180°, and 270° plan rotations; arbitrary-angle, tilted,
+  reflected, or skewed room placements fail closed instead of being approximated
 - world-space plan yaw extraction for supported devices from the transformed local
   X axis, persisted as CleanroomX `orientation_deg`; a degenerate transformed
   plan axis is rejected instead of being silently treated as 0°
@@ -237,12 +240,15 @@ quantities and transformed placement origins. IFC storey identity is preserved i
 the normalized semantic record for each space, and a single shared storey is
 promoted to the active CleanroomX floor. Multi-storey imports keep each room's
 world-space elevation but are not represented as multiple editable floor objects.
-IfcOpenShell's full nested local-placement transform is used for those origins,
-so rotated parent placements no longer lose their translated world position.
-However, CleanroomX still does not rotate the axis-aligned room footprint or
-reconstruct arbitrary room/device solids. B-Rep tessellation, complex solids,
-curved boundaries, multi-storey decomposition, door/window void geometry, and
-automatic engineering-analysis reconciliation are not yet claimed.
+IfcOpenShell's full nested local-placement transform is used for those origins.
+Rectangular spaces with quarter-turn plan rotations are converted to exact
+world-space axis-aligned bounds, including the translated minimum corner and
+length/width swap when required. Arbitrary-angle rotation, tilt, reflection, or
+skew cannot be represented by the current room contract and is rejected instead
+of being silently approximated. CleanroomX still does not reconstruct arbitrary
+room/device solids. B-Rep tessellation, complex solids, curved boundaries,
+multi-storey decomposition, door/window void geometry, and automatic
+engineering-analysis reconciliation are not yet claimed.
 
 Device-to-room linkage uses explicit `IfcSpace` containment first and then
 IfcOpenShell's indirect spatial-container resolution. It does not infer room
@@ -257,7 +263,7 @@ precision that the current model does not preserve.
 
 The bridge establishes stable IFC identity and provenance needed for later work:
 
-1. geometry/tessellation and rotated room/device footprint support;
+1. arbitrary-angle room/device footprint support plus geometry/tessellation;
 2. native multi-floor editing/view selection built on preserved IFC storey identity;
 3. IFC property-set mapping to cleanroom classifications and engineering inputs;
 4. bidirectional synchronization and digital-twin/CFD integration.

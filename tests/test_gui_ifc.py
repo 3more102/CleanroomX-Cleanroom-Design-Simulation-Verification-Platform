@@ -186,6 +186,66 @@ def test_gui_ifc_apply_preserves_global_id_spatial_identity(monkeypatch):
     assert app.spatial_workspace.refresh_count == 1
 
 
+def test_gui_ifc_apply_rejects_source_change_after_review(monkeypatch):
+    project = new_project("IFC GUI")
+    original = normalize_ifc_semantic_records(_records())
+    apply_ifc_semantics_to_project(
+        project,
+        original,
+        source_name="facility.ifc",
+        source_sha256="a" * 64,
+    )
+    before = copy.deepcopy(project.to_dict())
+
+    reviewed_records = _records()
+    reviewed_records[0]["length_m"] = 7.0
+    reviewed = normalize_ifc_semantic_records(reviewed_records)
+    changed_records = _records()
+    changed_records[0]["length_m"] = 8.0
+    changed = normalize_ifc_semantic_records(changed_records)
+    candidates = [
+        (
+            copy.deepcopy(reviewed),
+            {"source_name": "facility.ifc", "source_sha256": "b" * 64},
+        ),
+        (
+            copy.deepcopy(changed),
+            {"source_name": "facility.ifc", "source_sha256": "c" * 64},
+        ),
+    ]
+
+    app = _app(project)
+    app._show_ifc_plan = lambda _report: None
+    app._perform_project_edit = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        AssertionError("changed reviewed IFC source must not mutate the project")
+    )
+    monkeypatch.setattr(
+        gui_module,
+        "extract_ifc_semantics",
+        lambda _path: candidates.pop(0),
+    )
+    errors = []
+    monkeypatch.setattr(gui_module.messagebox, "showinfo", lambda *a, **k: None)
+    monkeypatch.setattr(gui_module.messagebox, "showwarning", lambda *a, **k: None)
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, parent=None: errors.append((title, message)),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "askyesno",
+        lambda *a, **k: True,
+    )
+
+    assert app.apply_ifc_reimport() is False
+
+    assert project.to_dict() == before
+    assert app.spatial_workspace.refresh_count == 0
+    assert errors
+    assert "changed after review" in errors[0][1]
+
+
 def test_gui_ifc_apply_blocks_conflict_without_mutating_project(monkeypatch):
     project = new_project("IFC GUI")
     original = normalize_ifc_semantic_records(_records())

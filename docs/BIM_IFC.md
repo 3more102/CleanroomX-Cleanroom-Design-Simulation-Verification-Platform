@@ -70,12 +70,20 @@ The review window shows each IFC `GlobalId`, the mapped CleanroomX spatial ID,
 the planned action, and whether the local project and IFC source changed relative
 to the prior import baseline. A two-sided divergent edit blocks application.
 
-Initial desktop import requires explicit confirmation before replacing an existing
-unlinked spatial layout. Import and re-import modify the in-memory project only;
-the normal CleanroomX Save command remains responsible for persistence, so existing
-external-revision checks, save locking, revision history, and recovery behavior
-remain authoritative. IFC operations do not silently synchronize engineering
-analysis inputs.
+Initial desktop import presents the extracted source name, room/device counts, and
+exact IFC source SHA-256 before any project mutation. The same confirmation is used
+when an existing unlinked spatial layout would be replaced.
+
+For both accepted initial import and accepted re-import, the desktop immediately
+re-reads the selected IFC source before mutating the project and requires both the
+raw source SHA-256 and normalized semantic SHA-256 to match the reviewed candidate.
+If either digest changed during the review-to-apply window, the operation fails
+closed and leaves the project unchanged.
+
+Import and re-import modify the in-memory project only; the normal CleanroomX Save
+command remains responsible for persistence, so existing external-revision checks,
+save locking, revision history, and recovery behavior remain authoritative. IFC
+operations do not silently synchronize engineering analysis inputs.
 
 ## API
 
@@ -182,7 +190,7 @@ The bridge establishes stable IFC identity and provenance needed for later work:
 1. geometry/tessellation and rotated-coordinate support;
 2. explicit IFC storey/floor mapping;
 3. IFC property-set mapping to cleanroom classifications and engineering inputs;
-4. GUI import/review workflow;
+4. richer property-set review and explicit engineering synchronization proposals;
 5. bidirectional synchronization and digital-twin/CFD integration.
 
 No IFC-derived engineering value is currently written directly into a solver

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased next-level BIM — explicit IFC cleanroom semantics — 2026-09-29
+
+- Reads the project-defined `CleanroomX_Space` IFC user property set on `IfcSpace` entities.
+- Maps only `Classification` and `AnalysisRoomName` into existing CleanroomX room semantic fields.
+- Keeps the mapping deliberately non-inferential: unrelated IFC property sets do not alter cleanroom classification or engineering inputs.
+- Uses a user-defined property-set name without the buildingSMART-reserved `Pset_` prefix and supports type inheritance through IfcOpenShell.
+- Adds focused malformed-payload and end-to-end extraction regressions without changing solver equations, tolerances, or acceptance semantics.
+
+
 ## Unreleased next-level BIM — IFC storey semantic fidelity — 2026-09-29
 
 - Preserves explicit `IfcBuildingStorey` identity, name, and world-space elevation on normalized `IfcSpace` semantic records.

@@ -32,7 +32,7 @@ The importer currently supports:
   and world-space elevation when available; when every imported space belongs to
   one storey, that storey is promoted into CleanroomX floor metadata
 - deterministic normalized semantic records
-- duplicate `GlobalId` and dangling-space rejection
+- duplicate `GlobalId`, dangling-space, and conflicting repeated storey-metadata rejection
 - semantic SHA-256 and original IFC source SHA-256 provenance
 
 The base CleanroomX installation still has no mandatory third-party runtime

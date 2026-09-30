@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — evidence-backed PASS — 2026-09-30
+
+- Rejects PASS findings that declare evidence absent or reference no evidence, preventing absence of evidence from being serialized as successful compliance.
+- Preserves FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED missing-evidence semantics for workflows that intentionally report incomplete or unavailable evidence.
+- Adds focused model regressions and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — single-finding verdict status — 2026-09-30
 
 - Rejects a verdict whose status disagrees with its sole referenced finding, preventing contradictory compliance state from being serialized as one auditable result.

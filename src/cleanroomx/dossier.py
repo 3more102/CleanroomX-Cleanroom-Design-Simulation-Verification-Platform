@@ -1035,6 +1035,7 @@ def build_dossier(manifest_path: str | Path) -> dict:
             )
         fan_airflow_consistency = analyze_hvac_fan_airflow_consistency(
             hvac,
+            hvac_project=hvac_project,
             fan_operating_points=fan_operating_points,
             fan_duct_networks=fan_duct_networks,
             fan_parallel_networks=fan_parallel_networks,

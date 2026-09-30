@@ -10,7 +10,11 @@ from .fan_curve import (
     _calculate_fan_operating_point,
     _format_fan_operating_point_calculation,
 )
-from .loop_network import LoopedFlowNetwork, solve_looped_network
+from .loop_network import (
+    LoopedFlowNetwork,
+    _calculate_looped_network,
+    _format_looped_network_calculation,
+)
 
 
 def _nonnegative(value: float, field_name: str) -> float:
@@ -66,22 +70,24 @@ class FanLoopNetworkStudy:
                 )
 
 
-def _node_pressure(result: dict, node_name: str) -> float:
-    for node in result["nodes"]:
-        if node["name"] == node_name:
-            return float(node["relative_pressure_pa"])
-    raise RuntimeError(f"node {node_name!r} missing from loop-network result")
+def _node_pressure_calculation(calculation: dict, node_name: str) -> float:
+    try:
+        return float(calculation["pressures_pa"][node_name])
+    except KeyError as exc:
+        raise RuntimeError(
+            f"node {node_name!r} missing from loop-network calculation"
+        ) from exc
 
 
-def derive_loop_equivalent_resistance(
+def _derive_loop_equivalent_resistance_calculation(
     study: FanLoopNetworkStudy,
 ) -> tuple[float, dict]:
-    reference_result = solve_looped_network(study.loop_network)
-    discharge_pressure = _node_pressure(
-        reference_result, study.fan_discharge_node
+    reference_calculation = _calculate_looped_network(study.loop_network)
+    discharge_pressure = _node_pressure_calculation(
+        reference_calculation, study.fan_discharge_node
     )
-    suction_pressure = _node_pressure(
-        reference_result, study.fan_suction_node
+    suction_pressure = _node_pressure_calculation(
+        reference_calculation, study.fan_suction_node
     )
     network_pressure_pa = discharge_pressure - suction_pressure
     if not math.isfinite(network_pressure_pa) or network_pressure_pa <= 0:
@@ -97,7 +103,19 @@ def derive_loop_equivalent_resistance(
     equivalent_resistance = network_pressure_pa / reference_airflow_m3_s**2
     if not math.isfinite(equivalent_resistance) or equivalent_resistance <= 0:
         raise ValueError("derived loop equivalent resistance must be finite and > 0")
-    return equivalent_resistance, reference_result
+    return equivalent_resistance, reference_calculation
+
+
+def derive_loop_equivalent_resistance(
+    study: FanLoopNetworkStudy,
+) -> tuple[float, dict]:
+    equivalent_resistance, reference_calculation = (
+        _derive_loop_equivalent_resistance_calculation(study)
+    )
+    return equivalent_resistance, _format_looped_network_calculation(
+        study.loop_network,
+        reference_calculation,
+    )
 
 
 def _network_at_airflow(
@@ -119,16 +137,20 @@ def _network_at_airflow(
     )
 
 
-def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
-    equivalent_resistance, reference_network = derive_loop_equivalent_resistance(
-        study
+def _calculate_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
+    equivalent_resistance, reference_calculation = (
+        _derive_loop_equivalent_resistance_calculation(study)
     )
     reference_airflow = study.loop_network.node_injections_m3_h[
         study.fan_discharge_node
     ]
     reference_network_pressure = (
-        _node_pressure(reference_network, study.fan_discharge_node)
-        - _node_pressure(reference_network, study.fan_suction_node)
+        _node_pressure_calculation(
+            reference_calculation, study.fan_discharge_node
+        )
+        - _node_pressure_calculation(
+            reference_calculation, study.fan_suction_node
+        )
     )
 
     operating_study = FanOperatingPointStudy(
@@ -141,10 +163,70 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
         ),
     )
     operating_calculation = _calculate_fan_operating_point(operating_study)
-    fan_result = _format_fan_operating_point_calculation(
-        operating_study,
-        operating_calculation,
+
+    calculation = {
+        "reference_airflow_m3_h": reference_airflow,
+        "reference_network_pressure_pa": reference_network_pressure,
+        "equivalent_loop_resistance_pa_per_m3_s_squared": equivalent_resistance,
+        "reference_network_calculation": reference_calculation,
+        "operating_study": operating_study,
+        "operating_calculation": operating_calculation,
+        "operating_network": None,
+        "operating_network_calculation": None,
+        "network_pressure_pa": None,
+        "equivalent_curve_network_pressure_pa": None,
+        "total_system_pressure_pa": None,
+        "fan_pressure_pa": None,
+    }
+    if operating_calculation is None:
+        return calculation
+
+    operating_airflow = operating_calculation["airflow_m3_h"]
+    operating_network = _network_at_airflow(study, operating_airflow)
+    operating_network_calculation = _calculate_looped_network(
+        operating_network
     )
+    network_pressure = (
+        _node_pressure_calculation(
+            operating_network_calculation, study.fan_discharge_node
+        )
+        - _node_pressure_calculation(
+            operating_network_calculation, study.fan_suction_node
+        )
+    )
+    equivalent_pressure = (
+        equivalent_resistance * (operating_airflow / 3600.0) ** 2
+    )
+
+    calculation.update(
+        {
+            "operating_network": operating_network,
+            "operating_network_calculation": operating_network_calculation,
+            "network_pressure_pa": network_pressure,
+            "equivalent_curve_network_pressure_pa": equivalent_pressure,
+            "total_system_pressure_pa": study.fixed_pressure_pa
+            + equivalent_pressure,
+            "fan_pressure_pa": operating_calculation["fan_pressure_pa"],
+        }
+    )
+    return calculation
+
+
+def _format_fan_loop_network_calculation(
+    study: FanLoopNetworkStudy,
+    calculation: dict,
+) -> dict:
+    fan_result = _format_fan_operating_point_calculation(
+        calculation["operating_study"],
+        calculation["operating_calculation"],
+    )
+    reference_network = _format_looped_network_calculation(
+        study.loop_network,
+        calculation["reference_network_calculation"],
+    )
+    equivalent_resistance = calculation[
+        "equivalent_loop_resistance_pa_per_m3_s_squared"
+    ]
 
     base = {
         "study": study.name,
@@ -153,8 +235,12 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
         "fan_discharge_node": study.fan_discharge_node,
         "fan_suction_node": study.fan_suction_node,
         "fixed_pressure_pa": round(study.fixed_pressure_pa, 6),
-        "reference_airflow_m3_h": round(reference_airflow, 6),
-        "reference_network_pressure_pa": round(reference_network_pressure, 9),
+        "reference_airflow_m3_h": round(
+            calculation["reference_airflow_m3_h"], 6
+        ),
+        "reference_network_pressure_pa": round(
+            calculation["reference_network_pressure_pa"], 9
+        ),
         "equivalent_loop_resistance_pa_per_m3_s_squared": round(
             equivalent_resistance, 9
         ),
@@ -164,7 +250,7 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
         "message": fan_result["message"],
     }
 
-    if operating_calculation is None:
+    if calculation["operating_calculation"] is None:
         return {
             **base,
             "operating_network_solution": None,
@@ -179,19 +265,14 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
             ),
         }
 
-    operating_airflow = operating_calculation["airflow_m3_h"]
-    operating_network = solve_looped_network(
-        _network_at_airflow(study, operating_airflow)
+    operating_network = _format_looped_network_calculation(
+        calculation["operating_network"],
+        calculation["operating_network_calculation"],
     )
-    network_pressure = (
-        _node_pressure(operating_network, study.fan_discharge_node)
-        - _node_pressure(operating_network, study.fan_suction_node)
-    )
-    equivalent_pressure = (
-        equivalent_resistance * (operating_airflow / 3600.0) ** 2
-    )
-    total_system_pressure = study.fixed_pressure_pa + equivalent_pressure
-    fan_pressure = operating_calculation["fan_pressure_pa"]
+    network_pressure = calculation["network_pressure_pa"]
+    equivalent_pressure = calculation["equivalent_curve_network_pressure_pa"]
+    total_system_pressure = calculation["total_system_pressure_pa"]
+    fan_pressure = calculation["fan_pressure_pa"]
 
     return {
         **base,
@@ -222,3 +303,10 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
             "limits, compressibility, transients, or manufacturer acceptance."
         ),
     }
+
+
+def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
+    return _format_fan_loop_network_calculation(
+        study,
+        _calculate_fan_loop_network(study),
+    )

@@ -40,7 +40,7 @@ WHITE = colors.white
 DOC_ID = 'CRX-UM-001'
 REVISION = 'Rev A'
 ISSUE_DATE = '30 September 2026'
-BASELINE = 'Stable v0.102.1 | documentation snapshot c9d539b8'
+BASELINE = 'Stable v0.102.1 | documentation snapshot 9a7ab222'
 
 
 def register_fonts():
@@ -212,7 +212,7 @@ def body_page(canvas, doc):
     canvas.setFont(FONT, 6.7)
     canvas.setFillColor(MUTED)
     canvas.drawString(17*mm, 9.5*mm, 'Reference copy - verify baseline before use')
-    canvas.drawCentredString(w/2, 9.5*mm, 'v0.102.1 | main c9d539b8')
+    canvas.drawCentredString(w/2, 9.5*mm, 'v0.102.1 | main 9a7ab222')
     canvas.drawRightString(w - 17*mm, 9.5*mm, f'Page {doc.page}')
     canvas.restoreState()
 
@@ -313,7 +313,7 @@ def cover_story(title_lines):
         ['Document ID', DOC_ID],
         ['Revision / issue date', f'{REVISION} | {ISSUE_DATE}'],
         ['Primary software baseline', 'CleanroomX v0.102.1 | Python 3.11 / 3.12 / 3.13'],
-        ['Documentation snapshot', 'main @ c9d539b81fccee19eeaf6380ea83d5ce1729a77b'],
+        ['Documentation snapshot', 'main @ 9a7ab222878324d03e44c93caea92c927e302ae7'],
         ['Document status', 'Engineering reference manual'],
         ['Repository', '3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform'],
     ]

@@ -40,7 +40,7 @@ jobs:
       - name: Commit generated PDF when changed
         shell: bash
         run: |
-          if git diff --quiet -- docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf; then
+          if [[ -z "$(git status --porcelain -- docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf)" ]]; then
             echo "PDF is already current."
             exit 0
           fi

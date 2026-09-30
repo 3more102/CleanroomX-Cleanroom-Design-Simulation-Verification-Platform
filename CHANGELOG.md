@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased fan-network numerical integrity — full-precision composition — 2026-09-30
+
+- Carries the full-precision bounded fan operating point into passive parallel-network redistribution and system-pressure checks.
+- Prevents the public three-decimal fan airflow and rounded network pressure from becoming downstream engineering inputs.
+- Adds a rounding-boundary regression without changing equations, units, schemas, fan-curve interpolation, or public result formatting.
+
 ## Unreleased cross-study numerical integrity — full-precision HVAC/fan consistency — 2026-09-30
 
 - Uses the source HVAC project to recompute canonical aggregate governing airflow at full precision when the engineering dossier evaluates HVAC/fan operating-airflow consistency.

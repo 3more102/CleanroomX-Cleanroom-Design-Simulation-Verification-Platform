@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import asdict
 from itertools import product
 
-from .fan_curve import FanOperatingPointStudy, SystemCurve, solve_fan_operating_point
+from .fan_curve import (
+    FanOperatingPointStudy,
+    SystemCurve,
+    _calculate_fan_operating_point,
+    _format_fan_operating_point_calculation,
+)
 from .fan_uncertainty_models import FanSystemUncertaintyStudy
 from .uncertainty_models import UncertainValue
 
@@ -26,17 +31,23 @@ def _solve(
     study: FanSystemUncertaintyStudy,
     fixed_pressure_pa: float,
     resistance_pa_per_m3_s_squared: float,
-) -> dict:
-    return solve_fan_operating_point(
-        FanOperatingPointStudy(
-            name=study.name,
-            fan_curve=study.fan_curve,
-            system_curve=SystemCurve(
-                name=study.system_curve_name,
-                fixed_pressure_pa=fixed_pressure_pa,
-                resistance_pa_per_m3_s_squared=resistance_pa_per_m3_s_squared,
-            ),
-        )
+) -> tuple[dict, dict | None]:
+    operating_study = FanOperatingPointStudy(
+        name=study.name,
+        fan_curve=study.fan_curve,
+        system_curve=SystemCurve(
+            name=study.system_curve_name,
+            fixed_pressure_pa=fixed_pressure_pa,
+            resistance_pa_per_m3_s_squared=resistance_pa_per_m3_s_squared,
+        ),
+    )
+    calculation = _calculate_fan_operating_point(operating_study)
+    return (
+        _format_fan_operating_point_calculation(
+            operating_study,
+            calculation,
+        ),
+        calculation,
     )
 
 
@@ -52,7 +63,7 @@ def _metric_envelope(points: list[dict], key: str, unit: str) -> dict:
 def analyze_fan_system_uncertainty(
     study: FanSystemUncertaintyStudy,
 ) -> dict:
-    nominal = _solve(
+    nominal, _ = _solve(
         study,
         study.fixed_pressure_pa.value,
         study.resistance_pa_per_m3_s_squared.value,
@@ -71,7 +82,7 @@ def analyze_fan_system_uncertainty(
     corners = []
     solved_points = []
     for fixed_pressure, resistance in product(fixed_values, resistance_values):
-        result = _solve(study, fixed_pressure, resistance)
+        result, calculation = _solve(study, fixed_pressure, resistance)
         corner = {
             "fixed_pressure_pa": round(fixed_pressure, 6),
             "resistance_pa_per_m3_s_squared": round(resistance, 6),
@@ -79,8 +90,8 @@ def analyze_fan_system_uncertainty(
             "operating_point": result["operating_point"],
         }
         corners.append(corner)
-        if result["operating_point"] is not None:
-            solved_points.append(result["operating_point"])
+        if calculation is not None:
+            solved_points.append(calculation)
 
     unresolved_corner_count = sum(
         item["status"] != "solved" for item in corners

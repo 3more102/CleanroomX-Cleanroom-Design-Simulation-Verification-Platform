@@ -19,7 +19,7 @@ CleanroomX evaluates every unique lower/upper corner of those two bounded inputs
 
 ## Conservative result handling
 
-An operating-point airflow/pressure envelope is reported only when the nominal case and every bounded corner intersect the supplied fan curve.
+An operating-point airflow/pressure envelope is reported only when the nominal case and every bounded corner intersect the supplied fan curve. Envelope extrema are selected from the full-precision bounded-intersection calculations and rounded only at the returned envelope boundary; the individually displayed corner operating points retain their existing presentation precision.
 
 If any corner would require fan-curve extrapolation, the analysis status is `indeterminate` and the complete envelope is withheld. Solved corners remain visible for diagnosis, but they are not presented as a complete uncertainty bound.
 

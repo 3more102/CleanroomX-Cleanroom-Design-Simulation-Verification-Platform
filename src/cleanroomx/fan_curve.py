@@ -188,7 +188,10 @@ def check_fan_duty_against_curve(
     }
 
 
-def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
+def _calculate_fan_operating_point(
+    study: FanOperatingPointStudy,
+) -> dict | None:
+    """Solve the bounded fan/system intersection at full numerical precision."""
     points = study.fan_curve.points
     residuals = [
         point.pressure_pa - study.system_curve.pressure_at(point.airflow_m3_h)
@@ -225,6 +228,32 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
                 solution = (airflow, fan_pressure, index)
                 break
 
+    if solution is None:
+        return None
+
+    airflow_m3_h, fan_pressure_pa, segment_index = solution
+    system_pressure_pa = study.system_curve.pressure_at(airflow_m3_h)
+    airflow_m3_s = airflow_m3_h / 3600.0
+    return {
+        "airflow_m3_h": airflow_m3_h,
+        "airflow_m3_s": airflow_m3_s,
+        "fan_pressure_pa": fan_pressure_pa,
+        "system_pressure_pa": system_pressure_pa,
+        "pressure_residual_pa": fan_pressure_pa - system_pressure_pa,
+        "air_power_kw": airflow_m3_s * system_pressure_pa / 1000.0,
+        "segment_index": segment_index,
+    }
+
+
+def _format_fan_operating_point_calculation(
+    study: FanOperatingPointStudy,
+    calculation: dict | None,
+) -> dict:
+    points = study.fan_curve.points
+    residuals = [
+        point.pressure_pa - study.system_curve.pressure_at(point.airflow_m3_h)
+        for point in points
+    ]
     system_at_points = [
         {
             "airflow_m3_h": round(point.airflow_m3_h, 3),
@@ -254,7 +283,7 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
         "curve_point_checks": system_at_points,
     }
 
-    if solution is None:
+    if calculation is None:
         if residuals[0] < 0:
             reason = (
                 "System pressure exceeds fan pressure at the lowest supplied airflow "
@@ -279,25 +308,21 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
             ),
         }
 
-    airflow_m3_h, fan_pressure_pa, segment_index = solution
-    system_pressure_pa = study.system_curve.pressure_at(airflow_m3_h)
-    airflow_m3_s = airflow_m3_h / 3600.0
-    air_power_kw = airflow_m3_s * system_pressure_pa / 1000.0
+    segment_index = calculation["segment_index"]
     left = points[segment_index]
     right = points[segment_index + 1]
-
     return {
         **base,
         "status": "solved",
         "operating_point": {
-            "airflow_m3_h": round(airflow_m3_h, 3),
-            "airflow_m3_s": round(airflow_m3_s, 6),
-            "fan_pressure_pa": round(fan_pressure_pa, 4),
-            "system_pressure_pa": round(system_pressure_pa, 4),
+            "airflow_m3_h": round(calculation["airflow_m3_h"], 3),
+            "airflow_m3_s": round(calculation["airflow_m3_s"], 6),
+            "fan_pressure_pa": round(calculation["fan_pressure_pa"], 4),
+            "system_pressure_pa": round(calculation["system_pressure_pa"], 4),
             "pressure_residual_pa": round(
-                fan_pressure_pa - system_pressure_pa, 9
+                calculation["pressure_residual_pa"], 9
             ),
-            "air_power_kw": round(air_power_kw, 6),
+            "air_power_kw": round(calculation["air_power_kw"], 6),
             "interpolation_segment": {
                 "low_airflow_m3_h": round(left.airflow_m3_h, 3),
                 "high_airflow_m3_h": round(right.airflow_m3_h, 3),
@@ -315,3 +340,10 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
             "correction, or manufacturer selection is inferred."
         ),
     }
+
+
+def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
+    return _format_fan_operating_point_calculation(
+        study,
+        _calculate_fan_operating_point(study),
+    )

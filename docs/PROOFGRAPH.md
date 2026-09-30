@@ -79,10 +79,10 @@ ProofGraph v1 uses six explicit verdict states:
 Unknown is the fail-closed representation when the available evidence or
 provenance is insufficient to issue a verified verdict. Indeterminate means the
 canonical analysis was evaluated but its result interval overlaps the decision
-boundary. not_checked means a known requirement/check was deliberately not
-evaluated under the canonical source workflow, for example because required
-evidence is absent or an explicitly optional mapping is not configured. None of
-these states is equivalent to pass.
+boundary. not_checked means a known requirement/check was not evaluated by the
+canonical source workflow, for example because required evidence is absent or an
+explicitly optional mapping is not configured. None of these states is equivalent
+to pass.
 
 ## Existing rule-pack bridge
 

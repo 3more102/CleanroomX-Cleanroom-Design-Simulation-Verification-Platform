@@ -46,6 +46,11 @@ Evidence provenance must remain acyclic. Multi-evidence dependency cycles such
 as `A -> B -> A` are rejected so derivation lineage remains suitable for
 deterministic traversal and audit.
 
+Verification runs are also closed over their declared checks: every verdict in
+a run may depend only on findings whose compliance checks are listed in that
+same run. This prevents a run from presenting a verdict derived from hidden or
+out-of-run checks.
+
 ## Evidence layers
 
 Evidence keeps its layer instead of overwriting earlier values. Design,

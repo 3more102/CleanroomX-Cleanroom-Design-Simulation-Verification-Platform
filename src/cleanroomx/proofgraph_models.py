@@ -638,6 +638,7 @@ class ProofGraph:
         verdict_ids = _unique_ids(self.verdicts, "proofgraph.verdicts")
         checks_by_id = {item.id: item for item in self.checks}
         findings_by_id = {item.id: item for item in self.findings}
+        verdicts_by_id = {item.id: item for item in self.verdicts}
         _unique_ids(self.corrective_actions, "proofgraph.corrective_actions")
         _unique_ids(self.verification_runs, "proofgraph.verification_runs")
 
@@ -766,6 +767,17 @@ class ProofGraph:
                 raise ValueError(
                     f"verification run {run.id!r} references unknown verdicts: "
                     + ", ".join(sorted(missing_verdicts))
+                )
+            required_check_ids = {
+                findings_by_id[finding_id].check_id
+                for verdict_id in run.verdict_ids
+                for finding_id in verdicts_by_id[verdict_id].finding_ids
+            }
+            missing_run_checks = required_check_ids - set(run.check_ids)
+            if missing_run_checks:
+                raise ValueError(
+                    f"verification run {run.id!r} verdicts depend on checks not "
+                    "included in the run: " + ", ".join(sorted(missing_run_checks))
                 )
 
     def body_dict(self) -> dict[str, Any]:

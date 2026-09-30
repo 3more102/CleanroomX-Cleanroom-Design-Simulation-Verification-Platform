@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased fan-network numerical integrity — full-precision composition — 2026-09-30
+
+- Carries the full-precision bounded fan operating point into passive parallel-network redistribution and system-pressure checks.
+- Prevents the public three-decimal fan airflow and rounded network pressure from becoming downstream engineering inputs.
+- Adds a rounding-boundary regression without changing equations, units, schemas, fan-curve interpolation, or public result formatting.
+
 ## Unreleased ProofGraph integrity — globally unique provenance IDs — 2026-09-30
 
 - Rejects reuse of one provenance-record ID across separate evidence records, removing ambiguity from graph-wide audit identity.

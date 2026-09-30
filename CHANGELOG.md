@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased ProofGraph semantics — preserve canonical not-checked state — 2026-09-30
+
+- Stops collapsing canonical `not_checked` results into ProofGraph `unknown` in the compliance-rule-pack and pressure-design-consistency adapters.
+- Preserves missing rule-pack evidence and explicitly optional unmapped pressure targets as `not_checked`, including strict ProofGraph serialization round trips.
+- Keeps `unknown` distinct for cases where CleanroomX cannot issue a verified verdict from the available evidence/provenance, and keeps `indeterminate` distinct for evaluated uncertainty intervals that overlap a decision boundary.
+- Updates ProofGraph and pressure-consistency documentation without changing solver equations, numerical tolerances, persisted project schemas, or source-service acceptance semantics.
+
 ## Unreleased ProofGraph integration — thermal uncertainty capacity evidence — 2026-09-29
 
 - Bridges canonical thermal uncertainty analysis into ProofGraph without duplicating psychrometric, load, airflow, or capacity equations.

@@ -7,7 +7,11 @@ from cleanroomx.damper_study import (
 )
 from cleanroomx.damper_study_io import loop_damper_study_from_dict
 from cleanroomx.damper_study_report import markdown_loop_damper_study_report
-from cleanroomx.loop_network import LoopedFlowNetwork, QuadraticFlowEdge
+from cleanroomx.loop_network import (
+    LoopedFlowNetwork,
+    QuadraticFlowEdge,
+    _calculate_looped_network,
+)
 
 
 def _network() -> LoopedFlowNetwork:
@@ -59,6 +63,91 @@ def test_throttling_one_path_redistributes_flow_without_changing_total() -> None
     assert result["cases"][0]["network_solution"][
         "max_abs_mass_balance_residual_m3_h"
     ] <= 1e-6
+
+
+def test_flow_change_uses_unrounded_network_state() -> None:
+    direct_resistance = 500.234567891
+    parallel_resistance = 500.0
+    network = LoopedFlowNetwork(
+        name="Sub-display damper redistribution",
+        node_injections_m3_h={
+            "Supply": 3600.0,
+            "Return": -3600.0,
+        },
+        edges=(
+            QuadraticFlowEdge(
+                "Adjusted",
+                "Supply",
+                "Return",
+                direct_resistance,
+            ),
+            QuadraticFlowEdge(
+                "Parallel",
+                "Supply",
+                "Return",
+                parallel_resistance,
+            ),
+        ),
+        reference_node="Supply",
+    )
+    baseline_calculation = _calculate_looped_network(network)
+    baseline_flow = (
+        baseline_calculation["edge_flows_m3_s"][0] * 3600.0
+    )
+
+    selected_multiplier = None
+    expected_delta = None
+    rounded_input_delta = None
+    for step in range(1, 101):
+        multiplier = 1.0 + step * 1e-9
+        case_network = LoopedFlowNetwork(
+            name="Sub-display damper redistribution case",
+            node_injections_m3_h=network.node_injections_m3_h,
+            edges=(
+                QuadraticFlowEdge(
+                    "Adjusted",
+                    "Supply",
+                    "Return",
+                    direct_resistance * multiplier,
+                ),
+                network.edges[1],
+            ),
+            reference_node=network.reference_node,
+        )
+        case_calculation = _calculate_looped_network(case_network)
+        case_flow = case_calculation["edge_flows_m3_s"][0] * 3600.0
+        raw_delta = round(case_flow - baseline_flow, 6)
+        display_delta = round(
+            round(case_flow, 6) - round(baseline_flow, 6),
+            6,
+        )
+        if raw_delta != display_delta:
+            selected_multiplier = multiplier
+            expected_delta = raw_delta
+            rounded_input_delta = display_delta
+            break
+
+    assert selected_multiplier is not None
+    result = solve_loop_damper_study(
+        LoopDamperStudy(
+            name="Sub-display throttle",
+            loop_network=network,
+            cases=(
+                DamperResistanceCase(
+                    "Tiny throttle",
+                    {"Adjusted": selected_multiplier},
+                ),
+            ),
+        )
+    )
+
+    row = next(
+        item
+        for item in result["cases"][0]["flow_changes"]
+        if item["edge"] == "Adjusted"
+    )
+    assert row["delta_airflow_m3_h"] == expected_delta
+    assert row["delta_airflow_m3_h"] != rounded_input_delta
 
 
 def test_unity_multiplier_preserves_baseline_solution() -> None:

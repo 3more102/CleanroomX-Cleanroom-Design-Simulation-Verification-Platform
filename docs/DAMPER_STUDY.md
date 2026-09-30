@@ -30,6 +30,8 @@ For each case, CleanroomX also reports:
 - baseline versus case airflow for every edge;
 - absolute and percent airflow change where a baseline flow is nonzero.
 
+Airflow deltas and percent changes are calculated from the full-precision loop-solver state. Rounded baseline and case edge flows in the public network solutions are presentation values only and are not subtracted or divided to derive redistribution metrics.
+
 When a geometry-derived v0.25 edge is throttled, the adjusted edge is marked as damper-adjusted and its evidence retains the original geometry-derived basis and evidence.
 
 ## Run

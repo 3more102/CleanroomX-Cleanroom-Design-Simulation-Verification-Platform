@@ -114,6 +114,12 @@ PASS findings are strictly evidence-backed. A finding with status `pass` must
 declare `evidence_present=true` and reference at least one evidence record.
 Missing evidence therefore cannot be serialized as successful compliance.
 
+PASS also honors the evidence-layer contract declared by its ComplianceCheck.
+Every kind listed in `required_evidence_kinds` must be represented by evidence
+referenced by the PASS finding itself. Non-PASS states may remain incomplete so
+UNKNOWN, INDETERMINATE, NOT_CHECKED, WARNING, and FAIL can preserve missing or
+partial evidence without being rejected as malformed graphs.
+
 ## Existing rule-pack bridge
 
 proofgraph_from_compliance_check converts the existing deterministic

@@ -4,7 +4,7 @@ CleanroomX v0.22 can cross-check the HVAC governing airflow against the operatin
 
 ## Purpose
 
-This check detects contradictory design inputs or study outputs across modules. It does not calculate a new fan operating point and does not change any fan or duct physics.
+This check detects contradictory design inputs or study outputs across modules. It does not change any fan or duct physics. When the dossier owns the source HVAC project and a standalone fan/system study, the consistency decision reuses their canonical full-precision calculations; rounded public result fields remain presentation-only.
 
 Supported fan-study results:
 
@@ -36,7 +36,7 @@ For each fan operating point, fan-speed case, or evaluated nonlinear-uncertainty
 
 `fan operating airflow - HVAC total governing airflow`
 
-A solved study is `match` when the absolute difference is less than or equal to the configured tolerance; otherwise it is `mismatch`.
+A solved study is `match` when the absolute difference is less than or equal to the configured tolerance; otherwise it is `mismatch`. For dossier-owned standalone fan/system studies, the airflow difference is evaluated from the full-precision bounded operating-point root rather than the three-decimal public airflow field.
 
 An unsolved fan study or fan-speed case is `not_comparable`, because there is no operating airflow to compare. The overall status is:
 

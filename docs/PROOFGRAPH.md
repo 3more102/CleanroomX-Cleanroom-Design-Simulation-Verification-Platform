@@ -61,8 +61,10 @@ explicit multi-finding aggregation policy.
 
 Verification runs are also closed over their declared checks: every verdict in
 a run may depend only on findings whose compliance checks are listed in that
-same run. This prevents a run from presenting a verdict derived from hidden or
-out-of-run checks.
+same run, and every check declared by the run must contribute to at least one
+referenced verdict. Explicit `not_checked` verdicts remain valid outcomes when
+evaluation was intentionally not performed. This prevents both hidden
+out-of-run dependencies and silent checks with no auditable outcome.
 
 ## Evidence layers
 

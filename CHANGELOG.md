@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased recovery integrity — strict editor-draft comparison — 2026-09-30
+
+- Routes preserved crash-recovery editor drafts through the canonical strict JSON parser during semantic source comparison.
+- Treats legacy duplicate-key drafts as invalid recovery evidence instead of silently applying JSON last-key-wins behavior, even when an old artifact carries `editor_json_valid=true`.
+- Preserves the raw recovery artifact and existing invalid/incomplete operator semantics; no solver, schema, project-save, or automatic-restore behavior changes.
+
 ## Unreleased thermal uncertainty numerical integrity — full-precision governing airflow — 2026-09-30
 
 - Keeps sensible-load airflow interval values at full precision while selecting the governing airflow candidate and conservative lower/upper bounds.

@@ -12,7 +12,7 @@ from .design_requirements import (
 )
 from .input_contracts import reject_unknown_fields
 from .markdown import markdown_text
-from .pressure_network import RoomPressureNetwork, solve_room_pressure_network
+from .pressure_network import RoomPressureNetwork, _solve_room_pressure_network
 from .pressure_network_io import pressure_network_from_dict
 from .verification import aggregate_verification_status
 
@@ -204,14 +204,10 @@ def analyze_pressure_design_consistency(
     study: PressureDesignConsistencyStudy,
 ) -> dict:
     requirements_result = analyze_design_requirements(study.requirements)
-    network_result = solve_room_pressure_network(study.pressure_network)
+    network_result, pressures = _solve_room_pressure_network(study.pressure_network)
 
     requirements_by_name = {room.name: room for room in study.requirements.rooms}
     mappings_by_room = {mapping.room: mapping for mapping in study.mappings}
-    pressures = {
-        item["name"]: item["pressure_pa"]
-        for item in network_result["nodes"]
-    }
 
     findings: list[dict[str, Any]] = []
     for room_name in sorted(requirements_by_name):

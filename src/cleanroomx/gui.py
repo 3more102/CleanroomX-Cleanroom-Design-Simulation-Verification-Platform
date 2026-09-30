@@ -71,6 +71,7 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
+from .strict_json import strict_json_loads as _strict_json_loads
 from .spatial import (
     SPATIAL_METADATA_KEY,
     SpatialDesignWorkspace,
@@ -100,14 +101,6 @@ _UNIT_SUFFIXES = (
     ("_um", "µm"),
     ("_m", "m"),
 )
-
-
-def _reject_json_constant(value: str):
-    raise ValueError(f"non-finite JSON constant is not allowed: {value}")
-
-
-def _strict_json_loads(text: str):
-    return json.loads(text, parse_constant=_reject_json_constant)
 
 
 def unit_hint(path: str) -> str:

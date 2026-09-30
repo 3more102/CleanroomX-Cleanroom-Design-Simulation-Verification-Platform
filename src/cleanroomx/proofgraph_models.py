@@ -569,32 +569,43 @@ def _reject_evidence_dependency_cycles(evidence: tuple[Evidence, ...]) -> None:
         for item in evidence
     }
     states: dict[str, int] = {}
-    stack: list[str] = []
-    stack_index: dict[str, int] = {}
-
-    def visit(evidence_id: str) -> None:
-        state = states.get(evidence_id, 0)
-        if state == 2:
-            return
-        if state == 1:
-            start = stack_index[evidence_id]
-            cycle = stack[start:] + [evidence_id]
-            raise ValueError(
-                "proofgraph evidence provenance contains dependency cycle: "
-                + " -> ".join(cycle)
-            )
-
-        states[evidence_id] = 1
-        stack_index[evidence_id] = len(stack)
-        stack.append(evidence_id)
-        for upstream_id in dependencies[evidence_id]:
-            visit(upstream_id)
-        stack.pop()
-        stack_index.pop(evidence_id)
-        states[evidence_id] = 2
 
     for evidence_id in sorted(dependencies):
-        visit(evidence_id)
+        if states.get(evidence_id, 0) == 2:
+            continue
+
+        stack: list[tuple[str, int]] = [(evidence_id, 0)]
+        path: list[str] = []
+        path_index: dict[str, int] = {}
+
+        while stack:
+            current_id, next_dependency_index = stack[-1]
+            if states.get(current_id, 0) == 0:
+                states[current_id] = 1
+                path_index[current_id] = len(path)
+                path.append(current_id)
+
+            current_dependencies = dependencies[current_id]
+            if next_dependency_index >= len(current_dependencies):
+                stack.pop()
+                states[current_id] = 2
+                path_index.pop(current_id)
+                path.pop()
+                continue
+
+            upstream_id = current_dependencies[next_dependency_index]
+            stack[-1] = (current_id, next_dependency_index + 1)
+            upstream_state = states.get(upstream_id, 0)
+            if upstream_state == 2:
+                continue
+            if upstream_state == 1:
+                start = path_index[upstream_id]
+                cycle = path[start:] + [upstream_id]
+                raise ValueError(
+                    "proofgraph evidence provenance contains dependency cycle: "
+                    + " -> ".join(cycle)
+                )
+            stack.append((upstream_id, 0))
 
 
 @dataclass(frozen=True, kw_only=True)

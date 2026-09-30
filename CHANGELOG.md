@@ -6,6 +6,12 @@
 - Keeps the public pressure-network result schema and formatting unchanged while preventing presentation rounding from changing pass/fail at explicit fine tolerances.
 - Adds a sub-display-resolution regression and documents the calculation/presentation boundary.
 
+## Unreleased loop numerical integrity — full-precision variable-friction feedback — 2026-09-30
+
+- Separates the loop-network full-precision calculation state from public result formatting without changing the public solver schema.
+- Feeds exact solved edge airflows into variable-friction near-zero classification, Reynolds evaluation, Darcy friction updates, and resistance closure instead of reusing six-decimal presentation airflow.
+- Adds a threshold-boundary regression where 100.0000004 m³/h must remain above a configured 100.0 m³/h freeze threshold even though its displayed airflow is 100.0 m³/h.
+
 ## Unreleased fan-network numerical integrity — full-precision composition — 2026-09-30
 
 - Carries the full-precision bounded fan operating point into passive parallel-network redistribution and system-pressure checks.

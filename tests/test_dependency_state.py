@@ -113,3 +113,33 @@ def test_snapshot_is_deterministic_and_exposes_five_state_labels():
     )
     states = {node["state"] for node in snapshot["nodes"]}
     assert states == {"current", "stale", "historical", "unresolved", "invalid"}
+
+
+def test_deep_dependency_chain_is_not_limited_by_python_recursion_depth():
+    graph = DependencyGraph()
+    graph.set_source("source-0000", "rev-0000")
+
+    previous_key = "source-0000"
+    previous_revision = "rev-0000"
+    for index in range(1, 1201):
+        key = f"artifact-{index:04d}"
+        revision = f"rev-{index:04d}"
+        graph.set_artifact(
+            key,
+            revision,
+            dependencies={previous_key: previous_revision},
+        )
+        previous_key = key
+        previous_revision = revision
+
+    assert graph.state(previous_key) is EvidenceState.CURRENT
+    states = graph.states()
+    assert len(states) == 1201
+    assert states[previous_key] is EvidenceState.CURRENT
+
+    snapshot = graph.snapshot()
+    assert len(snapshot["nodes"]) == 1201
+    assert snapshot["nodes"][-1]["state"] == "current"
+
+    graph.set_source("source-0000", "rev-new")
+    assert graph.state(previous_key) is EvidenceState.STALE

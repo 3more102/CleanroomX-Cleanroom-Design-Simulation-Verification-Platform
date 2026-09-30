@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased damper numerical integrity — full-precision redistribution metrics — 2026-09-30
+
+- Computes damper-case edge airflow deltas and percent changes from canonical full-precision loop-network state instead of subtracting rounded public edge flows.
+- Reuses each baseline and case calculation for both engineering metrics and terminal public formatting, avoiding duplicate solves and preserving the existing result schema.
+- Adds a sub-display-resolution regression where baseline and case flows round identically while the true airflow change remains reportable.
+
 ## Unreleased fan/loop numerical integrity — canonical reference and uncertainty state — 2026-09-30
 
 - Derives two-terminal equivalent loop resistance from full-precision reference node pressures instead of the rounded public loop-network result.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased cross-study numerical integrity — full-precision HVAC/fan consistency — 2026-09-30
+
+- Uses the source HVAC project to recompute canonical aggregate governing airflow at full precision when the engineering dossier evaluates HVAC/fan operating-airflow consistency.
+- Prevents the public three-decimal HVAC presentation total from changing a user-supplied tolerance-boundary match/mismatch decision.
+- Preserves the existing public HVAC result shape, fan-study result shapes, equations, units, tolerance semantics, and dossier schema; adds a focused rounding-boundary regression.
+
 ## Unreleased ProofGraph integrity — verification-run completeness — 2026-09-30
 
 - Rejects verification runs that declare checks with no verdict outcome, preventing silent unevaluated checks from appearing inside an otherwise auditable run.

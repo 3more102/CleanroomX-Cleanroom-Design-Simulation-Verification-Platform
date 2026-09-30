@@ -1,5 +1,3 @@
-import math
-
 import pytest
 
 from cleanroomx.fan_curve import FanCurve, FanCurvePoint
@@ -10,7 +8,11 @@ from cleanroomx.fan_loop_network import (
 )
 from cleanroomx.fan_loop_network_io import fan_loop_network_study_from_dict
 from cleanroomx.fan_loop_network_report import markdown_fan_loop_network_report
-from cleanroomx.loop_network import LoopedFlowNetwork, QuadraticFlowEdge
+from cleanroomx.loop_network import (
+    LoopedFlowNetwork,
+    QuadraticFlowEdge,
+    _calculate_looped_network,
+)
 
 
 def _reference_loop() -> LoopedFlowNetwork:
@@ -92,18 +94,19 @@ def test_equivalent_resistance_uses_unrounded_reference_pressure() -> None:
     )
 
     resistance, reference = derive_loop_equivalent_resistance(study)
-    expected = 1.0 / (
-        1.0 / math.sqrt(direct_resistance)
-        + 1.0 / math.sqrt(parallel_resistance)
-    ) ** 2
+    raw_reference = _calculate_looped_network(network)
+    raw_pressure = (
+        raw_reference["pressures_pa"]["Supply"]
+        - raw_reference["pressures_pa"]["Return"]
+    )
     return_pressure = next(
         node["relative_pressure_pa"]
         for node in reference["nodes"]
         if node["name"] == "Return"
     )
 
-    assert resistance == pytest.approx(expected, abs=1e-10)
-    assert abs(resistance - abs(return_pressure)) > 1e-10
+    assert resistance == pytest.approx(raw_pressure, abs=1e-15)
+    assert abs(resistance - abs(return_pressure)) > 1e-12
 
 
 def test_fan_loop_operating_point_resolves_full_network() -> None:

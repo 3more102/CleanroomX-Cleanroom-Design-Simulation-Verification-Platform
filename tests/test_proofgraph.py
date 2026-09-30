@@ -267,6 +267,28 @@ def test_graph_rejects_finding_evidence_not_declared_by_check() -> None:
         proofgraph_from_dict(broken)
 
 
+def test_graph_rejects_pass_missing_required_evidence_kind() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    broken["checks"][0]["required_evidence_kinds"] = ["design", "calculation"]
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="missing required evidence kind"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_allows_non_pass_missing_required_evidence_kind() -> None:
+    document = copy.deepcopy(_graph().to_dict())
+    document["checks"][0]["required_evidence_kinds"] = ["design", "calculation"]
+    document["findings"][0]["status"] = "unknown"
+    document["verdicts"][0]["status"] = "unknown"
+    document.pop("graph_sha256")
+
+    restored = proofgraph_from_dict(document)
+
+    assert restored.findings[0].status == "unknown"
+    assert restored.verdicts[0].status == "unknown"
+
+
 def test_graph_rejects_verdict_findings_for_another_requirement() -> None:
     broken = copy.deepcopy(_graph().to_dict())
     _add_second_requirement(broken)

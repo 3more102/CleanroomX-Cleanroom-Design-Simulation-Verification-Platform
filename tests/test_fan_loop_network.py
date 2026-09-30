@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from cleanroomx.fan_curve import FanCurve, FanCurvePoint
@@ -54,6 +56,54 @@ def test_reference_loop_derives_exact_two_terminal_resistance() -> None:
     resistance, reference = derive_loop_equivalent_resistance(_study())
     assert resistance == pytest.approx(125.0, abs=1e-8)
     assert reference["max_abs_mass_balance_residual_m3_h"] <= 1e-6
+
+
+def test_equivalent_resistance_uses_unrounded_reference_pressure() -> None:
+    direct_resistance = 123.456789123
+    parallel_resistance = 987.654321987
+    network = LoopedFlowNetwork(
+        name="Precision reference loop",
+        node_injections_m3_h={
+            "Supply": 3600.0,
+            "Return": -3600.0,
+        },
+        edges=(
+            QuadraticFlowEdge(
+                "Direct",
+                "Supply",
+                "Return",
+                direct_resistance,
+            ),
+            QuadraticFlowEdge(
+                "Parallel",
+                "Supply",
+                "Return",
+                parallel_resistance,
+            ),
+        ),
+        reference_node="Supply",
+    )
+    study = FanLoopNetworkStudy(
+        name="Precision reference study",
+        fan_curve=_fan_curve(),
+        loop_network=network,
+        fan_discharge_node="Supply",
+        fan_suction_node="Return",
+    )
+
+    resistance, reference = derive_loop_equivalent_resistance(study)
+    expected = 1.0 / (
+        1.0 / math.sqrt(direct_resistance)
+        + 1.0 / math.sqrt(parallel_resistance)
+    ) ** 2
+    return_pressure = next(
+        node["relative_pressure_pa"]
+        for node in reference["nodes"]
+        if node["name"] == "Return"
+    )
+
+    assert resistance == pytest.approx(expected, abs=1e-10)
+    assert abs(resistance - abs(return_pressure)) > 1e-10
 
 
 def test_fan_loop_operating_point_resolves_full_network() -> None:

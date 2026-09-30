@@ -761,6 +761,17 @@ class ProofGraph:
                     f"verdict {verdict.id!r} references findings for another "
                     f"requirement: " + ", ".join(mismatched)
                 )
+            referenced_findings = tuple(
+                findings_by_id[finding_id] for finding_id in verdict.finding_ids
+            )
+            if (
+                len(referenced_findings) == 1
+                and verdict.status != referenced_findings[0].status
+            ):
+                raise ValueError(
+                    f"verdict {verdict.id!r} status {verdict.status!r} does not "
+                    f"match its single finding status {referenced_findings[0].status!r}"
+                )
 
         for action in self.corrective_actions:
             if action.requirement_id not in requirement_ids:

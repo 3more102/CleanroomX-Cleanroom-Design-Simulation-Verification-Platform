@@ -6,9 +6,9 @@ import pytest
 
 from cleanroomx.consistency import analyze_hvac_fan_airflow_consistency
 from cleanroomx.dossier import build_dossier, summarize_dossier_components
+from cleanroomx.dossier_report import markdown_dossier_report
 from cleanroomx.hvac import analyze_hvac_project
 from cleanroomx.hvac_io import hvac_project_from_dict
-from cleanroomx.dossier_report import markdown_dossier_report
 
 
 def _hvac(airflow: float = 3600.0) -> dict:

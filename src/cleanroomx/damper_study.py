@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from .loop_network import (
     LoopedFlowNetwork,
     QuadraticFlowEdge,
+    _LoopedNetworkCalculation,
     _calculate_looped_network,
     _format_looped_network_calculation,
 )
@@ -117,9 +118,9 @@ def _case_network(
 
 def _flow_change_rows(
     baseline_network: LoopedFlowNetwork,
-    baseline_calculation,
+    baseline_calculation: _LoopedNetworkCalculation,
     case_network: LoopedFlowNetwork,
-    case_calculation,
+    case_calculation: _LoopedNetworkCalculation,
 ) -> list[dict]:
     baseline_flows = {
         edge.name: airflow_m3_s * 3600.0

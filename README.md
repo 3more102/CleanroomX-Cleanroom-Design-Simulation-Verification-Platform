@@ -170,8 +170,8 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Documentation
 
-- [Complete Solution Manual & User Guide (PDF)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf)
-- [Complete Solution Manual source (Markdown)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md)
+- [Professional Engineering User & Validation Manual (PDF)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf)
+- [Professional manual source (Markdown)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md)
 
 - [Application & GUI](docs/APPLICATION_GUI.md)
 - [2D + 3D spatial workspace](docs/LAYOUT_2D_3D.md)

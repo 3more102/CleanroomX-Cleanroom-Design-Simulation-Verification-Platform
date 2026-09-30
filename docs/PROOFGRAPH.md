@@ -42,6 +42,10 @@ requirement as its referenced check, finding evidence must be declared by that
 check, and every finding referenced by a verdict must belong to that verdict's
 requirement.
 
+Evidence provenance must remain acyclic. Multi-evidence dependency cycles such
+as `A -> B -> A` are rejected so derivation lineage remains suitable for
+deterministic traversal and audit.
+
 ## Evidence layers
 
 Evidence keeps its layer instead of overwriting earlier values. Design,

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased BIM import safety — bounded native IFC source size — 2026-09-30
+
+- Rejects native IFC source files larger than 512 MiB before IfcOpenShell parsing and re-enforces the ceiling while streaming source SHA-256 provenance.
+- Prevents a growing or unexpectedly giant IFC input from consuming unbounded hashing/parser resources while preserving the existing before/after source-stability digest guard.
+- Adds focused rejection coverage and documentation without changing IFC semantic mapping, project schemas, solver equations, or engineering acceptance criteria.
+
 ## Unreleased fan/loop numerical integrity — full-precision operating root — 2026-09-30
 
 - Carries the bounded fan/system operating-point root at full precision into the downstream loop-network solve instead of reusing the rounded public airflow value.

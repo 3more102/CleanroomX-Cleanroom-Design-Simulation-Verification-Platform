@@ -916,6 +916,17 @@ def test_ifc_extraction_preserves_space_storey_identity(monkeypatch, tmp_path):
     assert space_record["analysis_room_name"] == "Process"
 
 
+def test_ifc_extraction_rejects_oversized_source_before_parsing(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "facility.ifc"
+    source.write_bytes(b"IFC")
+    monkeypatch.setattr(bim_ifc_module, "_MAX_IFC_SOURCE_BYTES", 2)
+
+    with pytest.raises(IfcImportError, match="exceeds supported size limit"):
+        extract_ifc_semantics(source)
+
+
 def test_ifc_extraction_rejects_source_digest_drift(monkeypatch, tmp_path):
     _install_empty_ifcopenshell(monkeypatch)
     digests = iter(["a" * 64, "b" * 64])

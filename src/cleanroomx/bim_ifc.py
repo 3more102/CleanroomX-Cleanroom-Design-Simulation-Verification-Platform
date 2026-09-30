@@ -3,6 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 import math
+import os
 from pathlib import Path
 import re
 from typing import Any, Iterable
@@ -20,6 +21,8 @@ IFC_LINK_SCHEMA = "cleanroomx.ifc-link"
 IFC_LINK_SCHEMA_VERSION = 2
 IFC_SEMANTICS_SCHEMA = "cleanroomx.ifc-semantics"
 IFC_SEMANTICS_SCHEMA_VERSION = 1
+
+_MAX_IFC_SOURCE_BYTES = 512 * 1024 * 1024
 
 _IFC_SPACE_DIMENSION_SOURCES = frozenset(
     {"ifc_quantities", "ifcopenshell_geometry"}
@@ -1502,8 +1505,21 @@ def _containing_storey_metadata(
 
 def _file_sha256(path: Path) -> str:
     digest = sha256()
+    size = 0
     with path.open("rb") as stream:
+        source_size = os.fstat(stream.fileno()).st_size
+        if source_size > _MAX_IFC_SOURCE_BYTES:
+            raise IfcImportError(
+                "IFC source exceeds supported size limit "
+                f"({source_size} > {_MAX_IFC_SOURCE_BYTES} bytes)"
+            )
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            size += len(chunk)
+            if size > _MAX_IFC_SOURCE_BYTES:
+                raise IfcImportError(
+                    "IFC source exceeds supported size limit while reading "
+                    f"(more than {_MAX_IFC_SOURCE_BYTES} bytes)"
+                )
             digest.update(chunk)
     return digest.hexdigest()
 

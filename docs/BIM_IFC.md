@@ -132,9 +132,14 @@ external-revision checks, save locking, revision history, and recovery behavior
 remain authoritative. IFC operations do not silently synchronize engineering
 analysis inputs.
 
-## Source-stability guard
+## Source-stability and resource guards
 
-Native IFC extraction now hashes the source before and after IfcOpenShell semantic
+Native IFC sources are capped at 512 MiB. The size is checked from the opened file
+before hashing/IfcOpenShell parsing and is enforced again while the SHA-256 stream
+is read, so a growing input cannot bypass the ceiling. This is an import-resource
+safety limit, not an engineering or BIM acceptance criterion.
+
+Native IFC extraction hashes the source before and after IfcOpenShell semantic
 extraction. If the bytes change, disappear, or become unreadable during that
 window, extraction is discarded instead of returning semantics bound to stale
 provenance.

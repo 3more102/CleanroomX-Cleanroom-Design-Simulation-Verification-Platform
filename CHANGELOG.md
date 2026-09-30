@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — verification-run closure — 2026-09-30
+
+- Rejects verification runs whose declared verdicts depend on findings from checks that are not listed in the same run.
+- Keeps extra explicitly executed checks valid while preventing hidden out-of-run check dependencies from entering run-level audit evidence.
+- Adds regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — acyclic evidence provenance — 2026-09-30
 
 - Rejects multi-evidence provenance dependency cycles such as `A -> B -> A` in addition to existing direct self-reference protection.

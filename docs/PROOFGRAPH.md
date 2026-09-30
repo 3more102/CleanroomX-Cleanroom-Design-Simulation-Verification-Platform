@@ -44,7 +44,9 @@ requirement.
 
 Evidence provenance must remain acyclic. Multi-evidence dependency cycles such
 as `A -> B -> A` are rejected so derivation lineage remains suitable for
-deterministic traversal and audit.
+deterministic traversal and audit. Cycle validation uses an explicit traversal
+stack rather than Python recursion, so deep valid provenance chains are not
+bounded by the interpreter recursion limit.
 
 Verification runs are also closed over their declared checks: every verdict in
 a run may depend only on findings whose compliance checks are listed in that

@@ -114,68 +114,96 @@ class DependencyGraph:
         return self._nodes.get(_key(key))
 
     def state(self, key: str) -> EvidenceState:
-        return self._state(_key(key), memo={}, active=set())
+        normalized_key = _key(key)
+        memo: dict[str, EvidenceState] = {}
+        return self._state(normalized_key, memo=memo)
 
     def _state(
         self,
         key: str,
         *,
         memo: dict[str, EvidenceState],
-        active: set[str],
     ) -> EvidenceState:
         if key in memo:
             return memo[key]
-        node = self._nodes.get(key)
-        if node is None:
-            return EvidenceState.UNRESOLVED
-        if key in active:
-            return EvidenceState.INVALID
-        if not node.integrity_valid:
-            memo[key] = EvidenceState.INVALID
-            return memo[key]
-        if node.historical:
-            memo[key] = EvidenceState.HISTORICAL
-            return memo[key]
-        if node.revision is None:
-            memo[key] = EvidenceState.UNRESOLVED
-            return memo[key]
-        if not node.dependencies:
-            memo[key] = EvidenceState.CURRENT
-            return memo[key]
 
-        active.add(key)
-        unresolved = False
-        stale = False
-        for binding in node.dependencies:
-            dependency = self._nodes.get(binding.key)
-            if dependency is None:
-                unresolved = True
+        processing: set[str] = set()
+        stack: list[tuple[str, bool]] = [(key, False)]
+        while stack:
+            current_key, expanded = stack.pop()
+            if current_key in memo:
                 continue
-            dependency_state = self._state(binding.key, memo=memo, active=active)
-            if dependency_state in {EvidenceState.INVALID, EvidenceState.UNRESOLVED}:
-                unresolved = True
-                continue
-            if dependency_state in {EvidenceState.STALE, EvidenceState.HISTORICAL}:
-                stale = True
-            if dependency.revision != binding.revision:
-                stale = True
-        active.remove(key)
 
-        state = (
-            EvidenceState.UNRESOLVED
-            if unresolved
-            else EvidenceState.STALE
-            if stale
-            else EvidenceState.CURRENT
-        )
-        memo[key] = state
-        return state
+            node = self._nodes.get(current_key)
+            if node is None:
+                memo[current_key] = EvidenceState.UNRESOLVED
+                continue
+            if not node.integrity_valid:
+                memo[current_key] = EvidenceState.INVALID
+                continue
+            if node.historical:
+                memo[current_key] = EvidenceState.HISTORICAL
+                continue
+            if node.revision is None:
+                memo[current_key] = EvidenceState.UNRESOLVED
+                continue
+            if not node.dependencies:
+                memo[current_key] = EvidenceState.CURRENT
+                continue
+
+            if not expanded:
+                if current_key in processing:
+                    memo[current_key] = EvidenceState.INVALID
+                    continue
+                processing.add(current_key)
+                stack.append((current_key, True))
+                for binding in reversed(node.dependencies):
+                    if binding.key not in memo:
+                        stack.append((binding.key, False))
+                continue
+
+            processing.discard(current_key)
+            unresolved = False
+            stale = False
+            for binding in node.dependencies:
+                dependency = self._nodes.get(binding.key)
+                dependency_state = memo.get(
+                    binding.key,
+                    EvidenceState.UNRESOLVED,
+                )
+                if dependency is None or dependency_state in {
+                    EvidenceState.INVALID,
+                    EvidenceState.UNRESOLVED,
+                }:
+                    unresolved = True
+                    continue
+                if dependency_state in {
+                    EvidenceState.STALE,
+                    EvidenceState.HISTORICAL,
+                }:
+                    stale = True
+                if dependency.revision != binding.revision:
+                    stale = True
+
+            memo[current_key] = (
+                EvidenceState.UNRESOLVED
+                if unresolved
+                else EvidenceState.STALE
+                if stale
+                else EvidenceState.CURRENT
+            )
+
+        return memo.get(key, EvidenceState.UNRESOLVED)
 
     def states(self) -> dict[str, EvidenceState]:
-        return {key: self.state(key) for key in sorted(self._nodes)}
+        memo: dict[str, EvidenceState] = {}
+        for key in sorted(self._nodes):
+            self._state(key, memo=memo)
+        return {key: memo[key] for key in sorted(self._nodes)}
 
     def snapshot(self) -> dict:
         """Return a deterministic strict-JSON-compatible graph description."""
+        states = self.states()
         return {
             "schema": "cleanroomx.dependency-graph",
             "schema_version": 1,
@@ -189,31 +217,55 @@ class DependencyGraph:
                         {"key": binding.key, "revision": binding.revision}
                         for binding in node.dependencies
                     ],
-                    "state": self.state(node.key).value,
+                    "state": states[node.key].value,
                 }
                 for node in (self._nodes[key] for key in sorted(self._nodes))
             ],
         }
 
     def _assert_acyclic(self) -> None:
-        visiting: set[str] = set()
-        visited: set[str] = set()
+        adjacency = {
+            key: tuple(
+                binding.key
+                for binding in node.dependencies
+                if binding.key in self._nodes
+            )
+            for key, node in self._nodes.items()
+        }
+        states: dict[str, int] = {}
 
-        def visit(key: str) -> None:
-            if key in visited:
-                return
-            if key in visiting:
-                raise DependencyGraphError(
-                    f"dependency graph contains a cycle involving {key!r}"
-                )
-            visiting.add(key)
-            node = self._nodes.get(key)
-            if node is not None:
-                for binding in node.dependencies:
-                    if binding.key in self._nodes:
-                        visit(binding.key)
-            visiting.remove(key)
-            visited.add(key)
+        for root_key in sorted(adjacency):
+            if states.get(root_key, 0) == 2:
+                continue
 
-        for key in sorted(self._nodes):
-            visit(key)
+            stack: list[tuple[str, int]] = [(root_key, 0)]
+            path: list[str] = []
+            path_index: dict[str, int] = {}
+
+            while stack:
+                current_key, next_dependency_index = stack[-1]
+                if states.get(current_key, 0) == 0:
+                    states[current_key] = 1
+                    path_index[current_key] = len(path)
+                    path.append(current_key)
+
+                current_dependencies = adjacency[current_key]
+                if next_dependency_index >= len(current_dependencies):
+                    stack.pop()
+                    states[current_key] = 2
+                    path_index.pop(current_key)
+                    path.pop()
+                    continue
+
+                dependency_key = current_dependencies[next_dependency_index]
+                stack[-1] = (current_key, next_dependency_index + 1)
+                dependency_state = states.get(dependency_key, 0)
+                if dependency_state == 2:
+                    continue
+                if dependency_state == 1:
+                    start = path_index[dependency_key]
+                    cycle = path[start:] + [dependency_key]
+                    raise DependencyGraphError(
+                        "dependency graph contains a cycle: " + " -> ".join(cycle)
+                    )
+                stack.append((dependency_key, 0))

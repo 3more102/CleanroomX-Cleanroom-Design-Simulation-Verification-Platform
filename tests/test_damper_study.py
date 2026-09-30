@@ -61,6 +61,51 @@ def test_throttling_one_path_redistributes_flow_without_changing_total() -> None
     ] <= 1e-6
 
 
+def test_flow_change_uses_unrounded_network_state() -> None:
+    network = LoopedFlowNetwork(
+        name="Sub-display damper redistribution",
+        node_injections_m3_h={
+            "Supply": 3600.0,
+            "Return": -3600.0,
+        },
+        edges=(
+            QuadraticFlowEdge(
+                "Adjusted",
+                "Supply",
+                "Return",
+                500.234567891,
+            ),
+            QuadraticFlowEdge(
+                "Parallel",
+                "Supply",
+                "Return",
+                500.0,
+            ),
+        ),
+        reference_node="Supply",
+    )
+    result = solve_loop_damper_study(
+        LoopDamperStudy(
+            name="Sub-display throttle",
+            loop_network=network,
+            cases=(
+                DamperResistanceCase(
+                    "Tiny throttle",
+                    {"Adjusted": 1.000000002},
+                ),
+            ),
+        )
+    )
+
+    row = next(
+        item
+        for item in result["cases"][0]["flow_changes"]
+        if item["edge"] == "Adjusted"
+    )
+    assert row["baseline_airflow_m3_h"] == row["case_airflow_m3_h"]
+    assert row["delta_airflow_m3_h"] == pytest.approx(-0.000001, abs=1e-12)
+
+
 def test_unity_multiplier_preserves_baseline_solution() -> None:
     result = solve_loop_damper_study(
         LoopDamperStudy(

@@ -7,484 +7,442 @@ import sys
 from pathlib import Path
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
-    BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, PageBreak,
-    Preformatted, Table, TableStyle, KeepTogether, Flowable, HRFlowable
+    BaseDocTemplate, Frame, KeepTogether, NextPageTemplate, PageBreak,
+    PageTemplate, Paragraph, Preformatted, Spacer, Table, TableStyle,
 )
 from reportlab.platypus.tableofcontents import TableOfContents
-from reportlab.graphics.shapes import Drawing, Rect, String, Line, Polygon, Circle
 
-NAVY = colors.HexColor("#12324B")
-NAVY2 = colors.HexColor("#0B2133")
-BLUE = colors.HexColor("#1769AA")
-CYAN = colors.HexColor("#00A6C8")
-TEAL = colors.HexColor("#2E7D78")
-GREEN = colors.HexColor("#2F7D4B")
-AMBER = colors.HexColor("#B56A00")
-RED = colors.HexColor("#B3322B")
-INK = colors.HexColor("#1D2A35")
-MUTED = colors.HexColor("#5D6C78")
-LIGHT = colors.HexColor("#F4F7FA")
-LIGHT_BLUE = colors.HexColor("#EAF3F9")
-LIGHT_TEAL = colors.HexColor("#EAF7F5")
-LIGHT_AMBER = colors.HexColor("#FFF6E8")
-LIGHT_RED = colors.HexColor("#FCEDEC")
-BORDER = colors.HexColor("#D6DEE5")
+# CleanroomX visual system
+NAVY = colors.HexColor('#12314B')
+NAVY_2 = colors.HexColor('#1A4565')
+TEAL = colors.HexColor('#168A9A')
+BLUE = colors.HexColor('#2B6CB0')
+INK = colors.HexColor('#1E2936')
+MUTED = colors.HexColor('#607080')
+LINE = colors.HexColor('#D6DEE7')
+PALE = colors.HexColor('#F3F7FA')
+PALE_TEAL = colors.HexColor('#EAF6F7')
+PALE_BLUE = colors.HexColor('#EDF4FB')
+PALE_AMBER = colors.HexColor('#FFF7E6')
+PALE_RED = colors.HexColor('#FDEEEE')
+AMBER = colors.HexColor('#C07B00')
+RED = colors.HexColor('#A83B3B')
+GREEN = colors.HexColor('#2F7D5A')
 WHITE = colors.white
-CODE_FENCE = chr(96) * 3
+
+DOC_ID = 'CRX-UM-001'
+REVISION = 'Rev A'
+ISSUE_DATE = '30 September 2026'
+BASELINE = 'Stable v0.102.1 | documentation snapshot c9d539b8'
 
 
 def register_fonts():
     candidates = [
-        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-         "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
-        ("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-         "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-         "/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf"),
+        ('CX', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+        ('CX-Bold', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+        ('CX-Mono', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'),
     ]
-    for regular, bold, mono in candidates:
-        if Path(regular).exists() and Path(bold).exists():
-            pdfmetrics.registerFont(TTFont("CX", regular))
-            pdfmetrics.registerFont(TTFont("CX-Bold", bold))
-            if Path(mono).exists():
-                pdfmetrics.registerFont(TTFont("CX-Mono", mono))
-                return "CX", "CX-Bold", "CX-Mono"
-            return "CX", "CX-Bold", "Courier"
-    return "Helvetica", "Helvetica-Bold", "Courier"
+    ok = True
+    for name, path in candidates:
+        if not Path(path).exists():
+            ok = False
+            break
+    if ok:
+        for name, path in candidates:
+            pdfmetrics.registerFont(TTFont(name, path))
+        return 'CX', 'CX-Bold', 'CX-Mono'
+    return 'Helvetica', 'Helvetica-Bold', 'Courier'
 
 
 FONT, FONT_BOLD, FONT_MONO = register_fonts()
 
 
-def inline(text: str) -> str:
+def inline_md(text: str) -> str:
+    # Preserve markdown links while escaping all other text.
+    links = []
+    def link_repl(m):
+        links.append((m.group(1), m.group(2)))
+        return f'@@LINK{len(links)-1}@@'
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^)]+)\)', link_repl, text)
     text = html.escape(text, quote=False)
-    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-    text = re.sub(r"\x60([^\x60]+)\x60", lambda m: f'<font name="{FONT_MONO}">{m.group(1)}</font>', text)
-    text = re.sub(r"\[(.+?)\]\((https?://[^)]+)\)", r'<link href="\2" color="#1769AA"><u>\1</u></link>', text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'`([^`]+)`', rf"<font name='{FONT_MONO}'>\1</font>", text)
+    for i, (label, url) in enumerate(links):
+        safe_label = html.escape(label, quote=False)
+        safe_url = html.escape(url, quote=True)
+        text = text.replace(f'@@LINK{i}@@', f"<link href='{safe_url}' color='#2B6CB0'>{safe_label}</link>")
     return text
 
 
-BASE = getSampleStyleSheet()
-ST = {
-    "H1": ParagraphStyle("H1", parent=BASE["Heading1"], fontName=FONT_BOLD, fontSize=17, leading=21, textColor=NAVY, spaceBefore=12, spaceAfter=7, keepWithNext=True),
-    "H2": ParagraphStyle("H2", parent=BASE["Heading2"], fontName=FONT_BOLD, fontSize=13, leading=17, textColor=BLUE, spaceBefore=9, spaceAfter=5, keepWithNext=True),
-    "H3": ParagraphStyle("H3", parent=BASE["Heading3"], fontName=FONT_BOLD, fontSize=10.5, leading=14, textColor=INK, spaceBefore=7, spaceAfter=4, keepWithNext=True),
-    "Body": ParagraphStyle("Body", parent=BASE["BodyText"], fontName=FONT, fontSize=9, leading=13, textColor=INK, spaceAfter=5),
-    "Bullet": ParagraphStyle("Bullet", parent=BASE["BodyText"], fontName=FONT, fontSize=8.9, leading=12.6, leftIndent=11, firstLineIndent=-6, textColor=INK, spaceAfter=3),
-    "Number": ParagraphStyle("Number", parent=BASE["BodyText"], fontName=FONT, fontSize=8.9, leading=12.6, leftIndent=12, firstLineIndent=-9, textColor=INK, spaceAfter=3),
-    "Code": ParagraphStyle("Code", parent=BASE["Code"], fontName=FONT_MONO, fontSize=7.2, leading=9.5, leftIndent=4, rightIndent=4, borderColor=BORDER, borderWidth=.5, borderPadding=6, backColor=colors.HexColor("#F7F9FB"), textColor=INK, spaceBefore=4, spaceAfter=7),
-    "Table": ParagraphStyle("Table", parent=BASE["BodyText"], fontName=FONT, fontSize=7.5, leading=9.6, textColor=INK),
-    "TableHead": ParagraphStyle("TableHead", parent=BASE["BodyText"], fontName=FONT_BOLD, fontSize=7.5, leading=9.6, textColor=WHITE),
-    "CalloutTitle": ParagraphStyle("CalloutTitle", parent=BASE["BodyText"], fontName=FONT_BOLD, fontSize=9, leading=12, textColor=INK, spaceAfter=2),
-    "CalloutBody": ParagraphStyle("CalloutBody", parent=BASE["BodyText"], fontName=FONT, fontSize=8.5, leading=12, textColor=INK),
-    "TOCHead": ParagraphStyle("TOCHead", parent=BASE["Heading1"], fontName=FONT_BOLD, fontSize=20, leading=24, textColor=NAVY, spaceAfter=10),
-    "TOC0": ParagraphStyle("TOC0", parent=BASE["BodyText"], fontName=FONT_BOLD, fontSize=9, leading=12.2, textColor=NAVY, spaceBefore=3),
-    "TOC1": ParagraphStyle("TOC1", parent=BASE["BodyText"], fontName=FONT, fontSize=8.2, leading=11.2, textColor=INK, leftIndent=12),
-    "Caption": ParagraphStyle("Caption", parent=BASE["BodyText"], fontName=FONT, fontSize=7.5, leading=10, textColor=MUTED, alignment=1, spaceAfter=6),
-}
+def get_styles():
+    base = getSampleStyleSheet()
+    styles = {}
+    styles['cover_brand'] = ParagraphStyle(
+        'CoverBrand', parent=base['Title'], fontName=FONT_BOLD, fontSize=31,
+        leading=34, textColor=WHITE, alignment=TA_LEFT, spaceAfter=4,
+    )
+    styles['cover_title'] = ParagraphStyle(
+        'CoverTitle', parent=base['Title'], fontName=FONT_BOLD, fontSize=22,
+        leading=27, textColor=WHITE, alignment=TA_LEFT, spaceAfter=8,
+    )
+    styles['cover_sub'] = ParagraphStyle(
+        'CoverSub', parent=base['BodyText'], fontName=FONT, fontSize=10.2,
+        leading=14.5, textColor=colors.HexColor('#D9EBF2'), alignment=TA_LEFT,
+    )
+    styles['cover_meta'] = ParagraphStyle(
+        'CoverMeta', parent=base['BodyText'], fontName=FONT, fontSize=8.8,
+        leading=12, textColor=INK,
+    )
+    styles['part'] = ParagraphStyle(
+        'PartHeading', parent=base['Heading1'], fontName=FONT_BOLD, fontSize=18,
+        leading=22, textColor=WHITE, alignment=TA_LEFT, spaceAfter=0,
+    )
+    styles['h1'] = ParagraphStyle(
+        'Heading1', parent=base['Heading1'], fontName=FONT_BOLD, fontSize=17,
+        leading=21, textColor=NAVY, spaceBefore=0, spaceAfter=7,
+    )
+    styles['h2'] = ParagraphStyle(
+        'Heading2', parent=base['Heading2'], fontName=FONT_BOLD, fontSize=12.3,
+        leading=16, textColor=NAVY_2, spaceBefore=10, spaceAfter=5,
+        keepWithNext=True,
+    )
+    styles['h3'] = ParagraphStyle(
+        'Heading3', parent=base['Heading3'], fontName=FONT_BOLD, fontSize=10.3,
+        leading=13.5, textColor=TEAL, spaceBefore=8, spaceAfter=4,
+        keepWithNext=True,
+    )
+    styles['body'] = ParagraphStyle(
+        'Body', parent=base['BodyText'], fontName=FONT, fontSize=8.8,
+        leading=12.7, textColor=INK, spaceAfter=5.2,
+    )
+    styles['small'] = ParagraphStyle(
+        'Small', parent=base['BodyText'], fontName=FONT, fontSize=7.6,
+        leading=10.4, textColor=MUTED, spaceAfter=3,
+    )
+    styles['bullet'] = ParagraphStyle(
+        'Bullet', parent=styles['body'], leftIndent=12, firstLineIndent=-7,
+        spaceAfter=2.8,
+    )
+    styles['number'] = ParagraphStyle(
+        'Number', parent=styles['body'], leftIndent=13, firstLineIndent=-9,
+        spaceAfter=3.2,
+    )
+    styles['code'] = ParagraphStyle(
+        'Code', parent=base['Code'], fontName=FONT_MONO, fontSize=7.4,
+        leading=9.7, leftIndent=5, rightIndent=5, borderColor=LINE,
+        borderWidth=0.5, borderPadding=6, backColor=colors.HexColor('#F8FAFC'),
+        textColor=colors.HexColor('#213040'), spaceBefore=4, spaceAfter=7,
+    )
+    styles['table'] = ParagraphStyle(
+        'TableText', parent=base['BodyText'], fontName=FONT, fontSize=7.25,
+        leading=9.4, textColor=INK,
+    )
+    styles['table_head'] = ParagraphStyle(
+        'TableHead', parent=base['BodyText'], fontName=FONT_BOLD, fontSize=7.3,
+        leading=9.4, textColor=WHITE,
+    )
+    styles['callout'] = ParagraphStyle(
+        'Callout', parent=styles['body'], fontSize=8.25, leading=11.8,
+        spaceAfter=0,
+    )
+    styles['toc'] = ParagraphStyle(
+        'TOC', parent=styles['body'], fontSize=8.3, leading=11.5,
+    )
+    return styles
 
 
-class ManualDoc(BaseDocTemplate):
-    def __init__(self, filename, **kw):
-        super().__init__(filename, **kw)
-        self.current_chapter = "Front Matter"
-        self._seq = 0
-        frame = Frame(self.leftMargin, self.bottomMargin, self.width, self.height, id="body")
-        self.addPageTemplates([PageTemplate(id="main", frames=frame, onPage=self.page_decor)])
+STYLES = get_styles()
 
-    def page_decor(self, canvas, doc):
-        canvas.saveState()
-        w, h = A4
-        canvas.setFillColor(NAVY2)
-        canvas.rect(0, h-13*mm, w, 13*mm, fill=1, stroke=0)
-        canvas.setFillColor(WHITE)
-        canvas.setFont(FONT_BOLD, 7.4)
-        canvas.drawString(16*mm, h-8.3*mm, "CLEANROOMX | ENGINEERING USER & VALIDATION MANUAL")
-        canvas.setFont(FONT, 7)
-        canvas.drawRightString(w-16*mm, h-8.3*mm, self.current_chapter[:64])
-        canvas.setStrokeColor(BORDER)
-        canvas.line(16*mm, 14*mm, w-16*mm, 14*mm)
-        canvas.setFillColor(MUTED)
-        canvas.setFont(FONT, 7)
-        canvas.drawString(16*mm, 9.2*mm, "Revision 2.0 | 30 Sep 2026 | Verify software version before use")
-        canvas.drawRightString(w-16*mm, 9.2*mm, f"Page {doc.page}")
-        canvas.restoreState()
+
+class ManualDocTemplate(BaseDocTemplate):
+    def __init__(self, filename, **kwargs):
+        super().__init__(filename, **kwargs)
+        self._heading_seq = 0
+
+    def beforeDocument(self):
+        self._heading_seq = 0
+        return super().beforeDocument()
 
     def afterFlowable(self, flowable):
-        if isinstance(flowable, Paragraph) and flowable.style.name in ("H1", "H2"):
-            text = flowable.getPlainText()
-            level = 0 if flowable.style.name == "H1" else 1
-            if level == 0:
-                self.current_chapter = text
-            key = getattr(flowable, "_cx_key", None)
-            if key is None:
-                self._seq += 1
-                key = f"h{self._seq}"
-                setattr(flowable, "_cx_key", key)
-            self.canv.bookmarkPage(key)
-            try:
+        if isinstance(flowable, Paragraph):
+            style = flowable.style.name
+            if style in ('Heading1', 'Heading2'):
+                level = 0 if style == 'Heading1' else 1
+                text = flowable.getPlainText()
+                self._heading_seq += 1
+                key = f'h-{self._heading_seq}'
+                self.canv.bookmarkPage(key)
                 self.canv.addOutlineEntry(text, key, level=level, closed=False)
-            except Exception:
-                pass
-            self.notify("TOCEntry", (level, text, self.page, key))
+                self.notify('TOCEntry', (level, text, self.page, key))
 
 
-class ChapterBanner(Flowable):
-    def __init__(self, number, title):
-        super().__init__()
-        self.number = number
-        self.title = title
-        self.height = 51*mm
-
-    def wrap(self, availWidth, availHeight):
-        self.width = availWidth
-        return availWidth, self.height
-
-    def draw(self):
-        c = self.canv
-        c.setFillColor(NAVY)
-        c.roundRect(0, 0, self.width, self.height, 4*mm, fill=1, stroke=0)
-        c.setFillColor(CYAN)
-        c.rect(0, self.height-6*mm, self.width, 6*mm, fill=1, stroke=0)
-        c.setFillColor(WHITE)
-        c.setFont(FONT_BOLD, 10.5)
-        c.drawString(11*mm, self.height-18*mm, f"CHAPTER {self.number}")
-        words = self.title.split()
-        lines, line = [], ""
-        for word in words:
-            test = (line + " " + word).strip()
-            if c.stringWidth(test, FONT_BOLD, 20) > self.width-22*mm and line:
-                lines.append(line)
-                line = word
-            else:
-                line = test
-        if line:
-            lines.append(line)
-        c.setFont(FONT_BOLD, 20)
-        y = self.height-31*mm
-        for ln in lines[:2]:
-            c.drawString(11*mm, y, ln)
-            y -= 7.5*mm
+def cover_page(canvas, doc):
+    # No recurring header/footer; only a subtle page marker.
+    canvas.saveState()
+    w, h = A4
+    canvas.setFillColor(NAVY)
+    canvas.rect(0, h - 9*mm, w, 9*mm, fill=1, stroke=0)
+    canvas.setFillColor(TEAL)
+    canvas.rect(0, 0, w, 6*mm, fill=1, stroke=0)
+    canvas.restoreState()
 
 
-def callout(kind, title, body):
-    palette = {
-        "NOTE": (BLUE, LIGHT_BLUE),
-        "TIP": (TEAL, LIGHT_TEAL),
-        "QUALITY": (GREEN, colors.HexColor("#EAF5ED")),
-        "WARNING": (AMBER, LIGHT_AMBER),
-        "CRITICAL": (RED, LIGHT_RED),
-    }
-    accent, bg = palette.get(kind, (BLUE, LIGHT_BLUE))
-    t = Table([
-        ["", Paragraph(inline(title), ST["CalloutTitle"])],
-        ["", Paragraph(inline(body), ST["CalloutBody"])],
-    ], colWidths=[3*mm, 165*mm], hAlign="LEFT")
+def body_page(canvas, doc):
+    canvas.saveState()
+    w, h = A4
+    # top rule and header
+    canvas.setFillColor(NAVY)
+    canvas.rect(0, h - 8.5*mm, w, 8.5*mm, fill=1, stroke=0)
+    canvas.setFillColor(WHITE)
+    canvas.setFont(FONT_BOLD, 7.2)
+    canvas.drawString(17*mm, h - 5.6*mm, 'CLEANROOMX | ENGINEERING USER & OPERATIONS MANUAL')
+    canvas.setFont(FONT, 7.0)
+    canvas.drawRightString(w - 17*mm, h - 5.6*mm, f'{DOC_ID} | {REVISION}')
+    # footer
+    canvas.setStrokeColor(LINE)
+    canvas.setLineWidth(0.45)
+    canvas.line(17*mm, 14*mm, w - 17*mm, 14*mm)
+    canvas.setFont(FONT, 6.7)
+    canvas.setFillColor(MUTED)
+    canvas.drawString(17*mm, 9.5*mm, 'Reference copy - verify baseline before use')
+    canvas.drawCentredString(w/2, 9.5*mm, 'v0.102.1 | main c9d539b8')
+    canvas.drawRightString(w - 17*mm, 9.5*mm, f'Page {doc.page}')
+    canvas.restoreState()
+
+
+def section_title(text: str):
+    p = Paragraph(inline_md(text), STYLES['h1'])
+    line = Table([['']], colWidths=[A4[0]-34*mm], rowHeights=[1.2*mm])
+    line.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),TEAL),('BOX',(0,0),(-1,-1),0,TEAL)]))
+    return KeepTogether([p, line, Spacer(1, 5)])
+
+
+def part_title(text: str):
+    t = Table([[Paragraph(inline_md(text), STYLES['part'])]], colWidths=[A4[0]-34*mm])
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,-1), bg),
-        ("BACKGROUND", (0,0), (0,-1), accent),
-        ("SPAN", (0,0), (0,-1)),
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("LEFTPADDING", (1,0), (-1,-1), 7),
-        ("RIGHTPADDING", (1,0), (-1,-1), 7),
-        ("TOPPADDING", (1,0), (-1,0), 6),
-        ("BOTTOMPADDING", (1,-1), (-1,-1), 7),
-        ("BOX", (0,0), (-1,-1), .5, BORDER),
+        ('BACKGROUND',(0,0),(-1,-1),NAVY),
+        ('LEFTPADDING',(0,0),(-1,-1),10),('RIGHTPADDING',(0,0),(-1,-1),10),
+        ('TOPPADDING',(0,0),(-1,-1),18),('BOTTOMPADDING',(0,0),(-1,-1),18),
+        ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
     ]))
-    return KeepTogether([t, Spacer(1,3)])
+    return KeepTogether([Spacer(1, 28), t, Spacer(1, 18)])
 
 
-def md_table(lines, width):
-    rows = [[c.strip() for c in line.strip().strip("|").split("|")] for line in lines]
-    if len(rows) > 1 and all(re.fullmatch(r":?-{3,}:?", c.replace(" ", "")) for c in rows[1]):
+def callout(kind: str, text: str, width: float):
+    kind = kind.upper()
+    palette = {
+        'CONTROL': (TEAL, PALE_TEAL, 'CONTROL'),
+        'WARNING': (AMBER, PALE_AMBER, 'WARNING'),
+        'STOP': (RED, PALE_RED, 'STOP'),
+        'MAIN': (BLUE, PALE_BLUE, 'DEVELOPMENT SNAPSHOT'),
+        'NOTE': (MUTED, PALE, 'NOTE'),
+        'TIP': (GREEN, colors.HexColor('#ECF7F1'), 'GOOD PRACTICE'),
+    }
+    accent, bg, label = palette.get(kind, (MUTED, PALE, kind))
+    content = Paragraph(f'<b>{label}</b>  {inline_md(text)}', STYLES['callout'])
+    tbl = Table([['', content]], colWidths=[3.2*mm, width-3.2*mm])
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(0,0),accent),('BACKGROUND',(1,0),(1,0),bg),
+        ('VALIGN',(0,0),(-1,-1),'TOP'),
+        ('LEFTPADDING',(0,0),(0,0),0),('RIGHTPADDING',(0,0),(0,0),0),
+        ('TOPPADDING',(0,0),(0,0),0),('BOTTOMPADDING',(0,0),(0,0),0),
+        ('LEFTPADDING',(1,0),(1,0),7),('RIGHTPADDING',(1,0),(1,0),7),
+        ('TOPPADDING',(1,0),(1,0),6),('BOTTOMPADDING',(1,0),(1,0),6),
+        ('BOX',(0,0),(-1,-1),0.45,LINE),
+    ]))
+    return tbl
+
+
+def parse_table(lines, width):
+    rows = []
+    for line in lines:
+        rows.append([cell.strip() for cell in line.strip().strip('|').split('|')])
+    if len(rows) > 1 and all(re.fullmatch(r':?-{3,}:?', cell.replace(' ', '')) for cell in rows[1]):
         rows.pop(1)
-    n = max(len(r) for r in rows)
-    rows = [r + [""]*(n-len(r)) for r in rows]
-    data = []
-    for ri, row in enumerate(rows):
-        style = ST["TableHead"] if ri == 0 else ST["Table"]
-        data.append([Paragraph(inline(c), style) for c in row])
-    if n == 2:
-        widths = [width*.32, width*.68]
-    elif n == 3:
-        widths = [width*.24, width*.34, width*.42]
-    elif n == 4:
-        widths = [width*.18, width*.22, width*.28, width*.32]
-    else:
-        widths = [width/n]*n
-    t = Table(data, colWidths=widths, repeatRows=1, hAlign="LEFT")
+    cols = max(len(r) for r in rows)
+    rows = [r + ['']*(cols-len(r)) for r in rows]
+    # weighted widths, constrained for readability
+    lengths = []
+    for c in range(cols):
+        lengths.append(max(8, max(len(re.sub(r'[*`]', '', r[c])) for r in rows)))
+    total = sum(lengths)
+    widths = [width * (x/total) for x in lengths]
+    min_w = 23*mm if cols <= 3 else 17*mm
+    widths = [max(min_w, x) for x in widths]
+    scale = width / sum(widths)
+    widths = [x*scale for x in widths]
+
+    data=[]
+    for i,row in enumerate(rows):
+        st = STYLES['table_head'] if i==0 else STYLES['table']
+        data.append([Paragraph(inline_md(cell), st) for cell in row])
+    t = Table(data, colWidths=widths, repeatRows=1, hAlign='LEFT')
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), NAVY),
-        ("GRID", (0,0), (-1,-1), .35, BORDER),
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("LEFTPADDING", (0,0), (-1,-1), 4),
-        ("RIGHTPADDING", (0,0), (-1,-1), 4),
-        ("TOPPADDING", (0,0), (-1,-1), 4),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [WHITE, LIGHT]),
+        ('BACKGROUND',(0,0),(-1,0),NAVY_2),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1),[WHITE, PALE]),
+        ('GRID',(0,0),(-1,-1),0.35,LINE),('VALIGN',(0,0),(-1,-1),'TOP'),
+        ('LEFTPADDING',(0,0),(-1,-1),4.5),('RIGHTPADDING',(0,0),(-1,-1),4.5),
+        ('TOPPADDING',(0,0),(-1,-1),4.2),('BOTTOMPADDING',(0,0),(-1,-1),4.2),
     ]))
     return t
 
 
-def architecture(width=170*mm, height=88*mm):
-    d = Drawing(width, height)
-    layers = [
-        ("Operator surfaces", "GUI | 2D/3D | CLI | Batch", colors.HexColor("#EAF5F7")),
-        ("Application service", "Registry | Parse | Run | Report", colors.HexColor("#EDF3FA")),
-        ("Engineering services", "Verification | HVAC | Networks | Uncertainty", colors.HexColor("#EDF7EF")),
-        ("Assurance & evidence", "Consistency | Compliance | ProofGraph", colors.HexColor("#FFF6E8")),
-        ("Project lifecycle", "Persistence | Recovery | History | Bundles", colors.HexColor("#F6EFF8")),
-        ("External inputs", "Requirements | IFC | Manufacturer data | Measurements", colors.HexColor("#F2F3F5")),
-    ]
-    box_h, gap = 11*mm, 3*mm
-    y = height-box_h-4*mm
-    for i,(title,desc,bg) in enumerate(layers):
-        d.add(Rect(2*mm,y,width-4*mm,box_h,2*mm,2*mm,fillColor=bg,strokeColor=colors.HexColor("#AAB9C4"),strokeWidth=.7))
-        d.add(String(8*mm,y+6.4*mm,title,fontName=FONT_BOLD,fontSize=8.5,fillColor=NAVY))
-        d.add(String(58*mm,y+6.4*mm,desc,fontName=FONT,fontSize=7.4,fillColor=INK))
-        if i < len(layers)-1:
-            x = width/2
-            d.add(Line(x,y-1*mm,x,y-gap+.5*mm,strokeColor=MUTED,strokeWidth=.8))
-            d.add(Polygon([x-1.4*mm,y-gap+1.5*mm,x+1.4*mm,y-gap+1.5*mm,x,y-gap],fillColor=MUTED,strokeColor=MUTED))
-        y -= box_h+gap
-    return d
-
-
-def lifecycle(width=170*mm, height=46*mm):
-    d = Drawing(width, height)
-    steps = [("1","Requirements"),("2","Model"),("3","Validate"),("4","Run"),("5","Review"),("6","Evidence"),("7","Handoff")]
-    x0, y, bw, bh, gap = 5*mm, 18*mm, 20*mm, 14*mm, 3.3*mm
-    for i,(n,label) in enumerate(steps):
-        x = x0+i*(bw+gap)
-        fill = LIGHT_BLUE if i < 3 else (LIGHT_TEAL if i < 5 else LIGHT_AMBER)
-        d.add(Rect(x,y,bw,bh,2*mm,2*mm,fillColor=fill,strokeColor=colors.HexColor("#AAB9C4"),strokeWidth=.6))
-        d.add(Circle(x+4*mm,y+bh-4*mm,2.4*mm,fillColor=NAVY,strokeColor=NAVY))
-        d.add(String(x+3.2*mm,y+bh-5.1*mm,n,fontName=FONT_BOLD,fontSize=6,fillColor=WHITE))
-        d.add(String(x+3*mm,y+5*mm,label,fontName=FONT_BOLD,fontSize=6.8,fillColor=INK))
-        if i < len(steps)-1:
-            x2 = x+bw+gap-.8*mm
-            d.add(Line(x+bw+.5*mm,y+bh/2,x2,y+bh/2,strokeColor=MUTED,strokeWidth=.8))
-            d.add(Polygon([x2-1.3*mm,y+bh/2+1.2*mm,x2-1.3*mm,y+bh/2-1.2*mm,x2,y+bh/2],fillColor=MUTED,strokeColor=MUTED))
-    return d
-
-
-def sync(width=170*mm, height=55*mm):
-    d = Drawing(width, height)
-    lx, rx, y, bw, bh = 8*mm, 105*mm, 20*mm, 55*mm, 24*mm
-    d.add(Rect(lx,y,bw,bh,2*mm,2*mm,fillColor=LIGHT_BLUE,strokeColor=BLUE,strokeWidth=.8))
-    d.add(String(lx+5*mm,y+15*mm,"Spatial model",fontName=FONT_BOLD,fontSize=9,fillColor=NAVY))
-    d.add(String(lx+5*mm,y+9*mm,"X/Y + dimensions + devices",fontName=FONT,fontSize=7.2,fillColor=INK))
-    d.add(Rect(rx,y,bw,bh,2*mm,2*mm,fillColor=LIGHT_TEAL,strokeColor=TEAL,strokeWidth=.8))
-    d.add(String(rx+5*mm,y+15*mm,"Engineering input",fontName=FONT_BOLD,fontSize=9,fillColor=NAVY))
-    d.add(String(rx+5*mm,y+9*mm,"Dimensions + criteria + evidence",fontName=FONT,fontSize=7.2,fillColor=INK))
-    y1 = y+17*mm
-    d.add(Line(lx+bw+5*mm,y1,rx-5*mm,y1,strokeColor=BLUE,strokeWidth=1.1))
-    d.add(Polygon([rx-6.5*mm,y1+1.5*mm,rx-6.5*mm,y1-1.5*mm,rx-5*mm,y1],fillColor=BLUE,strokeColor=BLUE))
-    d.add(String(70*mm,y1+2.5*mm,"Push dimensions only",fontName=FONT_BOLD,fontSize=6.8,fillColor=BLUE))
-    y2 = y+7*mm
-    d.add(Line(rx-5*mm,y2,lx+bw+5*mm,y2,strokeColor=TEAL,strokeWidth=1.1))
-    d.add(Polygon([lx+bw+6.5*mm,y2+1.5*mm,lx+bw+6.5*mm,y2-1.5*mm,lx+bw+5*mm,y2],fillColor=TEAL,strokeColor=TEAL))
-    d.add(String(72*mm,y2+2.5*mm,"Pull dimensions only",fontName=FONT_BOLD,fontSize=6.8,fillColor=TEAL))
-    return d
-
-
-def evidence(width=170*mm, height=52*mm):
-    d = Drawing(width, height)
-    labels = ["Requirement","Input evidence","Canonical analysis","Finding","Verdict","Report / snapshot"]
-    fills = [LIGHT_AMBER,LIGHT_BLUE,LIGHT_TEAL,colors.HexColor("#F0F6EA"),colors.HexColor("#F6EFF8"),LIGHT]
-    x, y, bw, gap, bh = 4*mm, 17*mm, 24*mm, 4*mm, 17*mm
-    for i,label in enumerate(labels):
-        d.add(Rect(x,y,bw,bh,2*mm,2*mm,fillColor=fills[i],strokeColor=colors.HexColor("#AAB9C4"),strokeWidth=.6))
-        words = label.split()
-        d.add(String(x+4*mm,y+(10 if len(words)>1 else 7)*mm,words[0],fontName=FONT_BOLD,fontSize=6.6,fillColor=NAVY))
-        if len(words)>1:
-            d.add(String(x+4*mm,y+5*mm," ".join(words[1:]),fontName=FONT_BOLD,fontSize=6.6,fillColor=NAVY))
-        if i < len(labels)-1:
-            x2 = x+bw+gap-1*mm
-            d.add(Line(x+bw+1*mm,y+bh/2,x2,y+bh/2,strokeColor=MUTED,strokeWidth=.8))
-            d.add(Polygon([x2-1.2*mm,y+bh/2+1.2*mm,x2-1.2*mm,y+bh/2-1.2*mm,x2,y+bh/2],fillColor=MUTED,strokeColor=MUTED))
-        x += bw+gap
-    return d
-
-
-def pressure(width=170*mm, height=58*mm):
-    d = Drawing(width, height)
-    nodes = [("Process",25*mm,NAVY),("Airlock",82*mm,BLUE),("Corridor / ref",140*mm,TEAL)]
-    y = 30*mm
-    for label,x,col in nodes:
-        d.add(Circle(x,y,9*mm,fillColor=WHITE,strokeColor=col,strokeWidth=1.4))
-        d.add(String(x-7*mm,y+1*mm,label,fontName=FONT_BOLD,fontSize=6.8,fillColor=INK))
-    d.add(Line(34*mm,y,73*mm,y,strokeColor=MUTED,strokeWidth=1.2))
-    d.add(Polygon([71*mm,y+1.5*mm,71*mm,y-1.5*mm,73*mm,y],fillColor=MUTED,strokeColor=MUTED))
-    d.add(Line(91*mm,y,131*mm,y,strokeColor=MUTED,strokeWidth=1.2))
-    d.add(Polygon([129*mm,y+1.5*mm,129*mm,y-1.5*mm,131*mm,y],fillColor=MUTED,strokeColor=MUTED))
-    return d
-
-
-def deployment(width=170*mm, height=62*mm):
-    d = Drawing(width, height)
-    cols = [
-        ("Controlled workstation", ["Pinned CleanroomX build","Normal user privileges","Project workspace"], 8*mm, LIGHT_BLUE),
-        ("Engineering review", ["Independent review","Diagnostics","Freshness + assumptions"], 64*mm, LIGHT_TEAL),
-        ("Controlled records", ["Project bundle","HTML/PDF report","Snapshot + test evidence"], 120*mm, LIGHT_AMBER),
-    ]
-    for title,body,x,bg in cols:
-        d.add(Rect(x,17*mm,46*mm,30*mm,2*mm,2*mm,fillColor=bg,strokeColor=colors.HexColor("#AAB9C4"),strokeWidth=.7))
-        d.add(String(x+4*mm,39*mm,title,fontName=FONT_BOLD,fontSize=7.5,fillColor=NAVY))
-        for j,line in enumerate(body):
-            d.add(String(x+4*mm,32*mm-j*6*mm,line,fontName=FONT,fontSize=6.8,fillColor=INK))
-    for x in [54*mm,110*mm]:
-        d.add(Line(x,32*mm,x+8*mm,32*mm,strokeColor=MUTED,strokeWidth=.9))
-        d.add(Polygon([x+6*mm,33.5*mm,x+6*mm,30.5*mm,x+8*mm,32*mm],fillColor=MUTED,strokeColor=MUTED))
-    return d
-
-
-DIAGRAMS = {"architecture":architecture,"lifecycle":lifecycle,"sync":sync,"evidence":evidence,"pressure":pressure,"deployment":deployment}
-
-
-def front_matter(lines):
-    meta = {}
-    if not lines or lines[0].strip() != "---":
-        return meta, lines
-    i = 1
-    while i < len(lines) and lines[i].strip() != "---":
-        if ":" in lines[i]:
-            k,v = lines[i].split(":",1)
-            meta[k.strip()] = v.strip()
-        i += 1
-    return meta, lines[i+1:]
-
-
-def cover(meta):
-    usable = A4[0]-34*mm
-    rows = [
-        ["Document","Engineering User & Validation Manual"],
-        ["Revision",meta.get("revision","2.0")],
-        ["Stable release",meta.get("stable","v0.102.1")],
-        ["Engineering baseline",meta.get("baseline","")],
-        ["Manual date",meta.get("date","30 September 2026")],
-    ]
-    data = [[Paragraph(inline(a),ST["TableHead"] if i==0 else ST["Table"]),Paragraph(inline(b),ST["TableHead"] if i==0 else ST["Table"])] for i,(a,b) in enumerate(rows)]
-    t = Table(data,colWidths=[44*mm,116*mm])
-    t.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY2),("BACKGROUND",(0,1),(0,-1),LIGHT_BLUE),
-        ("GRID",(0,0),(-1,-1),.4,colors.HexColor("#9AB0C0")),("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("LEFTPADDING",(0,0),(-1,-1),6),("RIGHTPADDING",(0,0),(-1,-1),6),
-        ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)
+def cover_story(title_lines):
+    brand = title_lines[0] if title_lines else 'CLEANROOMX'
+    title = title_lines[1] if len(title_lines) > 1 else 'Engineering User & Operations Manual'
+    subtitle = title_lines[2] if len(title_lines) > 2 else 'Design | Simulation | Verification | Evidence'
+    # Dark hero panel
+    hero = Table([
+        [Paragraph(inline_md(brand), STYLES['cover_brand'])],
+        [Paragraph(inline_md(title), STYLES['cover_title'])],
+        [Paragraph(inline_md(subtitle), STYLES['cover_sub'])],
+    ], colWidths=[A4[0]-34*mm])
+    hero.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1),NAVY),
+        ('LEFTPADDING',(0,0),(-1,-1),12),('RIGHTPADDING',(0,0),(-1,-1),12),
+        ('TOPPADDING',(0,0),(0,0),24),('BOTTOMPADDING',(0,-1),(0,-1),24),
     ]))
-    title = ParagraphStyle("CoverTitle", parent=BASE["Title"], fontName=FONT_BOLD, fontSize=25, leading=30, textColor=WHITE, alignment=0)
-    sub = ParagraphStyle("CoverSub", parent=BASE["BodyText"], fontName=FONT, fontSize=11.2, leading=16, textColor=colors.HexColor("#DCEAF3"))
-    return [
-        Spacer(1,12*mm),
-        Table([[Paragraph("CLEANROOMX",ParagraphStyle("Brand",fontName=FONT_BOLD,fontSize=16,textColor=CYAN))]],colWidths=[usable],style=[("BACKGROUND",(0,0),(-1,-1),NAVY2),("LEFTPADDING",(0,0),(-1,-1),10),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)]),
-        Table([[Paragraph("Engineering User & Validation Manual",title)],[Paragraph("Design • Simulation • HVAC • Networks • BIM/IFC • Verification • Evidence • Controlled Handoff",sub)]],colWidths=[usable],style=[("BACKGROUND",(0,0),(-1,-1),NAVY),("LEFTPADDING",(0,0),(-1,-1),12),("RIGHTPADDING",(0,0),(-1,-1),12),("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10)]),
-        Spacer(1,10*mm),t,Spacer(1,7*mm),
-        callout("CRITICAL","Engineering and regulatory boundary","CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence. It does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, manufacturer approval, or regulatory compliance. Applicable criteria remain explicit project inputs and require qualified review."),
-        Spacer(1,8*mm),
-        Paragraph("Intended audience: cleanroom/HVAC engineers, BIM coordinators, verification engineers, reviewers, QA/validation personnel, technical leads, and controlled-document owners.",ST["Body"]),
-        Paragraph("This revision reorganizes the manual around operator tasks, review gates, and industrial use rather than repository chronology. Development status is isolated in the final appendix.",ST["Body"]),
-        PageBreak()
+    meta_rows = [
+        ['Document ID', DOC_ID],
+        ['Revision / issue date', f'{REVISION} | {ISSUE_DATE}'],
+        ['Primary software baseline', 'CleanroomX v0.102.1 | Python 3.11 / 3.12 / 3.13'],
+        ['Documentation snapshot', 'main @ c9d539b81fccee19eeaf6380ea83d5ce1729a77b'],
+        ['Document status', 'Engineering reference manual'],
+        ['Repository', '3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform'],
     ]
+    meta = Table([[Paragraph(inline_md(a), STYLES['cover_meta']), Paragraph(inline_md(b), STYLES['cover_meta'])] for a,b in meta_rows], colWidths=[45*mm, 132*mm])
+    meta.setStyle(TableStyle([
+        ('BACKGROUND',(0,0),(-1,-1),PALE),('GRID',(0,0),(-1,-1),0.35,LINE),
+        ('VALIGN',(0,0),(-1,-1),'TOP'),
+        ('FONTNAME',(0,0),(0,-1),FONT_BOLD),('TEXTCOLOR',(0,0),(0,-1),NAVY_2),
+        ('LEFTPADDING',(0,0),(-1,-1),5),('RIGHTPADDING',(0,0),(-1,-1),5),
+        ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
+    ]))
+    boundary = callout('WARNING',
+        'CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence. '
+        'It does not by itself establish cleanroom certification, CFD validation, commissioning/TAB acceptance, '
+        'manufacturer approval, or regulatory acceptance.', A4[0]-34*mm)
+    return [Spacer(1, 18), hero, Spacer(1, 16), meta, Spacer(1, 12), boundary,
+            Spacer(1, 12), Paragraph('Built for designers, HVAC engineers, reviewers, QA teams, BIM coordinators, and technical leads.', STYLES['cover_meta']),
+            Spacer(1, 4), Paragraph('Use only with the software baseline and project inputs identified in the applicable engineering record.', STYLES['cover_meta'])]
 
 
-def parse(source):
-    lines = Path(source).read_text(encoding="utf-8").splitlines()
-    meta, lines = front_matter(lines)
-    story = cover(meta)
-    story.append(Paragraph("Contents",ST["TOCHead"]))
-    toc = TableOfContents()
-    toc.levelStyles = [ST["TOC0"],ST["TOC1"]]
-    toc.dotsMinLevel = 0
-    story += [toc,PageBreak()]
-    usable = A4[0]-34*mm
-    para, i = [], 0
-
-    def flush():
-        nonlocal para
-        if para:
-            value = " ".join(x.strip() for x in para).strip()
-            if value:
-                story.append(Paragraph(inline(value),ST["Body"]))
-            para = []
-
-    while i < len(lines):
-        line = lines[i].rstrip()
-        s = line.strip()
-        if not s:
-            flush(); i += 1; continue
-        m = re.fullmatch(r"\[DIAGRAM:([a-z_]+)(?:\|([^\]]+))?\]",s)
-        if m:
-            flush()
-            fn = DIAGRAMS.get(m.group(1))
-            if fn:
-                story.append(fn())
-                if m.group(2):
-                    story.append(Paragraph(inline(m.group(2)),ST["Caption"]))
-            i += 1; continue
-        if s.startswith("> [!"):
-            flush()
-            cm = re.match(r"> \[!(NOTE|TIP|QUALITY|WARNING|CRITICAL)\]\s*(.*)",s)
-            kind = cm.group(1) if cm else "NOTE"
-            title = cm.group(2).strip() if cm else kind.title()
-            body = []
-            i += 1
-            while i < len(lines) and lines[i].lstrip().startswith(">"):
-                body.append(lines[i].lstrip()[1:].strip())
-                i += 1
-            story.append(callout(kind,title or kind.title()," ".join(body)))
-            continue
-        if s.startswith(CODE_FENCE):
-            flush(); i += 1; code = []
-            while i < len(lines) and not lines[i].strip().startswith(CODE_FENCE):
-                code.append(lines[i]); i += 1
-            story.append(Preformatted("\n".join(code),ST["Code"]))
-            i += 1; continue
-        if s.startswith("|"):
-            flush(); tbl = []
-            while i < len(lines) and lines[i].strip().startswith("|"):
-                tbl.append(lines[i].strip()); i += 1
-            story.append(md_table(tbl,usable)); story.append(Spacer(1,4)); continue
-        if s.startswith("# "):
-            flush()
-            title = s[2:].strip()
-            num = title.split(".",1)[0].strip() if re.match(r"^\d+\.",title) else "—"
-            chapter = title.split(".",1)[1].strip() if num != "—" else title
-            if story and not isinstance(story[-1],PageBreak):
-                story.append(PageBreak())
-            story += [ChapterBanner(num,chapter),Spacer(1,4),Paragraph(inline(title),ST["H1"])]
-            i += 1; continue
-        if s.startswith("## "):
-            flush(); story.append(Paragraph(inline(s[3:].strip()),ST["H2"])); i += 1; continue
-        if s.startswith("### "):
-            flush(); story.append(Paragraph(inline(s[4:].strip()),ST["H3"])); i += 1; continue
-        if re.match(r"^[-*] ",s):
-            flush(); story.append(Paragraph("• "+inline(s[2:].strip()),ST["Bullet"])); i += 1; continue
-        n = re.match(r"^(\d+)\.\s+(.*)",s)
-        if n:
-            flush(); story.append(Paragraph(f"{n.group(1)}. "+inline(n.group(2)),ST["Number"])); i += 1; continue
-        if s == "***":
-            flush(); story.append(HRFlowable(width="100%",thickness=.6,color=BORDER,spaceBefore=4,spaceAfter=6)); i += 1; continue
-        para.append(line); i += 1
-    flush()
-    return story
-
-
-def main():
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: render_solution_manual_pdf.py SOURCE.md OUTPUT.pdf")
-    doc = ManualDoc(
-        sys.argv[2],pagesize=A4,rightMargin=17*mm,leftMargin=17*mm,topMargin=18*mm,bottomMargin=19*mm,
-        title="CleanroomX Engineering User & Validation Manual",author="CleanroomX contributors",
-        subject="Professional operating, engineering, assurance, and validation manual for CleanroomX"
+def build(source: Path, output: Path):
+    page_w, page_h = A4
+    left = right = 17*mm
+    top = 17*mm
+    bottom = 18*mm
+    frame = Frame(left, bottom, page_w-left-right, page_h-top-bottom, id='body')
+    doc = ManualDocTemplate(
+        str(output), pagesize=A4, leftMargin=left, rightMargin=right,
+        topMargin=top, bottomMargin=bottom,
+        title='CleanroomX Engineering User & Operations Manual',
+        author='CleanroomX contributors',
+        subject='Industry-oriented CleanroomX engineering operations manual',
     )
-    doc.multiBuild(parse(sys.argv[1]))
+    doc.addPageTemplates([
+        PageTemplate(id='cover', frames=[frame], onPage=cover_page),
+        PageTemplate(id='body', frames=[frame], onPage=body_page),
+    ])
+
+    lines = source.read_text(encoding='utf-8').splitlines()
+    story=[]
+    idx=0
+    cover_lines=[]
+    while idx < len(lines) and lines[idx].strip() != '[[COVER_END]]':
+        if lines[idx].strip() and not lines[idx].lstrip().startswith('<!--'):
+            cover_lines.append(lines[idx].strip())
+        idx += 1
+    if idx < len(lines) and lines[idx].strip() == '[[COVER_END]]':
+        idx += 1
+    story.extend(cover_story(cover_lines[:3]))
+    story.append(NextPageTemplate('body'))
+    story.append(PageBreak())
+
+    usable = page_w-left-right
+    paragraph_lines=[]
+
+    def flush_paragraph():
+        nonlocal paragraph_lines
+        if paragraph_lines:
+            value=' '.join(x.strip() for x in paragraph_lines).strip()
+            if value:
+                story.append(Paragraph(inline_md(value), STYLES['body']))
+            paragraph_lines=[]
+
+    while idx < len(lines):
+        line=lines[idx].rstrip()
+        stripped=line.strip()
+        if not stripped:
+            flush_paragraph(); idx+=1; continue
+        if stripped.startswith('<!--'):
+            flush_paragraph()
+            while idx < len(lines) and '-->' not in lines[idx]: idx += 1
+            idx += 1; continue
+        if stripped == '[[TOC]]':
+            flush_paragraph()
+            if story and not isinstance(story[-1], PageBreak):
+                story.append(PageBreak())
+            story.append(Paragraph('Contents', STYLES['h1']))
+            toc=TableOfContents()
+            toc.levelStyles=[
+                ParagraphStyle(name='TOC1', fontName=FONT, fontSize=8.3, leading=11.5, leftIndent=0, firstLineIndent=0, textColor=INK),
+                ParagraphStyle(name='TOC2', fontName=FONT, fontSize=7.8, leading=10.5, leftIndent=11, firstLineIndent=0, textColor=MUTED),
+            ]
+            toc.dotsMinLevel=0
+            story.append(toc)
+            story.append(PageBreak())
+            idx+=1; continue
+        if stripped == '[[PAGEBREAK]]':
+            flush_paragraph(); story.append(PageBreak()); idx+=1; continue
+        if stripped.startswith('```'):
+            flush_paragraph(); idx+=1; code=[]
+            while idx < len(lines) and not lines[idx].strip().startswith('```'):
+                code.append(lines[idx]); idx += 1
+            story.append(Preformatted('\n'.join(code), STYLES['code']))
+            idx += 1; continue
+        if stripped.startswith('|'):
+            flush_paragraph(); table_lines=[]
+            while idx < len(lines) and lines[idx].strip().startswith('|'):
+                table_lines.append(lines[idx].strip()); idx += 1
+            story.append(parse_table(table_lines, usable)); story.append(Spacer(1,5)); continue
+        mcall=re.match(r'^>\s*\[!(\w+)\]\s*(.*)$', stripped)
+        if mcall:
+            flush_paragraph(); story.append(callout(mcall.group(1), mcall.group(2), usable)); story.append(Spacer(1,6)); idx+=1; continue
+        if stripped.startswith('# '):
+            flush_paragraph(); title=stripped[2:].strip()
+            if story and not isinstance(story[-1], PageBreak): story.append(PageBreak())
+            if title.upper().startswith('PART '):
+                story.append(part_title(title))
+            else:
+                story.append(Paragraph(inline_md(title), STYLES['h1']))
+                line_tbl = Table([['']], colWidths=[usable], rowHeights=[1.2*mm])
+                line_tbl.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),TEAL),('BOX',(0,0),(-1,-1),0,TEAL)]))
+                story.append(line_tbl)
+                story.append(Spacer(1, 5))
+            idx+=1; continue
+        if stripped.startswith('## '):
+            flush_paragraph(); story.append(Paragraph(inline_md(stripped[3:].strip()), STYLES['h2'])); idx+=1; continue
+        if stripped.startswith('### '):
+            flush_paragraph(); story.append(Paragraph(inline_md(stripped[4:].strip()), STYLES['h3'])); idx+=1; continue
+        if re.match(r'^[-*]\s+', stripped):
+            flush_paragraph(); text=re.sub(r'^[-*]\s+','',stripped); story.append(Paragraph('• '+inline_md(text), STYLES['bullet'])); idx+=1; continue
+        mnum=re.match(r'^(\d+)\.\s+(.*)$', stripped)
+        if mnum:
+            flush_paragraph(); story.append(Paragraph(f'{mnum.group(1)}. '+inline_md(mnum.group(2)), STYLES['number'])); idx+=1; continue
+        paragraph_lines.append(line); idx+=1
+    flush_paragraph()
+    doc.multiBuild(story)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    if len(sys.argv) != 3:
+        raise SystemExit('usage: render_solution_manual_pdf_v2.py SOURCE.md OUTPUT.pdf')
+    build(Path(sys.argv[1]), Path(sys.argv[2]))

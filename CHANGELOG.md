@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph scalability — iterative provenance-cycle validation — 2026-09-30
+
+- Replaces recursive provenance-cycle DFS with a deterministic explicit-stack traversal.
+- Preserves readable cycle-path rejection while allowing deep valid provenance chains beyond Python's recursion depth.
+- Adds a 1,200-link acyclic provenance regression without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — verification-run closure — 2026-09-30
 
 - Rejects verification runs whose declared verdicts depend on findings from checks that are not listed in the same run.

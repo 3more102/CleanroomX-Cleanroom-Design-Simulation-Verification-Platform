@@ -207,6 +207,27 @@ def test_graph_rejects_provenance_dependency_cycles() -> None:
         proofgraph_from_dict(broken)
 
 
+def test_graph_accepts_deep_acyclic_provenance_chain() -> None:
+    document = copy.deepcopy(_graph().to_dict())
+    template = copy.deepcopy(document["evidence"][0])
+    previous_id = template["id"]
+
+    for index in range(1200):
+        derived = copy.deepcopy(template)
+        derived["id"] = f"ev-chain-{index:04d}"
+        derived["property_name"] = f"derived_chain_value_{index:04d}"
+        derived["provenance"][0]["id"] = f"prov-chain-{index:04d}"
+        derived["provenance"][0]["origin"] = f"derived chain node {index:04d}"
+        derived["provenance"][0]["upstream_evidence_ids"] = [previous_id]
+        document["evidence"].append(derived)
+        previous_id = derived["id"]
+
+    document.pop("graph_sha256")
+    restored = proofgraph_from_dict(document)
+
+    assert len(restored.evidence) == 1201
+
+
 def _add_second_requirement(document: dict) -> None:
     other = copy.deepcopy(document["requirement_set"]["requirements"][0])
     other["id"] = "CRX-PRESS-OTHER"

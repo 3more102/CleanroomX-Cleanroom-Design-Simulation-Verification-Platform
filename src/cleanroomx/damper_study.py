@@ -3,7 +3,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge, solve_looped_network
+from .loop_network import (
+    LoopedFlowNetwork,
+    QuadraticFlowEdge,
+    _calculate_looped_network,
+    _format_looped_network_calculation,
+)
 
 
 def _multiplier(value: float, field_name: str) -> float:
@@ -110,20 +115,33 @@ def _case_network(
     )
 
 
-def _flow_change_rows(baseline: dict, case_result: dict) -> list[dict]:
+def _flow_change_rows(
+    baseline_network: LoopedFlowNetwork,
+    baseline_calculation: dict,
+    case_network: LoopedFlowNetwork,
+    case_calculation: dict,
+) -> list[dict]:
     baseline_flows = {
-        edge["name"]: float(edge["airflow_m3_h"])
-        for edge in baseline["edges"]
+        edge.name: airflow_m3_s * 3600.0
+        for edge, airflow_m3_s in zip(
+            baseline_network.edges,
+            baseline_calculation["edge_flows_m3_s"],
+            strict=True,
+        )
     }
     rows = []
-    for edge in case_result["edges"]:
-        base = baseline_flows[edge["name"]]
-        case_flow = float(edge["airflow_m3_h"])
+    for edge, airflow_m3_s in zip(
+        case_network.edges,
+        case_calculation["edge_flows_m3_s"],
+        strict=True,
+    ):
+        base = baseline_flows[edge.name]
+        case_flow = airflow_m3_s * 3600.0
         delta = case_flow - base
         percent = None if abs(base) < 1e-12 else delta / base * 100.0
         rows.append(
             {
-                "edge": edge["name"],
+                "edge": edge.name,
                 "baseline_airflow_m3_h": round(base, 6),
                 "case_airflow_m3_h": round(case_flow, 6),
                 "delta_airflow_m3_h": round(delta, 6),
@@ -136,12 +154,21 @@ def _flow_change_rows(baseline: dict, case_result: dict) -> list[dict]:
 
 
 def solve_loop_damper_study(study: LoopDamperStudy) -> dict:
-    baseline = solve_looped_network(study.loop_network)
+    baseline_calculation = _calculate_looped_network(study.loop_network)
+    baseline = _format_looped_network_calculation(
+        study.loop_network,
+        baseline_calculation,
+    )
     base_edges = {edge.name: edge for edge in study.loop_network.edges}
 
     case_results = []
     for case in study.cases:
-        solution = solve_looped_network(_case_network(study, case))
+        case_network = _case_network(study, case)
+        case_calculation = _calculate_looped_network(case_network)
+        solution = _format_looped_network_calculation(
+            case_network,
+            case_calculation,
+        )
         adjustments = []
         for edge_name, multiplier in case.edge_resistance_multipliers.items():
             edge = base_edges[edge_name]
@@ -165,7 +192,12 @@ def solve_loop_damper_study(study: LoopDamperStudy) -> dict:
                 "name": case.name,
                 "status": solution["status"],
                 "adjustments": adjustments,
-                "flow_changes": _flow_change_rows(baseline, solution),
+                "flow_changes": _flow_change_rows(
+                    study.loop_network,
+                    baseline_calculation,
+                    case_network,
+                    case_calculation,
+                ),
                 "network_solution": solution,
             }
         )

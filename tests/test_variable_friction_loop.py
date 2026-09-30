@@ -212,6 +212,46 @@ def test_zero_flow_automatic_spur_is_explicitly_frozen() -> None:
     ] == 1
 
 
+def test_near_zero_threshold_uses_full_precision_solved_airflow() -> None:
+    network = looped_flow_network_from_dict(
+        {
+            "name": "Near-zero precision boundary",
+            "reference_node": "A",
+            "node_injections_m3_h": {
+                "A": 100.0000004,
+                "B": -100.0000004,
+            },
+            "edges": [
+                _automatic_geometry(
+                    "AB",
+                    "A",
+                    "B",
+                    reference_airflow_m3_h=900.0,
+                )
+            ],
+        }
+    )
+
+    result = solve_variable_friction_looped_network(
+        network,
+        relaxation=1.0,
+        near_zero_airflow_m3_h=100.0,
+        resistance_relative_tolerance=1e-9,
+    )
+    closure = result["variable_friction"]["edge_closure"][0]
+
+    # The public loop result remains formatted to six decimal places.
+    assert result["edges"][0]["airflow_m3_h"] == 100.0
+    # Internally, 100.0000004 m3/h is above the configured threshold and
+    # must not be frozen merely because its display value rounds to 100.0.
+    assert closure["state"] == "automatic_friction"
+    assert closure["airflow_m3_h"] == pytest.approx(100.0000004, abs=1e-10)
+    assert result["variable_friction"]["near_zero_frozen_edge_count"] == 0
+    assert result["edges"][0]["resistance_evidence"][
+        "reference_airflow_m3_h"
+    ] == pytest.approx(100.0000004, abs=1e-10)
+
+
 def test_rectangular_automatic_geometry_can_be_reconstructed() -> None:
     network = looped_flow_network_from_dict(
         {

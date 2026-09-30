@@ -45,6 +45,8 @@ Reynolds-based friction is undefined at exactly zero velocity. If an automatic-f
 
 The pressure loss of such a branch is already negligible at the solved state. CleanroomX does not invent a Reynolds number or friction factor for zero flow.
 
+The near-zero comparison and every Reynolds/friction update use the full-precision solved edge airflow from the inner loop calculation. The six-decimal edge airflow shown in the public loop result is presentation only and is never fed back into the variable-friction iteration.
+
 ## Laminar boundary
 
 The existing friction model uses 64/Re for circular laminar ducts and Colebrook for Re >= 2300. Automatic laminar friction for noncircular ducts remains unsupported. If an iterated rectangular edge enters that unsupported regime, the solver stops with an explicit validation error rather than silently applying a circular correlation.

@@ -298,6 +298,18 @@ def test_graph_rejects_run_verdicts_that_depend_on_unlisted_checks() -> None:
         proofgraph_from_dict(broken)
 
 
+def test_graph_rejects_run_checks_without_verdict_outcomes() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    secondary_check = copy.deepcopy(broken["checks"][0])
+    secondary_check["id"] = "check-without-verdict"
+    broken["checks"].append(secondary_check)
+    broken["verification_runs"][0]["check_ids"].append(secondary_check["id"])
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="checks with no verdict outcome"):
+        proofgraph_from_dict(broken)
+
+
 def test_non_finite_evidence_is_rejected() -> None:
     with pytest.raises(ValueError, match="finite number"):
         DesignEvidence(

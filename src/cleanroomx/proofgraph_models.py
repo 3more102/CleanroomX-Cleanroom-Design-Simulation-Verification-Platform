@@ -838,6 +838,12 @@ class ProofGraph:
                     f"verification run {run.id!r} verdicts depend on checks not "
                     "included in the run: " + ", ".join(sorted(missing_run_checks))
                 )
+            checks_without_verdicts = set(run.check_ids) - required_check_ids
+            if checks_without_verdicts:
+                raise ValueError(
+                    f"verification run {run.id!r} includes checks with no verdict "
+                    "outcome: " + ", ".join(sorted(checks_without_verdicts))
+                )
 
     def body_dict(self) -> dict[str, Any]:
         return {

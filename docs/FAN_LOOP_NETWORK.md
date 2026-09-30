@@ -14,6 +14,8 @@ The reference flow is used to solve the fixed-resistance mesh once. The pressure
 
     R_eq = deltaP_reference / Q_reference^2
 
+The reference pressure used in this derivation is taken from the full-precision loop calculation state. Rounded node pressures in the public loop result are presentation values only and are never fed back into the equivalent-resistance calculation.
+
 Because every loop edge follows the fixed homogeneous law deltaP = R*Q*abs(Q), this two-terminal equivalent resistance remains constant when the entire through-flow is scaled.
 
 ## Fan operating point

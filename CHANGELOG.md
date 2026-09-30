@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased fan/loop numerical integrity — canonical reference and uncertainty state — 2026-09-30
+
+- Derives two-terminal equivalent loop resistance from full-precision reference node pressures instead of the rounded public loop-network result.
+- Exposes one internal fan/loop calculation layer so public formatting remains a terminal boundary while downstream uncertainty analysis reuses canonical operating-point and edge-flow state.
+- Builds fan/loop uncertainty envelopes from full-precision corner calculations and rounds only the final presented bounds; adds regressions for reference-pressure and operating-root precision boundaries.
+
 ## Unreleased ProofGraph thermal numerical integrity — full-precision evidence — 2026-09-30
 
 - Separates canonical full-precision thermal uncertainty calculations from the rounded presentation payload.

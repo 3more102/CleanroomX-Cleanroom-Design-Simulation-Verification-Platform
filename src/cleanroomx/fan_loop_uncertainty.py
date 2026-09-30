@@ -4,7 +4,12 @@ from dataclasses import asdict
 from itertools import product
 from math import prod
 
-from .fan_loop_network import FanLoopNetworkStudy, solve_fan_loop_network
+from .fan_loop_network import (
+    FanLoopNetworkStudy,
+    _calculate_fan_loop_network,
+    _format_fan_loop_network_calculation,
+    solve_fan_loop_network,
+)
 from .fan_loop_uncertainty_models import FanLoopNetworkUncertaintyStudy
 from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge
 from .uncertainty_models import UncertainValue
@@ -78,16 +83,22 @@ def _solve_case(
     study: FanLoopNetworkUncertaintyStudy,
     fixed_pressure_pa: float,
     edge_resistances: dict[str, float],
-) -> dict:
-    return solve_fan_loop_network(
-        FanLoopNetworkStudy(
-            name=study.name,
-            fan_curve=study.fan_curve,
-            loop_network=_network_at_corner(study, edge_resistances),
-            fan_discharge_node=study.fan_discharge_node,
-            fan_suction_node=study.fan_suction_node,
-            fixed_pressure_pa=fixed_pressure_pa,
-        )
+) -> tuple[dict, dict]:
+    fan_loop_study = FanLoopNetworkStudy(
+        name=study.name,
+        fan_curve=study.fan_curve,
+        loop_network=_network_at_corner(study, edge_resistances),
+        fan_discharge_node=study.fan_discharge_node,
+        fan_suction_node=study.fan_suction_node,
+        fixed_pressure_pa=fixed_pressure_pa,
+    )
+    calculation = _calculate_fan_loop_network(fan_loop_study)
+    return (
+        _format_fan_loop_network_calculation(
+            fan_loop_study,
+            calculation,
+        ),
+        calculation,
     )
 
 
@@ -180,13 +191,13 @@ def analyze_fan_loop_network_uncertainty(
     for fixed_pressure in fixed_values:
         for values in edge_combinations:
             edge_resistances = dict(zip(uncertain_edge_names, values))
-            result = _solve_case(
+            result, calculation = _solve_case(
                 study,
                 fixed_pressure,
                 edge_resistances,
             )
             equivalent_resistance = float(
-                result[
+                calculation[
                     "equivalent_loop_resistance_pa_per_m3_s_squared"
                 ]
             )
@@ -194,10 +205,37 @@ def analyze_fan_loop_network_uncertainty(
 
             point = result["fan_operating_point"]
             network = result["operating_network_solution"]
+            operating_calculation = calculation["operating_calculation"]
+            operating_network = calculation["operating_network"]
+            operating_network_calculation = calculation[
+                "operating_network_calculation"
+            ]
             edge_airflows = None
-            if point is not None and network is not None:
-                solved_points.append(point)
-                solved_networks.append(network)
+            if (
+                point is not None
+                and network is not None
+                and operating_calculation is not None
+                and operating_network is not None
+                and operating_network_calculation is not None
+            ):
+                solved_points.append(operating_calculation)
+                solved_networks.append(
+                    {
+                        "edges": [
+                            {
+                                "name": edge.name,
+                                "airflow_m3_h": airflow_m3_s * 3600.0,
+                            }
+                            for edge, airflow_m3_s in zip(
+                                operating_network.edges,
+                                operating_network_calculation[
+                                    "edge_flows_m3_s"
+                                ],
+                                strict=True,
+                            )
+                        ]
+                    }
+                )
                 edge_airflows = {
                     edge["name"]: edge["airflow_m3_h"]
                     for edge in network["edges"]

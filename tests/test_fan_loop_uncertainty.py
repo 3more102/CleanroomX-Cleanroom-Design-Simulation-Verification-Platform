@@ -122,6 +122,22 @@ def test_zero_uncertainty_collapses_duplicate_corner_dimensions() -> None:
     assert result["solved_corner_count"] == 1
 
 
+def test_zero_uncertainty_envelope_uses_full_precision_corner_root() -> None:
+    data = _data()
+    data["fixed_pressure_pa"]["uncertainty_abs"] = 0.0
+    for item in data["edge_resistance_uncertainty"].values():
+        item["uncertainty_abs"] = 0.0
+
+    result = analyze_fan_loop_network_uncertainty(
+        fan_loop_network_uncertainty_from_dict(data)
+    )
+
+    assert result["corners"][0]["operating_point"]["airflow_m3_h"] == 3484.053
+    airflow = result["operating_point_envelope"]["airflow_m3_h"]
+    assert airflow["lower"] == pytest.approx(3484.053129, abs=1e-6)
+    assert airflow["upper"] == pytest.approx(3484.053129, abs=1e-6)
+
+
 def test_unsolved_corner_makes_analysis_indeterminate() -> None:
     data = _data()
     data["fixed_pressure_pa"]["value"] = 450.0

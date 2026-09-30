@@ -130,6 +130,20 @@ def test_invalid_raw_editor_draft_is_preserved_as_semantic_evidence(tmp_path):
     assert any("invalid/incomplete" in line for line in details)
 
 
+def test_duplicate_key_editor_draft_is_invalid_even_if_legacy_ui_marked_valid(tmp_path):
+    _, candidate = _recovery(
+        tmp_path,
+        _project(),
+        editor_text='{"value": 1, "value": 2}',
+        editor_valid=True,
+    )
+
+    comparison = compare_recovery_to_source(candidate)
+
+    assert comparison.editor_draft_state == "invalid"
+    assert comparison.has_changes is True
+
+
 def test_missing_source_is_reported_without_guessing_changes(tmp_path):
     source, candidate = _recovery(tmp_path, _project())
     source.unlink()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from .hvac import calculate_hvac_governing_airflow_m3_h
 from .hvac_models import HVACProject
 from .models import ProjectSpec
 
@@ -111,6 +112,7 @@ def analyze_project_consistency(
 def analyze_hvac_fan_airflow_consistency(
     hvac_result: dict,
     *,
+    hvac_project: HVACProject | None = None,
     fan_operating_points: list[dict] | None = None,
     fan_duct_networks: list[dict] | None = None,
     fan_parallel_networks: list[dict] | None = None,
@@ -127,8 +129,14 @@ def analyze_hvac_fan_airflow_consistency(
     if not math.isfinite(tolerance) or tolerance < 0:
         raise ValueError("airflow_abs_tolerance_m3_h must be finite and >= 0")
 
+    if hvac_project is not None and not isinstance(hvac_project, HVACProject):
+        raise ValueError("hvac_project must be an HVACProject when provided")
     required_airflow = _finite_positive(
-        hvac_result["total_governing_airflow_m3_h"],
+        (
+            calculate_hvac_governing_airflow_m3_h(hvac_project)
+            if hvac_project is not None
+            else hvac_result["total_governing_airflow_m3_h"]
+        ),
         "HVAC total governing airflow",
     )
 

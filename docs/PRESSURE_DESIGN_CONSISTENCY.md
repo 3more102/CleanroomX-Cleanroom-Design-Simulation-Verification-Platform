@@ -68,3 +68,12 @@ workflow result: it records the configured target as DesignEvidence, the solved
 signed node-to-reference difference as CalculationEvidence, and preserves this
 workflow's pass/fail/not_checked semantics as pass/fail/not_checked verdicts. It
 does not add a second pressure solver or infer missing targets or mappings.
+
+
+## Numerical precision
+
+Pressure-target verdicts use the pressure network solver's full-precision node
+state. The pressure network's public node table remains rounded for presentation,
+but those display values are not fed back into the design-consistency comparison.
+This keeps user-supplied absolute tolerances authoritative even when they are
+finer than the public pressure display precision.

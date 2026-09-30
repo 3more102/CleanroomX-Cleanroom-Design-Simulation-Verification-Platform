@@ -72,7 +72,6 @@ def proofgraph_from_compliance_check(
     findings: list[ComplianceFinding] = []
     verdicts: list[ComplianceVerdict] = []
 
-    status_map = {"pass": "pass", "fail": "fail", "not_checked": "unknown"}
     by_rule = {rule.id: rule for rule in check.rule_pack.rules}
     for finding in result["findings"]:
         rule = by_rule[finding["id"]]
@@ -103,7 +102,7 @@ def proofgraph_from_compliance_check(
         check_id = f"check:{rule.id}"
         finding_id = f"finding:{rule.id}"
         verdict_id = f"verdict:{rule.id}"
-        status = status_map[finding["status"]]
+        status = finding["status"]
         reason = finding.get("note")
         if not reason:
             reason = (
@@ -238,7 +237,6 @@ def proofgraph_from_pressure_design_consistency(
     checks: list[ComplianceCheck] = []
     graph_findings: list[ComplianceFinding] = []
     verdicts: list[ComplianceVerdict] = []
-    status_map = {"pass": "pass", "fail": "fail", "not_checked": "unknown"}
 
     for room in configured_rooms:
         finding = findings_by_room[room.name]
@@ -330,7 +328,7 @@ def proofgraph_from_pressure_design_consistency(
         check_id = f"check:pressure-target:{room.name}"
         finding_id = f"finding:pressure-target:{room.name}"
         verdict_id = f"verdict:pressure-target:{room.name}"
-        status = status_map[finding["status"]]
+        status = finding["status"]
         checks.append(
             ComplianceCheck(
                 id=check_id,

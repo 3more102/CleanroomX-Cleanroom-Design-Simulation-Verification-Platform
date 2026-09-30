@@ -277,6 +277,15 @@ def test_graph_rejects_verdict_findings_for_another_requirement() -> None:
         proofgraph_from_dict(broken)
 
 
+def test_graph_rejects_single_finding_verdict_status_mismatch() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    broken["verdicts"][0]["status"] = "fail"
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="does not match its single finding status"):
+        proofgraph_from_dict(broken)
+
+
 def test_graph_rejects_run_verdicts_that_depend_on_unlisted_checks() -> None:
     broken = copy.deepcopy(_graph().to_dict())
     secondary_check = copy.deepcopy(broken["checks"][0])

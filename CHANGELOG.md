@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — single-finding verdict status — 2026-09-30
+
+- Rejects a verdict whose status disagrees with its sole referenced finding, preventing contradictory compliance state from being serialized as one auditable result.
+- Leaves multi-finding aggregation semantics unchanged until an explicit aggregation policy is defined.
+- Adds strict-parser regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — explicit project identity — 2026-09-30
 
 - Rejects a ProofGraph that combines evidence carrying different explicit `project_id` values, preventing cross-project evidence contamination from being serialized as one auditable graph.

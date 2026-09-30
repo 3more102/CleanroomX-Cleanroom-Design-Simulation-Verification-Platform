@@ -66,6 +66,10 @@ Each evidence record can retain:
 - upstream evidence dependencies
 - confidence and uncertainty metadata
 
+Provenance record IDs are unique across the graph. Upstream evidence dependencies
+must form an acyclic directed graph; multi-evidence dependency cycles are rejected
+rather than serialized as an apparently traceable evidence chain.
+
 Confidence is optional. ProofGraph does not manufacture a confidence percentage
 when none exists in the underlying engineering evidence.
 

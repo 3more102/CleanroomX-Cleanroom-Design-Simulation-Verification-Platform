@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — required evidence kinds on PASS — 2026-09-30
+
+- Rejects PASS findings whose referenced evidence omits any lifecycle kind explicitly declared by the owning check's `required_evidence_kinds`.
+- Keeps non-PASS findings valid with partial evidence so UNKNOWN, INDETERMINATE, NOT_CHECKED, WARNING, and FAIL continue to represent incomplete or adverse evidence honestly.
+- Adds focused pass/failure compatibility regressions without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — evidence-backed PASS — 2026-09-30
 
 - Rejects PASS findings that declare evidence absent or reference no evidence, preventing absence of evidence from being serialized as successful compliance.

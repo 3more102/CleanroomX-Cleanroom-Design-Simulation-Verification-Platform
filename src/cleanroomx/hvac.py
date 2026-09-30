@@ -14,6 +14,19 @@ from .hvac_models import HVACProject
 from .thermal import _format_thermal_design_calculation, calculate_thermal_design
 
 
+def calculate_hvac_governing_airflow_m3_h(project: HVACProject) -> float:
+    """Return aggregate governing HVAC airflow without presentation rounding."""
+    if not isinstance(project, HVACProject):
+        raise ValueError("project must be an HVACProject")
+    return math.fsum(
+        calculate_thermal_design(
+            room.thermal_design,
+            room.cleanroom_airflow_m3_h,
+        )["governing_supply_airflow_m3_h"]
+        for room in project.rooms
+    )
+
+
 def analyze_hvac_project(project: HVACProject) -> dict:
     room_results: list[dict] = []
     cleanroom_airflows: list[float] = []

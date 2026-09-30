@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 
 from .autosave import RecoveryCandidate, restore_recovery_artifact
 from .project import AnalysisDocument, ProjectDocument, load_project_document
+from .strict_json import strict_json_loads
 
 
 @dataclass(frozen=True)

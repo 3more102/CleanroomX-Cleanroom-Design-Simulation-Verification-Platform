@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — verification-run completeness — 2026-09-30
+
+- Rejects verification runs that declare checks with no verdict outcome, preventing silent unevaluated checks from appearing inside an otherwise auditable run.
+- Preserves explicit `not_checked` results as valid outcomes; every declared run check must be represented by at least one referenced verdict.
+- Adds strict-parser regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — PASS required-evidence closure — 2026-09-30
 
 - Rejects PASS findings that do not reference at least one evidence record for every kind declared by their compliance check's `required_evidence_kinds`.

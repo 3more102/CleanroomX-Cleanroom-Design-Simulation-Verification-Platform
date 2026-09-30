@@ -176,7 +176,11 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
     if operating_calculation is not None:
         operating_q_m3_s = operating_calculation["airflow_m3_s"]
         operating_airflow_m3_h = operating_calculation["airflow_m3_h"]
-        for source_path, path in zip(study.duct_network.paths, paths):
+        for source_path, path in zip(
+            study.duct_network.paths,
+            paths,
+            strict=True,
+        ):
             path_resistance = raw_path_resistance[path["name"]]
             path["operating_pressure_drop_pa"] = round(
                 path_resistance * operating_q_m3_s**2,
@@ -185,6 +189,7 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
             for source_section, section in zip(
                 source_path.sections,
                 path["sections"],
+                strict=True,
             ):
                 flow_ratio = (
                     source_section.airflow_m3_h

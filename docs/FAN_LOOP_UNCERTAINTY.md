@@ -28,6 +28,8 @@ The analysis defaults to `max_corner_cases = 256`. Inputs that would create more
 
 A `complete` result requires the nominal case and every configured corner to produce a bounded fan/system intersection. CleanroomX then reports the min/max corner span for operating airflow, system pressure, and equivalent loop resistance.
 
+Envelope selection is performed from the canonical full-precision fan/loop calculations for every solved corner. Corner operating points and loop-network rows remain rounded public presentation records, but those rounded values are not reused to choose uncertainty minima/maxima. Rounding is applied only when the final envelope and diagnostic ranges are formatted.
+
 If the nominal case or any corner has no intersection inside the supplied fan data, the result is `indeterminate` and no complete operating-point envelope is reported.
 
 Solved edge airflows are retained per corner as diagnostic evidence. They are not claimed as conservative continuous-interval bounds for every interior uncertainty combination.

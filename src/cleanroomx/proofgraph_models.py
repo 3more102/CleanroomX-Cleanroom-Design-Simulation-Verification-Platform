@@ -555,6 +555,48 @@ def _unique_ids(items: tuple[Any, ...], context: str) -> set[str]:
     return set(ids)
 
 
+def _reject_evidence_dependency_cycles(evidence: tuple[Evidence, ...]) -> None:
+    dependencies = {
+        item.id: tuple(
+            sorted(
+                {
+                    upstream_id
+                    for provenance in item.provenance
+                    for upstream_id in provenance.upstream_evidence_ids
+                }
+            )
+        )
+        for item in evidence
+    }
+    states: dict[str, int] = {}
+    stack: list[str] = []
+    stack_index: dict[str, int] = {}
+
+    def visit(evidence_id: str) -> None:
+        state = states.get(evidence_id, 0)
+        if state == 2:
+            return
+        if state == 1:
+            start = stack_index[evidence_id]
+            cycle = stack[start:] + [evidence_id]
+            raise ValueError(
+                "proofgraph evidence provenance contains dependency cycle: "
+                + " -> ".join(cycle)
+            )
+
+        states[evidence_id] = 1
+        stack_index[evidence_id] = len(stack)
+        stack.append(evidence_id)
+        for upstream_id in dependencies[evidence_id]:
+            visit(upstream_id)
+        stack.pop()
+        stack_index.pop(evidence_id)
+        states[evidence_id] = 2
+
+    for evidence_id in sorted(dependencies):
+        visit(evidence_id)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProofGraph:
     id: str
@@ -626,6 +668,8 @@ class ProofGraph:
                         f"provenance {provenance.id!r} references unknown upstream evidence: "
                         + ", ".join(sorted(missing))
                     )
+
+        _reject_evidence_dependency_cycles(self.evidence)
 
         for check in self.checks:
             if check.requirement_id not in requirement_ids:

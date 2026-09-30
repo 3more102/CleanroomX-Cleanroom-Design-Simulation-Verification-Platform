@@ -311,7 +311,7 @@ def _decorate_result(
             {
                 "name": row["name"],
                 "state": row["state"],
-                "airflow_m3_h": round(row["airflow_m3_h"], 6),
+                "airflow_m3_h": round(row["airflow_m3_h"], 9),
                 "used_resistance_pa_per_m3_s_squared": round(
                     row["used_resistance_pa_per_m3_s_squared"], 12
                 ),

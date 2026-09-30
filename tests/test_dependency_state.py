@@ -139,7 +139,8 @@ def test_deep_dependency_chain_is_not_limited_by_python_recursion_depth():
 
     snapshot = graph.snapshot()
     assert len(snapshot["nodes"]) == 1201
-    assert snapshot["nodes"][-1]["state"] == "current"
+    snapshot_by_key = {node["key"]: node for node in snapshot["nodes"]}
+    assert snapshot_by_key[previous_key]["state"] == "current"
 
     graph.set_source("source-0000", "rev-new")
     assert graph.state(previous_key) is EvidenceState.STALE

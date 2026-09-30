@@ -245,6 +245,7 @@ def test_near_zero_threshold_uses_full_precision_solved_airflow() -> None:
     # Internally, 100.0000004 m3/h is above the configured threshold and
     # must not be frozen merely because its display value rounds to 100.0.
     assert closure["state"] == "automatic_friction"
+    assert closure["airflow_m3_h"] == pytest.approx(100.0000004, abs=1e-10)
     assert result["variable_friction"]["near_zero_frozen_edge_count"] == 0
     assert result["edges"][0]["resistance_evidence"][
         "reference_airflow_m3_h"

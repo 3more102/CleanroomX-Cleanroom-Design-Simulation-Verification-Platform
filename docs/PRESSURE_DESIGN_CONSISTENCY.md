@@ -66,5 +66,5 @@ be represented as a ProofGraph evidence chain through
 proofgraph_from_pressure_design_consistency. The adapter reuses this canonical
 workflow result: it records the configured target as DesignEvidence, the solved
 signed node-to-reference difference as CalculationEvidence, and preserves this
-workflow's pass/fail/not_checked semantics as pass/fail/unknown verdicts. It does
-not add a second pressure solver or infer missing targets or mappings.
+workflow's pass/fail/not_checked semantics as pass/fail/not_checked verdicts. It
+does not add a second pressure solver or infer missing targets or mappings.

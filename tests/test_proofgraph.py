@@ -189,6 +189,42 @@ def test_graph_digest_detects_tampering() -> None:
         proofgraph_from_dict(document)
 
 
+def _add_second_requirement(document: dict) -> None:
+    other = copy.deepcopy(document["requirement_set"]["requirements"][0])
+    other["id"] = "CRX-PRESS-OTHER"
+    other["title"] = "Other pressure requirement"
+    document["requirement_set"]["requirements"].append(other)
+
+
+def test_graph_rejects_finding_requirement_that_disagrees_with_check() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    _add_second_requirement(broken)
+    broken["findings"][0]["requirement_id"] = "CRX-PRESS-OTHER"
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="does not match check"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_rejects_finding_evidence_not_declared_by_check() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    broken["checks"][0]["evidence_ids"] = []
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="evidence not declared by check"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_rejects_verdict_findings_for_another_requirement() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    _add_second_requirement(broken)
+    broken["verdicts"][0]["requirement_id"] = "CRX-PRESS-OTHER"
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="findings for another requirement"):
+        proofgraph_from_dict(broken)
+
+
 def test_non_finite_evidence_is_rejected() -> None:
     with pytest.raises(ValueError, match="finite number"):
         DesignEvidence(

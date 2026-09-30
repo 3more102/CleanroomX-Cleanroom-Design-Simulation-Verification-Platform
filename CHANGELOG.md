@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — semantic cross-reference validation — 2026-09-30
+
+- Rejects findings whose requirement identity disagrees with the referenced compliance check.
+- Rejects finding evidence that was not declared by the referenced check, preventing hidden evidence links from bypassing the check record.
+- Rejects verdicts that reference findings belonging to another requirement.
+- Adds strict-parser regressions for each inconsistent graph shape without changing solver equations, requirement criteria, numerical tolerances, or project persistence schemas.
+
 ## Unreleased ProofGraph semantics — preserve canonical not-checked state — 2026-09-30
 
 - Stops collapsing canonical `not_checked` results into ProofGraph `unknown` in the compliance-rule-pack and pressure-design-consistency adapters.

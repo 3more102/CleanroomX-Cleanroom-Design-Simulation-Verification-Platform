@@ -37,6 +37,10 @@ The foundation defines typed records for:
 
 The graph validates references between requirements, evidence, findings, verdicts,
 corrective actions, and verification runs. Dangling references fail closed.
+Semantic cross-links fail closed as well: a finding must belong to the same
+requirement as its referenced check, finding evidence must be declared by that
+check, and every finding referenced by a verdict must belong to that verdict's
+requirement.
 
 ## Evidence layers
 

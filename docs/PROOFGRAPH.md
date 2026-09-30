@@ -54,6 +54,11 @@ must agree. A graph therefore cannot silently combine explicitly identified
 evidence from different projects. Evidence that does not carry project identity
 remains valid for adapters whose source contract does not yet supply one.
 
+For verdicts backed by exactly one finding, the verdict status must equal that
+finding status. This prevents a serialized graph from presenting a PASS verdict
+over a FAIL, UNKNOWN, INDETERMINATE, NOT_CHECKED, or WARNING finding without an
+explicit multi-finding aggregation policy.
+
 Verification runs are also closed over their declared checks: every verdict in
 a run may depend only on findings whose compliance checks are listed in that
 same run. This prevents a run from presenting a verdict derived from hidden or

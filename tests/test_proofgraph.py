@@ -308,6 +308,30 @@ def test_non_finite_evidence_is_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("evidence_ids", "evidence_present", "error"),
+    [
+        (("ev-pressure",), False, "requires evidence_present=true"),
+        ((), True, "requires at least one evidence id"),
+    ],
+)
+def test_pass_finding_requires_explicit_evidence(
+    evidence_ids: tuple[str, ...],
+    evidence_present: bool,
+    error: str,
+) -> None:
+    with pytest.raises(ValueError, match=error):
+        ComplianceFinding(
+            id="finding-pass-without-evidence",
+            check_id="check-pressure",
+            requirement_id="CRX-PRESS-001",
+            status="pass",
+            reason="A pass must be evidence-backed.",
+            evidence_ids=evidence_ids,
+            evidence_present=evidence_present,
+        )
+
+
 def test_corrective_actions_cannot_bypass_user_approval() -> None:
     with pytest.raises(ValueError, match="requires_approval must remain true"):
         CorrectiveAction(

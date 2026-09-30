@@ -397,6 +397,15 @@ class ComplianceFinding:
         )
         if not isinstance(self.evidence_present, bool):
             raise ValueError("compliance_finding.evidence_present must be boolean")
+        if self.status == "pass":
+            if not self.evidence_present:
+                raise ValueError(
+                    "pass compliance finding requires evidence_present=true"
+                )
+            if not self.evidence_ids:
+                raise ValueError(
+                    "pass compliance finding requires at least one evidence id"
+                )
         object.__setattr__(
             self, "expected", _json_value(self.expected, "compliance_finding.expected")
         )

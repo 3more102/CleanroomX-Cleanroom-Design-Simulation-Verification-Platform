@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — PASS required-evidence closure — 2026-09-30
+
+- Rejects PASS findings that do not reference at least one evidence record for every kind declared by their compliance check's `required_evidence_kinds`.
+- Keeps incomplete evidence representable for FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED findings instead of turning absence into success or a structural parse failure.
+- Adds focused strict-parser regressions and documentation without changing schemas, solver equations, numerical tolerances, persistence formats, or acceptance criteria.
+
 ## Unreleased thermal uncertainty numerical integrity — full-precision governing airflow — 2026-09-30
 
 - Keeps sensible-load airflow interval values at full precision while selecting the governing airflow candidate and conservative lower/upper bounds.

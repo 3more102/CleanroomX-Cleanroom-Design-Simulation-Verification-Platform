@@ -653,6 +653,7 @@ class ProofGraph:
         requirement_ids = {item.id for item in self.requirement_set.requirements}
         source_ids = _unique_ids(self.evidence_sources, "proofgraph.evidence_sources")
         evidence_ids = _unique_ids(self.evidence, "proofgraph.evidence")
+        evidence_by_id = {item.id: item for item in self.evidence}
         check_ids = _unique_ids(self.checks, "proofgraph.checks")
         finding_ids = _unique_ids(self.findings, "proofgraph.findings")
         verdict_ids = _unique_ids(self.verdicts, "proofgraph.verdicts")
@@ -747,6 +748,20 @@ class ProofGraph:
                     f"finding {finding.id!r} references evidence not declared by "
                     f"check {check.id!r}: " + ", ".join(sorted(undeclared))
                 )
+            if finding.status == "pass":
+                evidence_kinds = {
+                    evidence_by_id[evidence_id].kind
+                    for evidence_id in finding.evidence_ids
+                }
+                missing_required_kinds = (
+                    set(check.required_evidence_kinds) - evidence_kinds
+                )
+                if missing_required_kinds:
+                    raise ValueError(
+                        f"pass finding {finding.id!r} is missing required evidence "
+                        f"kind(s) declared by check {check.id!r}: "
+                        + ", ".join(sorted(missing_required_kinds))
+                    )
 
         for verdict in self.verdicts:
             if verdict.requirement_id not in requirement_ids:

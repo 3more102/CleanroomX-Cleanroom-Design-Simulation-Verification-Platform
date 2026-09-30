@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased pressure-design numerical integrity — full-precision verdicts — 2026-09-30
+
+- Uses full-precision pressure-network node state for mapped design-pressure requirement comparisons instead of reusing the nine-decimal public node display.
+- Keeps the public pressure-network result schema and formatting unchanged while preventing presentation rounding from changing pass/fail at explicit fine tolerances.
+- Adds a sub-display-resolution regression and documents the calculation/presentation boundary.
+
 ## Unreleased fan-network numerical integrity — full-precision composition — 2026-09-30
 
 - Carries the full-precision bounded fan operating point into passive parallel-network redistribution and system-pressure checks.

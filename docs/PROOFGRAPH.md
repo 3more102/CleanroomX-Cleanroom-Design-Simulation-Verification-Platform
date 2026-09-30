@@ -48,6 +48,10 @@ deterministic traversal and audit. Cycle validation uses an explicit traversal
 stack rather than Python recursion, so deep valid provenance chains are not
 bounded by the interpreter recursion limit.
 
+Provenance record IDs are unique across the complete ProofGraph, not merely
+within one evidence record. Reusing one provenance ID for two evidence records is
+rejected so an audit reference cannot resolve to multiple derivation records.
+
 Explicit evidence project identity is also fail-closed. If evidence records carry
 non-null `project_id` values, every explicit project identity in one ProofGraph
 must agree. A graph therefore cannot silently combine explicitly identified

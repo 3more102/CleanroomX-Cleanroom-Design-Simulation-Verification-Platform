@@ -24,7 +24,7 @@ CleanroomX forms:
 
 and intersects it with the supplied fan curve using the existing bounded piecewise-linear solver. No fan-curve extrapolation is performed.
 
-When an operating point exists, the original loop network is solved again at that total airflow. The result reports fan operating airflow and pressure, equivalent loop resistance, the reference and operating network solutions, node/edge residuals, the direct loop pressure versus the equivalent-network pressure, and the fan-minus-system pressure residual.
+When an operating point exists, the original loop network is solved again at that total airflow. The fan/system root is carried at full floating-point precision into that downstream network solve and pressure-consistency calculation; the rounded operating-point fields are presentation values only. The result reports fan operating airflow and pressure, equivalent loop resistance, the reference and operating network solutions, node/edge residuals, the direct loop pressure versus the equivalent-network pressure, and the fan-minus-system pressure residual.
 
 If no intersection exists inside the supplied fan data, no operating loop solution is fabricated.
 

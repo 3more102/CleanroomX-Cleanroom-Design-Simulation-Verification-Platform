@@ -200,12 +200,21 @@ def _initial_node_pressures(network: LoopedFlowNetwork) -> dict[str, float]:
     return pressures
 
 
-def solve_looped_network(
+@dataclass(frozen=True)
+class _LoopedNetworkCalculation:
+    pressures: dict[str, float]
+    residuals: dict[str, float]
+    edge_flows_m3_s: tuple[float, ...]
+    iterations: int
+    mass_balance_tolerance_m3_h: float
+
+
+def _calculate_looped_network(
     network: LoopedFlowNetwork,
     *,
     mass_balance_tolerance_m3_h: float = 1e-6,
     max_iterations: int = 100,
-) -> dict:
+) -> _LoopedNetworkCalculation:
     tolerance_m3_h = _positive(
         mass_balance_tolerance_m3_h, "mass_balance_tolerance_m3_h"
     )
@@ -312,6 +321,30 @@ def solve_looped_network(
         iterations += 1
 
     residuals, edge_flows = evaluate(pressures)
+    return _LoopedNetworkCalculation(
+        pressures=dict(pressures),
+        residuals=dict(residuals),
+        edge_flows_m3_s=tuple(edge_flows),
+        iterations=iterations,
+        mass_balance_tolerance_m3_h=tolerance_m3_h,
+    )
+
+
+def _format_looped_network_calculation(
+    network: LoopedFlowNetwork,
+    calculation: _LoopedNetworkCalculation,
+) -> dict:
+    nodes = tuple(network.node_injections_m3_h)
+    injections_m3_s = {
+        node: injection / 3600.0
+        for node, injection in network.node_injections_m3_h.items()
+    }
+    pressures = calculation.pressures
+    residuals = calculation.residuals
+    edge_flows = calculation.edge_flows_m3_s
+    iterations = calculation.iterations
+    tolerance_m3_h = calculation.mass_balance_tolerance_m3_h
+
     node_results = []
     for node in nodes:
         residual_m3_h = residuals[node] * 3600.0
@@ -434,3 +467,17 @@ def solve_looped_network(
             "controls, leakage, compressibility, or transient behavior."
         ),
     }
+
+
+def solve_looped_network(
+    network: LoopedFlowNetwork,
+    *,
+    mass_balance_tolerance_m3_h: float = 1e-6,
+    max_iterations: int = 100,
+) -> dict:
+    calculation = _calculate_looped_network(
+        network,
+        mass_balance_tolerance_m3_h=mass_balance_tolerance_m3_h,
+        max_iterations=max_iterations,
+    )
+    return _format_looped_network_calculation(network, calculation)

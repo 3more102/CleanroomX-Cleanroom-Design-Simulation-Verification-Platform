@@ -11,6 +11,7 @@ from cleanroomx.proofgraph import (
     proofgraph_from_dict,
     proofgraph_from_thermal_uncertainty,
 )
+from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
 from cleanroomx.thermal_uncertainty_models import UncertainThermalDesign
 from cleanroomx.uncertainty_models import Provenance, UncertainValue
 
@@ -82,6 +83,33 @@ def test_thermal_adapter_preserves_capacity_interval_and_dependencies() -> None:
         document["requirement_set"]["requirements"][0]["criteria"]["operator"]
         == "available_covers_complete_required_interval"
     )
+
+
+def test_thermal_adapter_preserves_full_precision_capacity_evidence_at_boundary() -> None:
+    design = UncertainThermalDesign(
+        name="Precision boundary",
+        room_air=AirState(22.0, 45.0),
+        cleanroom_airflow_m3_h=uv(1000.0, "m3/h"),
+        internal_sensible_kw=uv(1.0000004, "kW"),
+        internal_latent_kw=uv(0.0, "kW"),
+        makeup_airflow_m3_h=uv(0.0, "m3/h"),
+        capacity_margin_percent=0.0,
+        available_cooling_capacity_kw=1.0000002,
+    )
+
+    presented = analyze_thermal_uncertainty(design)
+    assert presented["cooling_capacity_kw"]["upper"] == 1.0
+    assert presented["cooling_capacity_kw"]["status"] == "fail"
+
+    document = proofgraph_from_thermal_uncertainty(design).to_dict()
+    by_property = {item["property_name"]: item for item in document["evidence"]}
+    cooling = by_property["cooling_capacity_kw"]
+    finding = document["findings"][0]
+
+    assert document["verdicts"][0]["status"] == "fail"
+    assert cooling["value"]["upper"] == pytest.approx(1.0000004)
+    assert finding["actual"]["upper"] == pytest.approx(1.0000004)
+    assert finding["delta"] == pytest.approx(-0.0000002)
 
 
 def test_thermal_adapter_preserves_indeterminate_without_promoting_to_pass() -> None:

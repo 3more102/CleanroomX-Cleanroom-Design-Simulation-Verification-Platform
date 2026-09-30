@@ -80,3 +80,14 @@ The workflow does not infer or solve:
 - motor/electrical efficiency or manufacturer selection
 
 Use applicable project design criteria, manufacturer data, detailed HVAC calculations, commissioning measurements, and qualified engineering review for real designs.
+
+
+## Numerical precision boundary
+
+The bounded fan/system intersection is retained at full floating-point precision
+while CleanroomX redistributes the operating airflow through the passive parallel
+network and recomputes the network/system pressure check. The rounded operating
+point and network rows are presentation values only and are not reused as
+engineering inputs. This prevents sub-display-resolution airflow rounding from
+creating a false fan-minus-system pressure residual or changing downstream branch
+calculations.

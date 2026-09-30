@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased fan/loop numerical integrity — full-precision operating root — 2026-09-30
+
+- Carries the bounded fan/system operating-point root at full precision into the downstream loop-network solve instead of reusing the rounded public airflow value.
+- Computes the fan-minus-system pressure check from the full-precision fan pressure and equivalent-system pressure, preventing presentation rounding from creating a false residual.
+- Keeps the public result schema and display precision unchanged; adds a focused regression at a non-round operating point and documents the calculation/presentation boundary.
+
 ## Unreleased fan-network numerical integrity — full-precision composition — 2026-09-30
 
 - Carries the full-precision bounded fan operating point into passive parallel-network redistribution and system-pressure checks.

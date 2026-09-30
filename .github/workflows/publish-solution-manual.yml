@@ -1,0 +1,51 @@
+name: Publish CleanroomX solution manual PDF
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md
+      - scripts/render_solution_manual_pdf.py
+      - .github/workflows/publish-solution-manual.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PDF renderer
+        run: python -m pip install --disable-pip-version-check reportlab
+
+      - name: Build solution manual PDF
+        run: |
+          python scripts/render_solution_manual_pdf.py \
+            docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md \
+            docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf
+          test -s docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf
+
+      - name: Commit generated PDF when changed
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf; then
+            echo "PDF is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf
+          git commit -m "docs: publish CleanroomX solution manual PDF"
+          git push

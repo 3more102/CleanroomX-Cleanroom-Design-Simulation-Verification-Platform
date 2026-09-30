@@ -207,12 +207,42 @@ def test_graph_rejects_provenance_dependency_cycles() -> None:
         proofgraph_from_dict(broken)
 
 
+def test_graph_rejects_provenance_ids_reused_across_evidence() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    duplicate = copy.deepcopy(broken["evidence"][0])
+    duplicate["id"] = "ev-secondary-pressure"
+    duplicate["property_name"] = "secondary_pressure_differential_pa"
+    broken["evidence"].append(duplicate)
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="duplicate provenance id"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_allows_distinct_provenance_ids_across_evidence() -> None:
+    expanded = copy.deepcopy(_graph().to_dict())
+    secondary = copy.deepcopy(expanded["evidence"][0])
+    secondary["id"] = "ev-secondary-pressure"
+    secondary["property_name"] = "secondary_pressure_differential_pa"
+    secondary["provenance"][0]["id"] = "prov-secondary-pressure"
+    expanded["evidence"].append(secondary)
+    expanded.pop("graph_sha256")
+
+    restored = proofgraph_from_dict(expanded)
+
+    assert [item.id for item in restored.evidence] == [
+        "ev-pressure",
+        "ev-secondary-pressure",
+    ]
+
+
 def test_graph_rejects_mixed_explicit_project_identity() -> None:
     broken = copy.deepcopy(_graph().to_dict())
     cross_project = copy.deepcopy(broken["evidence"][0])
     cross_project["id"] = "ev-other-project"
     cross_project["property_name"] = "other_project_pressure_pa"
     cross_project["project_id"] = "PROJECT-2"
+    cross_project["provenance"][0]["id"] = "prov-other-project"
     broken["evidence"].append(cross_project)
     broken.pop("graph_sha256")
 

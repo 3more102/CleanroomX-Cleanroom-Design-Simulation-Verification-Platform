@@ -225,7 +225,7 @@ def test_existing_compliance_rulepack_maps_into_proofgraph() -> None:
     assert len(document["graph_sha256"]) == 64
 
 
-def test_missing_compliance_evidence_becomes_unknown_without_fabrication() -> None:
+def test_missing_compliance_evidence_preserves_not_checked_without_fabrication() -> None:
     payload = _compliance_payload()
     payload["evidence"] = {"room": {}}
 
@@ -234,9 +234,11 @@ def test_missing_compliance_evidence_becomes_unknown_without_fabrication() -> No
 
     assert document["evidence"] == []
     assert document["checks"][0]["evidence_ids"] == []
-    assert document["findings"][0]["status"] == "unknown"
+    assert document["findings"][0]["status"] == "not_checked"
     assert document["findings"][0]["evidence_present"] is False
-    assert document["verdicts"][0]["status"] == "unknown"
+    assert document["verdicts"][0]["status"] == "not_checked"
+    assert document["verification_runs"][0]["metadata"]["source_status"] == "not_checked"
+    assert proofgraph_from_dict(copy.deepcopy(document)).to_dict() == document
 
 
 def test_evidence_revision_changes_proofgraph_identity() -> None:

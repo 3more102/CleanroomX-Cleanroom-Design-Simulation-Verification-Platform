@@ -598,6 +598,10 @@ class ProofGraph:
         findings_by_id = {item.id: item for item in self.findings}
         _unique_ids(self.corrective_actions, "proofgraph.corrective_actions")
         _unique_ids(self.verification_runs, "proofgraph.verification_runs")
+        provenance_owner_by_id: dict[str, str] = {}
+        upstream_by_evidence: dict[str, set[str]] = {
+            item.id: set() for item in self.evidence
+        }
 
         for item in self.evidence:
             if item.source_id not in source_ids:
@@ -611,6 +615,13 @@ class ProofGraph:
                         f"evidence {item.id!r} contains duplicate provenance id {provenance.id!r}"
                     )
                 provenance_ids.add(provenance.id)
+                other_owner = provenance_owner_by_id.get(provenance.id)
+                if other_owner is not None:
+                    raise ValueError(
+                        f"provenance id {provenance.id!r} is reused by evidence "
+                        f"{other_owner!r} and {item.id!r}"
+                    )
+                provenance_owner_by_id[provenance.id] = item.id
                 if provenance.source_id not in source_ids:
                     raise ValueError(
                         f"provenance {provenance.id!r} references unknown source "
@@ -626,6 +637,43 @@ class ProofGraph:
                         f"provenance {provenance.id!r} references unknown upstream evidence: "
                         + ", ".join(sorted(missing))
                     )
+                upstream_by_evidence[item.id].update(provenance.upstream_evidence_ids)
+
+        remaining_dependencies = {
+            evidence_id: set(upstream_ids)
+            for evidence_id, upstream_ids in upstream_by_evidence.items()
+        }
+        dependents: dict[str, set[str]] = {
+            evidence_id: set() for evidence_id in upstream_by_evidence
+        }
+        for evidence_id, upstream_ids in upstream_by_evidence.items():
+            for upstream_id in upstream_ids:
+                dependents[upstream_id].add(evidence_id)
+
+        ready = [
+            evidence_id
+            for evidence_id, upstream_ids in remaining_dependencies.items()
+            if not upstream_ids
+        ]
+        processed_count = 0
+        while ready:
+            evidence_id = ready.pop()
+            processed_count += 1
+            for dependent_id in dependents[evidence_id]:
+                remaining_dependencies[dependent_id].discard(evidence_id)
+                if not remaining_dependencies[dependent_id]:
+                    ready.append(dependent_id)
+
+        if processed_count != len(remaining_dependencies):
+            unresolved = sorted(
+                evidence_id
+                for evidence_id, upstream_ids in remaining_dependencies.items()
+                if upstream_ids
+            )
+            raise ValueError(
+                "proofgraph evidence provenance contains a dependency cycle; "
+                "unresolved evidence: " + ", ".join(unresolved)
+            )
 
         for check in self.checks:
             if check.requirement_id not in requirement_ids:

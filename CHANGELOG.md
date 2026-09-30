@@ -4,7 +4,7 @@
 
 - Computes damper-case edge airflow deltas and percent changes from canonical full-precision loop-network state instead of subtracting rounded public edge flows.
 - Reuses each baseline and case calculation for both engineering metrics and terminal public formatting, avoiding duplicate solves and preserving the existing result schema.
-- Adds a sub-display-resolution regression where baseline and case flows round identically while the true airflow change remains reportable.
+- Adds a solver-tolerance-robust regression that deterministically finds a sub-display case where subtracting rounded edge flows disagrees with rounding the canonical airflow change.
 
 ## Unreleased fan/loop numerical integrity — canonical reference and uncertainty state — 2026-09-30
 

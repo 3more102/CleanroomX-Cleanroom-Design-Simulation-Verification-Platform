@@ -188,7 +188,13 @@ def check_fan_duty_against_curve(
     }
 
 
-def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
+def calculate_fan_operating_point(study: FanOperatingPointStudy) -> dict:
+    """Return full-precision fan/system operating-point calculation state.
+
+    Presentation rounding belongs in :func:`solve_fan_operating_point`.
+    Downstream engineering composition must consume this calculation layer so
+    displayed precision never becomes a solver or network input.
+    """
     points = study.fan_curve.points
     residuals = [
         point.pressure_pa - study.system_curve.pressure_at(point.airflow_m3_h)
@@ -227,12 +233,10 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
 
     system_at_points = [
         {
-            "airflow_m3_h": round(point.airflow_m3_h, 3),
-            "fan_pressure_pa": round(point.pressure_pa, 4),
-            "system_pressure_pa": round(
-                study.system_curve.pressure_at(point.airflow_m3_h), 4
-            ),
-            "pressure_margin_pa": round(residual, 4),
+            "airflow_m3_h": point.airflow_m3_h,
+            "fan_pressure_pa": point.pressure_pa,
+            "system_pressure_pa": study.system_curve.pressure_at(point.airflow_m3_h),
+            "pressure_margin_pa": residual,
         }
         for point, residual in zip(points, residuals)
     ]
@@ -242,13 +246,13 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
         "fan_curve": study.fan_curve.name,
         "system_curve": study.system_curve.name,
         "fan_curve_airflow_range_m3_h": [
-            round(points[0].airflow_m3_h, 3),
-            round(points[-1].airflow_m3_h, 3),
+            points[0].airflow_m3_h,
+            points[-1].airflow_m3_h,
         ],
         "system_model": {
-            "fixed_pressure_pa": round(study.system_curve.fixed_pressure_pa, 4),
-            "resistance_pa_per_m3_s_squared": round(
-                study.system_curve.resistance_pa_per_m3_s_squared, 6
+            "fixed_pressure_pa": study.system_curve.fixed_pressure_pa,
+            "resistance_pa_per_m3_s_squared": (
+                study.system_curve.resistance_pa_per_m3_s_squared
             ),
         },
         "curve_point_checks": system_at_points,
@@ -290,17 +294,15 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
         **base,
         "status": "solved",
         "operating_point": {
-            "airflow_m3_h": round(airflow_m3_h, 3),
-            "airflow_m3_s": round(airflow_m3_s, 6),
-            "fan_pressure_pa": round(fan_pressure_pa, 4),
-            "system_pressure_pa": round(system_pressure_pa, 4),
-            "pressure_residual_pa": round(
-                fan_pressure_pa - system_pressure_pa, 9
-            ),
-            "air_power_kw": round(air_power_kw, 6),
+            "airflow_m3_h": airflow_m3_h,
+            "airflow_m3_s": airflow_m3_s,
+            "fan_pressure_pa": fan_pressure_pa,
+            "system_pressure_pa": system_pressure_pa,
+            "pressure_residual_pa": fan_pressure_pa - system_pressure_pa,
+            "air_power_kw": air_power_kw,
             "interpolation_segment": {
-                "low_airflow_m3_h": round(left.airflow_m3_h, 3),
-                "high_airflow_m3_h": round(right.airflow_m3_h, 3),
+                "low_airflow_m3_h": left.airflow_m3_h,
+                "high_airflow_m3_h": right.airflow_m3_h,
             },
         },
         "message": (
@@ -315,3 +317,66 @@ def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
             "correction, or manufacturer selection is inferred."
         ),
     }
+
+
+def format_fan_operating_point_calculation(calculation: dict) -> dict:
+    """Format full-precision fan calculation state for the public result boundary."""
+    base = {
+        "study": calculation["study"],
+        "fan_curve": calculation["fan_curve"],
+        "system_curve": calculation["system_curve"],
+        "fan_curve_airflow_range_m3_h": [
+            round(value, 3)
+            for value in calculation["fan_curve_airflow_range_m3_h"]
+        ],
+        "system_model": {
+            "fixed_pressure_pa": round(
+                calculation["system_model"]["fixed_pressure_pa"], 4
+            ),
+            "resistance_pa_per_m3_s_squared": round(
+                calculation["system_model"]["resistance_pa_per_m3_s_squared"], 6
+            ),
+        },
+        "curve_point_checks": [
+            {
+                "airflow_m3_h": round(item["airflow_m3_h"], 3),
+                "fan_pressure_pa": round(item["fan_pressure_pa"], 4),
+                "system_pressure_pa": round(item["system_pressure_pa"], 4),
+                "pressure_margin_pa": round(item["pressure_margin_pa"], 4),
+            }
+            for item in calculation["curve_point_checks"]
+        ],
+        "status": calculation["status"],
+        "message": calculation["message"],
+        "scope_note": calculation["scope_note"],
+    }
+
+    point = calculation["operating_point"]
+    if point is None:
+        return {**base, "operating_point": None}
+
+    return {
+        **base,
+        "operating_point": {
+            "airflow_m3_h": round(point["airflow_m3_h"], 3),
+            "airflow_m3_s": round(point["airflow_m3_s"], 6),
+            "fan_pressure_pa": round(point["fan_pressure_pa"], 4),
+            "system_pressure_pa": round(point["system_pressure_pa"], 4),
+            "pressure_residual_pa": round(point["pressure_residual_pa"], 9),
+            "air_power_kw": round(point["air_power_kw"], 6),
+            "interpolation_segment": {
+                "low_airflow_m3_h": round(
+                    point["interpolation_segment"]["low_airflow_m3_h"], 3
+                ),
+                "high_airflow_m3_h": round(
+                    point["interpolation_segment"]["high_airflow_m3_h"], 3
+                ),
+            },
+        },
+    }
+
+
+def solve_fan_operating_point(study: FanOperatingPointStudy) -> dict:
+    return format_fan_operating_point_calculation(
+        calculate_fan_operating_point(study)
+    )

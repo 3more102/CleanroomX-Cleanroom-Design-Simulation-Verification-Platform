@@ -332,6 +332,28 @@ def test_pass_finding_requires_explicit_evidence(
         )
 
 
+def test_graph_rejects_pass_finding_missing_required_evidence_kind() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    broken["checks"][0]["required_evidence_kinds"] = ["design", "calculation"]
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="missing required evidence kinds"):
+        proofgraph_from_dict(broken)
+
+
+def test_non_pass_finding_may_preserve_missing_required_evidence_kind() -> None:
+    incomplete = copy.deepcopy(_graph().to_dict())
+    incomplete["checks"][0]["required_evidence_kinds"] = ["design", "calculation"]
+    incomplete["findings"][0]["status"] = "fail"
+    incomplete["verdicts"][0]["status"] = "fail"
+    incomplete.pop("graph_sha256")
+
+    parsed = proofgraph_from_dict(incomplete)
+
+    assert parsed.findings[0].status == "fail"
+    assert parsed.checks[0].required_evidence_kinds == ("design", "calculation")
+
+
 def test_corrective_actions_cannot_bypass_user_approval() -> None:
     with pytest.raises(ValueError, match="requires_approval must remain true"):
         CorrectiveAction(

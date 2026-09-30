@@ -6,6 +6,12 @@
 - Prevents the public three-decimal fan airflow and rounded network pressure from becoming downstream engineering inputs.
 - Adds a rounding-boundary regression without changing equations, units, schemas, fan-curve interpolation, or public result formatting.
 
+## Unreleased ProofGraph integrity — globally unique provenance IDs — 2026-09-30
+
+- Rejects reuse of one provenance-record ID across separate evidence records, removing ambiguity from graph-wide audit identity.
+- Preserves valid distinct provenance records, provenance DAG semantics, and current adapter-generated IDs with linear validation over provenance records.
+- Adds focused strict-parser success/failure regressions and documentation without changing schemas, solver equations, numerical tolerances, persistence formats, or requirement criteria.
+
 ## Unreleased cross-study numerical integrity — full-precision HVAC/fan consistency — 2026-09-30
 
 - Uses the source HVAC project to recompute canonical aggregate governing airflow at full precision when the engineering dossier evaluates HVAC/fan operating-airflow consistency.

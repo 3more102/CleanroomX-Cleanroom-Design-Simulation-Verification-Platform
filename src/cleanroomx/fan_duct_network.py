@@ -8,7 +8,8 @@ from .fan_curve import (
     FanCurve,
     FanOperatingPointStudy,
     SystemCurve,
-    solve_fan_operating_point,
+    calculate_fan_operating_point,
+    format_fan_operating_point_calculation,
 )
 
 
@@ -84,6 +85,8 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
     )
     paths: list[dict] = []
     raw_path_resistance: dict[str, float] = {}
+    raw_section_flow_ratio: dict[tuple[str, str], float] = {}
+    raw_section_resistance: dict[tuple[str, str], float] = {}
 
     for path in study.duct_network.paths:
         section_rows: list[dict] = []
@@ -99,6 +102,9 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
                 section,
                 study.reference_system_airflow_m3_h,
             )
+            section_key = (path.name, section.name)
+            raw_section_flow_ratio[section_key] = flow_ratio
+            raw_section_resistance[section_key] = scaled_resistance
             reference_drop = (
                 scaled_resistance
                 * reference_system_airflow_m3_s**2
@@ -160,17 +166,19 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
         fixed_pressure_pa=study.fixed_pressure_pa,
         resistance_pa_per_m3_s_squared=critical_resistance,
     )
-    fan_result = solve_fan_operating_point(
+    fan_calculation = calculate_fan_operating_point(
         FanOperatingPointStudy(
             name=study.name,
             fan_curve=study.fan_curve,
             system_curve=system_curve,
         )
     )
+    fan_result = format_fan_operating_point_calculation(fan_calculation)
 
     operating_point = fan_result["operating_point"]
-    if operating_point is not None:
-        operating_q_m3_s = operating_point["airflow_m3_s"]
+    operating_point_calculation = fan_calculation["operating_point"]
+    if operating_point_calculation is not None:
+        operating_q_m3_s = operating_point_calculation["airflow_m3_s"]
         for path in paths:
             path_resistance = raw_path_resistance[path["name"]]
             path["operating_pressure_drop_pa"] = round(
@@ -178,15 +186,14 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
                 4,
             )
             for section in path["sections"]:
+                section_key = (path["name"], section["name"])
                 section["operating_airflow_m3_h"] = round(
-                    operating_point["airflow_m3_h"]
-                    * section["flow_ratio_to_system"],
+                    operating_point_calculation["airflow_m3_h"]
+                    * raw_section_flow_ratio[section_key],
                     3,
                 )
                 section["operating_pressure_drop_pa"] = round(
-                    section[
-                        "quadratic_resistance_pa_per_m3_s_squared"
-                    ]
+                    raw_section_resistance[section_key]
                     * operating_q_m3_s**2,
                     4,
                 )

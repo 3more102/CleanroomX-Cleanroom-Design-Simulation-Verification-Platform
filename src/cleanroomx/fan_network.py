@@ -8,7 +8,13 @@ from .duct_flow import (
     ParallelFlowPath,
     solve_parallel_branch_flows,
 )
-from .fan_curve import FanCurve, FanOperatingPointStudy, SystemCurve, solve_fan_operating_point
+from .fan_curve import (
+    FanCurve,
+    FanOperatingPointStudy,
+    SystemCurve,
+    _calculate_fan_operating_point,
+    _format_fan_operating_point_calculation,
+)
 
 
 def _nonnegative(value: float, field_name: str) -> float:
@@ -64,12 +70,15 @@ def solve_fan_driven_parallel_network(
         fixed_pressure_pa=study.fixed_pressure_pa,
         resistance_pa_per_m3_s_squared=equivalent_resistance,
     )
-    fan_result = solve_fan_operating_point(
-        FanOperatingPointStudy(
-            name=study.name,
-            fan_curve=study.fan_curve,
-            system_curve=system_curve,
-        )
+    operating_study = FanOperatingPointStudy(
+        name=study.name,
+        fan_curve=study.fan_curve,
+        system_curve=system_curve,
+    )
+    operating_calculation = _calculate_fan_operating_point(operating_study)
+    fan_result = _format_fan_operating_point_calculation(
+        operating_study,
+        operating_calculation,
     )
 
     path_resistances = [
@@ -96,7 +105,7 @@ def solve_fan_driven_parallel_network(
         "message": fan_result["message"],
     }
 
-    if fan_result["operating_point"] is None:
+    if operating_calculation is None:
         return {
             **base,
             "network_solution": None,
@@ -111,7 +120,8 @@ def solve_fan_driven_parallel_network(
             ),
         }
 
-    operating_airflow_m3_h = fan_result["operating_point"]["airflow_m3_h"]
+    operating_airflow_m3_h = operating_calculation["airflow_m3_h"]
+    operating_airflow_m3_s = operating_calculation["airflow_m3_s"]
     network_result = solve_parallel_branch_flows(
         ParallelFlowNetwork(
             name=study.name,
@@ -119,9 +129,9 @@ def solve_fan_driven_parallel_network(
             paths=study.paths,
         )
     )
-    variable_pressure_pa = network_result["common_pressure_drop_pa"]
+    variable_pressure_pa = equivalent_resistance * operating_airflow_m3_s**2
     total_system_pressure_pa = study.fixed_pressure_pa + variable_pressure_pa
-    fan_pressure_pa = fan_result["operating_point"]["fan_pressure_pa"]
+    fan_pressure_pa = operating_calculation["fan_pressure_pa"]
 
     return {
         **base,

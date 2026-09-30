@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — acyclic evidence provenance — 2026-09-30
+
+- Rejects multi-evidence provenance dependency cycles such as `A -> B -> A` in addition to existing direct self-reference protection.
+- Uses deterministic traversal and cycle diagnostics so malformed graphs fail closed reproducibly.
+- Adds regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph integrity — semantic cross-reference validation — 2026-09-30
 
 - Rejects findings whose requirement identity disagrees with the referenced compliance check.

@@ -19,7 +19,10 @@ from .proofgraph_models import (
     _canonical_sha256,
 )
 from .psychrometric_uncertainty_models import UncertainAirState
-from .thermal_uncertainty import analyze_thermal_uncertainty
+from .thermal_uncertainty import (
+    analyze_thermal_uncertainty,
+    calculate_thermal_uncertainty_values,
+)
 from .thermal_uncertainty_models import UncertainThermalDesign
 from .uncertainty_models import Provenance, UncertainValue
 
@@ -151,6 +154,7 @@ def proofgraph_from_thermal_uncertainty(
         )
 
     result = analyze_thermal_uncertainty(design)
+    calculation = calculate_thermal_uncertainty_values(design)
     input_revision = _canonical_sha256(asdict(design))
     subject_ref = design.name
 
@@ -321,7 +325,7 @@ def proofgraph_from_thermal_uncertainty(
 
     add_calculation(
         "internal_total_kw",
-        result["loads_kw"]["internal_total"],
+        calculation["loads_kw"]["internal_total"],
         unit="kW",
         upstream_properties=("internal_sensible_kw", "internal_latent_kw"),
         origin="internal_sensible_kw + internal_latent_kw",
@@ -337,20 +341,20 @@ def proofgraph_from_thermal_uncertainty(
     )
     add_calculation(
         "makeup_air_total_kw",
-        result["loads_kw"]["makeup_air_total"],
+        calculation["loads_kw"]["makeup_air_total"],
         unit="kW",
         upstream_properties=makeup_upstream,
         origin="makeup_air_psychrometric_load_interval",
     )
     add_calculation(
         "net_room_plus_makeup_kw",
-        result["loads_kw"]["net_room_plus_makeup"],
+        calculation["loads_kw"]["net_room_plus_makeup"],
         unit="kW",
         upstream_properties=("internal_total_kw", "makeup_air_total_kw"),
         origin="internal_total_kw + makeup_air_total_kw",
     )
 
-    thermal_airflow = result["airflow_m3_h"]["thermal_for_internal_sensible"]
+    thermal_airflow = calculation["airflow_m3_h"]["thermal_for_internal_sensible"]
     if thermal_airflow is not None:
         add_calculation(
             "thermal_airflow_for_internal_sensible_m3_h",
@@ -374,7 +378,7 @@ def proofgraph_from_thermal_uncertainty(
         governing_upstream.append("thermal_airflow_for_internal_sensible_m3_h")
     add_calculation(
         "governing_supply_airflow_m3_h",
-        result["airflow_m3_h"]["governing"],
+        calculation["airflow_m3_h"]["governing"],
         unit="m3/h",
         upstream_properties=tuple(governing_upstream),
         origin="maximum_of_explicit_airflow_requirements",
@@ -383,11 +387,7 @@ def proofgraph_from_thermal_uncertainty(
     for mode in ("cooling", "heating"):
         add_calculation(
             f"{mode}_capacity_kw",
-            {
-                "nominal": result[f"{mode}_capacity_kw"]["nominal"],
-                "lower": result[f"{mode}_capacity_kw"]["lower"],
-                "upper": result[f"{mode}_capacity_kw"]["upper"],
-            },
+            calculation[f"{mode}_capacity_kw"],
             unit="kW",
             upstream_properties=(
                 "net_room_plus_makeup_kw",
@@ -410,6 +410,7 @@ def proofgraph_from_thermal_uncertainty(
         if available is None:
             continue
         capacity_result = result[f"{mode}_capacity_kw"]
+        capacity_values = calculation[f"{mode}_capacity_kw"]
         canonical_status = capacity_result["status"]
         if canonical_status not in {"pass", "fail", "indeterminate"}:
             raise ValueError(
@@ -471,12 +472,12 @@ def proofgraph_from_thermal_uncertainty(
                 evidence_present=True,
                 expected=available,
                 actual={
-                    "nominal": capacity_result["nominal"],
-                    "lower": capacity_result["lower"],
-                    "upper": capacity_result["upper"],
+                    "nominal": capacity_values["nominal"],
+                    "lower": capacity_values["lower"],
+                    "upper": capacity_values["upper"],
                 },
                 unit="kW",
-                delta=available - capacity_result["upper"],
+                delta=available - capacity_values["upper"],
             )
         )
         verdicts.append(

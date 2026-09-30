@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased recovery integrity — strict editor-draft JSON — 2026-09-30
+
+- Routes recovered raw editor drafts through the canonical strict JSON parser before semantic comparison.
+- Treats duplicate object keys, non-finite constants, malformed JSON, and excessive nesting as invalid recovery evidence even when a legacy UI-state flag marked the draft valid.
+- Adds a regression for duplicate-key legacy recovery input without changing project schemas, engineering calculations, or restoration behavior.
+
 ## Unreleased ProofGraph integrity — evidence-backed PASS — 2026-09-30
 
 - Rejects PASS findings that declare evidence absent or reference no evidence, preventing absence of evidence from being serialized as successful compliance.

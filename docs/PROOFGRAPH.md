@@ -110,6 +110,10 @@ canonical source workflow, for example because required evidence is absent or an
 explicitly optional mapping is not configured. None of these states is equivalent
 to pass.
 
+PASS findings are strictly evidence-backed. A finding with status `pass` must
+declare `evidence_present=true` and reference at least one evidence record.
+Missing evidence therefore cannot be serialized as successful compliance.
+
 ## Existing rule-pack bridge
 
 proofgraph_from_compliance_check converts the existing deterministic

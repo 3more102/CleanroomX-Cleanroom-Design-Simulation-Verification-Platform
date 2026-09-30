@@ -594,6 +594,8 @@ class ProofGraph:
         check_ids = _unique_ids(self.checks, "proofgraph.checks")
         finding_ids = _unique_ids(self.findings, "proofgraph.findings")
         verdict_ids = _unique_ids(self.verdicts, "proofgraph.verdicts")
+        checks_by_id = {item.id: item for item in self.checks}
+        findings_by_id = {item.id: item for item in self.findings}
         _unique_ids(self.corrective_actions, "proofgraph.corrective_actions")
         _unique_ids(self.verification_runs, "proofgraph.verification_runs")
 
@@ -648,11 +650,24 @@ class ProofGraph:
                     f"finding {finding.id!r} references unknown requirement "
                     f"{finding.requirement_id!r}"
                 )
+            check = checks_by_id[finding.check_id]
+            if finding.requirement_id != check.requirement_id:
+                raise ValueError(
+                    f"finding {finding.id!r} requirement {finding.requirement_id!r} "
+                    f"does not match check {check.id!r} requirement "
+                    f"{check.requirement_id!r}"
+                )
             missing = set(finding.evidence_ids) - evidence_ids
             if missing:
                 raise ValueError(
                     f"finding {finding.id!r} references unknown evidence: "
                     + ", ".join(sorted(missing))
+                )
+            undeclared = set(finding.evidence_ids) - set(check.evidence_ids)
+            if undeclared:
+                raise ValueError(
+                    f"finding {finding.id!r} references evidence not declared by "
+                    f"check {check.id!r}: " + ", ".join(sorted(undeclared))
                 )
 
         for verdict in self.verdicts:
@@ -666,6 +681,16 @@ class ProofGraph:
                 raise ValueError(
                     f"verdict {verdict.id!r} references unknown findings: "
                     + ", ".join(sorted(missing))
+                )
+            mismatched = sorted(
+                finding_id
+                for finding_id in verdict.finding_ids
+                if findings_by_id[finding_id].requirement_id != verdict.requirement_id
+            )
+            if mismatched:
+                raise ValueError(
+                    f"verdict {verdict.id!r} references findings for another "
+                    f"requirement: " + ", ".join(mismatched)
                 )
 
         for action in self.corrective_actions:

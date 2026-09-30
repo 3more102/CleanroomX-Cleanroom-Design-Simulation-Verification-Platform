@@ -48,6 +48,12 @@ deterministic traversal and audit. Cycle validation uses an explicit traversal
 stack rather than Python recursion, so deep valid provenance chains are not
 bounded by the interpreter recursion limit.
 
+Explicit evidence project identity is also fail-closed. If evidence records carry
+non-null `project_id` values, every explicit project identity in one ProofGraph
+must agree. A graph therefore cannot silently combine explicitly identified
+evidence from different projects. Evidence that does not carry project identity
+remains valid for adapters whose source contract does not yet supply one.
+
 Verification runs are also closed over their declared checks: every verdict in
 a run may depend only on findings whose compliance checks are listed in that
 same run. This prevents a run from presenting a verdict derived from hidden or

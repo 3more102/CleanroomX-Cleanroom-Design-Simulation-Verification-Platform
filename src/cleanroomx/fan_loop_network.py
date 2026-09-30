@@ -7,7 +7,8 @@ from .fan_curve import (
     FanCurve,
     FanOperatingPointStudy,
     SystemCurve,
-    solve_fan_operating_point,
+    _calculate_fan_operating_point,
+    _format_fan_operating_point_calculation,
 )
 from .loop_network import LoopedFlowNetwork, solve_looped_network
 
@@ -130,16 +131,19 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
         - _node_pressure(reference_network, study.fan_suction_node)
     )
 
-    fan_result = solve_fan_operating_point(
-        FanOperatingPointStudy(
-            name=study.name,
-            fan_curve=study.fan_curve,
-            system_curve=SystemCurve(
-                name=f"{study.name} equivalent loop network",
-                fixed_pressure_pa=study.fixed_pressure_pa,
-                resistance_pa_per_m3_s_squared=equivalent_resistance,
-            ),
-        )
+    operating_study = FanOperatingPointStudy(
+        name=study.name,
+        fan_curve=study.fan_curve,
+        system_curve=SystemCurve(
+            name=f"{study.name} equivalent loop network",
+            fixed_pressure_pa=study.fixed_pressure_pa,
+            resistance_pa_per_m3_s_squared=equivalent_resistance,
+        ),
+    )
+    operating_calculation = _calculate_fan_operating_point(operating_study)
+    fan_result = _format_fan_operating_point_calculation(
+        operating_study,
+        operating_calculation,
     )
 
     base = {
@@ -160,8 +164,7 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
         "message": fan_result["message"],
     }
 
-    point = fan_result["operating_point"]
-    if point is None:
+    if operating_calculation is None:
         return {
             **base,
             "operating_network_solution": None,
@@ -176,7 +179,7 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
             ),
         }
 
-    operating_airflow = point["airflow_m3_h"]
+    operating_airflow = operating_calculation["airflow_m3_h"]
     operating_network = solve_looped_network(
         _network_at_airflow(study, operating_airflow)
     )
@@ -184,11 +187,11 @@ def solve_fan_loop_network(study: FanLoopNetworkStudy) -> dict:
         _node_pressure(operating_network, study.fan_discharge_node)
         - _node_pressure(operating_network, study.fan_suction_node)
     )
-    total_system_pressure = study.fixed_pressure_pa + network_pressure
-    fan_pressure = point["fan_pressure_pa"]
     equivalent_pressure = (
         equivalent_resistance * (operating_airflow / 3600.0) ** 2
     )
+    total_system_pressure = study.fixed_pressure_pa + equivalent_pressure
+    fan_pressure = operating_calculation["fan_pressure_pa"]
 
     return {
         **base,

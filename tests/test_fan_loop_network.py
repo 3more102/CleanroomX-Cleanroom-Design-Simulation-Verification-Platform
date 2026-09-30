@@ -76,6 +76,21 @@ def test_fan_loop_operating_point_resolves_full_network() -> None:
     assert abs(result["system_pressure_check"]["network_pressure_residual_pa"]) <= 1e-6
 
 
+def test_operating_network_uses_full_precision_fan_root() -> None:
+    result = solve_fan_loop_network(_study(fixed_pressure_pa=20.0))
+
+    assert result["fan_operating_point"]["airflow_m3_h"] == 3484.053
+    supply = next(
+        node
+        for node in result["operating_network_solution"]["nodes"]
+        if node["name"] == "Supply"
+    )
+    assert supply["specified_injection_m3_h"] == pytest.approx(
+        3484.053129062, abs=1e-9
+    )
+    assert result["system_pressure_check"]["fan_minus_system_pressure_pa"] == 0.0
+
+
 def test_no_bounded_fan_intersection_preserves_reference_evidence() -> None:
     result = solve_fan_loop_network(_study(fixed_pressure_pa=600.0))
     assert result["status"] == "no_intersection_in_supplied_range"

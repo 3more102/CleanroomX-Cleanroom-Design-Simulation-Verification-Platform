@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+from .fan_curve import FanOperatingPointStudy, _calculate_fan_operating_point
 from .hvac import calculate_hvac_governing_airflow_m3_h
 from .hvac_models import HVACProject
 from .models import ProjectSpec
@@ -114,6 +115,7 @@ def analyze_hvac_fan_airflow_consistency(
     *,
     hvac_project: HVACProject | None = None,
     fan_operating_points: list[dict] | None = None,
+    fan_operating_point_studies: list[FanOperatingPointStudy] | None = None,
     fan_duct_networks: list[dict] | None = None,
     fan_parallel_networks: list[dict] | None = None,
     fan_loop_networks: list[dict] | None = None,
@@ -142,7 +144,13 @@ def analyze_hvac_fan_airflow_consistency(
 
     checks: list[dict] = []
 
-    def add_check(kind: str, item: dict, point_key: str) -> None:
+    def add_check(
+        kind: str,
+        item: dict,
+        point_key: str,
+        *,
+        canonical_airflow_m3_h: float | None = None,
+    ) -> None:
         point = item.get(point_key)
         study_name = str(item.get("study", "")).strip() or "unnamed"
         if point is None:
@@ -161,7 +169,11 @@ def analyze_hvac_fan_airflow_consistency(
             return
 
         operating_airflow = _finite_positive(
-            point["airflow_m3_h"],
+            (
+                canonical_airflow_m3_h
+                if canonical_airflow_m3_h is not None
+                else point["airflow_m3_h"]
+            ),
             f"fan operating airflow for study {study_name!r}",
         )
         difference = operating_airflow - required_airflow
@@ -181,8 +193,26 @@ def analyze_hvac_fan_airflow_consistency(
             }
         )
 
-    for item in fan_operating_points or []:
-        add_check("fan_operating_point", item, "operating_point")
+    operating_point_results = fan_operating_points or []
+    if fan_operating_point_studies is not None:
+        if len(fan_operating_point_studies) != len(operating_point_results):
+            raise ValueError(
+                "fan_operating_point_studies must align one-to-one with "
+                "fan_operating_points"
+            )
+        for item, study in zip(operating_point_results, fan_operating_point_studies):
+            calculation = _calculate_fan_operating_point(study)
+            add_check(
+                "fan_operating_point",
+                item,
+                "operating_point",
+                canonical_airflow_m3_h=(
+                    None if calculation is None else calculation["airflow_m3_h"]
+                ),
+            )
+    else:
+        for item in operating_point_results:
+            add_check("fan_operating_point", item, "operating_point")
     for item in fan_duct_networks or []:
         add_check("fan_duct_network", item, "operating_point")
     for item in fan_parallel_networks or []:

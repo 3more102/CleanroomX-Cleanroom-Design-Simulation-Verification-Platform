@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — provenance DAG validation — 2026-09-30
+
+- Requires `ProvenanceRecord.id` values to remain unique across the complete ProofGraph, not only within one evidence record.
+- Rejects multi-evidence cycles in `upstream_evidence_ids` while retaining valid acyclic calculation dependency chains.
+- Uses iterative dependency validation so malformed deep graphs do not rely on recursive cycle detection.
+- Adds strict-parser regressions for cross-evidence provenance-ID reuse and cyclic evidence dependencies without changing solver equations or engineering criteria.
+
 ## Unreleased ProofGraph integrity — semantic cross-reference validation — 2026-09-30
 
 - Rejects findings whose requirement identity disagrees with the referenced compliance check.

@@ -2,6 +2,10 @@ import pytest
 
 from cleanroomx.hvac_models import AirState
 from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
+from cleanroomx.psychrometrics import (
+    moist_air_cp_kj_kg_da_k,
+    moist_air_specific_volume_m3_kg_da,
+)
 from cleanroomx.thermal_uncertainty_io import thermal_uncertainty_from_dict
 from cleanroomx.psychrometric_uncertainty_models import UncertainAirState
 from cleanroomx.thermal_uncertainty_models import (
@@ -105,6 +109,35 @@ def test_thermal_airflow_interval_expands_with_load_and_supply_temp() -> None:
     assert thermal["lower"] < thermal["nominal"] < thermal["upper"]
     assert result["airflow_m3_h"]["governing"]["lower"] <= result["airflow_m3_h"]["governing"]["upper"]
     assert result["airflow_m3_h"]["governing"]["nominal_basis"] == "internal_sensible_load"
+
+
+def test_governing_airflow_selection_uses_unrounded_thermal_candidate() -> None:
+    room = AirState(22.0, 45.0)
+    raw_thermal_airflow = (
+        4.0
+        / (moist_air_cp_kj_kg_da_k(room) * (room.dry_bulb_c - 16.0))
+        * moist_air_specific_volume_m3_kg_da(room)
+        * 3600.0
+    )
+    displayed_thermal_airflow = round(raw_thermal_airflow, 6)
+    assert raw_thermal_airflow > displayed_thermal_airflow
+
+    result = analyze_thermal_uncertainty(
+        base_design(
+            cleanroom_airflow_m3_h=uv(
+                displayed_thermal_airflow,
+                "m3/h",
+                0.0,
+            )
+        )
+    )
+
+    thermal = result["airflow_m3_h"]["thermal_for_internal_sensible"]
+    governing = result["airflow_m3_h"]["governing"]
+    assert thermal is not None
+    assert thermal["nominal"] == pytest.approx(displayed_thermal_airflow)
+    assert governing["nominal"] == pytest.approx(displayed_thermal_airflow)
+    assert governing["nominal_basis"] == "internal_sensible_load"
 
 
 def test_supply_temperature_interval_must_stay_below_room_for_positive_load() -> None:

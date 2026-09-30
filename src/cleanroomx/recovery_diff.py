@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 
 from .autosave import RecoveryCandidate, restore_recovery_artifact
 from .project import AnalysisDocument, ProjectDocument, load_project_document
+from .strict_json import strict_json_loads
 
 
 @dataclass(frozen=True)
@@ -71,8 +71,8 @@ def _draft_state(
         return editor_id, "invalid"
 
     try:
-        parsed = json.loads(editor_text)
-    except (TypeError, json.JSONDecodeError):
+        parsed = strict_json_loads(editor_text)
+    except (TypeError, ValueError):
         return editor_id, "invalid"
     if not isinstance(parsed, dict):
         return editor_id, "invalid"

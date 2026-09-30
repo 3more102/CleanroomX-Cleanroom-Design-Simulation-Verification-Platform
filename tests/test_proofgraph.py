@@ -189,6 +189,24 @@ def test_graph_digest_detects_tampering() -> None:
         proofgraph_from_dict(document)
 
 
+def test_graph_rejects_provenance_dependency_cycles() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    derived = copy.deepcopy(broken["evidence"][0])
+    derived["id"] = "ev-pressure-derived"
+    derived["property_name"] = "derived_pressure_margin_pa"
+    derived["provenance"][0]["id"] = "prov-pressure-derived"
+    derived["provenance"][0]["origin"] = "derived from ev-pressure"
+    derived["provenance"][0]["upstream_evidence_ids"] = ["ev-pressure"]
+    broken["evidence"][0]["provenance"][0]["upstream_evidence_ids"] = [
+        derived["id"]
+    ]
+    broken["evidence"].append(derived)
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="provenance contains dependency cycle"):
+        proofgraph_from_dict(broken)
+
+
 def _add_second_requirement(document: dict) -> None:
     other = copy.deepcopy(document["requirement_set"]["requirements"][0])
     other["id"] = "CRX-PRESS-OTHER"

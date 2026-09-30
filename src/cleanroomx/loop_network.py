@@ -200,12 +200,13 @@ def _initial_node_pressures(network: LoopedFlowNetwork) -> dict[str, float]:
     return pressures
 
 
-def solve_looped_network(
+def _calculate_looped_network(
     network: LoopedFlowNetwork,
     *,
     mass_balance_tolerance_m3_h: float = 1e-6,
     max_iterations: int = 100,
 ) -> dict:
+    """Solve the loop network while retaining full-precision internal state."""
     tolerance_m3_h = _positive(
         mass_balance_tolerance_m3_h, "mass_balance_tolerance_m3_h"
     )
@@ -312,6 +313,29 @@ def solve_looped_network(
         iterations += 1
 
     residuals, edge_flows = evaluate(pressures)
+    return {
+        "iterations": iterations,
+        "mass_balance_tolerance_m3_h": tolerance_m3_h,
+        "pressures_pa": pressures,
+        "residuals_m3_s": residuals,
+        "edge_flows_m3_s": tuple(edge_flows),
+    }
+
+
+def _format_looped_network_calculation(
+    network: LoopedFlowNetwork,
+    calculation: dict,
+) -> dict:
+    """Format a full-precision loop calculation at the public boundary."""
+    nodes = tuple(network.node_injections_m3_h)
+    injections_m3_s = {
+        node: injection / 3600.0
+        for node, injection in network.node_injections_m3_h.items()
+    }
+    pressures = calculation["pressures_pa"]
+    residuals = calculation["residuals_m3_s"]
+    edge_flows = calculation["edge_flows_m3_s"]
+
     node_results = []
     for node in nodes:
         residual_m3_h = residuals[node] * 3600.0
@@ -333,7 +357,7 @@ def solve_looped_network(
 
     edge_results = []
     pressure_law_errors = []
-    for edge, airflow_m3_s in zip(network.edges, edge_flows):
+    for edge, airflow_m3_s in zip(network.edges, edge_flows, strict=True):
         actual_pressure_difference_pa = (
             pressures[edge.start_node] - pressures[edge.end_node]
         )
@@ -386,7 +410,7 @@ def solve_looped_network(
         * (
             pressures[edge.start_node] - pressures[edge.end_node]
         )
-        for edge, airflow_m3_s in zip(network.edges, edge_flows)
+        for edge, airflow_m3_s in zip(network.edges, edge_flows, strict=True)
     )
     net_node_injection_power_w = sum(
         pressures[node] * injections_m3_s[node] for node in nodes
@@ -394,16 +418,18 @@ def solve_looped_network(
     pressure_power_balance_residual_w = (
         net_node_injection_power_w - total_edge_dissipation_w
     )
-
     max_mass_balance_error_m3_h = max(
         abs(residuals[node] * 3600.0) for node in nodes
     )
+
     return {
         "network": network.name,
         "status": "solved",
         "reference_node": network.reference_node,
-        "iterations": iterations,
-        "mass_balance_tolerance_m3_h": tolerance_m3_h,
+        "iterations": calculation["iterations"],
+        "mass_balance_tolerance_m3_h": calculation[
+            "mass_balance_tolerance_m3_h"
+        ],
         "nodes": node_results,
         "edges": edge_results,
         "max_abs_mass_balance_residual_m3_h": round(
@@ -434,3 +460,19 @@ def solve_looped_network(
             "controls, leakage, compressibility, or transient behavior."
         ),
     }
+
+
+def solve_looped_network(
+    network: LoopedFlowNetwork,
+    *,
+    mass_balance_tolerance_m3_h: float = 1e-6,
+    max_iterations: int = 100,
+) -> dict:
+    return _format_looped_network_calculation(
+        network,
+        _calculate_looped_network(
+            network,
+            mass_balance_tolerance_m3_h=mass_balance_tolerance_m3_h,
+            max_iterations=max_iterations,
+        ),
+    )

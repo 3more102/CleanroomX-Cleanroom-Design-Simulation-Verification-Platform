@@ -5,6 +5,7 @@ import pytest
 from cleanroomx.loop_network import (
     LoopedFlowNetwork,
     QuadraticFlowEdge,
+    _calculate_looped_network,
     solve_looped_network,
 )
 from cleanroomx.loop_network_io import looped_flow_network_from_dict
@@ -119,6 +120,25 @@ def test_multi_loop_network_converges_and_preserves_continuity() -> None:
     assert result["max_abs_mass_balance_residual_m3_h"] <= 1e-6
     assert result["max_abs_pressure_law_residual_pa"] <= 1e-9
 
+
+
+def test_raw_calculation_preserves_sub_display_edge_airflow() -> None:
+    network = LoopedFlowNetwork(
+        name="Sub-display parallel edge",
+        node_injections_m3_h={"Source": 3600.0, "Sink": -3600.0},
+        edges=(
+            QuadraticFlowEdge("Main", "Source", "Sink", 1.0),
+            QuadraticFlowEdge("Trace", "Source", "Sink", 8.1e19),
+        ),
+        reference_node="Source",
+    )
+
+    calculation = _calculate_looped_network(network)
+    result = solve_looped_network(network)
+    raw_trace_m3_h = calculation.edge_flows_m3_s[1] * 3600.0
+
+    assert raw_trace_m3_h == pytest.approx(4.0e-7, rel=1e-12)
+    assert result["edges"][1]["airflow_m3_h"] == 0.0
 
 def test_unbalanced_injections_are_rejected() -> None:
     with pytest.raises(ValueError, match="sum to zero"):

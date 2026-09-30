@@ -70,6 +70,22 @@ def test_exact_explicit_mapping_passes() -> None:
     }
 
 
+def test_verdict_uses_full_precision_pressure_solver_state() -> None:
+    payload = _payload(target_pa=2.0000000004)
+    payload["pressure_network"]["nodes"][0]["supply_m3_h"] = 72.0000000144
+    payload["pressure_abs_tolerance_pa"] = 1e-12
+
+    result = analyze_pressure_design_consistency(
+        pressure_design_consistency_from_dict(payload)
+    )
+
+    finding = result["findings"][0]
+    assert result["status"] == "pass"
+    assert finding["status"] == "pass"
+    assert finding["actual"] == pytest.approx(2.0000000004, abs=1e-12)
+    assert abs(finding["delta"]) <= 1e-12
+
+
 def test_signed_negative_pressure_target_is_preserved() -> None:
     payload = _payload(target_pa=-2.0)
     payload["pressure_network"]["nodes"][0] = {

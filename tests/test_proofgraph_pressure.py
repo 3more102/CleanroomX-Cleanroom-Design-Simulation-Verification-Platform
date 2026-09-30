@@ -106,15 +106,17 @@ def test_required_mapping_failure_keeps_target_without_inventing_calculation() -
     assert document["findings"][0]["actual"] is None
 
 
-def test_explicitly_optional_mapping_becomes_unknown() -> None:
+def test_explicitly_optional_mapping_preserves_not_checked() -> None:
     payload = _payload()
     payload["mappings"] = []
     payload["require_all_configured_targets_mapped"] = False
 
     document = _graph(payload).to_dict()
 
-    assert document["verdicts"][0]["status"] == "unknown"
-    assert document["findings"][0]["status"] == "unknown"
+    assert document["verdicts"][0]["status"] == "not_checked"
+    assert document["findings"][0]["status"] == "not_checked"
+    assert document["verification_runs"][0]["metadata"]["source_status"] == "not_checked"
+    assert proofgraph_from_dict(copy.deepcopy(document)).to_dict() == document
 
 
 def test_negative_pressure_target_sign_is_preserved() -> None:

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph thermal numerical integrity — full-precision evidence — 2026-09-30
+
+- Separates canonical full-precision thermal uncertainty calculations from the rounded presentation payload.
+- Stores those canonical load, airflow, cooling, and heating intervals in ProofGraph calculation evidence and finding actual/delta fields.
+- Adds a sub-display-resolution capacity boundary regression proving that a FAIL verdict remains reproducible from evidence even when the standalone report rounds the displayed upper bound.
+
 ## Unreleased BIM import safety — bounded native IFC source size — 2026-09-30
 
 - Rejects native IFC source files larger than 512 MiB before IfcOpenShell parsing and re-enforces the ceiling while streaming source SHA-256 provenance.

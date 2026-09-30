@@ -65,6 +65,54 @@ def test_equal_parallel_paths_are_integrated_with_fan_curve() -> None:
     )
 
 
+def test_network_composition_uses_unrounded_fan_operating_point() -> None:
+    path_a = ParallelFlowPath("A", (_section("A1", 0.05),))
+    path_b = ParallelFlowPath("B", (_section("B1", 0.05),))
+    paths = (path_a, path_b)
+    result = solve_fan_driven_parallel_network(
+        FanDrivenParallelNetworkStudy(
+            name="Precision boundary",
+            fan_curve=FanCurve(
+                "Precision fan",
+                (
+                    FanCurvePoint(0.0, 500.0),
+                    FanCurvePoint(500.0, 0.0),
+                ),
+            ),
+            fixed_pressure_pa=50.0,
+            paths=paths,
+        )
+    )
+
+    resistance = equivalent_parallel_resistance(paths)
+    quadratic = resistance / 3600.0**2
+    exact_airflow_m3_h = (
+        -1.0 + math.sqrt(1.0 + 4.0 * quadratic * 450.0)
+    ) / (2.0 * quadratic)
+    expected_network_pressure_pa = resistance * (
+        exact_airflow_m3_h / 3600.0
+    ) ** 2
+    rounded_airflow_pressure_pa = resistance * (
+        round(exact_airflow_m3_h, 3) / 3600.0
+    ) ** 2
+
+    assert result["fan_operating_point"]["airflow_m3_h"] == round(
+        exact_airflow_m3_h, 3
+    )
+    assert result["network_solution"]["common_pressure_drop_pa"] == round(
+        expected_network_pressure_pa, 4
+    )
+    assert result["network_solution"]["common_pressure_drop_pa"] != round(
+        rounded_airflow_pressure_pa, 4
+    )
+    assert result["system_pressure_check"]["parallel_network_pressure_pa"] == round(
+        expected_network_pressure_pa, 4
+    )
+    assert abs(
+        result["system_pressure_check"]["fan_minus_system_pressure_pa"]
+    ) <= 1e-6
+
+
 def test_equivalent_resistance_matches_parallel_rq2_relation() -> None:
     path_a = ParallelFlowPath("A", (_section("A1", 0.5),))
     path_b = ParallelFlowPath("B", (_section("B1", 0.4),))

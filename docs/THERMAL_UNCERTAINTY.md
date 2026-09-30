@@ -82,6 +82,8 @@ Sensible-load airflow is evaluated across sensible-load bounds, supply-air-tempe
 
 The governing airflow lower and upper bounds are the maximum of the corresponding candidate lower and upper bounds. The nominal governing basis is reported separately.
 
+All candidate comparisons use full-precision calculated airflow values. Six-decimal rounding is applied only when formatting the returned interval, so presentation rounding cannot change the governing basis or internal bound selection.
+
 ## Traceability
 
 Every uncertain numeric input may carry the existing CleanroomX provenance record: source type/name, reference, revision, date, uncertainty basis, and notes.

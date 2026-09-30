@@ -255,9 +255,9 @@ def _thermal_airflow_interval(
         for room in _corner_states(design.room_air)
     ]
     return {
-        "nominal": round(nominal, 6),
-        "lower": round(min(values), 6),
-        "upper": round(max(values), 6),
+        "nominal": nominal,
+        "lower": min(values),
+        "upper": max(values),
         "unit": "m3/h",
     }
 
@@ -426,7 +426,16 @@ def analyze_thermal_uncertainty(
         "airflow_m3_h": {
             "cleanroom": _interval(design.cleanroom_airflow_m3_h),
             "makeup": _interval(makeup),
-            "thermal_for_internal_sensible": thermal_airflow,
+            "thermal_for_internal_sensible": (
+                None
+                if thermal_airflow is None
+                else {
+                    "nominal": round(thermal_airflow["nominal"], 6),
+                    "lower": round(thermal_airflow["lower"], 6),
+                    "upper": round(thermal_airflow["upper"], 6),
+                    "unit": thermal_airflow["unit"],
+                }
+            ),
             "governing": {
                 "nominal": round(nominal_governing, 6),
                 "lower": round(governing_lower, 6),

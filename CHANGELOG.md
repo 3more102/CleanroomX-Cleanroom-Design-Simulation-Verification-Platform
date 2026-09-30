@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased thermal uncertainty numerical integrity — full-precision governing airflow — 2026-09-30
+
+- Keeps sensible-load airflow interval values at full precision while selecting the governing airflow candidate and conservative lower/upper bounds.
+- Applies six-decimal rounding only when formatting the returned thermal-airflow interval, preventing presentation rounding from changing the reported governing basis.
+- Adds a boundary regression where a rounded tie previously selected the wrong nominal airflow basis; no equations, units, capacity criteria, or uncertainty semantics change.
+
 ## Unreleased ProofGraph integrity — evidence-backed PASS — 2026-09-30
 
 - Rejects PASS findings that declare evidence absent or reference no evidence, preventing absence of evidence from being serialized as successful compliance.

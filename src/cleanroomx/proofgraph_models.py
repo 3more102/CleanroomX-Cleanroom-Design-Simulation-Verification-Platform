@@ -663,16 +663,16 @@ class ProofGraph:
         _unique_ids(self.corrective_actions, "proofgraph.corrective_actions")
         _unique_ids(self.verification_runs, "proofgraph.verification_runs")
 
+        provenance_ids: set[str] = set()
         for item in self.evidence:
             if item.source_id not in source_ids:
                 raise ValueError(
                     f"evidence {item.id!r} references unknown source {item.source_id!r}"
                 )
-            provenance_ids: set[str] = set()
             for provenance in item.provenance:
                 if provenance.id in provenance_ids:
                     raise ValueError(
-                        f"evidence {item.id!r} contains duplicate provenance id {provenance.id!r}"
+                        f"proofgraph evidence contains duplicate provenance id {provenance.id!r}"
                     )
                 provenance_ids.add(provenance.id)
                 if provenance.source_id not in source_ids:

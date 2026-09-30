@@ -11,7 +11,7 @@ Industry-oriented guide for design, simulation, verification, BIM/IFC, evidence,
 | Revision | Rev A |
 | Issue date | 30 September 2026 |
 | Primary production baseline | CleanroomX v0.102.1 |
-| Documentation snapshot | `main` at `c9d539b81fccee19eeaf6380ea83d5ce1729a77b` |
+| Documentation snapshot | `main` at `9a7ab222878324d03e44c93caea92c927e302ae7` |
 | Package version on snapshot | 0.102.1 |
 | Supported Python | 3.11 / 3.12 / 3.13 |
 | Project schema | `cleanroomx.project`, schema version 1 |

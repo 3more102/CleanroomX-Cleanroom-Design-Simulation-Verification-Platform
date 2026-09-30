@@ -1,1461 +1,1000 @@
----
-revision: 2.0
-stable: v0.102.1
-baseline: ae80aec3f61f009597a1b01f05d67fb91b545d70 (PR #594 engineering baseline)
-date: 30 September 2026
----
+CLEANROOMX
+Engineering User & Operations Manual
+Industry-oriented guide for design, simulation, verification, BIM/IFC, evidence, handoff, and controlled engineering use
+[[COVER_END]]
 
-# 1. Document Control, Scope, and Intended Use
+# Document Control and Applicability
 
-## 1.1 Purpose of this manual
-
-This manual is the primary operating and engineering reference for CleanroomX. It is written for real project use: installation, model setup, engineering analysis, review, evidence production, BIM/IFC coordination, troubleshooting, deployment, and controlled handoff.
-
-The manual is deliberately task-oriented. It separates stable released capability from unreleased capability on `main`, and it separates software evidence from engineering or regulatory approval. Repository history and implementation detail remain available in the project documentation, but they are not allowed to obscure day-to-day operating procedures.
-
-> [!QUALITY] Manual objective
-> A competent engineer or reviewer should be able to install CleanroomX, establish a project, execute a supported workflow, identify whether the result is current and complete, package the evidence, and understand the engineering limitations without reading source code.
-
-## 1.2 Document status
-
-| Item | Controlled value |
+| Field | Controlled value |
 | --- | --- |
-| Manual revision | 2.0 |
-| Manual date | 30 September 2026 |
-| Stable software release | v0.102.1 |
-| Stable release validation | 1008 passing tests on Python 3.11, 3.12, and 3.13 at the final v0.102.1 gate |
-| Engineering implementation baseline used for this manual | `ae80aec3f61f009597a1b01f05d67fb91b545d70` - PR #594 |
-| Project schema | `cleanroomx.project`, schema version 1 |
-| ProofGraph schema | `cleanroomx.proofgraph`, schema version 1 - current-main capability |
+| Document ID | CRX-UM-001 |
+| Revision | Rev A |
+| Issue date | 30 September 2026 |
+| Primary production baseline | CleanroomX v0.102.1 |
+| Documentation snapshot | `main` at `c9d539b81fccee19eeaf6380ea83d5ce1729a77b` |
+| Package version on snapshot | 0.102.1 |
 | Supported Python | 3.11 / 3.12 / 3.13 |
-| Pending at cutoff | PR #595, CI run #1928 SUCCESS, not merged into the engineering baseline |
+| Project schema | `cleanroomx.project`, schema version 1 |
+| Stable release validation anchor | 1008 passing tests on Python 3.11, 3.12, and 3.13 at the final v0.102.1 spatial release gate |
+| Intended audience | Cleanroom designers, HVAC engineers, BIM coordinators, reviewers, QA/verification personnel, technical leads, and developers supporting controlled deployments |
+| Repository | `3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform` |
 
-Later documentation-only commits may exist because this manual is published from the same repository. For engineering reproducibility, the software build used for a project should be recorded independently in the project evidence.
+> [!CONTROL] This manual separates the validated v0.102.1 production baseline from capabilities present only on the later `main` development snapshot. Deploying organizations should define which software revision is approved for project work and retain the exact version or commit in project records.
 
-## 1.3 Status labels used in this manual
+> [!WARNING] CleanroomX provides engineering screening, simulation, verification, and software/provenance evidence. It does not by itself establish ISO cleanroom certification, CFD validation, commissioning or TAB acceptance, manufacturer approval, physical measurement uncertainty, or regulatory acceptance.
 
-| Label | Meaning |
-| --- | --- |
-| Stable | Capability is part of the v0.102.1 release closure and release evidence. |
-| Current main | Capability is implemented after v0.102.1 on the verified engineering baseline used for this manual; it is not part of the immutable v0.102.1 release tag. |
-| Pending | Capability exists only in an open pull request at the manual cutoff and shall not be treated as available on `main`. |
+## Revision history
 
-## 1.4 Intended audience
-
-This manual is written for the following roles.
-
-| Role | Primary responsibility in CleanroomX |
-| --- | --- |
-| Cleanroom / HVAC design engineer | Define engineering inputs, execute analyses, review assumptions and margins. |
-| Verification engineer | Check model validity, solver status, completeness, uncertainty, and traceability. |
-| BIM coordinator | Import/review IFC semantics, manage GlobalId identity, resolve re-import conflicts. |
-| Technical reviewer | Independently review assumptions, inputs, results, limitations, and report freshness. |
-| QA / validation representative | Control software version, evidence package, test status, approvals, and records. |
-| System owner / IT | Deploy supported Python/Tk environment, file permissions, backup, and access controls. |
-| Project manager / lead | Define acceptance criteria, review gates, deliverables, and responsible approvers. |
-
-## 1.5 Responsibility boundary
-
-CleanroomX calculates and preserves evidence from explicit inputs. It does not decide what a project is legally required to achieve. Cleanroom classification limits, pressure targets, recovery requirements, thermal limits, filter criteria, commissioning acceptance limits, and manufacturer constraints must come from the applicable project requirements and selected standards.
-
-> [!CRITICAL] Do not convert a software PASS into regulatory approval
-> A CleanroomX PASS means the configured CleanroomX check passed under the supplied model and criteria. It is not, by itself, cleanroom certification, GMP acceptance, TAB acceptance, manufacturer approval, CFD validation, or regulatory approval.
-
-## 1.6 Recommended controlled-use pattern
-
-[DIAGRAM:deployment|Figure 1-1. Recommended use of CleanroomX inside an engineering or quality-controlled organization.]
-
-For controlled projects, separate these responsibilities wherever practical:
-
-- software installation and version control;
-- engineering input preparation;
-- analysis execution;
-- independent technical review;
-- QA/validation approval of released evidence;
-- document retention and change control.
-
-This separation reduces the risk that a single operator both defines a criterion and approves the resulting evidence without independent review.
-
-# 2. Product Architecture and Engineering Philosophy
-
-## 2.1 What CleanroomX is
-
-CleanroomX is a local Python engineering platform for cleanroom design, simulation, verification, spatial planning, HVAC analysis, airflow networks, fan/network studies, bounded uncertainty, BIM/IFC interoperability, reporting, and auditable numerical/provenance evidence.
-
-The desktop GUI, command-line tools, and project batch runner use shared backend services. Engineering equations are not reimplemented inside GUI callbacks. This is an important quality property: the same canonical engineering services are reused across interactive, automated, reporting, and assurance workflows.
-
-[DIAGRAM:architecture|Figure 2-1. CleanroomX architecture - one canonical engineering stack behind multiple operator surfaces.]
-
-## 2.2 Engineering principles
-
-CleanroomX development follows a small set of principles that operators should understand because they affect how results must be interpreted.
-
-- **Explicit inputs over hidden assumptions.** Project criteria, leakage coefficients, fan curves, efficiencies, uncertainty bounds, and standard-derived limits are entered or imported explicitly.
-- **Full-precision calculation before presentation rounding.** Current numerical hardening keeps canonical floating-point state through calculations and rounds only at presentation boundaries.
-- **Fail closed where provenance is incomplete or ambiguous.** Missing mappings, stale dependencies, invalid JSON, conflicting IFC re-imports, and invalid ProofGraph links do not silently become success.
-- **Deterministic evidence.** Supported workflows preserve canonical input identities, SHA-256 content identities, solver provenance, and replay/integrity evidence.
-- **Separate geometry from engineering evidence.** Spatial geometry can synchronize dimensions, but solver results and observed pressure are not silently written into the spatial model.
-- **No extrapolation where the model does not authorize it.** Fan curve workflows remain bounded by supplied data.
-- **One calculation path.** The GUI is an operator shell over backend services, not a second engineering implementation.
-
-## 2.3 Capability map
-
-| Domain | Stable v0.102.1 | Current-main additions |
+| Revision | Date | Description |
 | --- | --- | --- |
-| Spatial design | 2D/3D shared model, rooms/devices/openings, edit history, pressure visualization, sync state | IFC semantic fidelity and re-import hardening |
-| Verification | room/project ACH, particle and pressure checks, recovery | design requirement consistency bridges |
-| HVAC / thermal | psychrometrics, thermal loads, airflow balance, fan duty, uncertainty | additional full-precision evidence integration |
-| Networks | duct, branch, loop, variable-friction, fan/network | room pressure/leakage network |
-| Assurance | dossiers, consistency, provenance/replay | compliance rule packs, design assurance, snapshots, ProofGraph |
-| Project lifecycle | strict JSON, atomic save, recovery, revisions, run history, bundles | diagnostics and additional resource hardening |
+| A | 2026-09-30 | Rebuilt as an industry-oriented engineering user and operations manual with document control, role-based workflows, operating gates, evidence review, handoff procedures, troubleshooting, and reference appendices. |
 
-## 2.4 Lifecycle view
+## Approval record template
 
-[DIAGRAM:lifecycle|Figure 2-2. Recommended engineering lifecycle from explicit requirements through controlled evidence handoff.]
+| Role | Name | Signature / approval reference | Date |
+| --- | --- | --- | --- |
+| Prepared by |  |  |  |
+| Engineering review |  |  |  |
+| QA / verification review |  |  |  |
+| Approved for organizational use |  |  |  |
 
-A mature project does not start with the solver. It starts with explicit requirements and source data, progresses through model construction and validation, executes the selected canonical workflows, and ends with reviewed evidence that is versioned and traceable.
+> [!NOTE] The approval table is a template. CleanroomX does not create or imply organizational approval. Use the document-control process required by your company, project, client, or regulator.
 
-# 3. Installation, Readiness, and Controlled Deployment
+[[TOC]]
 
-## 3.1 Supported environment
+# PART I - PURPOSE, GOVERNANCE, AND FIRST USE
 
-CleanroomX supports Python 3.11, 3.12, and 3.13. The base package declares no mandatory third-party runtime dependency beyond the Python standard library. The desktop GUI requires Tk support. Native IFC ingestion is optional and requires IfcOpenShell through the `bim` extra.
+# 1. Product Purpose and Engineering Boundary
 
-### 3.1.1 Windows repository checkout
+CleanroomX is a local Python engineering platform for cleanroom design, spatial planning, simulation, HVAC analysis, airflow and pressure-network studies, verification, uncertainty screening, BIM/IFC interoperability, reporting, and auditable numerical/provenance evidence.
 
-```powershell
+The application is designed around one important architectural rule: the desktop GUI, command-line workflows, batch workflows, reports, and assurance layers use shared backend engineering services. Engineering equations are not intended to be independently reimplemented in GUI callbacks. This reduces the risk that two interfaces produce different answers for the same canonical input.
+
+## 1.1 Capability families
+
+| Family | Primary purpose |
+| --- | --- |
+| Spatial design | Synchronized 2D and 3D room layout, floors, dimensions, elevations, classifications, openings, equipment, devices, pressure visualization, and geometry validation. |
+| Verification | Room and multi-room calculations for volume, ACH, particle criteria, observed pressure, pressure cascades, and aggregate completeness. |
+| HVAC and thermal | Psychrometrics, sensible/latent/makeup loads, airflow balance, preliminary fan duty, and bounded thermal/psychrometric uncertainty. |
+| Airflow networks | Duct losses, branch networks, looped networks, variable-friction networks, and related numerical provenance. |
+| Fan studies | Supplied fan-curve operating point, speed/affinity studies, fan plus passive-network composition, and uncertainty. |
+| Assurance and evidence | Consistency checks, dossiers, compliance rule packs, design assurance, snapshots, and ProofGraph evidence structures. |
+| Project lifecycle | Strict JSON, atomic save, autosave/recovery, revision protection, bounded undo/redo, run history, and stale-evidence protection. |
+| Handoff and automation | Portable reports, project bundles, deterministic batch execution, diagnostics, and CLI tooling. |
+
+## 1.2 What CleanroomX does not decide for the engineer
+
+CleanroomX does not invent project requirements. The engineer remains responsible for the authoritative values used as inputs, including room classifications, project-specific ACH targets, pressure-differential criteria, filter performance, leakage coefficients, duct roughness/friction assumptions, manufacturer fan data, weather/design conditions, measurement data, uncertainty information, and applicable standards or client criteria.
+
+> [!STOP] A software `pass` must never be treated as proof that an external standard, client specification, commissioning requirement, or regulatory requirement has been satisfied unless the applicable criteria were explicitly and correctly represented in the evaluated input and the evidence has been reviewed by an authorized engineer.
+
+## 1.3 Stable release versus development snapshot
+
+The primary production baseline for this manual is v0.102.1. The current repository snapshot used to prepare the documentation contains later features that are not part of that tagged stable release. Those capabilities are marked as development snapshot features when discussed.
+
+| Capability | v0.102.1 baseline | Later `main` snapshot |
+| --- | --- | --- |
+| Desktop GUI, 2D/3D spatial workspace, persistence, recovery, revisions, run history | Available | Available |
+| Room/project verification, HVAC, thermal, duct, loop, fan and uncertainty workflows | Available | Available |
+| Pressure/leakage network | Not part of tagged baseline | Available on `main` snapshot |
+| Design foundation / pressure design consistency | Not part of tagged baseline | Available on `main` snapshot |
+| Compliance rule packs / design assurance | Not part of tagged baseline | Available on `main` snapshot |
+| ProofGraph evidence model | Not part of tagged baseline | Available on `main` snapshot |
+| Newer IFC hardening and provenance enhancements | Baseline IFC support varies by release point | Additional hardening on `main` snapshot |
+
+> [!MAIN] Development snapshot features should be treated as release-controlled software in your organization. Pin the exact commit, run the required verification gate, and document approval before using them for project decisions.
+
+# 2. Roles and Responsibilities
+
+Industry use improves when responsibilities are separated. One person may perform multiple roles on a small project, but the review intent should remain explicit.
+
+| Role | Typical responsibilities in CleanroomX |
+| --- | --- |
+| Project / design engineer | Owns requirements, geometry, airflow assumptions, analysis inputs, engineering interpretation, and disposition of warnings. |
+| HVAC / mechanical specialist | Reviews psychrometrics, loads, airflow balance, duct/network assumptions, fan data, and operating-point conclusions. |
+| BIM coordinator | Controls IFC source revision, semantic mapping, re-import review, GlobalId identity, and geometry handoff. |
+| Independent checker / reviewer | Confirms input provenance, units, acceptance criteria, result freshness, convergence, evidence completeness, and limitations. |
+| QA / verification lead | Defines approved software revision, required records, release evidence, retention, and change-control expectations. |
+| Application maintainer | Installs approved builds, confirms readiness, controls plugins, and preserves validated deployment records. |
+
+## 2.1 Minimum separation for a released engineering result
+
+For significant project decisions, the recommended pattern is:
+
+1. The design engineer prepares the input and performs the analysis.
+2. A second competent reviewer checks the source data, units, model assumptions, solver status, and acceptance criteria.
+3. The project lead or responsible engineer approves use of the result in downstream design documents.
+4. The issued record includes the CleanroomX version or commit, project revision, analysis identity, and report or bundle evidence.
+
+> [!TIP] Treat the exported CleanroomX evidence as a traceable engineering calculation record, not as a substitute for a checking process.
+
+# 3. Deployment Readiness and First Launch
+
+## 3.1 Supported runtime
+
+The stable package supports Python 3.11, 3.12, and 3.13. The base package declares no mandatory third-party Python runtime dependency. Tk support is required for the desktop GUI. Native IFC reading is optional and uses the BIM extra.
+
+## 3.2 Windows repository checkout
+
+```text
 cd C:\CleanroomX
 .\start-cleanroomx.ps1
-```
 
-Command Prompt / Explorer compatible launcher:
-
-```cmd
+# Command Prompt / Explorer-compatible launcher
 start-cleanroomx.cmd
-```
 
-Readiness check without opening the GUI:
-
-```powershell
+# Headless readiness check
 .\start-cleanroomx.ps1 --check
 ```
 
-The repository launcher prefers `.venv\Scripts\python.exe`, configures the repository `src` tree, and avoids ambiguity caused by a stale globally installed package.
+The repository launcher prefers `.venv\Scripts\python.exe` when present, uses the repository `src` tree, and avoids PATH ambiguity from an older installed package.
 
-### 3.1.2 Python installation
+## 3.3 Normal Python installation
 
-```bash
+```text
 python -m venv .venv
 python -m pip install -e .
 cleanroomx-gui --check
 cleanroomx-gui --demo
 ```
 
-Development / validation environment:
+For development and verification work:
 
-```bash
+```text
 python -m pip install -e .[dev]
 python -m pytest -q
 ```
 
-Optional native IFC support:
+For native IFC support:
 
-```bash
-python -m pip install -e .[bim]
+```text
+python -m pip install "cleanroomx[bim]"
 ```
 
-## 3.2 Installation acceptance procedure
+## 3.4 Deployment verification record
 
-Use this procedure whenever a new workstation or virtual environment is prepared for project use.
+Before accepting a workstation for controlled engineering use, record at least:
 
-1. Record the Git commit or release tag that is being installed.
-2. Create a clean Python virtual environment.
-3. Install CleanroomX from the intended source or validated package.
-4. Run `cleanroomx-gui --check`.
-5. Launch `cleanroomx-gui --demo` and confirm the demonstration project opens.
-6. Open **Design 2D + 3D** and confirm rooms/devices are visible.
-7. Run the active demonstration analysis.
-8. If the workstation is part of a controlled project, retain the installation evidence and software identity in the project record.
+| Check | Command / evidence | Acceptance |
+| --- | --- | --- |
+| Python version | `python --version` | Approved 3.11, 3.12, or 3.13 runtime |
+| CleanroomX identity | package/repository version record | Matches approved release or commit |
+| Registry readiness | `cleanroomx-gui --check` | Completes successfully |
+| GUI launch | `cleanroomx-gui --demo` or Windows launcher | Application opens and demo loads |
+| Optional BIM dependency | `cleanroomx-ifc --help` or representative import test | Required only when IFC workflow is approved for use |
+| Verification suite | CI or local test evidence, according to organizational process | Required evidence retained |
 
-> [!QUALITY] Installation release gate
-> Do not use the workstation for released project evidence if the registry readiness check fails, the intended version cannot be confirmed, or the demonstration workflow cannot execute.
+> [!CONTROL] Do not proceed with normal project work when `cleanroomx-gui --check` fails. Treat this as an application wiring, installation, or source-state readiness failure.
 
-## 3.3 Production deployment guidance
+## 3.5 First 20-minute operator familiarization
 
-Recommended operating controls:
+1. Launch the bundled demo.
+2. Open the Design 2D + 3D workspace and inspect rooms and devices.
+3. Select an existing analysis and use Validate before Run.
+4. Inspect normalized result JSON, diagnostics/provenance, and the report view.
+5. Make a harmless input change and confirm the previous result becomes stale.
+6. Rerun the analysis and confirm a fresh result is produced.
+7. Export a report to a temporary folder and inspect the output.
+8. Close without modifying the original demo if the session is only training.
 
-- run with normal user privileges;
-- keep project and evidence directories under normal OS access controls;
-- use organization backup/versioning for project directories;
-- keep source requirements and manufacturer data separate from generated reports;
-- do not place credentials, API keys, or unrelated secrets in project JSON;
-- pin the CleanroomX version or commit used for controlled analyses;
-- retain validation evidence appropriate to the organization's software-assurance process.
+# 4. Standard Project Lifecycle
 
-## 3.4 Linux / CI GUI smoke
+A professional workflow should use explicit gates rather than treating the Run button as the entire process.
 
-On Debian/Ubuntu style systems:
+| Gate | Operator action | Required evidence | Stop condition |
+| --- | --- | --- | --- |
+| G0 - Baseline | Confirm approved CleanroomX version/commit and project source revision | Version, commit/tag, project path/revision | Software or source identity is uncertain |
+| G1 - Inputs | Enter or import geometry, engineering data, criteria, and references | Source notes, units, provenance, controlled files | Missing or ambiguous required source data |
+| G2 - Validate | Use canonical parser/validation path | Successful validation or resolved findings | Invalid JSON, unsupported model, missing required data |
+| G3 - Execute | Run the selected workflow | Completed fresh result with solver/provenance status | Non-convergence, dependency change, abandoned worker, execution error |
+| G4 - Technical review | Check equations/model intent, assumptions, limits, status and completeness | Review notes / checker sign-off | Result is stale, incomplete, unchecked, or inconsistent with project intent |
+| G5 - Cross-check | Run diagnostics/consistency/assurance as applicable | Diagnostics and related evidence | Conflicts, warnings without disposition, or unsupported acceptance claim |
+| G6 - Issue | Export report, bundle, or snapshot | Issued file set with version and revision | Export freshness or integrity check fails |
+| G7 - Archive | Preserve source project, referenced files, report, and approval record | Controlled project record | Missing source files or unverifiable handoff |
 
-```bash
-sudo apt-get update
-sudo apt-get install -y xvfb tk
-xvfb-run -a cleanroomx-gui examples/gui_demo.cleanroomx.json --smoke
-xvfb-run -a python -m pytest -q tests/test_spatial_editing_gui.py
+## 4.1 Recommended file naming convention
+
+CleanroomX does not require a specific naming convention. A project organization may adopt a convention such as:
+
+```text
+PROJECT-AREA-REV03.cleanroomx.json
+PROJECT-AREA-REV03_analysis-verification_report.html
+PROJECT-AREA-REV03_handoff.cleanroomx.zip
 ```
 
-This validates real Tk widget behavior under a virtual display. Headless Python tests alone do not replace GUI smoke testing for desktop deployment.
+Include a project revision that your document-control system understands. Do not rely on filenames alone; CleanroomX also records internal identity and hashes where supported.
 
-# 4. Project Lifecycle and File Governance
+## 4.2 When to rerun
 
-## 4.1 Project file model
+Rerun an analysis when any input that affects the calculation changes. CleanroomX actively protects against stale evidence by binding completed results to the canonical SHA-256 identity of the submitted analysis input. File-backed workflows also fingerprint referenced dependencies.
 
-Desktop projects use `cleanroomx.project`, schema version 1. A project contains project metadata, an ordered analysis list, an optional active analysis identifier, and optional spatial layout metadata under the project block.
+> [!CONTROL] If a result disappears after an input edit, this is expected stale-result protection. Validate the revised input and run again. Do not copy values from the old result into a new report.
 
-A project record is not only a collection of numbers. It is the anchor for engineering identity, path context, spatial state, analysis definitions, run evidence, and handoff artifacts.
+# PART II - DESKTOP AND PROJECT OPERATIONS
 
-Example skeleton:
+# 5. Desktop GUI Operating Procedure
 
-```json
+## 5.1 Normal operator sequence
+
+1. Create a new project or open a `.cleanroomx.json` project.
+2. Add an analysis from the application catalog or select an existing analysis.
+3. Edit or import the strict JSON object used by that workflow.
+4. Select Validate to run the real backend parser and validation path without executing the engineering calculation.
+5. Select Run to execute the backend workflow in a worker thread.
+6. Review normalized result JSON, diagnostics/provenance, report output, and available plots.
+7. Resolve warnings or unchecked criteria according to project rules.
+8. Export only while the result is fresh.
+9. Save the project using the normal guarded save path.
+
+## 5.2 Run ownership and Abandon
+
+The Abandon action suppresses the pending result but does not forcibly terminate the Python worker. The application maintains exclusive execution ownership until the worker exits. This prevents a second run from overlapping the abandoned computation.
+
+> [!WARNING] Do not assume Abandon is an emergency thread kill. Wait for the application to report that the worker has finished before starting conflicting work.
+
+## 5.3 Strict JSON input boundary
+
+CleanroomX intentionally rejects permissive JSON constructs that could hide an engineering input error. Examples include malformed JSON, duplicate object keys at strict ingestion boundaries, and non-finite constants such as `NaN` and `Infinity`.
+
+A valid engineering input should be explicit, finite, unit-consistent, and traceable to its source.
+
+## 5.4 Cached results and freshness
+
+Before restoring a cached result, accepting a background run, or exporting a result/report, CleanroomX compares the recorded input identity with the current analysis kind and input. A mismatch invalidates the cached result.
+
+For file-backed workflows such as consistency and dossiers, referenced files are fingerprinted before and after the run. A changing or unstable dependency causes the result to be discarded rather than publishing mixed-revision evidence.
+
+# 6. Project Files, Persistence, Recovery, and Revisions
+
+## 6.1 Project document
+
+Desktop projects use schema `cleanroomx.project`, schema version 1. The document contains project metadata, analyses, an optional active analysis identifier, and optional spatial metadata.
+
+```text
 {
   "schema": "cleanroomx.project",
   "schema_version": 1,
   "application_version": "0.102.1",
-  "project": {
-    "name": "Example Facility",
-    "description": "Engineering screening model",
-    "metadata": {}
-  },
+  "project": {"name": "My Cleanroom", "metadata": {}},
   "analyses": [
-    {
-      "id": "verification",
-      "name": "Facility verification",
-      "kind": "project_verification",
-      "input": {}
-    }
+    {"id": "verification", "name": "Facility verification",
+     "kind": "project_verification", "input": {...}}
   ],
   "active_analysis_id": "verification"
 }
 ```
 
-## 4.2 Strict JSON boundary
+## 6.2 Save behavior
 
-CleanroomX rejects malformed JSON and non-finite constants such as `NaN`, `Infinity`, and `-Infinity`. Strict engineering loaders also reject duplicate object keys rather than silently using last-key-wins behavior.
+Project saves are validated and use atomic temporary-file replacement. When a saved project is opened, CleanroomX records a content revision. A normal Save is guarded so that an external edit, deletion, or replacement of the project file is not silently overwritten.
 
-Current-main project ingestion is bounded to 64 MiB. Saves use the same authority so CleanroomX does not intentionally create a normal project file it cannot reopen.
+If the project changed externally, use one of these controlled options:
 
-> [!WARNING] Do not repair engineering JSON with permissive tools without review
-> A permissive editor or script may silently normalize duplicate keys or non-standard numeric tokens. Use CleanroomX validation after any external edit.
+- Save Project As to preserve the current in-memory work under a new file; or
+- reopen the newer disk revision and intentionally reapply required changes.
 
-## 4.3 Additive-field preservation
+> [!STOP] Do not bypass an external-change save block by manually replacing the project file. The block exists to protect a newer source revision.
 
-Within schema version 1, unknown additive strict-JSON fields at the document, project, and analysis-record levels are preserved through open/edit/save cycles. CleanroomX-owned fields remain authoritative.
+## 6.3 Legacy migration
 
-This allows controlled extensions without silently deleting unknown metadata, while avoiding reinterpretation of data that the installed version does not understand.
+Supported legacy single-analysis shapes are migrated in memory. A migrated legacy file opens as an unsaved converted copy. The first new save must be Save Project As to a different path. CleanroomX intentionally does not create a reverse migration back into the older format.
 
-## 4.4 Guarded project saves
+## 6.4 Autosave and recovery
 
-Saved projects use atomic staging/replacement and external-write protection. CleanroomX records the stable revision opened or produced by the previous successful save. If another process changes, deletes, or replaces the project file, a normal save is blocked instead of silently overwriting the newer disk content.
+Recovery autosaves are separate from explicit project files. They do not overwrite the open `.cleanroomx.json` source. Recovery artifacts include project state, raw editor draft, application version, timestamp, project identity, and source-file fingerprint evidence.
 
-Recommended response to a save conflict:
+At startup, the Recovery Center can inspect available recovery state. Restore as Unsaved Copy preserves the original project and requires a new Save As destination.
 
-1. Do not retry by repeatedly clicking Save.
-2. Use **Save Project As** to preserve the current in-memory work under a different path, or reopen the disk version.
-3. Compare the two revisions under project change control.
-4. Re-run affected analyses after any reconciliation.
+> [!CONTROL] Recovery is a resilience mechanism, not a substitute for project backup, document control, or revision management.
 
-## 4.5 Legacy migration
+## 6.5 Undo/Redo and run history
 
-Supported legacy single-analysis shapes are migrated in memory. A migrated source opens as a protected unsaved copy. The first schema-v1 save must use a different destination, keeping the original legacy bytes available for comparison or rollback.
+Project-wide transactional Undo/Redo applies to design edits. Persistent run-history evidence and camera/view state are not treated as ordinary design edits. Completed runs are retained with input/provenance identity according to the application's run-history rules.
 
-## 4.6 Recovery autosave
+# 7. 2D and 3D Spatial Design
 
-Recovery artifacts are separate from explicit project files. The GUI uses debounced/periodic recovery checkpoints and never treats a recovery artifact as the authoritative project save.
+The 2D editor and 3D viewer share one canonical spatial model. There is no independent 3D geometry copy.
 
-Startup recovery supports inspection, restore-as-unsaved-copy, and explicit discard. Restored recovery data must be saved to a new explicit destination before it becomes a normal saved project.
+## 7.1 Spatial objects
 
-### Recovery decision table
-
-| Situation | Recommended action |
+| Object | Stored information |
 | --- | --- |
-| Source unchanged and recovery is newer | Inspect semantic differences, restore only if needed. |
-| Source changed externally | Keep both versions; do not overwrite automatically. |
-| Source missing | Restore as unsaved copy, then Save As. |
-| Recovery malformed/unreadable | Preserve artifact for investigation; do not guess contents. |
+| Floor | Stable ID, name, elevation, default ceiling height, metric units |
+| Room | Stable ID, X/Y, length, width, height, floor elevation, optional pressure, classification, analysis-room link |
+| Device/opening | Stable ID, type, room assignment, coordinates, dimensions, orientation; wall openings may include wall side and swing |
+| View | 2D/3D zoom and pan, azimuth/elevation, snap and visibility flags |
+| Sync baseline | Analysis identity, room mapping identity, and last synchronized dimensions |
 
-# 5. Desktop GUI - Standard Operating Procedure
+## 7.2 2D operations
 
-## 5.1 Normal operator sequence
+The workspace supports room creation, selection, move, resize, duplicate, delete, and property editing. Devices and openings can include doors, windows, generic openings, supply, return, exhaust, FFUs, equipment, sensors, and transfer openings.
 
-1. Create a new project or open an existing `.cleanroomx.json` project.
-2. Confirm the project name, description, path context, and active analysis.
-3. Add or select an analysis from the application catalog.
-4. Enter or import the strict JSON input.
-5. Choose **Validate** before execution.
-6. Correct all validation errors; do not bypass the parser by editing result files.
-7. Choose **Run** and wait for completion.
-8. Review result status, diagnostics/provenance, report, and any plots.
-9. Confirm the result is current for the active input.
-10. Export or hand off evidence only after review.
+A room move also moves devices assigned to that room. Room and device duplication generates new stable IDs. A full drag gesture is treated as one undo/redo transaction, and no-op drag releases are suppressed so they do not create unnecessary history or autosave changes.
 
-> [!QUALITY] Operator rule
-> Validation proves that the configured input is structurally acceptable to the selected workflow. It does not prove that the engineering assumptions are correct. Engineering review is still required.
+## 7.3 3D operations
 
-## 5.2 Run ownership and Abandon
+The pure-Tk 3D view projects the same canonical spatial model. It supports orbit, zoom, pan, reset, and fit-to-view operations. Fit derives the view from actual room floor/ceiling corners, including elevated rooms.
 
-The **Abandon** action suppresses the pending result but does not force-terminate the Python worker thread. CleanroomX keeps the run exclusive until the worker exits so an abandoned long computation cannot overlap a new backend run.
+## 7.4 Spatial integrity checks
 
-## 5.3 Result freshness
-
-Accepted completed results are bound to the canonical SHA-256 of the exact submitted analysis input. File-backed workflows also bind external dependency revisions.
-
-A result must be treated as stale when:
-
-- the analysis kind changes;
-- the input changes after the run;
-- a referenced engineering file changes or disappears;
-- a synchronized geometry update changes the engineering input;
-- a Save As operation changes path context and invalidates file-backed evidence.
-
-Stale results are rejected from cache restore/export at the application boundary.
-
-## 5.4 Review the four panes of evidence
-
-For every completed analysis, review more than the summary status.
-
-| Evidence area | Review question |
-| --- | --- |
-| Input | Are units, values, names, paths, and assumptions correct? |
-| Result JSON | What did the canonical workflow calculate and what status did it return? |
-| Diagnostics / provenance | Is the evidence fresh, deterministic, and bound to the intended inputs? |
-| Markdown / HTML report | Is the human-readable interpretation consistent with the JSON evidence and project boundary? |
-
-## 5.5 Recommended analysis naming
-
-Use stable names that identify system and purpose, for example:
-
-- `Process Suite - Project Verification`
-- `AHU-01 - HVAC Screening`
-- `Supply Network - Variable Friction`
-- `Process Pressure - Design Consistency`
-
-Avoid multiple analyses with identical display names. Stable IDs remain authoritative, but duplicate names create review ambiguity.
-
-# 6. Spatial Design Workspace
-
-## 6.1 Canonical 2D/3D model
-
-The 2D editor and 3D viewer use the same spatial layout object. There is no independent 3D geometry copy. A change made to the canonical room/device model is visible in both views.
-
-Stored spatial information includes:
-
-| Object | Key properties |
-| --- | --- |
-| Floor | stable ID, name, elevation, default ceiling height, metric units |
-| Room | stable ID, X/Y, length, width, height, floor elevation, pressure, classification, analysis link |
-| Device/opening | stable ID, type, room association, X/Y/Z, dimensions, orientation, wall metadata where applicable |
-| View state | zoom, pan, 3D azimuth/elevation, snap and visibility flags |
-| Sync baseline | analysis identity, mapping identity, last synchronized room dimensions |
-
-## 6.2 Supported device/opening types
-
-The current spatial model supports doors, windows, generic wall openings, supply diffusers, return grilles, exhaust grilles, FFUs, equipment, sensors, and transfer openings.
-
-Wall-opening records may carry width, height, wall side, orientation, and swing metadata.
-
-## 6.3 Editing procedure
-
-### Room creation and editing
-
-1. Open **Design 2D + 3D**.
-2. Create the room and assign a unique engineering-friendly name.
-3. Enter dimensions and floor elevation.
-4. Set classification text only when it represents an explicit project designation.
-5. Add an `analysis_room_name` link only when the engineering room mapping is known.
-6. Use **Validate** after geometry changes.
-
-### Room movement and resize
-
-- drag uses deterministic gesture-start coordinates;
-- snap-to-grid may be enabled or disabled;
-- a completed drag is one undo/redo transaction;
-- assigned devices move with room translation;
-- a no-op drag does not dirty the project or schedule autosave.
-
-### Duplication
-
-A duplicated room receives new stable IDs and a unique name. Its assigned devices are copied with new IDs, but stored pressure, engineering room link, and synchronization baseline are deliberately not copied.
-
-This prevents a copied geometry object from inheriting evidence or mapping identity that belongs to the original room.
-
-## 6.4 3D navigation
-
-The 3D view supports zoom, pan, reset, fit, azimuth change, elevation change, and Shift+left-drag orbit. **Fit** evaluates real floor and ceiling geometry rather than only resetting zoom.
-
-## 6.5 Spatial validation
-
-Spatial checks include:
+Spatial validation detects conditions such as:
 
 - non-finite or non-positive dimensions;
-- duplicate IDs and duplicate room names;
+- duplicate stable IDs or room names;
 - overlapping room footprints;
-- orphan or unassigned devices;
-- devices outside their assigned rooms;
-- invalid device elevation;
-- dangling room references;
-- unsupported device types and malformed view flags.
+- dangling room references and orphan devices;
+- devices outside assigned rooms or above valid elevation;
+- unsupported device types or malformed view flags.
 
-> [!NOTE] Spatial validation scope
-> These checks prove internal model integrity. They do not calculate airflow fields, contamination transport, constructability, fire/life-safety compliance, or regulatory cleanroom certification.
+> [!WARNING] Passing spatial validation means the internal model is geometrically and structurally consistent. It does not establish airflow performance, cleanroom classification, fire/life-safety compliance, or constructability.
 
-# 7. Spatial to Engineering Synchronization
+# 8. Spatial-Engineering Synchronization
 
-## 7.1 Synchronization boundary
+Spatial geometry and engineering analysis inputs are deliberately separated. Synchronization is explicit rather than automatic.
 
-[DIAGRAM:sync|Figure 7-1. CleanroomX synchronizes shared room dimensions without silently transferring engineering evidence.]
+## 8.1 Push and Pull
 
-Spatial and engineering models intentionally remain separate. For supported verification workflows, push and pull operations synchronize only room length, width, and height.
+Use Push to analysis when spatial geometry is authoritative. Use Pull from analysis when engineering room geometry is authoritative. For room and project verification workflows, synchronization is dimension-focused and uses explicit room mappings.
 
-- spatial X/Y placement is preserved by pulls;
-- observed pressure is not copied from spatial data into engineering input;
-- fresh verification pressure may be projected into the visual workspace without being persisted into geometry;
-- all mappings are preflighted before mutation;
-- prior results are invalidated after a real input change.
+Pull preserves the spatial X/Y placement. Engineering evidence such as a solved pressure is not silently written into geometry. Fresh verification pressure may be visualized without becoming part of the canonical spatial geometry state.
 
-## 7.2 Synchronization states
+## 8.2 Synchronization states
 
-| State | Engineering interpretation |
+| State | Meaning |
 | --- | --- |
-| synchronized | Shared dimensions match the persisted synchronization baseline. |
-| geometry newer | Baseline proves geometry changed since last synchronization. |
-| engineering newer | Baseline proves engineering geometry changed since last synchronization. |
-| conflicting | Both sides differ, or provenance is insufficient to decide which is authoritative. |
+| synchronized | Mapped room dimensions match the persisted synchronization baseline. |
+| geometry newer | The spatial dimensions changed since the last synchronized baseline. |
+| engineering newer | The engineering dimensions changed since the last synchronized baseline. |
+| conflicting | Both sides differ or provenance is insufficient to prove which side is newer. |
 | unmapped | No valid explicit room mapping exists. |
 
-## 7.3 Recommended conflict procedure
+> [!CONTROL] Resolve conflicting and unmapped states before issuing geometry-dependent engineering results. Synchronization is preflighted before mutation so an invalid later mapping cannot intentionally leave a partial update.
 
-1. Stop before pushing or pulling.
-2. Identify the authoritative source for the current change.
-3. Review room identity, name mapping, and dimensions.
-4. Resolve any duplicate or missing mappings.
-5. Apply one direction only.
-6. Revalidate the project.
-7. Re-run affected analyses.
-8. Record the reason for the reconciliation in project change control if the project is controlled.
-
-> [!WARNING] Do not use synchronization as a merge engine
-> Synchronization is an explicit authority transfer for shared dimensions. It is not a generic two-way merge for engineering criteria, results, pressure evidence, or project requirements.
-
-# 8. BIM / IFC Interoperability
-
-## 8.1 Purpose
-
-The BIM/IFC bridge converts supported IFC semantics into the existing CleanroomX spatial contract and records provenance linking the spatial layout to the original IFC source and normalized semantic content.
-
-Native `.ifc` ingestion requires IfcOpenShell. The base CleanroomX installation can still consume normalized semantic records supplied by another integration.
-
-## 8.2 Current mapping scope
-
-| IFC entity / concept | CleanroomX behavior |
-| --- | --- |
-| `IfcSpace` | Room |
-| `IfcDoor` | Door |
-| `IfcWindow` | Window |
-| Explicit `IfcAirTerminal` semantic role | Supply / return / exhaust where role is explicit |
-| Generic `IfcFlowTerminal` | Equipment; no inferred HVAC airflow role |
-| `IfcSensor` | Sensor |
-| Flow controller, unitary equipment, fan, pump, furnishing element | Equipment |
-| `IfcBuildingStorey` | Storey identity/elevation; single common storey may populate active floor metadata |
-| `CleanroomX_Space` custom property set | Explicit `Classification` and `AnalysisRoomName` only |
-
-## 8.3 Geometry fidelity boundary
-
-The current spatial contract is axis-aligned. Native import supports representable rectangular `IfcSpace` geometry, including 0/90/180/270 degree plan rotations. Arbitrary-angle, tilted, reflected, skewed, incomplete, or non-rectangular room geometry is rejected rather than converted to a misleading bounding box.
-
-Space dimension provenance records whether dimensions came from explicit IFC quantities or the verified IfcOpenShell rectangular-prism fallback.
-
-## 8.4 Initial import SOP
-
-GUI route: **BIM -> Import IFC Spatial Layout...**
-
-1. Select the IFC file.
-2. Review the preview showing source filename, extracted room/device counts, and source SHA-256.
-3. Confirm that the selected file is the intended project revision.
-4. If an existing unlinked spatial layout will be replaced, review the replacement warning carefully.
-5. Confirm import.
-6. CleanroomX re-extracts the IFC and requires the source and semantic SHA-256 values to match the reviewed candidate before mutation.
-7. Save the project explicitly after reviewing the imported layout.
-8. Do not assume engineering inputs were synchronized; IFC import updates spatial state only.
-
-CLI:
-
-```bash
-cleanroomx-ifc import project.cleanroomx.json facility.ifc
-```
-
-## 8.5 Re-import SOP
-
-Read-only review:
-
-```bash
-cleanroomx-ifc plan project.cleanroomx.json facility-v2.ifc
-```
-
-Apply conflict-free re-import:
-
-```bash
-cleanroomx-ifc reimport project.cleanroomx.json facility-v2.ifc
-```
-
-The planner classifies unchanged, source-only, local-only, converged, added, removed, and conflicting changes. Two-sided divergent edits are blocked.
-
-> [!QUALITY] Re-import release gate
-> Apply only a conflict-free reviewed plan. After applying, validate the spatial model, review room identity, and then explicitly synchronize engineering dimensions if the IFC revision is intended to become authoritative for engineering geometry.
-
-## 8.6 IFC resource and source-stability guards
-
-Current main caps native IFC source files at 512 MiB before parsing and enforces the ceiling again while streaming source SHA-256. The source is hashed before and after extraction; changed or disappearing sources are rejected.
-
-This is a provenance/resource safety control, not an engineering acceptance criterion.
+# PART III - ENGINEERING ANALYSIS WORKFLOWS
 
 # 9. Room and Project Verification
 
-## 9.1 Room volume
+## 9.1 Room volume and ACH
 
-The geometric room volume is:
+Room volume:
 
 ```text
 V = length * width * height
 ```
 
-Dimensions are in metres and volume is in m3.
-
-## 9.2 Nominal supply ACH
+Nominal supply air changes per hour:
 
 ```text
-ACH = supply_airflow_m3_h / room_volume_m3
+ACH = supply_airflow_m3_h / V
 ```
 
-ACH is a nominal supply-air change rate. It is not an airflow pattern or contaminant-distribution calculation.
+The calculation uses geometric room volume and the supplied airflow. The engineer is responsible for whether the supplied airflow and room volume are appropriate for the project criterion being checked.
 
-## 9.3 Particle requirements
+## 9.2 Multi-room pressure cascade
 
-Room verification can compare observed particle concentration against explicit configured maximum values. CleanroomX does not generate a classification limit from the room's free-text classification field.
+A project can include explicit pressure-cascade relationships. CleanroomX evaluates supplied observations and criteria; it does not fabricate a missing room pressure.
 
-For controlled work, record the source of every particle criterion in the project requirements or compliance evidence.
-
-## 9.4 Observed pressure and pressure cascade
-
-Project verification can compare explicit observed room pressures using configured relationships such as:
-
-```json
-{
-  "higher_pressure_room": "Process",
-  "lower_pressure_room": "Preparation",
-  "min_delta_pa": 10
-}
+```text
+"pressure_cascade": [
+  {"higher_pressure_room": "Process",
+   "lower_pressure_room": "Preparation",
+   "min_delta_pa": 10}
+]
 ```
 
-CleanroomX evaluates the configured relation from explicit evidence. Missing room pressure remains unavailable; it is not invented.
-
-## 9.5 Aggregate result semantics
+## 9.3 Aggregate verification states
 
 | Status | Meaning |
 | --- | --- |
-| `fail` | At least one evaluated finding fails. |
-| `pass_with_unchecked` | No evaluated finding fails, but unresolved/unconfigured evidence remains. |
-| `pass` | Every included finding is evaluated and passing. |
-| `not_checked` | Nothing in the aggregate was evaluated. |
+| fail | At least one evaluated finding fails. |
+| pass_with_unchecked | No evaluated finding fails, but at least one configured criterion remains unchecked. |
+| pass | Every included finding is evaluated and passing. |
+| not_checked | Nothing in the aggregate was evaluated. |
 
-The historical `passed` boolean is a backward-compatible no-failure predicate. For release decisions, use `status` together with `complete`.
+> [!CONTROL] Use `status` together with completeness. A no-failure boolean alone is not sufficient evidence that every required check was performed.
 
-## 9.6 Worked demonstration from the packaged project
+# 10. Particle Decay and Recovery
 
-The packaged demonstration uses a Process room of 6 m x 5 m x 3 m with 2700 m3/h supply airflow.
+## 10.1 First-order screening model
 
-```text
-Volume = 6 * 5 * 3 = 90 m3
-ACH    = 2700 / 90 = 30 1/h
-```
-
-The demonstration pressure relationship Process -> Preparation uses observed pressures 30 Pa and 16 Pa with a configured minimum delta of 10 Pa.
-
-```text
-Observed delta = 30 - 16 = 14 Pa
-Configured minimum = 10 Pa
-Result = pass for this configured demonstration criterion
-```
-
-> [!NOTE] Demonstration values are not design recommendations
-> The values above come from the repository demo and are included only to explain software operation. They are not universal cleanroom requirements.
-
-# 10. Particle Decay and Recovery Qualification
-
-## 10.1 First-order decay model
-
-CleanroomX includes a well-mixed first-order particle-removal screening model:
+Particle concentration decay:
 
 ```text
 C(t) = C0 * exp(-(ACH/60) * eta * t)
 ```
 
-where:
-
-- `C0` is initial concentration;
-- `C(t)` is concentration after time `t`;
-- `ACH` is air changes per hour;
-- `eta` is effective single-pass removal fraction;
-- `t` is time in minutes.
-
-## 10.2 Recovery time
+Recovery time to a target concentration:
 
 ```text
 t = ln(C0 / Ctarget) / ((ACH/60) * eta)
 ```
 
-If the target is greater than or equal to the initial concentration, the implemented screening function returns 0 minutes.
+where `t` is in minutes when ACH is in 1/h and `eta` is the effective single-pass removal fraction.
 
-## 10.3 What the screening model does not include
-
-The simple decay model does not resolve:
-
-- active particle sources;
-- non-uniform mixing;
-- local recirculation;
-- deposition;
-- door-opening transients;
-- leakage transport;
-- room-scale velocity fields;
-- CFD effects.
-
-## 10.4 Measured recovery workflow
-
-The dedicated recovery-test workflow evaluates time-series particle samples against an explicit target concentration and optional maximum recovery time. The result can retain instrument ID, sample location, occupancy state, and provenance.
-
-Use measured recovery data for qualification evidence where required by the project. Do not replace required testing with the theoretical decay screening calculation.
-
-# 11. Psychrometrics, Thermal Loads, and HVAC Screening
-
-## 11.1 Airflow balance
-
-For each room, steady-state net surplus is:
+The CLI includes direct screening commands:
 
 ```text
-net surplus = supply + transfer in - return - exhaust - transfer out
-surplus margin = net surplus - minimum required surplus
+cleanroomx decay --initial 1000000 --ach 30 --minutes 10 --efficiency 1.0
+cleanroomx recovery --initial 1000000 --target 100000 --ach 30 --efficiency 1.0
 ```
 
-A positive net surplus represents airflow available for exfiltration or another unmodeled outflow. A negative value means another inflow would be required to close the steady-state balance.
+## 10.2 Observed recovery qualification
 
-CleanroomX does not convert airflow surplus directly into room pressure because pressure requires an explicit leakage/opening flow-pressure model or measured relationship.
+The dedicated recovery-test workflow can evaluate measured time-series samples against a target concentration and optional maximum recovery time. Instrument identity, sample location, occupancy state, and provenance can remain visible in the result/report.
 
-## 11.2 Preliminary supply-fan duty
+> [!WARNING] The simple decay equation is not CFD. It does not model active particle sources, deposition, leakage, imperfect mixing, local recirculation, or detailed room-scale velocity fields.
 
-Total static pressure:
+# 11. Psychrometrics, Thermal, and HVAC
+
+## 11.1 Steady room airflow balance
+
+```text
+net_surplus = supply + transfer_in - return - exhaust - transfer_out
+surplus_margin = net_surplus - minimum_required_surplus
+```
+
+A positive surplus represents airflow available for exfiltration or another unmodeled outflow path. A negative result implies infiltration or another unmodeled inflow is required to close the balance.
+
+## 11.2 Preliminary fan duty
 
 ```text
 P_static = P_duct + P_coil + P_terminal_filter + P_other
-```
-
-Air, shaft, and estimated electrical power:
-
-```text
-Q_m3_s = airflow_m3_h / 3600
-air_power_W = Q_m3_s * P_static
+Q_s = airflow_m3_h / 3600
+air_power_W = Q_s * P_static
 shaft_power_W = air_power_W / fan_efficiency
 electrical_input_W = shaft_power_W / motor_efficiency
 ```
 
-The workflow is preliminary steady-state screening. System effect, dirty-filter allowance, VFD/control losses, altitude correction, redundancy, acoustic acceptance, and final manufacturer selection remain external responsibilities.
+> [!WARNING] This is preliminary steady-state sizing. System effect, dirty-filter allowance, VFD/control losses, altitude correction, acoustic limits, motor service factor, and final manufacturer selection are not automatically inferred.
 
-## 11.3 Psychrometric uncertainty
+## 11.3 Thermal and psychrometric uncertainty
 
-For uncertain air states, CleanroomX evaluates endpoint combinations of dry-bulb temperature, relative humidity, and pressure. It reports conservative intervals for humidity ratio, enthalpy, specific volume, and dew point.
+The bounded uncertainty workflows evaluate endpoint combinations of configured uncertain inputs and report result intervals. Capacity decisions distinguish pass, fail, indeterminate, and not-checked conditions rather than converting an overlapping uncertainty interval into a false pass.
 
-This avoids assuming monotonic behavior of every derived psychrometric quantity over the supplied uncertainty interval.
-
-## 11.4 Thermal uncertainty
-
-Cooling and heating requirement intervals are derived from the complete net-load interval and configured margin:
-
-```text
-Q_cool = max(Q_net, 0) * margin_multiplier
-Q_heat = max(-Q_net, 0) * margin_multiplier
-```
-
-Capacity result semantics:
-
-| Status | Capacity interpretation |
-| --- | --- |
-| pass | Available capacity covers the complete requirement interval. |
-| fail | Complete requirement interval is above available capacity. |
-| indeterminate | Available capacity lies inside the requirement interval. |
-| not_checked | No available capacity is configured. |
-
-Current numerical-integrity work keeps governing airflow and capacity verdicts on full-precision calculation state, with rounding only at the reporting boundary.
+> [!CONTROL] An `indeterminate` result means the evaluated interval crosses the decision boundary. It requires engineering disposition; it is not equivalent to pass.
 
 # 12. Duct, Branch, and Looped Airflow Networks
 
-## 12.1 Duct section model
+CleanroomX includes duct pressure-loss analysis, passive parallel/branch solving, fixed-resistance loop solving, and variable-friction loop workflows.
 
-For a duct section:
+## 12.1 Duct-loss review points
 
-```text
-velocity pressure = 0.5 * rho * velocity^2
-friction loss = f * (L / Dh) * velocity pressure
-local loss = K * velocity pressure
-total section loss = friction loss + local loss
-```
+Before accepting a duct result, verify:
 
-For a rectangular duct:
+- geometry and cross-section units;
+- airflow and density assumptions;
+- friction factor or roughness method used by the selected workflow;
+- local-loss coefficients and their source;
+- equipment pressure drops entered separately from duct friction;
+- critical-path selection;
+- whether the result represents clean or dirty filter condition as required by the project.
 
-```text
-Dh = 2 * width * height / (width + height)
-```
+## 12.2 Network convergence
 
-Friction factor may be supplied explicitly or calculated from explicit roughness and kinematic viscosity at the section airflow.
+Loop and nonlinear network workflows may fail to converge when the graph, boundary conditions, or numerical assumptions are invalid or ill-conditioned.
 
-## 12.2 Duct-path review checklist
+> [!STOP] Non-convergence must never be reported as a solved state. Review graph connectivity, balanced node injections, positive resistances, boundary conditions, and numerical controls before rerunning.
 
-Before relying on a path result, confirm:
+# 13. Fan Curves, Operating Point, Speed Studies, and Network Composition
 
-- airflow is the intended design case;
-- density is appropriate for the intended screening basis;
-- duct geometry and units are correct;
-- friction-factor method is documented;
-- local-loss coefficient includes the intended fittings only;
-- path sections represent the actual critical path being reviewed.
+Fan workflows use supplied fan data and system/network calculations to locate an operating point within the supported data range.
 
-## 12.3 Fixed-demand branch network
+## 13.1 No extrapolation boundary
 
-The branch solver uses mass continuity from explicit fixed terminal demands in a directed tree, then evaluates pressure loss through the duct model. It does not infer pressure-driven terminal flow or balance a looped network.
+When the supplied fan and system curves do not cross within the supplied range, the workflow reports that no supported intersection exists rather than extrapolating a solution.
 
-Use the loop solver when topology contains loops or parallel paths that require pressure-driven redistribution.
+> [!CONTROL] A `no_intersection_in_supplied_range` result means the engineering data do not support an operating point in the supplied range. Extend or replace the manufacturer curve only from an authorized source; do not invent points to force an intersection.
 
-## 12.4 Looped network model
+## 13.2 Speed studies
 
-Every fixed-resistance edge uses:
+Speed studies use the implemented affinity-law relationships and preserve numerical provenance around the supplied curve and selected operating state. Review whether the equipment and control system are permitted to operate across the requested speed range.
 
-```text
-Delta P = R * Q * abs(Q)
-```
+## 13.3 Fan plus network workflows
 
-where `Q` is signed airflow in m3/s and `R` is Pa/(m3/s)^2.
+CleanroomX can compose a fan with passive networks, looped networks, variable-friction networks, and uncertainty studies. Treat the composed result as a coupled engineering calculation: changing either the fan data or the network model invalidates the operating state.
 
-A geometry-derived fixed resistance is:
+# 14. Pressure / Leakage Network
+
+> [!MAIN] The room pressure/leakage network is documented from the later `main` snapshot and is not part of the tagged v0.102.1 production baseline. Use only under your approved development-snapshot procedure.
+
+The pressure-network workflow solves room/node pressures against fixed references, mechanical injections/extractions, and configured leakage paths. Power-law leakage relationships require explicit coefficients and exponents supplied by the project engineer.
+
+A representative single-path relationship is:
 
 ```text
-R = 0.5 * rho * (f * L / Dh + K) / A^2
+Q = C * (deltaP)^n
 ```
 
-Node injections must balance to zero. One reference node is assigned 0 Pa; changing the pressure reference changes the offset but not solved edge flows.
+For signed networks the implementation handles flow direction according to the configured pressure difference and path model. The user must provide realistic leakage parameters and a physically meaningful connected network.
 
-## 12.5 Numerical method
+## 14.1 Review checklist
 
-The loop solver validates topology, resistance, and balanced injections, constructs an initial pressure state, then solves nonlinear node continuity with damped Newton iteration. Result evidence includes node mass-balance residuals and edge pressure-law residuals.
+- Every network component has a stable identity.
+- At least one valid fixed-pressure reference or equivalent boundary is present as required by the model.
+- Mechanical injection/extraction is intentionally defined.
+- Leakage coefficients, exponents, areas, and offsets are traceable to project assumptions or measurements.
+- Solver convergence is confirmed.
+- Calculated pressure differences are compared to explicit project targets through the appropriate consistency workflow when needed.
 
-Non-convergence raises an error rather than returning a false solved state.
+# 15. Uncertainty, Qualification, and Numerical Precision
 
-# 13. Room Pressure / Leakage Network - Current Main
+CleanroomX uncertainty workflows are deterministic engineering screening tools. They are not a substitute for a full statistical uncertainty analysis unless the configured model and organizational method establish that equivalence.
 
-## 13.1 Purpose
+## 15.1 Presentation versus calculation precision
 
-The room pressure network is a steady-state multizone pressure solver for explicit mechanical airflows and pressure-dependent leakage/opening paths.
+The software keeps canonical calculation state at full precision and rounds only presentation fields where designed. This is important for coupled workflows because a value displayed to a few decimals should not become the internal basis for a subsequent calculation.
 
-[DIAGRAM:pressure|Figure 13-1. Simplified pressure-network concept.]
+## 15.2 Measurement uncertainty
 
-At least one fixed-pressure node is required. Every unknown-pressure node must connect through configured pressure paths to a fixed-pressure boundary.
+If a decision depends on measured data, uncertainty information must come from the measurement system, calibration, sampling method, or approved engineering procedure. CleanroomX does not manufacture an uncertainty percentage when none has been supplied.
 
-## 13.2 Mechanical injection
+> [!WARNING] Software numerical precision and physical measurement uncertainty are different concepts. A numerically stable result does not prove that the field measurement or input assumption is accurate.
+
+# PART IV - ASSURANCE, EVIDENCE, BIM, AND HANDOFF
+
+# 16. Design Foundation, Consistency, and Design Assurance
+
+> [!MAIN] Design foundation, pressure-design consistency, compliance rule packs, and design-assurance orchestration are later `main` snapshot features. They are not part of the tagged v0.102.1 baseline.
+
+The design-assurance workflow is read-only orchestration over existing evidence-producing services. It does not introduce a second HVAC solver or invent a standards limit.
+
+A typical assurance package can combine:
+
+1. canonical design-consistency evidence;
+2. optional explicit pressure-design consistency; and
+3. one or more versioned compliance rule-pack evaluations.
+
+## 16.1 Compliance rule-pack policy
+
+Rule packs record explicit identity, version, source/reference, evidence paths, evaluation status, and a canonical SHA-256 digest. They do not grant authority to copyrighted or proprietary requirements.
+
+> [!CONTROL] Criteria must come from authorized, public, licensed, or user-entered project sources. CleanroomX does not ship proprietary standards clauses or infer universal cleanroom limits.
+
+## 16.2 Assurance snapshots
+
+Design-assurance snapshots are intended to freeze and independently verify evidence identity. Use them to preserve the exact source bytes, normalized result, traceability digests, and replay information supported by the workflow.
+
+A typical command sequence is:
 
 ```text
-mechanical injection = supply - return - exhaust
-```
-
-The solver forms mass-balance equations around the explicit mechanical injections and pressure-driven path flows.
-
-## 13.3 Power-law path
-
-```text
-Q = C * sign(Delta P) * |Delta P|^n
-```
-
-CleanroomX accepts user-supplied exponents from 0.5 to 1.0. The coefficient and exponent are project inputs; the software does not infer them from a door/opening label.
-
-## 13.4 Orifice path
-
-```text
-Q = Cd * A * sign(Delta P) * sqrt(2 * |Delta P| / rho)
-```
-
-`Cd`, opening area, and air density are explicit inputs.
-
-## 13.5 Near-zero regularization
-
-Each path has an explicit `linearization_pressure_pa`. Near zero pressure difference, CleanroomX uses a linear continuation matched to the configured nonlinear law at the transition pressure so the Newton derivative remains usable.
-
-## 13.6 Pressure targets
-
-A target may define a high node, low node, minimum differential pressure, and optional maximum differential pressure. A physical network solve can succeed even if a target fails; the result becomes `solved_with_target_violations` rather than being collapsed into success.
-
-## 13.7 Worked pressure-network demonstration
-
-The repository demonstration uses a Process node supplying 540 m3/h to a leakage path with `C = 0.01 m3/s/Pa^n`, `n = 1`, and a Corridor fixed at 0 Pa.
-
-```text
-540 m3/h = 0.15 m3/s
-Q = C * Delta P  (because n = 1)
-Delta P = Q / C = 0.15 / 0.01 = 15 Pa
-```
-
-This exactly illustrates the configured demo inputs. Real leakage coefficients must come from project-specific engineering data, measurements, product information, or documented assumptions.
-
-# 14. Fan/System Studies and Network Coupling
-
-## 14.1 Supplied fan-curve operating point
-
-CleanroomX accepts two or more supplied fan performance points. Airflow must be strictly increasing and pressure non-increasing. The fan curve is piecewise-linearly interpolated only between supplied points.
-
-The system curve is:
-
-```text
-Delta P_system = Delta P_fixed + R * Q^2
-```
-
-The operating point is the bounded intersection between the supplied fan curve and the explicit system curve.
-
-If no intersection exists inside the supplied fan range, CleanroomX returns `no_intersection_in_supplied_range` rather than extrapolating.
-
-## 14.2 Fan curve review questions
-
-- Is the curve from the intended fan, speed, air density, and configuration?
-- Are the curve points within the manufacturer's validated range?
-- Does the project require correction for density, system effect, filter loading, or accessories?
-- Is the operating point away from manufacturer-prohibited regions?
-- Are shaft, motor, and drive limits reviewed outside CleanroomX where required?
-
-## 14.3 Fan speed studies
-
-Affinity-law transformations are applied only to the supplied reference points. The tool does not infer an acceptable VFD range, motor limit, stall/surge boundary, or manufacturer-approved operating envelope.
-
-Reported `Q * Delta P` is fluid air power. It is not electrical input power unless explicit efficiency models support that calculation.
-
-## 14.4 Fan-network and fan-loop integrations
-
-CleanroomX can couple a bounded fan operating point with passive network calculations and nonlinear loop/variable-friction models. Current numerical hardening keeps the operating root and downstream network state at full precision rather than reusing rounded public display values.
-
-This matters when an explicit project tolerance is finer than the display precision.
-
-## 14.5 Pending PR #595 at manual cutoff
-
-PR #595 proposes using the canonical full-precision standalone fan root in HVAC/fan cross-study consistency when the dossier owns the fan study. CI run #1928 passed on the PR head, but the PR was not part of the engineering baseline used for this manual.
-
-> [!WARNING] Pending capability
-> Do not claim PR #595 behavior on the baseline identified in Section 1 until it is merged and the project is run on a commit that contains it.
-
-# 15. Variable Friction, Damper Scenarios, and Numerical Integrity
-
-## 15.1 Variable-friction loop workflow
-
-Automatic-friction edges can be iterated using solved branch flow. Each outer iteration:
-
-1. solves the complete loop network with current edge resistances;
-2. reads the full-precision solved airflow of each automatic-friction edge;
-3. recomputes Reynolds number and Darcy friction;
-4. derives target resistance;
-5. optionally relaxes the update;
-6. repeats until resistance closure is within the configured tolerance.
-
-Directly supplied resistance and geometry-derived resistance with user-supplied Darcy factor remain fixed.
-
-## 15.2 Near-zero flow handling
-
-Reynolds-based friction is undefined at zero velocity. If an automatic-friction edge solves at or below the configured near-zero airflow threshold, its previous resistance is retained and the edge is identified as frozen near zero flow.
-
-Current main applies this classification using full-precision edge flow, not the rounded public result.
-
-## 15.3 Damper-resistance scenario studies
-
-A damper case applies explicit resistance multipliers:
-
-```text
-R_case = multiplier * R_base
-```
-
-The multiplier is not derived from actuator position or blade angle. The operator must supply resistance multipliers from an appropriate engineering basis.
-
-Airflow redistribution metrics are calculated from canonical full-precision loop state. Rounded edge values are presentation only.
-
-## 15.4 Why full precision matters
-
-CleanroomX deliberately separates calculation state from presentation state. Rounding is appropriate for human-readable output, but it must not become a new engineering input when:
-
-- a threshold lies near a display rounding boundary;
-- two study results are compared with a fine tolerance;
-- uncertainty envelopes are composed from multiple calculations;
-- a verdict is reproduced from ProofGraph evidence;
-- a nonlinear solver feeds another solver.
-
-This is the core meaning of the recent numerical-integrity hardening on current main.
-
-# 16. Design Requirements, Consistency, Compliance, and Assurance - Current Main
-
-## 16.1 Design requirements
-
-The design-requirements workflow converts explicit room requirements and selected project/reference profiles into structured targets with provenance.
-
-Room-level inputs may include:
-
-- dimensions;
-- minimum ACH;
-- temperature/RH range;
-- pressure target;
-- recovery target;
-- filtration requirement;
-- intended process;
-- occupancy and sensible-load inputs;
-- contamination assumptions;
-- operating mode;
-- supply/return strategy.
-
-Reference profiles are project data. They are not hard-coded regulatory standards.
-
-## 16.2 Preliminary air-system design
-
-The air-system workflow evaluates explicit drivers including minimum ACH, sensible-load airflow, outdoor airflow, exhaust/transfer balance, and minimum surplus.
-
-Balance sizing driver:
-
-```text
-max(0, exhaust + transfer_out + minimum_surplus - transfer_in)
-```
-
-The largest evaluated driver becomes the governing preliminary supply airflow. Capacity-based counts for user-supplied FFUs and terminals may be reported.
-
-## 16.3 Design consistency
-
-`design_consistency` compares only shared explicit quantities represented on both sides, including room-set identity, dimensions, minimum ACH, ACH-derived airflow, explicit sensible load, and room temperature against the configured range.
-
-Every numeric comparison uses an explicit absolute tolerance. Missing requirement evidence remains `not_checked`; it is not promoted to PASS.
-
-The workflow deliberately does not infer pressure mappings, filtration semantics, contamination control, or regulatory requirements.
-
-## 16.4 Pressure design consistency
-
-`pressure_design_consistency` compares a room's configured signed pressure target with an explicitly mapped network node-to-reference pressure difference:
-
-```text
-observed_delta_pa = pressure(node) - pressure(reference_node)
-```
-
-Mappings and tolerance are explicit. Reference rooms are not inferred.
-
-## 16.5 Compliance rule packs
-
-Compliance rule packs bind explicit criteria to supplied evidence. They retain rule-pack identity/version, source/reference, criteria digest, evidence digest, expected/actual values, tolerance, and result.
-
-Rule packs are only as complete and authoritative as the project makes them. CleanroomX does not claim that a supplied rule pack fully represents a standard.
-
-## 16.6 Design assurance matrix
-
-`design_assurance` composes:
-
-1. one canonical design-consistency result;
-2. optional pressure-design consistency;
-3. one or more versioned compliance checks.
-
-Aggregate semantics:
-
-- `fail` if any component fails;
-- `not_checked` only when every component is entirely not checked;
-- `pass_with_unchecked` when no component fails but unresolved evidence remains;
-- `pass` only when every component is complete and passes.
-
-The matrix also records a deterministic traceability digest over its component evidence.
-
-# 17. ProofGraph Evidence Model - Current Main
-
-## 17.1 Purpose
-
-ProofGraph is a GUI-independent evidence model for requirement-to-evidence-to-verdict traceability. It is not a second engineering solver.
-
-[DIAGRAM:evidence|Figure 17-1. Requirement-to-evidence chain used by assurance and ProofGraph integrations.]
-
-## 17.2 Core objects
-
-ProofGraph schema v1 defines typed records for requirements, evidence sources, evidence layers, provenance, confidence, compliance checks, findings, verdicts, corrective actions, verification runs, and the complete graph.
-
-Evidence layers include design, calculation, simulation, commissioning, operational, and neutral declared evidence.
-
-## 17.3 Fail-closed structural rules
-
-Current main rejects, among other conditions:
-
-- dangling references;
-- finding/check requirement mismatches;
-- finding evidence not declared by its check;
-- verdicts referencing findings for another requirement;
-- provenance dependency cycles;
-- reused provenance IDs across the graph;
-- conflicting explicit project IDs;
-- single-finding verdict status that disagrees with the finding;- verification runs with hidden out-of-run dependencies;
-- verification runs that declare checks without any outcome;
-- PASS findings without supporting evidence;
-- PASS findings missing required evidence kinds.
-
-These controls prevent a structurally valid JSON object from misrepresenting the evidence relationship.
-
-## 17.4 Verdict states
-
-ProofGraph v1 uses:
-
-- `pass`
-- `warning`
-- `fail`
-- `unknown`
-- `indeterminate`
-- `not_checked`
-
-None of `unknown`, `indeterminate`, or `not_checked` is equivalent to PASS.
-
-## 17.5 Corrective actions
-
-Corrective actions are modeled but must retain `requires_approval=true`. ProofGraph does not automatically apply engineering changes.
-
-## 17.6 Evidence integrations
-
-Current-main adapters include compliance rule packs, pressure design consistency, IFC design evidence, ACH design evidence, airflow-balance evidence, and thermal uncertainty capacity evidence.
-
-The adapters preserve canonical source semantics; they do not rerun engineering through a separate implementation.
-
-# 18. Reporting, Bundles, Snapshots, Batch, and Diagnostics
-
-## 18.1 Portable HTML engineering report
-
-The desktop can export the currently selected fresh completed analysis as a self-contained HTML report. The report includes project/analysis identity, exact submitted input, normalized result, diagnostics/provenance, backend Markdown report, and an embedded machine-readable payload with deterministic SHA-256.
-
-The report does not invoke the solver during generation. It refuses stale analysis evidence.
-
-## 18.2 Portable project bundle
-
-Portable bundles use `.cleanroomx.zip` and include:
-
-- `manifest.json`;
-- `project.cleanroomx.json`;
-- deduplicated external dependencies registered by the application layer.
-
-Example CLI:
-
-```bash
-cleanroomx-project-bundle export project.cleanroomx.json review.cleanroomx.zip
-cleanroomx-project-bundle verify review.cleanroomx.zip
-cleanroomx-project-bundle extract review.cleanroomx.zip ./review
-```
-
-Bundle verification rejects unsafe archive paths, undeclared members, integrity mismatch, unsupported schemas, encryption, unsafe compression, and configured resource-limit violations.
-
-## 18.3 Design assurance snapshot
-
-```bash
 cleanroomx-assurance-snapshot create examples/design_assurance_demo.json design_assurance.snapshot.json
 cleanroomx-assurance-snapshot verify design_assurance.snapshot.json
 ```
 
-A snapshot freezes exact source bytes, normalized result, result digest, traceability digest, producing version, and whole-artifact digest. Verification replays the embedded source through the canonical assurance service.
+# 17. ProofGraph Evidence Model
 
-SHA-256 proves content identity/integrity, not signer identity or source authority.
+> [!MAIN] ProofGraph schema version 1 is a later `main` snapshot evidence foundation and is not part of the tagged v0.102.1 production baseline.
 
-## 18.4 Deterministic project batch execution
+ProofGraph is a GUI-independent evidence and traceability model. It is not a second engineering solver.
 
-```bash
-cleanroomx-project-run project.cleanroomx.json
+## 17.1 Core evidence objects
+
+The model includes requirements, evidence sources, evidence records, design/calculation/simulation/commissioning/operational evidence layers, provenance records, confidence records, compliance checks, findings, verdicts, corrective actions, verification runs, and the ProofGraph container.
+
+Cross-record references fail closed. Dangling references are rejected. Evidence provenance must remain acyclic. Reusing a provenance record ID ambiguously is rejected. Explicit project identities within one graph must agree.
+
+## 17.2 Verdict states
+
+| State | Meaning |
+| --- | --- |
+| pass | Requirement/check is supported by the required evidence and evaluated as passing. |
+| warning | Review attention is required but the condition is not represented as a verified fail. |
+| fail | Evaluated evidence does not satisfy the configured requirement. |
+| unknown | Evidence or provenance is insufficient for a verified verdict. |
+| indeterminate | Canonical analysis was evaluated but the result interval overlaps the decision boundary. |
+| not_checked | The known requirement/check was not evaluated. |
+
+A PASS finding must be evidence-backed. Missing evidence cannot be serialized as a successful compliance result.
+
+## 17.3 Corrective actions
+
+ProofGraph corrective actions retain `requires_approval=true`. The evidence foundation does not automatically apply an engineering remediation.
+
+> [!CONTROL] Keep requirement, evidence, finding, verdict, and corrective-action identities traceable. Do not edit exported evidence files manually to manufacture a different verdict.
+
+# 18. BIM / IFC Interoperability
+
+CleanroomX includes an optional IFC semantic bridge separated from the engineering solvers. It converts supported IFC spaces and selected building-services/equipment semantics into the canonical CleanroomX spatial model and records source provenance.
+
+## 18.1 Supported semantic mapping
+
+The documented snapshot includes mapping for `IfcSpace`, `IfcDoor`, `IfcWindow`, `IfcAirTerminal` with explicit supply/return/exhaust semantics, generic flow terminals as equipment, sensors, selected flow controllers and unitary equipment, fans, pumps, and furnishings as equipment.
+
+The importer uses IFC units, placement transforms, storey identity, GlobalId identity, and explicit CleanroomX-owned space properties where configured. It avoids guessing an airflow role from ambiguous generic terminal semantics.
+
+## 18.2 Native IFC installation
+
+```text
+python -m pip install "cleanroomx[bim]"
 ```
 
-The batch runner binds execution to one exact stable project revision, executes selected analyses in persisted order, checks source revision around each attempt, and preserves per-run provenance.
+## 18.3 CLI workflow
 
-Use batch execution for controlled repeatability, not as a way to bypass engineering review.
+```text
+cleanroomx-ifc import project.cleanroomx.json facility.ifc
+cleanroomx-ifc plan project.cleanroomx.json facility-v2.ifc
+cleanroomx-ifc reimport project.cleanroomx.json facility-v2.ifc
+```
 
-## 18.5 Project diagnostics
+Initial import establishes identity. Plan is read-only. Reimport applies only a conflict-free candidate under the documented guards.
 
-```bash
+## 18.4 Desktop workflow
+
+The BIM menu provides initial import, review re-import, and apply re-import operations. The review presents IFC `GlobalId`, mapped CleanroomX spatial ID, planned action, and whether local or source changes diverged from the prior baseline.
+
+> [!CONTROL] A two-sided divergent edit must be resolved rather than silently choosing the local or IFC version.
+
+## 18.5 Source stability and resource boundary
+
+The documented `main` snapshot limits native IFC sources to 512 MiB and fingerprints source bytes around semantic extraction. Desktop review adds a second review-time stability boundary before mutation.
+
+> [!WARNING] IFC import fidelity is intentionally conservative. Unsupported arbitrary-angle, tilted, reflected, skewed, or otherwise non-representable room geometry may fail closed rather than being approximated.
+
+# 19. Reporting, Project Bundles, Batch Automation, and Diagnostics
+
+## 19.1 Reports
+
+Use reports only from fresh completed results. Portable HTML reports are intended to preserve exact input, result, and provenance in a reviewer-friendly file. Review the exported file before issuing it downstream.
+
+## 19.2 Project bundles
+
+Portable project bundles collect a project and referenced external dependencies into an integrity-checked handoff artifact. Bundle inspection rejects unsafe archive paths, duplicate or undeclared members, unsupported/encrypted content, integrity mismatches, and resource-limit violations before extraction is published.
+
+A recommended handoff sequence is:
+
+1. Save the project and confirm required analyses are fresh.
+2. Run project diagnostics.
+3. Export the bundle.
+4. Verify the bundle before sending it.
+5. Transfer through the organization's approved channel.
+6. On the receiving workstation, verify and extract to a new/empty directory.
+7. Open the extracted project and confirm the software baseline.
+
+## 19.3 Project diagnostics
+
+```text
 cleanroomx-project-check project.cleanroomx.json
-cleanroomx-project-check project.cleanroomx.json --format markdown
-cleanroomx-project-check project.cleanroomx.json --output diagnostics.json
 ```
 
-Diagnostics checks spatial integrity, analysis input validity, engineering synchronization, run-history freshness, traceability hygiene, and analysis naming. It is read-only and does not execute engineering solvers.
+Diagnostics is a read-only project/model health check. It checks software/model/provenance conditions, not external certification.
 
-### Diagnostics severity
+> [!WARNING] A diagnostics `pass` means the configured CleanroomX checks found no errors or warnings. It does not establish ISO/GMP compliance, cleanroom certification, commissioning acceptance, or manufacturer approval.
 
-| Severity | Meaning |
-| --- | --- |
-| error | Invalid/inconsistent state should be corrected before relying on the affected workflow. |
-| warning | Actionable state requiring engineering review. |
-| info | Incomplete but not intrinsically invalid, such as never-run analysis. |
+## 19.4 Deterministic batch execution
 
-A diagnostics `pass` means the configured software/model/provenance checks found no error or warning. It does not mean regulatory compliance.
+Project batch execution is appropriate for repeatable automation when the project revision and analysis selection are controlled. Preserve batch output together with the exact source project and application version.
 
-# 19. Industry Review Gates and Evidence Release
+# PART V - DATA INTEGRITY, TROUBLESHOOTING, AND CHANGE CONTROL
 
-## 19.1 Recommended gate model
+# 20. Data Integrity and Traceability
 
-Use these gates when CleanroomX output will support an engineering deliverable.
+## 20.1 Input identity
 
-| Gate | Minimum evidence before proceeding |
-| --- | --- |
-| G0 - Software readiness | version/commit recorded; `cleanroomx-gui --check` passed; intended environment confirmed |
-| G1 - Project integrity | project opens cleanly; strict JSON valid; path context understood; no unresolved save conflict |
-| G2 - Model integrity | spatial and engineering validation complete; mappings reviewed; diagnostics acceptable |
-| G3 - Analysis execution | canonical run completed; solver/convergence status acceptable; no stale dependencies |
-| G4 - Technical review | assumptions, units, criteria, margins, limitations, and uncertainty reviewed independently |
-| G5 - Evidence release | fresh report/bundle/snapshot produced; software version and source revision retained; approvals recorded externally |
+A released engineering result should be traceable to:
 
-## 19.2 Reviewer checklist
+- CleanroomX version or exact commit;
+- project file identity and revision;
+- analysis ID and kind;
+- canonical analysis input;
+- external dependency hashes where applicable;
+- execution status and solver convergence;
+- report or run-bundle identity;
+- checker/reviewer disposition.
 
-A reviewer should verify at least the following:
+## 20.2 Strict ingestion
 
-- [ ] software release/commit is identified;
-- [ ] project file and relevant external dependencies are identified;
-- [ ] input units and names are correct;
-- [ ] criteria source is documented;
-- [ ] solver status is solved/converged where required;
-- [ ] no material result is stale;
-- [ ] `pass_with_unchecked`, `unknown`, `indeterminate`, and `not_checked` are not presented as complete PASS;
-- [ ] uncertainty bounds are explicit where used;
-- [ ] rounded display values are not manually reused for fine-threshold decisions;
-- [ ] BIM/IFC provenance is reviewed when spatial data came from IFC;
-- [ ] report limitations match the intended downstream use;
-- [ ] evidence package can be replayed or traced to exact inputs.
+CleanroomX uses strict JSON and finite-number boundaries to reduce ambiguous or non-portable engineering state. Unknown future schema versions fail closed. Duplicate analysis IDs and invalid active-analysis references are rejected.
 
-## 19.3 Recommended released package
+## 20.3 External dependencies
 
-For a controlled engineering handoff, consider retaining:
+Consistency and dossier workflows may reference external engineering files. Relative paths resolve from project path context and are rebased when a project is intentionally saved to another directory. During execution, dependency fingerprints protect against source changes during the run.
 
-1. source project file;
-2. external requirements/manufacturer/measurement files;
-3. CleanroomX version or Git commit;
-4. diagnostics output;
-5. final analysis JSON or run bundle;
-6. portable HTML/PDF report;
-7. design-assurance snapshot when applicable;
-8. portable project bundle when external dependencies must travel with the project;
-9. review comments and approval record in the organization's document-control system;
-10. relevant release/test evidence when software validation is in scope.
+## 20.4 Evidence retention
 
-# 20. Security, Data Integrity, and Operational Controls
+For an issued calculation, retain the minimum set required by your project procedure. A robust set normally includes:
 
-## 20.1 Security boundary
+- approved project file;
+- referenced controlled input files;
+- issued report or portable HTML report;
+- diagnostics / assurance evidence as applicable;
+- project bundle for handoff where used;
+- software version or commit record;
+- review/approval record.
 
-CleanroomX is a local desktop/CLI application. It is not an authentication system, secret store, network service, or sandbox for hostile code.
-
-Installed plugins are trusted executable Python packages. Plugin discovery is fail-isolated so one malformed extension does not terminate built-in startup, but plugins are still code and should be controlled like other executable software.
-
-## 20.2 Project input controls
-
-- treat project JSON and referenced engineering files as trusted project inputs;
-- review paths before running file-backed analyses;
-- do not store unrelated credentials in engineering files;
-- use OS permissions to protect controlled records;
-- back up source project files before migration or bulk edit;
-- inspect portable bundles from external sources before release use.
-
-## 20.3 Hashes and authenticity
-
-CleanroomX uses SHA-256 extensively for deterministic content identity and integrity. A matching digest can show that bytes or normalized content have not changed relative to a known artifact. It does not prove:
-
-- who authored the content;
-- who approved it;
-- whether a standard interpretation is correct;
-- whether a source file is authoritative;
-- whether a result is suitable for certification.
-
-Authentication and approval belong to the organization's document-control and identity systems.
+> [!TIP] Preserve inputs and evidence; do not preserve only screenshots of a result. Screenshots are convenient for communication but weak for reproducibility and audit.
 
 # 21. Troubleshooting and Failure Handling
 
-## 21.1 GUI does not start
-
-Check in this order:
-
-1. run `cleanroomx-gui --check`;
-2. verify Python version is 3.11-3.13;
-3. verify Tk support exists;
-4. on Windows, use the repository launcher to avoid PATH ambiguity;
-5. confirm the intended CleanroomX build is imported rather than an older installed package;
-6. inspect the exception before modifying project files.
-
-## 21.2 Project will not open
-
-Possible causes include malformed JSON, non-finite constants, invalid UTF-8, unsupported schema/version, duplicate IDs, invalid active-analysis reference, oversized project file, or unsupported analysis kind.
-
-Do not hand-edit around a schema error without keeping the original source. Make a copy, correct one issue at a time, and revalidate.
-
-## 21.3 Save blocked because the file changed externally
-
-This is a protection, not a defect.
-
-- Save As to a different file to preserve in-memory work; or
-- reopen the disk version and reconcile under change control.
-
-Do not attempt to bypass the external-write guard by creating same-file aliases.
-
-## 21.4 Result disappeared after editing input
-
-Expected behavior. Result freshness is bound to the exact submitted input identity. Revalidate and rerun.
-
-## 21.5 IFC re-import reports conflict
-
-Review the per-entity plan. A conflict means both the local spatial object and the IFC-derived source changed differently relative to the prior baseline. Decide which source is authoritative and reconcile intentionally. Conflict-free source-only changes can be applied while preserving stable CleanroomX IDs.
-
-## 21.6 Network solver does not converge
-
-Review:
-
-- connectivity and reference boundary;
-- sign convention and balanced injections;
-- resistance/leakage parameter magnitude;
-- near-zero linearization setting;
-- unrealistic or non-finite input scales;
-- configured iteration/tolerance values.
-
-Do not report a manually edited solved state. Correct the model and rerun.
-
-## 21.7 Fan study reports no intersection
-
-`no_intersection_in_supplied_range` means the configured fan and system curves did not cross inside the supplied fan data. CleanroomX deliberately does not extrapolate. Review the supplied fan data, system model, or equipment selection basis.
-
-## 21.8 PASS but incomplete
-
-`pass_with_unchecked` means evaluated evidence passed but unresolved evidence remains. Review every unchecked item before treating the project as complete.
-
-# 22. Validation, Change Control, and Rollback
-
-## 22.1 Stable release evidence
-
-The v0.102.1 final spatial production baseline recorded:
-
-- 1008 passing tests on Python 3.11;
-- 1008 passing tests on Python 3.12;
-- 1008 passing tests on Python 3.13;
-- Windows PowerShell and CMD launcher smoke;
-- clean wheel build/install checks;
-- Python 3.13 installed Tk/Xvfb GUI smoke;
-- Release 2 compatibility/provenance gates;
-- deterministic spatial and autosave race regressions.
-
-The authoritative detailed records remain `VALIDATION.txt`, `TEST_EVIDENCE.md`, and `CHANGELOG.md` in the repository.
-
-## 22.2 Controlled change procedure
-
-For project use after a software update:
-
-1. identify the old and new CleanroomX versions/commits;
-2. review changelog and affected workflows;
-3. run the organization's required software verification;
-4. reopen representative projects;
-5. rerun affected analyses rather than reusing generated results from an old build;
-6. compare material outputs and explain differences;
-7. approve the new build for controlled use before release work.
-
-## 22.3 Code rollback
-
-Use normal Git revert and CI on shared repository history. Do not rewrite shared history unless repository policy explicitly allows it.
-
-## 22.4 Project rollback
-
-Restore a preserved earlier project revision or original legacy source. CleanroomX does not synthesize reverse migration to historical formats.
-
-Generated result files should be regenerated from preserved inputs under the selected validated software version rather than manually edited to match an earlier report.
-
-# 23. Command-Line Quick Reference
-
-The installed entry points on the current project package include:
-
-| Command | Primary use |
+| Symptom | Meaning / safe action |
 | --- | --- |
-| `cleanroomx` | Core room calculations / verification helpers |
-| `cleanroomx-gui` | Desktop application, readiness check, demo/smoke |
+| Python 3.11+ not found | Install an approved supported Python or create the project `.venv`. On Windows prefer the repository launcher. |
+| `cleanroomx-gui --check` fails | Treat as application readiness failure. Correct installation/source state before normal GUI use. |
+| GUI/Tk error | Confirm the Python build includes Tk. On Linux automation use a real display or Xvfb as documented. |
+| Invalid JSON / duplicate key / NaN | Correct the input. Do not attempt permissive normalization around the strict engineering boundary. |
+| Save blocked because project changed externally | Preserve the newer disk source. Use Save Project As for current work or reopen the disk revision. |
+| Recovery shown at startup | Inspect differences. Restore as Unsaved Copy only when the recovery state is needed. |
+| Result disappears after edit | Expected stale-result protection. Validate and rerun. |
+| External dependency changed during run | Stabilize source files and rerun. Discard the invalid mixed-revision attempt. |
+| Fan reports no supplied-range intersection | Supply valid manufacturer data or revise the system model. Do not extrapolate by guesswork. |
+| Pressure network non-convergence | Review connectivity, fixed boundary, path parameters, balance, and solver conditions. |
+| Loop solver non-convergence | Check graph connectivity, balanced injections, positive resistances, and numerical controls. |
+| IFC import rejected | Review source size, semantic support, placement/containment, axis-aligned representability, and source stability. |
+| IFC re-import conflict | Use the read-only plan/review to resolve divergent local/source edits before apply. |
+| Bundle verification rejected | Do not extract. Review integrity, member paths, size limits, declared dependencies, and source stability. |
+| ProofGraph parse rejected | Review strict schema fields, IDs, cross-references, provenance cycles/project IDs, PASS evidence requirements, and verification-run closure. |
+
+## 21.1 Incident response for a questionable issued result
+
+When an issued result may be wrong or based on the wrong revision:
+
+1. Stop further reliance on the affected result.
+2. Preserve the project, report, bundle, and referenced input files exactly as found.
+3. Record the software version/commit and the suspected issue.
+4. Reproduce the calculation in a controlled copy.
+5. Determine whether the issue is input data, model selection, numerical behavior, software defect, or document-control failure.
+6. Reissue only after technical review and approval.
+7. If a software defect is confirmed, open a tracked defect and evaluate impact on other calculations made with the affected version.
+
+# 22. Security, Deployment, Migration, and Rollback
+
+CleanroomX is a local desktop/CLI engineering application. It is not a network service, authentication system, secret store, or hostile-code sandbox.
+
+## 22.1 Operational security guidance
+
+- Run with normal user privileges.
+- Keep project files and reports under normal OS access controls.
+- Do not store credentials, API keys, or unrelated secrets in project JSON.
+- Treat installed analysis plugins as trusted executable Python packages.
+- Back up source projects before migration or bulk editing.
+- Review reports before incorporating them into controlled downstream documentation.
+
+## 22.2 Archive safety
+
+Portable bundles are treated as untrusted archives and are inspected before extraction. Do not bypass failed bundle verification with a generic unzip process when the bundle is intended to be trusted as a CleanroomX handoff artifact.
+
+## 22.3 Rollback
+
+For repository deployments, prefer a reviewed Git revert of the release-changing commit rather than rewriting shared history. Preserve affected projects and evidence, identify the last validated baseline, revert through normal review/CI, and regenerate derived reports using the selected validated application revision.
+
+For migrated project formats, retain the archived original if the legacy representation may be required later.
+
+# 23. Validation Status and Software Change Control
+
+The v0.102.1 release closure records complete-suite validation on Python 3.11, 3.12, and 3.13 with 1008 passing tests at the final deterministic spatial-drag release gate. The recorded release evidence also includes Windows launcher smoke coverage, clean wheel build/install checks, installed Tk GUI smoke testing, synchronized 2D/3D regression coverage, autosave race regression coverage, and solver/provenance compatibility gates.
+
+> [!CONTROL] Regression coverage is software verification evidence. It is not an independent engineering validation of every possible project model, a formal security audit, or a substitute for project-specific checking.
+
+## 23.1 Change-control impact review
+
+When upgrading CleanroomX for controlled work, evaluate:
+
+- software version / commit change;
+- project schema or migration behavior;
+- solver equations, tolerances, root-selection or no-extrapolation rules;
+- reporting or evidence schema changes;
+- BIM semantic mapping changes;
+- persistence/recovery behavior;
+- CLI interface changes;
+- test and release evidence for the new baseline;
+- whether existing issued calculations require re-execution.
+
+A documentation-only commit should still be recorded if the manual or project procedure is part of the controlled environment, even when engineering calculations are unchanged.
+
+# PART VI - OPERATING CHECKLISTS AND REFERENCE
+
+# 24. Standard Operating Checklists
+
+## 24.1 New project checklist
+
+| Check | Complete |
+| --- | --- |
+| Approved CleanroomX baseline confirmed | [ ] |
+| Project code/name and revision assigned | [ ] |
+| Controlled source files identified | [ ] |
+| Room geometry and units verified | [ ] |
+| Engineering criteria entered explicitly | [ ] |
+| Spatial-engineering mapping reviewed | [ ] |
+| Project saved to controlled working location | [ ] |
+| Initial diagnostics completed if required by procedure | [ ] |
+
+## 24.2 Pre-run checklist
+
+| Check | Complete |
+| --- | --- |
+| Correct project revision open | [ ] |
+| Correct analysis ID/kind selected | [ ] |
+| Input source and units checked | [ ] |
+| Required file dependencies are stable and accessible | [ ] |
+| Validate passes | [ ] |
+| Model limitations understood | [ ] |
+| Required acceptance criteria are explicit | [ ] |
+
+## 24.3 Result review checklist
+
+| Check | Complete |
+| --- | --- |
+| Run completed without error | [ ] |
+| Result is fresh for current input | [ ] |
+| Solver converged where applicable | [ ] |
+| No unsupported extrapolation occurred | [ ] |
+| `pass_with_unchecked`, `unknown`, `indeterminate`, warnings, or not-checked states have documented disposition | [ ] |
+| Input and result units are correct | [ ] |
+| Result magnitude is physically reasonable | [ ] |
+| Assumptions and limitations are documented | [ ] |
+| Independent checker has reviewed the evidence | [ ] |
+
+## 24.4 Handoff checklist
+
+| Check | Complete |
+| --- | --- |
+| Project saved and revision identified | [ ] |
+| Required analyses rerun and fresh | [ ] |
+| Project diagnostics reviewed | [ ] |
+| Report / HTML report exported and visually checked | [ ] |
+| Project bundle exported and verified when dependencies exist | [ ] |
+| Software baseline recorded in transmittal | [ ] |
+| Recipient instructions include bundle verification and extraction to a new directory | [ ] |
+| Approval/transmittal record retained | [ ] |
+
+## 24.5 IFC re-import checklist
+
+| Check | Complete |
+| --- | --- |
+| Correct IFC revision selected | [ ] |
+| Initial source identity / SHA-256 reviewed | [ ] |
+| Re-import plan reviewed before mutation | [ ] |
+| GlobalId-to-CleanroomX identity changes understood | [ ] |
+| Divergent local/source edits resolved | [ ] |
+| Candidate source remained stable through apply | [ ] |
+| Spatial model validated after apply | [ ] |
+| Engineering analyses intentionally synchronized or left unchanged as required | [ ] |
+
+# 25. Worked Engineering Examples
+
+## 25.1 Example A - ACH and idealized recovery
+
+Room dimensions: 6 m x 5 m x 3 m. Supply airflow: 2700 m3/h. Initial particle concentration: 1,000,000/m3. Target: 100,000/m3. Effective removal efficiency: 1.0.
+
+```text
+V = 6 * 5 * 3 = 90 m3
+ACH = 2700 / 90 = 30 1/h
+
+t = ln(1000000 / 100000) / (30/60)
+  = ln(10) / 0.5
+  = 4.60517 minutes
+```
+
+Interpretation: the mathematical result is the idealized well-mixed recovery screening value. Field qualification should use measured recovery data and the applicable test procedure.
+
+## 25.2 Example B - rectangular duct and preliminary fan power
+
+Assume a rectangular duct 0.8 m x 0.45 m carrying 5400 m3/h for 18 m. Use Darcy friction factor 0.02, air density 1.2 kg/m3, and local loss coefficient K=1.8. Add coil loss 180 Pa and other loss 90 Pa. Fan efficiency 0.68 and motor efficiency 0.92.
+
+```text
+Area A = 0.8 * 0.45 = 0.3600 m2
+Q = 5400 / 3600 = 1.5000 m3/s
+v = 1.5000 / 0.3600 = 4.1667 m/s
+Hydraulic diameter Dh = 0.5760 m
+Velocity pressure = 10.417 Pa
+Friction loss = 6.510 Pa
+Local loss = 18.750 Pa
+Duct total = 25.260 Pa
+Fan total static = 25.260 + 180 + 90 = 295.260 Pa
+Air power = 1.5 * 295.260 = 442.89 W
+Shaft power = 442.89 / 0.68 = 651.31 W
+Electrical input = 651.31 / 0.92 = 707.95 W
+```
+
+Interpretation: the result is preliminary fan-duty screening. Final selection still requires approved manufacturer data, system-effect consideration, operating margin, dirty-filter condition where applicable, and project-specific requirements.
+
+## 25.3 Example C - simple pressure/leakage relationship
+
+> [!MAIN] This example uses the later `main` pressure-network capability.
+
+A process node injects 540 m3/h = 0.15 m3/s. The corridor reference is 0 Pa. A linear leakage path uses `C = 0.01 m3/s/Pa` and `n = 1.0`.
+
+```text
+0.15 = 0.01 * deltaP
+
+deltaP = 15 Pa
+```
+
+An explicit design-consistency mapping can compare the solved signed pressure difference to a +15 Pa project target. The target must come from the project requirement, not from the solver result.
+
+## 25.4 Example D - controlled handoff
+
+1. Open the approved project revision.
+2. Confirm the analyses required for review are fresh.
+3. Run `cleanroomx-project-check` and disposition findings.
+4. Export `review.cleanroomx.zip` using the project-bundle workflow.
+5. Verify the bundle before transmittal.
+6. Export a portable HTML report for the specific completed analysis when a human-readable calculation record is required.
+7. Record software baseline, project revision, report/bundle names, and checker approval in the transmittal.
+
+# 26. Command-Line Reference
+
+The installed package exposes these primary commands. Use `COMMAND --help` for the exact options supported by the installed build.
+
+| Command | Purpose |
+| --- | --- |
+| `cleanroomx` | Core calculations including direct room/particle utilities exposed by the main CLI |
+| `cleanroomx-gui` | Desktop application, demo, and headless registry readiness check |
 | `cleanroomx-project-run` | Deterministic saved-project batch execution |
-| `cleanroomx-project-bundle` | Export / verify / extract portable bundles |
+| `cleanroomx-project-bundle` | Portable project bundle export / verification / extraction workflow |
 | `cleanroomx-project-check` | Read-only project diagnostics |
-| `cleanroomx-ifc` | IFC import / plan / reimport |
-| `cleanroomx-hvac` | HVAC project screening |
-| `cleanroomx-recovery-test` | Measured recovery qualification |
-| `cleanroomx-uncertainty` | Room uncertainty |
+| `cleanroomx-ifc` | IFC import, plan, and re-import workflow |
+| `cleanroomx-hvac` | HVAC / thermal / airflow / fan screening workflow |
+| `cleanroomx-recovery-test` | Observed particle recovery qualification |
+| `cleanroomx-uncertainty` | Room uncertainty workflow |
 | `cleanroomx-qualification` | Qualification workflow |
-| `cleanroomx-duct-flow` | Duct path pressure-loss analysis |
-| `cleanroomx-loop-flow` | Fixed-resistance loop network |
-| `cleanroomx-pressure-network` | Room pressure/leakage network |
-| `cleanroomx-loop-friction` | Variable-friction loop |
-| `cleanroomx-thermal-uncertainty` | Thermal/HVAC bounded uncertainty |
-| `cleanroomx-psychrometric-uncertainty` | Psychrometric bounded uncertainty |
+| `cleanroomx-duct-flow` | Duct-network pressure-loss analysis |
+| `cleanroomx-loop-flow` | Fixed-resistance looped airflow network |
+| `cleanroomx-pressure-network` | Room pressure/leakage network on the documented `main` snapshot |
+| `cleanroomx-loop-friction` | Variable-friction loop solver |
+| `cleanroomx-thermal-uncertainty` | Bounded thermal/HVAC uncertainty |
+| `cleanroomx-psychrometric-uncertainty` | Bounded psychrometric uncertainty |
 | `cleanroomx-fan-curve` | Fan/system operating point |
-| `cleanroomx-fan-uncertainty` | Fan uncertainty |
-| `cleanroomx-fan-speed` | Fan speed / affinity study |
-| `cleanroomx-fan-duct` | Fan + duct network composition |
-| `cleanroomx-fan-network` | Fan + passive network |
-| `cleanroomx-fan-loop` | Fan + loop network |
-| `cleanroomx-fan-loop-friction` | Fan + variable-friction loop |
-| `cleanroomx-fan-loop-friction-speed` | Speed study on fan/variable-friction loop |
-| `cleanroomx-fan-loop-friction-uncertainty` | Uncertainty on fan/variable-friction loop |
-| `cleanroomx-fan-loop-uncertainty` | Fan/loop uncertainty |
+| `cleanroomx-fan-uncertainty` | Fan/system bounded uncertainty |
+| `cleanroomx-fan-speed` | Fan speed / affinity-law study |
+| `cleanroomx-fan-duct` | Fan plus duct-network composition |
+| `cleanroomx-fan-network` | Fan plus passive network |
+| `cleanroomx-fan-loop` | Fan plus looped network |
+| `cleanroomx-fan-loop-friction` | Fan plus variable-friction loop |
+| `cleanroomx-fan-loop-friction-speed` | Speed study with nonlinear variable-friction loop |
+| `cleanroomx-fan-loop-friction-uncertainty` | Uncertainty around nonlinear fan/variable-friction loop |
+| `cleanroomx-fan-loop-uncertainty` | Fan/loop bounded uncertainty |
 | `cleanroomx-fan-loop-speed` | Fan/loop speed study |
-| `cleanroomx-damper-study` | Loop damper resistance scenarios |
+| `cleanroomx-damper-study` | Loop resistance-multiplier scenarios |
 | `cleanroomx-dossier` | Engineering dossier composition |
-| `cleanroomx-consistency` | Cross-study consistency |
-| `cleanroomx-assurance-snapshot` | Create / verify deterministic assurance snapshots |
+| `cleanroomx-consistency` | Cross-module consistency checks |
+| `cleanroomx-assurance-snapshot` | Create / verify design-assurance snapshots |
 
-Use `--help` on the installed command to confirm exact options in the software version being used.
+# 27. Status, Units, and Interpretation Reference
 
-# 24. Engineering Formula Summary
+## 27.1 General result interpretation
 
-| Calculation | Implemented relationship / interpretation |
+| Term | Interpretation |
 | --- | --- |
-| Room volume | `V = L * W * H` |
-| Nominal ACH | `ACH = supply_m3_h / V_m3` |
-| Particle decay | `C(t) = C0 exp(-(ACH/60) eta t)` |
-| Recovery time | `t = ln(C0/Ctarget) / ((ACH/60) eta)` |
-| Airflow surplus | `supply + transfer_in - return - exhaust - transfer_out` |
-| Duct velocity pressure | `0.5 rho v^2` |
-| Darcy friction loss | `f (L/Dh) (0.5 rho v^2)` |
-| Local duct loss | `K (0.5 rho v^2)` |
-| Rectangular hydraulic diameter | `2WH/(W+H)` |
-| Supply fan fluid power | `Q * Delta P` |
-| Shaft power | `fluid power / fan efficiency` |
-| Electrical input estimate | `shaft power / motor efficiency` |
-| Loop edge pressure law | `Delta P = R Q abs(Q)` |
-| Geometry-derived loop R | `0.5 rho (fL/Dh + K) / A^2` |
-| Pressure path power law | `Q = C sign(Delta P) |Delta P|^n` |
-| Pressure path orifice | `Q = Cd A sign(Delta P) sqrt(2|Delta P|/rho)` |
-| Fan system curve | `Delta P_system = Delta P_fixed + R Q^2` |
+| pass | Configured criterion was evaluated and passed. |
+| fail | Configured criterion was evaluated and failed. |
+| warning | Review attention is required. The exact meaning is workflow-specific. |
+| not_checked | Known criterion was not evaluated. |
+| unknown | Available evidence is insufficient for a verified conclusion. |
+| indeterminate | Evaluated interval overlaps the decision boundary. |
+| fresh | Result identity still matches current analysis input and required dependency revisions. |
+| stale | Current input/dependencies no longer match the completed run. Rerun is required. |
 
-All formula use remains subject to the workflow-specific assumptions and boundaries described in the relevant chapter.
+## 27.2 Common engineering units
 
-# 25. External Standards and Reference Map
-
-CleanroomX does not embed these documents as automatic acceptance criteria. They are listed as authoritative context that project engineers may use to define requirements, test plans, or rule packs.
-
-| Reference | Current verified official description / relevance |
+| Quantity | Typical unit in CleanroomX workflows |
 | --- | --- |
-| ISO 14644-1:2015 | Classification of air cleanliness by particle concentration. ISO reports Edition 2 (2015) as current after review/confirmation. Official: https://www.iso.org/standard/53394.html |
-| ISO 14644-2:2015 | Monitoring to provide evidence of cleanroom performance related to air cleanliness by particle concentration. Official: https://www.iso.org/standard/53393.html |
-| ISO 14644-3:2019 | Test methods for cleanrooms and clean zones. Official ISO publication page. |
-| EU GMP Annex 1 (2022 revision) | Manufacture of Sterile Medicinal Products; European Commission publication dated 25 Aug 2022, with entry into operation dates stated by the Commission. Official: https://health.ec.europa.eu/latest-updates/revision-manufacture-sterile-medicinal-products-2022-08-25_en |
-| ASHRAE Handbook - HVAC Applications, Clean Spaces | Clean-space design context including contamination control, airflow patterns, pressurization, testing/commissioning concepts. Official handbook: https://handbook.ashrae.org/ |
-| ASHRAE Design Guide for Cleanrooms | Practical cleanroom fundamentals, environmental control systems, testing, commissioning, qualification, and industry applications. Official: https://www.ashrae.org/technical-resources/bookstore/ashrae-design-guide-for-cleanrooms |
-| NIST CONTAM 3.4 documentation | Multizone airflow and contaminant transport reference supporting pressure/airflow model forms. Official: https://www.nist.gov/publications/contam-user-guide-and-program-documentation-version-34 |
-| buildingSMART IFC 4.3.2.0 | Official IFC 4.3 release documentation for BIM data exchange; buildingSMART identifies 4.3.2.0 as the latest official IFC release and ISO 16739-1:2024 publication. Official: https://standards.buildingsmart.org/IFC/RELEASE/IFC4_3/ |
+| Length / room dimensions | m |
+| Area | m2 |
+| Volume | m3 |
+| Airflow | m3/h or m3/s according to the field/workflow |
+| Pressure | Pa |
+| ACH | 1/h |
+| Temperature | degC where documented |
+| Relative humidity | fraction or percent according to the explicit field contract |
+| Power | W / kW in reports as documented |
+| Particle concentration | concentration per m3 |
 
-> [!WARNING] Standards use
-> The standard or regulation applicable to a real facility depends on jurisdiction, industry, process, product, project contract, and lifecycle stage. Use licensed/current copies and qualified engineering/regulatory interpretation. A CleanroomX rule pack or project profile is project data, not a substitute for the source document.
+> [!CONTROL] Always follow the field-level unit contract shown by the workflow/schema. Do not infer units from a number alone.
 
-# 26. Final Release Checklist
+# 28. Standards and Reference Sources
 
-Before releasing a CleanroomX-based engineering package, complete the following checklist or an organization-approved equivalent.
+CleanroomX separates standards-defined classification from project engineering airflow and HVAC inputs. The repository does not bundle copyrighted standards text and does not infer a universal fixed ACH from an ISO cleanliness class.
 
-## Software and project identity
+Primary references identified by the project documentation include:
 
-- [ ] software version / Git commit recorded;
-- [ ] project file identified and protected from uncontrolled overwrite;
-- [ ] external engineering dependencies identified;
-- [ ] project diagnostics reviewed;
-- [ ] recovery or alternate revisions reconciled.
+- ISO 14644-1:2015, Cleanrooms and associated controlled environments - Part 1: Classification of air cleanliness by particle concentration. [Official ISO page](https://www.iso.org/standard/53394.html)
+- ISO 14644-3:2019, Cleanrooms and associated controlled environments - Part 3: Test methods. [Official ISO page](https://www.iso.org/standard/60598.html)
+- ISO 14644-4:2022, Cleanrooms and associated controlled environments - Part 4: Design, construction and start-up. [Official ISO page](https://www.iso.org/standard/72379.html)
+- ASHRAE Design Guide for Cleanrooms: Fundamentals, Systems, and Performance. [ASHRAE official page](https://www.ashrae.org/technical-resources/bookstore/ashrae-design-guide-for-cleanrooms)
+- 2025 ASHRAE Handbook - Fundamentals, Chapter 1, Psychrometrics. [ASHRAE Handbook page](https://handbook.ashrae.org/Handbooks/F25/SI/F25_Ch01/F25_Ch01_si.aspx)
+- JCGM 100:2008, Evaluation of measurement data - Guide to the expression of uncertainty in measurement. [BIPM/JCGM official page](https://www.bipm.org/en/doi/10.59161/JCGM100-2008E)
+- JCGM 106:2012, Evaluation of measurement data - The role of measurement uncertainty in conformity assessment. [BIPM/JCGM official page](https://www.bipm.org/en/doi/10.59161/JCGM106-2012)
+- NIST Technical Note 1297, Guidelines for Evaluating and Expressing the Uncertainty of NIST Measurement Results. [NIST official page](https://www.nist.gov/pml/nist-technical-note-1297)
 
-## Model and input review
-
-- [ ] room/device identity reviewed;
-- [ ] engineering geometry synchronized intentionally;
-- [ ] units verified;
-- [ ] criteria source documented;
-- [ ] manufacturer data revision documented where used;
-- [ ] uncertainty basis documented where used;
-- [ ] IFC source/revision documented where used.
-
-## Analysis review
-
-- [ ] validation passed;
-- [ ] solver converged / valid workflow status obtained;
-- [ ] result is fresh for the current input;
-- [ ] external dependency fingerprints are current;
-- [ ] residuals / margins / limits reviewed;
-- [ ] incomplete statuses are not represented as complete PASS;
-- [ ] numerical precision is not degraded by manual reuse of rounded values.
-
-## Evidence and handoff
-
-- [ ] final report generated from fresh evidence;
-- [ ] project bundle created when dependencies must be transferred;
-- [ ] assurance snapshot created where applicable;
-- [ ] released files stored under controlled access;
-- [ ] independent technical review completed;
-- [ ] approval recorded outside CleanroomX in the organization's approval system.
-
-# 27. Glossary and Status Semantics
-
-| Term | Meaning in CleanroomX |
-| --- | --- |
-| Canonical input identity | Deterministic SHA-256 of the exact normalized/submitted input used by the application execution path. |
-| Fresh result | Result whose analysis kind/input and required external dependency revisions still match the completed run evidence. |
-| Strict JSON | JSON boundary that rejects malformed syntax, duplicate keys where enforced, and non-finite numeric constants. |
-| Spatial layout | Canonical room/device geometry stored in project metadata and shared by 2D/3D views. |
-| Sync baseline | Persisted shared-dimension/mapping evidence used to determine whether geometry or engineering changed since the last synchronization. |
-| Pass with unchecked | No evaluated failure, but unresolved criteria remain; not a complete PASS. |
-| Unknown | Evidence/provenance is insufficient for a verified verdict. |
-| Indeterminate | Canonical analysis was evaluated but its result interval overlaps the decision boundary. |
-| Not checked | Known criterion/check was not evaluated. |
-| ProofGraph | Traceability/evidence graph; not a separate engineering solver. |
-| Content digest | Deterministic SHA-256 identity used for integrity/provenance, not a digital signature. |
-| Portable bundle | Integrity-checked ZIP containing project and registered external dependencies. |
-| Design assurance snapshot | Self-contained artifact binding source bytes, normalized result, traceability, producing version, and replay evidence. |
-
-# 28. Current Development Status at Manual Cutoff
-
-This appendix isolates development status from the operating procedures so normal users do not have to interpret repository chronology while using the software.
-
-## 28.1 Stable v0.102.1
-
-Stable release scope includes the Release 2 project lifecycle and final synchronized spatial production closure:
-
-- 2D/3D shared spatial model;
-- dimension-only bidirectional synchronization;
-- deterministic drag/edit history;
-- windows and generic openings;
-- viewport fit/reset/orbit controls;
-- atomic persistence and guarded saves;
-- recovery, revisions, run history, bundles, reports;
-- project batch execution;
-- strict engineering JSON;
-- precision-safe core HVAC composition;
-- explicit verification completeness;
-- v0.91-v0.95 compatibility/provenance gates.
-
-## 28.2 Current-main engineering additions through PR #594
-
-The engineering baseline used for this manual includes current-main work such as:
-
-- room pressure/leakage network;
-- design requirements and preliminary air-system design;
-- design consistency and pressure design consistency;
-- compliance rule-pack and design assurance composition;
-- design assurance snapshots;
-- project diagnostics;
-- ProofGraph foundation and multiple evidence adapters;
-- conflict-aware IFC re-import and source-stability/resource hardening;
-- full-precision pressure-design, fan/network, loop, thermal, cross-study, uncertainty, and damper composition hardening;
-- additional ProofGraph structural-integrity rules.
-
-## 28.3 Pending PR #595
-
-At the manual cutoff, PR #595 was open and its exact head `e2fd382181b512d8ec786747db2bdc3954edb968` had CI run #1928 with conclusion SUCCESS. Its proposed behavior is not part of the engineering baseline identified on the cover.
-
-## 28.4 Authoritative repository records
-
-For release engineering and code-history audit, use:
-
-- `README.md`
-- `ARCHITECTURE.md`
-- `CHANGELOG.md`
-- `VALIDATION.txt`
-- `TEST_EVIDENCE.md`
-- workflow-specific documents under `docs/`
-
-This manual is the operator/engineering guide; the repository records remain authoritative for exact commit-level development history.
+> [!WARNING] Referencing a standard does not mean CleanroomX has encoded every clause or that a project is compliant. Use licensed standards and the approved project specification to define the criteria actually evaluated.

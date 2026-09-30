@@ -550,12 +550,12 @@ def _solve_linear_system(
     return solution
 
 
-def solve_room_pressure_network(
+def _solve_room_pressure_network(
     network: RoomPressureNetwork,
     *,
     mass_balance_tolerance_m3_h: float = 1e-6,
     max_iterations: int = 100,
-) -> dict:
+) -> tuple[dict, dict[str, float]]:
     tolerance_m3_h = _positive(
         mass_balance_tolerance_m3_h,
         "mass_balance_tolerance_m3_h",
@@ -1029,7 +1029,7 @@ def solve_room_pressure_network(
         "total mechanical net_injection_m3_h",
     )
 
-    return {
+    result = {
         "network": network.name,
         "status": (
             "solved"
@@ -1088,3 +1088,18 @@ def solve_room_pressure_network(
             "or certification compliance."
         ),
     }
+    return result, dict(pressures)
+
+
+def solve_room_pressure_network(
+    network: RoomPressureNetwork,
+    *,
+    mass_balance_tolerance_m3_h: float = 1e-6,
+    max_iterations: int = 100,
+) -> dict:
+    result, _ = _solve_room_pressure_network(
+        network,
+        mass_balance_tolerance_m3_h=mass_balance_tolerance_m3_h,
+        max_iterations=max_iterations,
+    )
+    return result

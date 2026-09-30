@@ -262,9 +262,11 @@ def _thermal_airflow_interval(
     }
 
 
-def analyze_thermal_uncertainty(
+def calculate_thermal_uncertainty_values(
     design: UncertainThermalDesign,
 ) -> dict:
+    """Return canonical full-precision derived values for thermal uncertainty."""
+
     sensible = design.internal_sensible_kw
     latent = design.internal_latent_kw
     makeup = design.makeup_airflow_m3_h
@@ -326,6 +328,89 @@ def analyze_thermal_uncertainty(
     )
     governing_lower = max(item[2] for item in airflow_candidates)
     governing_upper = max(item[3] for item in airflow_candidates)
+
+    return {
+        "loads_kw": {
+            "internal_total": {
+                "nominal": internal_nominal,
+                "lower": internal_lower,
+                "upper": internal_upper,
+            },
+            "makeup_air_total": {
+                "nominal": makeup_nominal,
+                "lower": makeup_lower,
+                "upper": makeup_upper,
+                "kw_per_m3_h_at_nominal_states": makeup_kw_per_m3_h,
+            },
+            "net_room_plus_makeup": {
+                "nominal": net_nominal,
+                "lower": net_lower,
+                "upper": net_upper,
+            },
+        },
+        "cooling_capacity_kw": {
+            "nominal": cooling_nominal,
+            "lower": cooling_lower,
+            "upper": cooling_upper,
+        },
+        "heating_capacity_kw": {
+            "nominal": heating_nominal,
+            "lower": heating_lower,
+            "upper": heating_upper,
+        },
+        "airflow_m3_h": {
+            "thermal_for_internal_sensible": thermal_airflow,
+            "governing": {
+                "nominal": nominal_governing,
+                "lower": governing_lower,
+                "upper": governing_upper,
+                "nominal_basis": nominal_basis,
+                "unit": "m3/h",
+            },
+        },
+    }
+
+
+def analyze_thermal_uncertainty(
+    design: UncertainThermalDesign,
+) -> dict:
+    calculation = calculate_thermal_uncertainty_values(design)
+    sensible = design.internal_sensible_kw
+    latent = design.internal_latent_kw
+    makeup = design.makeup_airflow_m3_h
+
+    internal_total = calculation["loads_kw"]["internal_total"]
+    internal_nominal = internal_total["nominal"]
+    internal_lower = internal_total["lower"]
+    internal_upper = internal_total["upper"]
+
+    makeup_total = calculation["loads_kw"]["makeup_air_total"]
+    makeup_nominal = makeup_total["nominal"]
+    makeup_lower = makeup_total["lower"]
+    makeup_upper = makeup_total["upper"]
+    makeup_kw_per_m3_h = makeup_total["kw_per_m3_h_at_nominal_states"]
+
+    net_total = calculation["loads_kw"]["net_room_plus_makeup"]
+    net_nominal = net_total["nominal"]
+    net_lower = net_total["lower"]
+    net_upper = net_total["upper"]
+
+    cooling = calculation["cooling_capacity_kw"]
+    cooling_nominal = cooling["nominal"]
+    cooling_lower = cooling["lower"]
+    cooling_upper = cooling["upper"]
+
+    heating = calculation["heating_capacity_kw"]
+    heating_nominal = heating["nominal"]
+    heating_lower = heating["lower"]
+    heating_upper = heating["upper"]
+
+    thermal_airflow = calculation["airflow_m3_h"]["thermal_for_internal_sensible"]
+    governing = calculation["airflow_m3_h"]["governing"]
+    nominal_basis = governing["nominal_basis"]
+    nominal_governing = governing["nominal"]
+    governing_lower = governing["lower"]
+    governing_upper = governing["upper"]
 
     cooling_status, cooling_message = _capacity_status(
         cooling_lower,

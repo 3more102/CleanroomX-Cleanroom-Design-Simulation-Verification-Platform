@@ -84,6 +84,8 @@ The governing airflow lower and upper bounds are the maximum of the correspondin
 
 All candidate comparisons use full-precision calculated airflow values. Six-decimal rounding is applied only when formatting the returned interval, so presentation rounding cannot change the governing basis or internal bound selection.
 
+Cooling/heating capacity decisions likewise use the canonical full-precision load and capacity intervals. The public analysis payload remains rounded for presentation, while evidence integrations such as ProofGraph consume the full-precision derived values that actually drove the capacity status. This keeps a boundary verdict reproducible from its stored calculation evidence instead of allowing display rounding to change the apparent decision.
+
 ## Traceability
 
 Every uncertain numeric input may carry the existing CleanroomX provenance record: source type/name, reference, revision, date, uncertainty basis, and notes.

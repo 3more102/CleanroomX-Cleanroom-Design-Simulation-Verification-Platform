@@ -1,7 +1,10 @@
 import pytest
 
 from cleanroomx.hvac_models import AirState
-from cleanroomx.thermal_uncertainty import analyze_thermal_uncertainty
+from cleanroomx.thermal_uncertainty import (
+    analyze_thermal_uncertainty,
+    calculate_thermal_uncertainty_values,
+)
 from cleanroomx.psychrometrics import (
     moist_air_cp_kj_kg_da_k,
     moist_air_specific_volume_m3_kg_da,
@@ -57,6 +60,23 @@ def test_internal_load_interval_and_capacity_pass() -> None:
     assert result["cooling_capacity_kw"]["upper"] == pytest.approx(5.5)
     assert result["cooling_capacity_kw"]["status"] == "pass"
     assert result["overall_status"] == "pass"
+
+
+def test_canonical_values_preserve_precision_beyond_public_formatting() -> None:
+    design = base_design(
+        internal_sensible_kw=uv(1.0000004, "kW"),
+        internal_latent_kw=uv(0.0, "kW"),
+        supply_air_temp_c=None,
+        capacity_margin_percent=0.0,
+        available_cooling_capacity_kw=1.0000002,
+    )
+
+    calculation = calculate_thermal_uncertainty_values(design)
+    presented = analyze_thermal_uncertainty(design)
+
+    assert calculation["cooling_capacity_kw"]["upper"] == pytest.approx(1.0000004)
+    assert presented["cooling_capacity_kw"]["upper"] == 1.0
+    assert presented["cooling_capacity_kw"]["status"] == "fail"
 
 
 def test_capacity_overlap_is_indeterminate() -> None:

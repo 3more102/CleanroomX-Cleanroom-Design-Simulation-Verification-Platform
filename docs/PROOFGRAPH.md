@@ -320,6 +320,13 @@ Canonical complete-interval semantics are preserved:
 - FAIL when the full required interval exceeds available capacity;
 - INDETERMINATE when available capacity lies inside the required interval.
 
+The adapter stores full-precision canonical derived intervals in CalculationEvidence
+and uses those same values for finding `actual` and `delta`. The standalone
+thermal-analysis payload may round interval values to six decimal places for
+presentation, but that display rounding is not reused as ProofGraph decision
+evidence. A boundary verdict can therefore be reproduced from the evidence that
+actually drove the canonical capacity comparison.
+
 ProofGraph now accepts explicit `indeterminate` and `not_checked` verdict
 states instead of forcing those conditions into PASS/FAIL. The thermal adapter
 does not emit `not_checked` requirements for unconfigured capacities; it records

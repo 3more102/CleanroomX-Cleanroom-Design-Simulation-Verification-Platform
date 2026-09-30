@@ -61,6 +61,52 @@ def test_throttling_one_path_redistributes_flow_without_changing_total() -> None
     ] <= 1e-6
 
 
+
+def test_flow_change_percent_uses_unrounded_sub_display_airflow() -> None:
+    network = LoopedFlowNetwork(
+        name="Sub-display damper branch",
+        node_injections_m3_h={"Source": 3600.0, "Sink": -3600.0},
+        edges=(
+            QuadraticFlowEdge("Main", "Source", "Sink", 1.0),
+            QuadraticFlowEdge("Trace", "Source", "Sink", 8.1e19),
+        ),
+        reference_node="Source",
+    )
+    result = solve_loop_damper_study(
+        LoopDamperStudy(
+            name="Trace throttling",
+            loop_network=network,
+            cases=(
+                DamperResistanceCase(
+                    "Trace x4",
+                    {"Trace": 4.0},
+                ),
+            ),
+        )
+    )
+
+    baseline_trace = next(
+        edge
+        for edge in result["baseline_solution"]["edges"]
+        if edge["name"] == "Trace"
+    )
+    case_trace = next(
+        edge
+        for edge in result["cases"][0]["network_solution"]["edges"]
+        if edge["name"] == "Trace"
+    )
+    change = next(
+        row
+        for row in result["cases"][0]["flow_changes"]
+        if row["edge"] == "Trace"
+    )
+
+    assert baseline_trace["airflow_m3_h"] == 0.0
+    assert case_trace["airflow_m3_h"] == 0.0
+    assert change["baseline_airflow_m3_h"] == 0.0
+    assert change["case_airflow_m3_h"] == 0.0
+    assert change["percent_change"] == pytest.approx(-50.0)
+
 def test_unity_multiplier_preserves_baseline_solution() -> None:
     result = solve_loop_damper_study(
         LoopDamperStudy(

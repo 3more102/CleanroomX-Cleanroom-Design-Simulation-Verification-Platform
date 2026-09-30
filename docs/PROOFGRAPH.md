@@ -67,15 +67,22 @@ when none exists in the underlying engineering evidence.
 
 ## Compliance states
 
-ProofGraph v1 uses four explicit verdict states:
+ProofGraph v1 uses six explicit verdict states:
 
 - pass
 - warning
 - fail
 - unknown
+- indeterminate
+- not_checked
 
-Unknown is the fail-closed representation for insufficient or unavailable
-evidence. It is not equivalent to pass.
+Unknown is the fail-closed representation when the available evidence or
+provenance is insufficient to issue a verified verdict. Indeterminate means the
+canonical analysis was evaluated but its result interval overlaps the decision
+boundary. not_checked means a known requirement/check was not evaluated by the
+canonical source workflow, for example because required evidence is absent or an
+explicitly optional mapping is not configured. None of these states is equivalent
+to pass.
 
 ## Existing rule-pack bridge
 
@@ -96,8 +103,10 @@ The adapter preserves:
 - pass/fail result
 - missing-evidence state
 
-Existing not_checked findings become ProofGraph unknown verdicts and no evidence
-record is fabricated for the absent value.
+Existing not_checked findings remain not_checked in ProofGraph, and no evidence
+record is fabricated for the absent value. This preserves the distinction between
+a check that was not evaluated and a check whose evidence cannot support a
+verified verdict.
 
 This is an adapter boundary. It does not reinterpret an external standard, invent
 a standard limit, or claim that the supplied rule pack is complete.
@@ -160,9 +169,10 @@ For each configured room pressure target it creates:
 - a ComplianceCheck requiring both design and calculation evidence;
 - a finding and verdict that preserve the canonical pass/fail/not_checked result.
 
-not_checked maps to ProofGraph unknown. A required missing mapping remains fail,
-matching the source service. When no pressure target exists, the adapter does not
-invent a requirement merely because a solved pressure observation is available.
+not_checked remains not_checked in ProofGraph. A required missing mapping remains
+fail, matching the source service. When no pressure target exists, the adapter
+does not invent a requirement merely because a solved pressure observation is
+available.
 
 The design-requirements object, pressure-network object, and mapping policy each
 receive deterministic revision digests. Confidence remains unset because the

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import math
 
-from .loop_network import LoopedFlowNetwork, QuadraticFlowEdge, solve_looped_network
+from .loop_network import (
+    LoopedFlowNetwork,
+    QuadraticFlowEdge,
+    _calculate_looped_network,
+    _format_looped_network_calculation,
+)
 from .loop_resistance import LoopedDuctResistanceInput, derive_loop_edge_resistance
 
 
@@ -187,17 +192,23 @@ def _relaxed_automatic_edge(
 
 def _edge_target_rows(
     network: LoopedFlowNetwork,
-    solved: dict,
+    calculation: dict,
     near_zero_airflow_m3_h: float,
 ) -> tuple[list[dict], float, int]:
-    solved_edges = {row["name"]: row for row in solved["edges"]}
+    edge_airflows_m3_h = {
+        edge.name: airflow_m3_s * 3600.0
+        for edge, airflow_m3_s in zip(
+            network.edges,
+            calculation["edge_flows_m3_s"],
+            strict=True,
+        )
+    }
     rows: list[dict] = []
     max_relative_change = 0.0
     near_zero_count = 0
 
     for edge in network.edges:
-        solved_edge = solved_edges[edge.name]
-        airflow = abs(float(solved_edge["airflow_m3_h"]))
+        airflow = abs(edge_airflows_m3_h[edge.name])
         if not _is_automatic_geometry_edge(edge):
             rows.append(
                 {
@@ -300,7 +311,7 @@ def _decorate_result(
             {
                 "name": row["name"],
                 "state": row["state"],
-                "airflow_m3_h": round(row["airflow_m3_h"], 9),
+                "airflow_m3_h": round(row["airflow_m3_h"], 6),
                 "used_resistance_pa_per_m3_s_squared": round(
                     row["used_resistance_pa_per_m3_s_squared"], 12
                 ),
@@ -404,13 +415,14 @@ def solve_variable_friction_looped_network(
     automatic_edge_count = len(automatic_edges)
 
     if automatic_edge_count == 0:
-        solved = solve_looped_network(
+        calculation = _calculate_looped_network(
             network,
             mass_balance_tolerance_m3_h=mass_balance_tolerance_m3_h,
             max_iterations=max_newton_iterations,
         )
+        solved = _format_looped_network_calculation(network, calculation)
         rows, max_relative_change, near_zero_count = (
-            _edge_target_rows(network, solved, near_zero)
+            _edge_target_rows(network, calculation, near_zero)
         )
         return _decorate_result(
             solved,
@@ -429,13 +441,14 @@ def solve_variable_friction_looped_network(
     for outer_iteration in range(
         1, max_outer_iterations + 1
     ):
-        solved = solve_looped_network(
+        calculation = _calculate_looped_network(
             current,
             mass_balance_tolerance_m3_h=mass_balance_tolerance_m3_h,
             max_iterations=max_newton_iterations,
         )
+        solved = _format_looped_network_calculation(current, calculation)
         rows, max_relative_change, near_zero_count = (
-            _edge_target_rows(current, solved, near_zero)
+            _edge_target_rows(current, calculation, near_zero)
         )
         history.append(
             {

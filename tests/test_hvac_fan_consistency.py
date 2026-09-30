@@ -6,6 +6,8 @@ import pytest
 
 from cleanroomx.consistency import analyze_hvac_fan_airflow_consistency
 from cleanroomx.dossier import build_dossier, summarize_dossier_components
+from cleanroomx.hvac import analyze_hvac_project
+from cleanroomx.hvac_io import hvac_project_from_dict
 from cleanroomx.dossier_report import markdown_dossier_report
 
 
@@ -30,6 +32,40 @@ def test_hvac_fan_airflow_consistency_passes_with_explicit_tolerance() -> None:
     assert result["status"] == "pass"
     assert result["mismatch_count"] == 0
     assert result["study_airflow_checks"][0]["absolute_difference_m3_h"] == 2.0
+
+
+def test_hvac_fan_airflow_consistency_uses_unrounded_source_project() -> None:
+    project = hvac_project_from_dict(
+        {
+            "name": "Cross-study precision",
+            "rooms": [
+                {
+                    "name": "Room",
+                    "cleanroom_airflow_m3_h": 1000.0004,
+                    "thermal_design": {
+                        "room_air": {
+                            "dry_bulb_c": 22.0,
+                            "relative_humidity_percent": 45.0,
+                        }
+                    },
+                }
+            ],
+        }
+    )
+    presented = analyze_hvac_project(project)
+    assert presented["total_governing_airflow_m3_h"] == 1000.0
+
+    result = analyze_hvac_fan_airflow_consistency(
+        presented,
+        hvac_project=project,
+        fan_operating_points=[_fan("Precision fan", 1000.00055)],
+        airflow_abs_tolerance_m3_h=0.0002,
+    )
+
+    assert result["status"] == "pass"
+    assert result["mismatch_count"] == 0
+    assert result["hvac_governing_airflow_m3_h"] == 1000.0004
+    assert result["study_airflow_checks"][0]["absolute_difference_m3_h"] == 0.00015
 
 
 def test_hvac_fan_airflow_consistency_fails_on_solved_mismatch() -> None:

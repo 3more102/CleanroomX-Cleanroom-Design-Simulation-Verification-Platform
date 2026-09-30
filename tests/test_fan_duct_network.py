@@ -92,9 +92,8 @@ def test_derives_critical_path_and_solves_fan_operating_point() -> None:
     path_b = next(
         path for path in result["paths"] if path["name"] == "Path B"
     )
-    assert path_b["operating_pressure_drop_pa"] == pytest.approx(
-        295.266, abs=0.02
-    )
+    assert path_b["operating_pressure_drop_pa"] == 295.266
+    assert path_b["sections"][0]["operating_pressure_drop_pa"] == 295.266
 
 
 def test_reference_flow_ratio_scales_section_resistance() -> None:

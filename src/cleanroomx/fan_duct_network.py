@@ -8,7 +8,8 @@ from .fan_curve import (
     FanCurve,
     FanOperatingPointStudy,
     SystemCurve,
-    solve_fan_operating_point,
+    _calculate_fan_operating_point,
+    _format_fan_operating_point_calculation,
 )
 
 
@@ -160,34 +161,50 @@ def analyze_fan_duct_network(study: FanDuctNetworkStudy) -> dict:
         fixed_pressure_pa=study.fixed_pressure_pa,
         resistance_pa_per_m3_s_squared=critical_resistance,
     )
-    fan_result = solve_fan_operating_point(
-        FanOperatingPointStudy(
-            name=study.name,
-            fan_curve=study.fan_curve,
-            system_curve=system_curve,
-        )
+    operating_study = FanOperatingPointStudy(
+        name=study.name,
+        fan_curve=study.fan_curve,
+        system_curve=system_curve,
+    )
+    operating_calculation = _calculate_fan_operating_point(operating_study)
+    fan_result = _format_fan_operating_point_calculation(
+        operating_study,
+        operating_calculation,
     )
 
     operating_point = fan_result["operating_point"]
-    if operating_point is not None:
-        operating_q_m3_s = operating_point["airflow_m3_s"]
-        for path in paths:
+    if operating_calculation is not None:
+        operating_q_m3_s = operating_calculation["airflow_m3_s"]
+        operating_airflow_m3_h = operating_calculation["airflow_m3_h"]
+        for source_path, path in zip(
+            study.duct_network.paths,
+            paths,
+            strict=True,
+        ):
             path_resistance = raw_path_resistance[path["name"]]
             path["operating_pressure_drop_pa"] = round(
                 path_resistance * operating_q_m3_s**2,
                 4,
             )
-            for section in path["sections"]:
+            for source_section, section in zip(
+                source_path.sections,
+                path["sections"],
+                strict=True,
+            ):
+                flow_ratio = (
+                    source_section.airflow_m3_h
+                    / study.reference_system_airflow_m3_h
+                )
+                scaled_resistance = _section_scaled_resistance(
+                    source_section,
+                    study.reference_system_airflow_m3_h,
+                )
                 section["operating_airflow_m3_h"] = round(
-                    operating_point["airflow_m3_h"]
-                    * section["flow_ratio_to_system"],
+                    operating_airflow_m3_h * flow_ratio,
                     3,
                 )
                 section["operating_pressure_drop_pa"] = round(
-                    section[
-                        "quadratic_resistance_pa_per_m3_s_squared"
-                    ]
-                    * operating_q_m3_s**2,
+                    scaled_resistance * operating_q_m3_s**2,
                     4,
                 )
 

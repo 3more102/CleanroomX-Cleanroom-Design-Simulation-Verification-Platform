@@ -225,6 +225,40 @@ def test_graph_rejects_verdict_findings_for_another_requirement() -> None:
         proofgraph_from_dict(broken)
 
 
+def _append_secondary_evidence(document: dict) -> dict:
+    secondary = copy.deepcopy(document["evidence"][0])
+    secondary["id"] = "ev-pressure-secondary"
+    secondary["property_name"] = "secondary_pressure_differential_pa"
+    secondary["provenance"][0]["origin"] = "/spaces/ROOM-A/secondary_pressure_target_pa"
+    document["evidence"].append(secondary)
+    return secondary
+
+
+def test_graph_rejects_provenance_id_reused_across_evidence() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    _append_secondary_evidence(broken)
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="provenance id .* is reused"):
+        proofgraph_from_dict(broken)
+
+
+def test_graph_rejects_multi_evidence_provenance_cycle() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    secondary = _append_secondary_evidence(broken)
+    secondary["provenance"][0]["id"] = "prov-pressure-secondary"
+    broken["evidence"][0]["provenance"][0]["upstream_evidence_ids"] = [
+        secondary["id"]
+    ]
+    secondary["provenance"][0]["upstream_evidence_ids"] = [
+        broken["evidence"][0]["id"]
+    ]
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="dependency cycle"):
+        proofgraph_from_dict(broken)
+
+
 def test_non_finite_evidence_is_rejected() -> None:
     with pytest.raises(ValueError, match="finite number"):
         DesignEvidence(

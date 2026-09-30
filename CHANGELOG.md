@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased ProofGraph integrity — explicit project identity — 2026-09-30
+
+- Rejects a ProofGraph that combines evidence carrying different explicit `project_id` values, preventing cross-project evidence contamination from being serialized as one auditable graph.
+- Keeps evidence without an explicit project identity compatible for source adapters that do not yet provide one.
+- Adds strict-parser regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
+
 ## Unreleased ProofGraph scalability — iterative provenance-cycle validation — 2026-09-30
 
 - Replaces recursive provenance-cycle DFS with a deterministic explicit-stack traversal.

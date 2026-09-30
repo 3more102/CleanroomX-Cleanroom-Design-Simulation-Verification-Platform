@@ -207,6 +207,19 @@ def test_graph_rejects_provenance_dependency_cycles() -> None:
         proofgraph_from_dict(broken)
 
 
+def test_graph_rejects_mixed_explicit_project_identity() -> None:
+    broken = copy.deepcopy(_graph().to_dict())
+    cross_project = copy.deepcopy(broken["evidence"][0])
+    cross_project["id"] = "ev-other-project"
+    cross_project["property_name"] = "other_project_pressure_pa"
+    cross_project["project_id"] = "PROJECT-2"
+    broken["evidence"].append(cross_project)
+    broken.pop("graph_sha256")
+
+    with pytest.raises(ValueError, match="multiple explicit project ids"):
+        proofgraph_from_dict(broken)
+
+
 def test_graph_accepts_deep_acyclic_provenance_chain() -> None:
     document = copy.deepcopy(_graph().to_dict())
     template = copy.deepcopy(document["evidence"][0])

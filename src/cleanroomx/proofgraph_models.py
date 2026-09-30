@@ -683,6 +683,19 @@ class ProofGraph:
 
         _reject_evidence_dependency_cycles(self.evidence)
 
+        explicit_project_ids = sorted(
+            {
+                item.project_id
+                for item in self.evidence
+                if item.project_id is not None
+            }
+        )
+        if len(explicit_project_ids) > 1:
+            raise ValueError(
+                "proofgraph evidence contains multiple explicit project ids: "
+                + ", ".join(explicit_project_ids)
+            )
+
         for check in self.checks:
             if check.requirement_id not in requirement_ids:
                 raise ValueError(

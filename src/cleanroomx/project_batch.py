@@ -11,11 +11,11 @@ from typing import Callable, Sequence
 from . import __version__
 from .application import run_analysis
 from .markdown import markdown_text
+from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
     ProjectFileRevision,
-    atomic_write_text,
     capture_project_file_revision,
     load_project_document_with_revision,
     project_file_revision_matches,
@@ -426,8 +426,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = Path(args.project).expanduser().resolve(strict=False)
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file
@@ -453,7 +453,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
-            atomic_write_text(args.output, text)
+            def verify_publication_boundary() -> None:
+                matches, check_error = _source_revision_state(source, revision)
+                if not matches:
+                    detail = f": {check_error}" if check_error else ""
+                    raise OSError(
+                        f"project source changed before output publication{detail}"
+                    )
+                _assert_output_is_distinct_from_source(source, args.output)
+                _assert_output_is_distinct_from_dependencies(
+                    project,
+                    base_dir=source.parent,
+                    output=args.output,
+                )
+
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=verify_publication_boundary,
+            )
         else:
             sys.stdout.write(text)
         return project_batch_exit_code(batch)

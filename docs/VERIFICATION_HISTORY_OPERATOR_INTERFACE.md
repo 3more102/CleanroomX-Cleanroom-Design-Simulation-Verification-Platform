@@ -61,15 +61,19 @@ verification record.
 
 A record is reported as `current` only when its analysis kind, canonical input
 SHA-256, requirements SHA-256, mappings SHA-256, and active mapping identities all
-still match and the analysis declares no file-backed external engineering inputs.
+still match. For schema-v2 records with file-backed engineering inputs, each current
+dependency must also match the exact persisted SHA-256 and byte size captured from
+the immutable execution snapshot.
 
-If configuration changed, the state is `stale`. If active mappings exist but no
-record is retained, the state is `not_verified`. Analyses without active mappings
-are `not_configured`.
+If configuration or dependency content changed, the state is `stale`. If active
+mappings exist but no record is retained, the state is `not_verified`. Analyses
+without active mappings are `not_configured`.
 
-Schema-v1 verification records do not retain the file fingerprints needed to prove
-that external dependency bytes are unchanged. Therefore a matching file-backed
-analysis is reported as `dependency_freshness_unverifiable`, never as current.
+Legacy schema-v1 records are preserved without rewriting their historical hashes.
+Because they do not contain external dependency fingerprints, a matching
+file-backed v1 record remains `dependency_freshness_unverifiable`. A schema-v2
+record is also reported unverifiable if a dependency is unavailable/unstable or a
+relative path cannot be resolved against the saved project directory.
 
 ## Project diagnostics integration
 

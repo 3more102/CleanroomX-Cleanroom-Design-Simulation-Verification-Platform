@@ -53,6 +53,42 @@ def _latest_records_by_analysis(
     return latest
 
 
+def verification_record_currency_context(
+    record: dict[str, Any],
+    current_assessment: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Contextualize one retained record without rewriting historical evidence."""
+    if current_assessment is None:
+        return {
+            "state": "not_in_current_project",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "The analysis referenced by this retained verification record is "
+                "not present in the current project."
+            ),
+        }
+
+    latest_record = current_assessment.get("latest_record")
+    if (
+        not isinstance(latest_record, dict)
+        or latest_record.get("sequence") != record.get("sequence")
+    ):
+        return {
+            "state": "historical",
+            "current": False,
+            "complete": True,
+            "mismatch_reasons": [],
+            "explanation": (
+                "A newer retained verification record exists for this analysis. "
+                "Current verification currency applies only to the latest retained "
+                "record."
+            ),
+        }
+    return copy.deepcopy(current_assessment)
+
+
 def _analysis_currency(
     analysis,
     *,

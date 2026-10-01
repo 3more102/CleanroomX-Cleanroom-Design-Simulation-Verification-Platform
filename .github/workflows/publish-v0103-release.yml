@@ -1,0 +1,112 @@
+name: Publish CleanroomX v0.103.0
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish immutable v0.103.0 release
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.103.0
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+      CI_RUN_ID: ${{ github.event.workflow_run.id }}
+      CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+    steps:
+      - name: Check out exact successful CI commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Qualify current main and immutable tag
+        id: closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Immutable release tag ${TAG} already exists at ${existing_sha}; no publication work is required."
+            exit 0
+          fi
+
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
+            echo "Successful CI commit ${TARGET_SHA} is stale; current main is ${current_main_sha}."
+          else
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+            echo "Successful CI commit is current main and is eligible for v0.103.0 publication."
+          fi
+
+      - name: Verify validated Release 3 identity
+        if: steps.closure.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git show "${TARGET_SHA}:pyproject.toml" | grep -E '^version = "0\.103\.0"$')" = 'version = "0.103.0"'
+          test "$(git show "${TARGET_SHA}:src/cleanroomx/__init__.py" | grep -E '^__version__ = "0\.103\.0"$')" = '__version__ = "0.103.0"'
+          git show "${TARGET_SHA}:examples/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.103.0"'
+          git show "${TARGET_SHA}:src/cleanroomx/demo/gui_demo.cleanroomx.json" | grep -F '"application_version": "0.103.0"'
+          git show "${TARGET_SHA}:README.md" | grep -F 'The current stable release is **v0.103.0 (Release 3)**.'
+          git show "${TARGET_SHA}:CHANGELOG.md" | grep -F '## v0.103.0 — Release 3 — 2026-10-01'
+          git show "${TARGET_SHA}:VALIDATION.txt" | grep -F 'RELEASE 3 / v0.103.0 RELEASE IDENTITY CANDIDATE'
+          git show "${TARGET_SHA}:.github/workflows/ci.yml" | grep -F 'tests/test_project_requirements_traceability.py'
+          git show "${TARGET_SHA}:.github/workflows/ci.yml" | grep -F 'cleanroomx-project-traceability --help'
+
+      - name: Publish tag and GitHub Release
+        if: steps.closure.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
+            echo "Main advanced to ${current_main_sha}; skip stale publication for ${TARGET_SHA}."
+            exit 0
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            echo "Release ${TAG} already exists at ${existing_sha}; immutable release is unchanged."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            remote_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${remote_sha}" = "${TARGET_SHA}"
+          else
+            git tag "${TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          cat > /tmp/release-notes.md <<EOF
+          CleanroomX v0.103.0 promotes Release 3 to the production release identity.
+
+          Exact release gate:
+          - release commit: ${TARGET_SHA}
+          - successful current-main CI run: ${CI_RUN_ID}
+          - CI run: ${CI_RUN_URL}
+
+          Release 3 adds first-class persisted project requirements, explicit requirement-to-analysis evidence mappings, canonical requirement verification with unit conversion, immutable verification history and current-context currency checks, retained ProofGraph evidence with cross-artifact integrity verification, project-native engineering dossiers, requirements traceability CLI/GUI surfaces, verification-history operator interfaces, and an external-plugin trust gate that blocks untrusted plugins before import.
+
+          The release retains the Release 2 durable project lifecycle, crash recovery, revision history, project-wide undo/redo, immutable analysis execution and run history, project bundles, synchronized 2D/3D spatial production features, HVAC/network/uncertainty workflows, and strict numerical/provenance checks.
+
+          Project schema remains cleanroomx.project schema_version 1. No solver equation, numerical tolerance, unit convention, or configured engineering acceptance criterion is intentionally changed by the v0.103.0 release-identity patch.
+
+          Publication is fail-closed: this workflow only tags the exact successful CI SHA when it is still current main, and it refuses to move or replace an existing v0.103.0 tag.
+          EOF
+
+          gh release create "${TAG}" --verify-tag --target "${TARGET_SHA}" --title "CleanroomX v0.103.0 — Release 3" --notes-file /tmp/release-notes.md

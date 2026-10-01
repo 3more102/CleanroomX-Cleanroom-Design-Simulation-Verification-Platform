@@ -90,6 +90,11 @@ every configured analysis has both:
 - `currency.state == "current"`;
 - a latest retained canonical verification with `verified == true`.
 
+The strict-JSON `gate` object also reports configured, accepted, and rejected
+analysis counts plus stable `accepted_analysis_ids` / `rejected_analysis_ids`
+lists. CI can therefore identify the exact failing project analyses without
+re-deriving scope from the complete currency payload.
+
 This is deliberately fail-closed: a configured analysis that is stale,
 dependency-freshness-unverifiable, not yet verified, or currently verified as
 FAIL/incomplete causes the complete-project gate to fail. Historical orphaned

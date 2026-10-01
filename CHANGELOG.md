@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — project verification operator CLI — 2026-10-01
+
+- Adds `cleanroomx-project-verify run` for read-only execution of the canonical saved-project requirements → evidence → verification → ProofGraph workflow.
+- Adds `cleanroomx-project-verify persist` to run the same workflow and append the canonical result to the guarded tamper-evident project verification ledger.
+- Uses exit code 0 only for verified PASS, 1 for successfully executed adverse/incomplete verification, and 2 for operational or integrity failures.
+- Protects read-only workflow artifact publication against project/dependency overwrite and rejects publication if the exact verified project revision has changed.
+- Preserves failed and incomplete verification as valid historical audit evidence when the operator chooses `persist`.
+
+
 ## Unreleased Release 3 — desktop project dossier export — 2026-10-01
 
 - Adds **File → Export Project Engineering Dossier...** to the desktop application.

@@ -202,7 +202,12 @@ def _finite_number(value: Any) -> float:
         raise EngineeringUnitConversionError(
             "engineering value must be a finite number"
         )
-    result = float(value)
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise EngineeringUnitConversionError(
+            "engineering value must be representable as a finite number"
+        ) from exc
     if not math.isfinite(result):
         raise EngineeringUnitConversionError(
             "engineering value must be a finite number"

@@ -27,11 +27,8 @@ The list output is strict JSON using inspection schema version 2 and contains:
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
 - compact per-record immutable verification status;
-- a per-record `current_assessment` that labels the latest applicable record with
-  canonical current/stale/unverifiable state, older records as `historical`, and
-  records for removed analyses as `not_in_current_project`;
-- the complete fail-closed project verification-currency assessment against the
-  current project configuration and retained dependency fingerprints;
+- per-record `current_currency` context that labels only the latest retained record for each current analysis with its canonical current/stale/unverifiable state, labels older records `historical`, and labels records for removed analyses `not_in_current_project`;
+- fail-closed project-wide verification-currency assessment against the current project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -46,9 +43,8 @@ cleanroomx-verification-history show project.cleanroomx.json --sequence 12
 
 This returns the complete canonical persisted record, including exact evidence
 locators, canonical findings, ProofGraph identities, runtime/code provenance, and
-the chained record hash. The response also includes `record_currency`, derived from the canonical
-verification-currency record-context helper. The historical record itself is not
-modified.
+the chained record hash. The persisted record remains immutable historical evidence;
+current-project interpretation is returned separately as `record_currency`.
 
 ## Stable-read boundary
 
@@ -58,14 +54,15 @@ file revision before and after inspection and emits nothing if the file changes
 during the operation.
 
 The command is read-only. It does not rewrite the project, recompute historical
-verdicts, or silently bind old evidence to current project state.
+verdicts, or silently bind old evidence to current project state. The CLI and
+desktop reuse the same canonical record-currency context helper so
+`historical`, `not_in_current_project`, and latest-record semantics cannot drift
+independently.
 
 ## Verification currency
 
 The operator output also assesses each current analysis against its latest retained
-verification record. Per-record CLI context is derived from the canonical
-verification-currency record-context helper so current, historical, and removed-
-analysis states are explicit in machine-readable output.
+verification record.
 
 A record is reported as `current` only when its analysis kind, canonical input
 SHA-256, requirements SHA-256, mappings SHA-256, and active mapping identities all

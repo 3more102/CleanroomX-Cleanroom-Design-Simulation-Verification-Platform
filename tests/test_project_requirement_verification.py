@@ -197,7 +197,7 @@ def test_stale_and_unknown_freshness_fail_closed() -> None:
     assert unknown["verified"] is False
 
 
-def test_unit_mismatch_is_invalid_without_implicit_conversion() -> None:
+def test_unsupported_unit_mismatch_is_invalid_fail_closed() -> None:
     result = verify_project_requirements(
         _registry(_requirement(unit="1/h")),
         [_evidence(unit="Hz")],
@@ -206,7 +206,7 @@ def test_unit_mismatch_is_invalid_without_implicit_conversion() -> None:
     assert result["status"] == "not_checked"
     assert result["findings"][0]["state"] == "invalid"
     assert result["summary"]["invalid_count"] == 1
-    assert "no implicit conversion" in result["findings"][0]["explanation"]
+    assert "unsupported source engineering unit 'Hz'" in result["findings"][0]["explanation"]
 
 
 def test_missing_value_remains_incomplete_before_unit_conversion() -> None:

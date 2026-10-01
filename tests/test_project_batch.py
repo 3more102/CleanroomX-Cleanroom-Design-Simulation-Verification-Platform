@@ -303,6 +303,18 @@ def test_project_batch_cli_uses_same_loaded_revision_for_guard_and_execution(
     assert output_path.is_file()
 
 
+def test_project_batch_cli_reports_project_path_resolution_errors(monkeypatch, capsys):
+    def fail_resolve(self, strict=False):
+        raise OSError("cannot resolve project path")
+
+    monkeypatch.setattr(project_batch.Path, "resolve", fail_resolve)
+
+    code = main(["broken.cleanroomx.json"])
+
+    assert code == 2
+    assert "cannot resolve project path" in capsys.readouterr().err
+
+
 def test_project_batch_cli_refuses_project_source_as_output(tmp_path, capsys):
     project_path = save_project_document(
         tmp_path / "batch.cleanroomx.json",

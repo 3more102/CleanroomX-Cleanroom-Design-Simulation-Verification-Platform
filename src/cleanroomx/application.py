@@ -661,6 +661,7 @@ def validate_application_registry() -> dict:
         "builtin_analysis_count": len(_BUILTIN_ANALYSES),
         "plugin_api_version": PLUGIN_API_VERSION,
         "plugin_analysis_count": len(_PLUGIN_ANALYSES),
+        "plugin_trust_policy": _PLUGIN_DISCOVERY.trust_policy.to_dict(),
         "plugin_issue_count": len(issues),
         "plugin_issues": list(issues),
         "callable_target_count": callable_target_count,

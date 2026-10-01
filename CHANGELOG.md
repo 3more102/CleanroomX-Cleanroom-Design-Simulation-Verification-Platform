@@ -7,8 +7,6 @@
 - Fails closed before `entry_point.load()` for invalid policy configuration, missing allowlist identity, non-allowlisted distributions, and pinned-version mismatch.
 - Exposes the effective policy and configuration diagnostics through the existing application registry / `cleanroomx-gui --check` surface without changing plugin API v1 or built-in analysis behavior.
 
-## Unreleased Release 3 — persisted verification status gate — 2026-10-01
-
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

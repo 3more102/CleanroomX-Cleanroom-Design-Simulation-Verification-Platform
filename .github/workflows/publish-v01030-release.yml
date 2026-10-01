@@ -1,0 +1,79 @@
+name: Publish CleanroomX v0.103.0
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish immutable v0.103.0 release
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.103.0
+      TARGET_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check out exact successful CI commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Qualify and publish exact current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [ "${current_main_sha}" != "${TARGET_SHA}" ]; then
+            echo "Successful CI SHA ${TARGET_SHA} is stale; current main is ${current_main_sha}. Publication skipped."
+            exit 0
+          fi
+
+          grep -Fx 'version = "0.103.0"' pyproject.toml
+          grep -Fx '__version__ = "0.103.0"' src/cleanroomx/__init__.py
+          grep -F '"application_version": "0.103.0"' examples/gui_demo.cleanroomx.json
+          grep -F '"application_version": "0.103.0"' src/cleanroomx/demo/gui_demo.cleanroomx.json
+          grep -F 'Release: CleanroomX v0.103.0' VALIDATION.txt
+          grep -F '# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence' TEST_EVIDENCE.md
+
+          tag_ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha' 2>/dev/null || true)"
+          if [ -n "${tag_ref}" ]; then
+            if [ "${tag_ref}" != "${TARGET_SHA}" ]; then
+              echo "Immutable tag ${TAG} already exists at ${tag_ref}, not ${TARGET_SHA}."
+              exit 1
+            fi
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              echo "Release ${TAG} already exists at the exact target SHA; nothing to do."
+              exit 0
+            fi
+          fi
+
+          cat > /tmp/release-notes.md <<EOF
+          CleanroomX v0.103.0 is the Release 3 production closure.
+
+          Exact release SHA: ${TARGET_SHA}
+
+          Release 3 closes the requirements/evidence/verification line with persisted explicit evidence authority, fail-closed external-plugin trust, canonical engineering-unit conversion, retained canonical ProofGraph evidence with cross-artifact integrity validation, project requirements traceability, verification-currency gates, protected project-batch publication, and desktop/operator evidence drill-down.
+
+          The exact current-main CI that triggered this workflow is the authoritative release gate. Historical baseline evidence remains in TEST_EVIDENCE.md and VALIDATION.txt.
+
+          No solver equation, numerical tolerance, requirement acceptance criterion, project schema version, or historical verification semantic is intentionally changed by the release-identity promotion.
+          EOF
+
+          if [ -n "${tag_ref}" ]; then
+            gh release create "${TAG}" --verify-tag --title "CleanroomX v0.103.0 — Release 3 Production Closure" --notes-file /tmp/release-notes.md
+          else
+            gh release create "${TAG}" --target "${TARGET_SHA}" --title "CleanroomX v0.103.0 — Release 3 Production Closure" --notes-file /tmp/release-notes.md
+          fi

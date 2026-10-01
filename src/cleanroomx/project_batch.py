@@ -426,8 +426,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = Path(args.project).expanduser().resolve(strict=False)
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file
@@ -453,6 +453,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
+            matches, check_error = _source_revision_state(source, revision)
+            if not matches:
+                detail = f": {check_error}" if check_error else ""
+                raise OSError(
+                    f"project source changed before output publication{detail}"
+                )
+            _assert_output_is_distinct_from_source(source, args.output)
+            _assert_output_is_distinct_from_dependencies(
+                project,
+                base_dir=source.parent,
+                output=args.output,
+            )
             atomic_write_text(args.output, text)
         else:
             sys.stdout.write(text)

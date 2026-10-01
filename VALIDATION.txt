@@ -1,6 +1,47 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
+Release: CleanroomX v0.103.0
+Release date: 2026-10-01
+
+RELEASE 3 VERIFIED FUNCTIONAL BASELINE
+PR #707 — Release 3 final closure restack on current main
+Exact tested PR head:
+875408729ec3587d96f4c86f77b14de80b6548be
+CI run id:
+36875375370
+conclusion SUCCESS
+Python 3.11 complete suite: 1662 passed, 4 skipped
+Python 3.12 complete suite: 1662 passed, 4 skipped
+Python 3.13 complete suite: 1662 passed, 4 skipped
+Windows PowerShell/CMD launcher smoke: SUCCESS
+
+SUBSEQUENT RELEASE 3 CLOSURE
+- PR #709 merged ProofGraph evidence precedence/conflict assessment.
+- PR #711 merged Node-24 CI action/credential hardening.
+- The final v0.103.0 candidate includes protected cleanroomx-project-run output guards for the project source, same-file aliases, and declared file-backed engineering dependencies.
+- Package/runtime/demo/CI identity is promoted to 0.103.0 without changing the project schema version.
+
+FINAL PUBLICATION RULE
+Publish v0.103.0 only from a successful CI workflow whose head SHA is still
+the exact current main SHA. The publication workflow refuses stale successful
+runs and never moves an existing v0.103.0 tag.
+
+PASS - canonical requirements/evidence/verification architecture present
+PASS - persisted verification ledger and currency model present
+PASS - ProofGraph cross-artifact integrity and precedence assessment present
+PASS - external plugin trust gate present
+PASS - project verification/dossier/traceability operator surfaces present
+PASS - project-batch output protected against source/dependency overwrite
+PASS - project schema remains cleanroomx.project v1
+PASS - solver equations, numerical tolerances, and requirement criteria are not intentionally changed by release identity promotion
+
+HISTORICAL EVIDENCE FOLLOWS
+===========================
+
+CLEANROOMX RELEASE VALIDATION
+=============================
+
 Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 

@@ -77,3 +77,14 @@ merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
+
+
+## v0.103.0 Release 3 production closure anchor
+
+The verified functional Release 3 baseline is PR #707 head
+`875408729ec3587d96f4c86f77b14de80b6548be`, which passed CI run
+`36875375370` on Python 3.11, 3.12, and 3.13 plus Windows launcher smoke.
+The final immutable `v0.103.0` tag is created only from a successful CI SHA
+that is still the exact current `main` commit. Preserve all published release
+tags; rollback by normal revert plus the full CI matrix rather than rewriting
+shared history or moving a tag.

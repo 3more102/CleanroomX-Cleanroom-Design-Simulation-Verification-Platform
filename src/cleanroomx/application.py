@@ -934,6 +934,13 @@ def _canonical_input_sha256(payload: dict) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+def analysis_input_sha256(payload: dict) -> str:
+    """Return the canonical SHA-256 identity used for analysis input provenance."""
+    if not isinstance(payload, dict):
+        raise TypeError("analysis input identity requires a JSON object")
+    return _canonical_input_sha256(payload)
+
+
 _RUNTIME_CODE_FINGERPRINT_ALGORITHM = "sha256-python-source-tree-v1"
 _RUNTIME_CODE_FINGERPRINT_ATTEMPTS = 3
 
@@ -1235,6 +1242,18 @@ def _external_dependency_references(kind: str, payload: dict) -> list[tuple[str,
                     if isinstance(value, str) and value.strip():
                         references.append((f"{key}[{index}]", value))
     return references
+
+
+def analysis_external_dependency_references(
+    kind: str,
+    payload: dict,
+) -> tuple[tuple[str, str], ...]:
+    """Return declared file-backed engineering dependencies for one analysis."""
+    if not isinstance(kind, str) or not kind:
+        raise ValueError("analysis kind must be a non-empty string")
+    if not isinstance(payload, dict):
+        raise TypeError("analysis dependency inspection requires a JSON object")
+    return tuple(_external_dependency_references(kind, payload))
 
 
 def _capture_external_dependencies(

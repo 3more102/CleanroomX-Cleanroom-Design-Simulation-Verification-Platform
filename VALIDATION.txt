@@ -15,6 +15,9 @@ PASS REQUIRED - clean wheel build/install and installed operator surfaces
 PASS REQUIRED - Windows PowerShell/CMD launcher smoke
 PASS REQUIRED - package/runtime/demo/CI identity equals 0.103.0
 PASS REQUIRED - project-batch output cannot overwrite source or dependencies
+PASS REQUIRED - project-facing report outputs recheck protected identities at atomic replacement
+PASS REQUIRED - persisted evidence-authority v1/v2 compatibility and fail-closed ambiguity
+PASS REQUIRED - automatic Darcy friction fails closed for 2000 <= Re <= 4000
 
 Publication rule:
 create v0.103.0 only after successful CI for the exact current main SHA;

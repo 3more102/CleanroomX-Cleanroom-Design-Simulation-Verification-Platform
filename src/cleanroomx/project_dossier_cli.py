@@ -84,7 +84,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 source=source,
                 output=args.output,
             )
-            atomic_write_text(args.output, text)
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=lambda: _assert_project_output_is_safe(
+                    project,
+                    source=source,
+                    output=args.output,
+                ),
+            )
         else:
             sys.stdout.write(text)
         return 0

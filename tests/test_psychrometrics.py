@@ -38,6 +38,41 @@ def test_saturation_pressure_matches_ashrae_f25_reference_table(
     )
 
 
+@pytest.mark.parametrize(
+    ("temperature_c", "expected_kpa"),
+    [
+        (-43.15, 0.00894735),  # IAPWS R14-08 Table 3: 230 K, 8.94735e-6 MPa
+        (26.85, 3.53658941),  # IAPWS-IF97 Table 35: 300 K, 3.53658941e-3 MPa
+    ],
+)
+def test_saturation_pressure_matches_iapws_program_verification(
+    temperature_c: float,
+    expected_kpa: float,
+) -> None:
+    assert saturation_vapor_pressure_kpa(temperature_c) == pytest.approx(
+        expected_kpa,
+        rel=5e-7,
+    )
+
+
+def test_dew_point_fails_closed_in_zero_c_phase_boundary_pressure_gap() -> None:
+    target_pressure_kpa = 0.61118
+    dry_bulb_c = 25.0
+    relative_humidity_percent = (
+        100.0
+        * target_pressure_kpa
+        / saturation_vapor_pressure_kpa(dry_bulb_c)
+    )
+    state = AirState(
+        dry_bulb_c,
+        relative_humidity_percent,
+        101.325,
+    )
+
+    with pytest.raises(ValueError, match="phase-boundary"):
+        dew_point_c(state)
+
+
 def test_subfreezing_saturated_air_dew_point_matches_dry_bulb() -> None:
     state = AirState(-20.0, 100.0, 101.325)
     assert dew_point_c(state) == pytest.approx(-20.0, abs=1e-9)

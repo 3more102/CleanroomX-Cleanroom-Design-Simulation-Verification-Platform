@@ -235,6 +235,12 @@ def test_compatible_rate_unit_is_converted_before_comparison() -> None:
     assert finding["state"] == "pass"
     assert finding["actual"] == pytest.approx(20.0)
     assert finding["delta"] == pytest.approx(0.0)
+    assert finding["evidence_actual"] == pytest.approx(20.0 / 3600.0)
+    assert finding["evidence_unit"] == "1/s"
+    assert finding["unit_conversion"]["source_unit"] == "1/s"
+    assert finding["unit_conversion"]["target_unit"] == "1/h"
+    assert finding["unit_conversion"]["family"] == "inverse_time_rate"
+    assert finding["unit_conversion"]["output_value"] == pytest.approx(20.0)
     assert "canonical engineering unit authority" in finding["explanation"]
 
 

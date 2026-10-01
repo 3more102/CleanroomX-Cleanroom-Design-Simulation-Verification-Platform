@@ -264,3 +264,48 @@ def test_reference_flow_fan_duct_study_uses_auto_friction() -> None:
     section = result["paths"][0]["sections"][0]
     assert section["friction_factor_method"] == "colebrook"
     assert section["friction_factor"] == pytest.approx(0.022331, abs=1e-6)
+
+def test_duct_section_auto_friction_fails_closed_in_transition_region() -> None:
+    diameter_m = 0.2
+    kinematic_viscosity_m2_s = 1.5e-5
+    reynolds = 3000.0
+    area_m2 = math.pi * diameter_m**2 / 4.0
+    velocity_m_s = reynolds * kinematic_viscosity_m2_s / diameter_m
+    airflow_m3_h = velocity_m_s * area_m2 * 3600.0
+
+    section = DuctSection(
+        name="Transition circular",
+        length_m=5.0,
+        airflow_m3_h=airflow_m3_h,
+        friction_factor=None,
+        air_density_kg_m3=1.2,
+        diameter_m=diameter_m,
+        absolute_roughness_m=0.00001,
+        kinematic_viscosity_m2_s=kinematic_viscosity_m2_s,
+    )
+
+    with pytest.raises(ValueError, match="transition region"):
+        analyze_duct_section(section)
+
+def test_duct_section_explicit_friction_remains_available_in_transition_region() -> None:
+    diameter_m = 0.2
+    kinematic_viscosity_m2_s = 1.5e-5
+    reynolds = 3000.0
+    area_m2 = math.pi * diameter_m**2 / 4.0
+    velocity_m_s = reynolds * kinematic_viscosity_m2_s / diameter_m
+    airflow_m3_h = velocity_m_s * area_m2 * 3600.0
+
+    result = analyze_duct_section(
+        DuctSection(
+            name="Qualified transition circular",
+            length_m=5.0,
+            airflow_m3_h=airflow_m3_h,
+            friction_factor=0.025,
+            air_density_kg_m3=1.2,
+            diameter_m=diameter_m,
+        )
+    )
+
+    assert result["friction_factor_method"] == "user_input"
+    assert result["friction_factor"] == pytest.approx(0.025)
+    assert result["reynolds_number"] is None

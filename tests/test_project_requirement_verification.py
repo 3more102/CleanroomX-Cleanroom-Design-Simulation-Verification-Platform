@@ -413,7 +413,8 @@ def test_explicit_evidence_authority_resolves_conflict_without_deleting_candidat
     assert result["verified"] is True
     finding = result["findings"][0]
     assert finding["evidence_id"] == "E-PASS"
-    assert finding["evidence_ids"] == ["E-FAIL", "E-PASS"]
+    assert finding["evidence_ids"] == ["E-PASS"]
+    assert finding["candidate_evidence_ids"] == ["E-FAIL", "E-PASS"]
     assert finding["evidence_authority"] == authority.to_dict()
     assert result["evidence_authority"] == [authority.to_dict()]
     assert len(result["evidence_authority_sha256"]) == 64

@@ -109,6 +109,45 @@ def test_requirements_digest_is_independent_of_input_order() -> None:
     assert left_requirements == right_requirements
 
 
+def test_requirements_digest_normalizes_equivalent_numeric_targets() -> None:
+    integer_target = _registry()
+    float_target = copy.deepcopy(integer_target)
+    negative_zero_target = copy.deepcopy(integer_target)
+    positive_zero_target = copy.deepcopy(integer_target)
+
+    for registry, target in (
+        (integer_target, 20),
+        (float_target, 20.0),
+        (negative_zero_target, -0.0),
+        (positive_zero_target, 0.0),
+    ):
+        requirement = registry["sets"][0]["requirements"][0]
+        requirement["minimum"] = None
+        requirement["target"] = target
+
+    integer_registry = ProjectDocument(
+        name="Integer target",
+        metadata={"requirements": integer_target},
+    ).to_dict()["project"]["metadata"]["requirements"]
+    float_registry = ProjectDocument(
+        name="Float target",
+        metadata={"requirements": float_target},
+    ).to_dict()["project"]["metadata"]["requirements"]
+    negative_zero_registry = ProjectDocument(
+        name="Negative zero target",
+        metadata={"requirements": negative_zero_target},
+    ).to_dict()["project"]["metadata"]["requirements"]
+    positive_zero_registry = ProjectDocument(
+        name="Positive zero target",
+        metadata={"requirements": positive_zero_target},
+    ).to_dict()["project"]["metadata"]["requirements"]
+
+    assert integer_registry == float_registry
+    assert integer_registry["sets"][0]["requirements"][1]["target"] == 20.0
+    assert negative_zero_registry == positive_zero_registry
+    assert negative_zero_registry["sets"][0]["requirements"][1]["target"] == 0.0
+
+
 def test_requirements_digest_normalizes_scope_and_required_evidence_order() -> None:
     left = _registry()
     right = copy.deepcopy(left)

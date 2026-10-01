@@ -1,8 +1,16 @@
-# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
+# CleanroomX v0.103.0 Release 3 Verification and Assurance Test Evidence
 
 ## Verified final baseline
 
-Validation date: 2026-09-25
+Validation date: 2026-10-01
+
+## v0.103.0 Release 3 closure
+
+Release 3 is layered on the immutable v0.102.1 spatial baseline and the Release 2 solver/provenance compatibility gates. The final functional line includes the consolidated Release 3 verification closure merged through PR #707 (`165b0c61f776270f58e8b691171181d694857570`), ProofGraph evidence-precedence closure PR #709 (`bb9208c2f11e20e1163992f4c8bca00a27bcb63b`, exact-head CI #2233 passed), CI runtime hardening PR #711 (`3b6db4093df79523159fe1b623fa99851900bc02`, exact-head CI #2235 passed), and the final project-batch protected-output/single-loaded-revision hardening carried by this release candidate.
+
+The v0.103.0 release gate requires the exact final PR head and then the merged current-`main` head to pass the repository CI matrix on Python 3.11, 3.12, and 3.13 plus the Windows PowerShell/CMD launcher smoke. The matrix retains the v0.91-v0.95 compatibility gates, v0.100 desktop/application regression gate, Release 2 consolidation regressions, Release 3 requirements/verification regressions, the complete suite, clean-wheel/install checks, representative CLI smoke, performance evidence, and installed Tk/Xvfb GUI smoke where defined by the workflow.
+
+Release 3 adds persisted requirements and evidence mappings, canonical verification/history/traceability, ProofGraph cross-artifact integrity and evidence precedence, explicit evidence authority, canonical engineering-unit conversion, external-plugin trust gating, and hardened project-batch execution/output safety. The release identity itself changes no solver equation, numerical tolerance, project schema version, or historical verification record.
 
 ## v0.102.1 final spatial production baseline
 

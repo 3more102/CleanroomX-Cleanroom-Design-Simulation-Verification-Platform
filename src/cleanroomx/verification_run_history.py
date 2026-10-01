@@ -200,7 +200,7 @@ def _verification_identity_body(record: dict[str, Any]) -> dict[str, Any]:
         "runtime_environment": copy.deepcopy(record["runtime_environment"]),
         "code_revision": copy.deepcopy(record["code_revision"]),
     }
-    if _record_schema_version(record) == 2:
+    if record.get("record_schema_version") == 2:
         body["record_schema_version"] = 2
         body["external_dependencies"] = copy.deepcopy(
             record["external_dependencies"]

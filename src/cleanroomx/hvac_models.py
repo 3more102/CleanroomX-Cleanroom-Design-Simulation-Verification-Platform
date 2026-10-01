@@ -40,7 +40,7 @@ class AirState:
         if not -45.0 <= temperature <= 60.0:
             raise ValueError(
                 "dry_bulb_c must be between -45 and 60 C for the implemented "
-                "saturation-vapor-pressure approximation"
+                "psychrometric model"
             )
         if not 0.0 < rh <= 100.0:
             raise ValueError("relative_humidity_percent must be > 0 and <= 100")

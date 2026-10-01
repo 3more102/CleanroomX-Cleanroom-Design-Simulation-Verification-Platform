@@ -1896,6 +1896,119 @@ def test_verification_history_currency_context_applies_only_to_latest_record():
     assert removed_context["current"] is False
 
 
+def test_verification_history_currency_context_rejects_cross_analysis_projection():
+    current_assessment = {
+        "analysis_id": "room-a",
+        "latest_record": {"sequence": 9},
+        "state": "current",
+        "current": True,
+        "complete": True,
+        "mismatch_reasons": [],
+        "explanation": "Current verification matches the project.",
+    }
+
+    with pytest.raises(ValueError, match="analysis does not match retained record"):
+        gui_module.verification_history_record_currency_context(
+            {"sequence": 9, "analysis_id": "room-b"},
+            current_assessment,
+        )
+
+
+def test_requirement_evidence_rendering_is_scoped_to_verification_history_dialog():
+    assert not hasattr(gui_module.RunHistoryDialog, "_display_value")
+    assert hasattr(gui_module.VerificationHistoryDialog, "_display_value")
+    assert "requirement_tree" not in gui_module.RunHistoryDialog._show_selected.__code__.co_names
+    assert "requirement_tree" in gui_module.VerificationHistoryDialog._show_selected.__code__.co_names
+
+
+def test_verification_history_requirement_rows_bind_retained_evidence_read_only():
+    record = {
+        "verification": {
+            "findings": [
+                {
+                    "requirement_id": "REQ-ACH",
+                    "subject_ref": "ROOM-A",
+                    "status": "pass",
+                    "state": "pass",
+                    "criterion": {
+                        "operator": "minimum",
+                        "expected": 20.0,
+                        "tolerance": 0.0,
+                    },
+                    "actual": 25.0,
+                    "unit": "1/h",
+                    "included": True,
+                    "explanation": "Current evidence satisfies the explicit requirement criterion.",
+                    "evidence_ids": ["MAP-ACH"],
+                },
+                {
+                    "requirement_id": "REQ-PRESSURE",
+                    "subject_ref": "ROOM-A",
+                    "status": "not_checked",
+                    "state": "not_checked",
+                    "criterion": {
+                        "operator": "minimum",
+                        "expected": 10.0,
+                        "tolerance": 0.0,
+                    },
+                    "actual": None,
+                    "unit": "Pa",
+                    "included": True,
+                    "explanation": "No engineering evidence is bound to this requirement.",
+                    "evidence_ids": [],
+                },
+            ]
+        },
+        "evidence": [
+            {
+                "id": "MAP-ACH",
+                "requirement_id": "REQ-ACH",
+                "subject_ref": "ROOM-A",
+                "property_name": "air_change_rate",
+                "value": 25.0,
+                "unit": "1/h",
+                "source": "analysis_run",
+                "source_revision": "a" * 64,
+                "calculation_source": "room_verification",
+                "evidence_locator": "/result/ach",
+                "project_revision": "b" * 64,
+                "evidence_kinds": ["calculation"],
+                "freshness": "current",
+            }
+        ],
+    }
+
+    rows = gui_module.verification_history_requirement_rows(record)
+
+    assert [row["requirement_id"] for row in rows] == [
+        "REQ-ACH",
+        "REQ-PRESSURE",
+    ]
+    assert rows[0]["status"] == "pass"
+    assert rows[0]["criterion"]["operator"] == "minimum"
+    assert rows[0]["evidence_ids"] == ("MAP-ACH",)
+    assert rows[0]["evidence"][0]["value"] == 25.0
+    assert rows[0]["evidence"][0]["freshness"] == "current"
+    assert rows[0]["evidence"][0]["evidence_locator"] == "/result/ach"
+    assert rows[1]["status"] == "not_checked"
+    assert rows[1]["evidence_ids"] == ()
+    assert rows[1]["evidence"] == ()
+
+    rows[0]["evidence"][0]["value"] = 99.0
+    assert record["evidence"][0]["value"] == 25.0
+
+
+def test_verification_history_requirement_rows_rejects_unstructured_inputs():
+    assert gui_module.verification_history_requirement_rows({}) == []
+    assert (
+        gui_module.verification_history_requirement_rows(
+            {"verification": {"findings": "invalid"}, "evidence": []}
+        )
+        == []
+    )
+
+
+
 def test_gui_verification_history_passes_project_and_base_dir_to_dialog(monkeypatch):
     app = CleanroomXApp.__new__(CleanroomXApp)
     app.root = object()

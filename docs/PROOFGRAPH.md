@@ -97,6 +97,30 @@ Each evidence record can retain:
 Confidence is optional. ProofGraph does not manufacture a confidence percentage
 when none exists in the underlying engineering evidence.
 
+## Evidence precedence and conflict assessment
+
+`assess_evidence_precedence` evaluates competing ProofGraph evidence claims
+without mutating the graph or deleting historical evidence. Callers supply an
+explicit `EvidencePrecedencePolicy` whose evidence-kind and source orders are
+strongest-first.
+
+Claims are grouped by subject reference and engineering property. A uniquely
+highest-ranked claim is selected while every lower-ranked claim remains retained
+and visible in the report. Equally ranked claims with identical value and unit
+remain coequal. Equally ranked claims that disagree in value or unit produce an
+explicit `conflict` with no selected claim.
+
+The assessment deliberately performs no unit conversion, timestamp-based
+freshness inference, confidence weighting, source guessing, or solver
+recomputation. Unlisted kinds and sources rank after explicitly listed entries.
+This makes precedence a caller-owned engineering policy rather than a hidden
+ProofGraph assumption.
+
+The deterministic report schema is
+`cleanroomx.proofgraph-evidence-precedence` version 1 and includes the complete
+candidate set, preferred set, shadowed evidence IDs, conflict state, and the
+selected evidence ID when one policy-authoritative claim exists.
+
 ## Compliance states
 
 ProofGraph v1 uses six explicit verdict states:
@@ -175,19 +199,15 @@ proofgraph_from_dict performs strict schema parsing:
 
 The model remains pure Python with no GUI dependency.
 
-## Next integration slices
+## Remaining integration slices
 
-The next high-value work should build on this model rather than create another
-parallel evidence representation:
+The calculation and IFC evidence bridges and the explicit precedence/conflict
+assessment are now implemented on the shared ProofGraph model. The remaining
+high-value work should continue on that same representation:
 
-1. emit CalculationEvidence from existing pressure, airflow, ACH, and spatial
-   design analyses;
-2. emit DesignEvidence and ProvenanceRecord data from IFC semantic bindings,
-   including dimension_source, GlobalId, storey, placement, and source digest;
-3. add explicit evidence precedence/conflict policies without deleting history;
-4. expose requirement -> evidence -> verdict drill-down in the desktop
+1. expose requirement -> evidence -> verdict drill-down in the desktop
    Compliance / Assurance area;
-5. add commissioning and operational adapters only after their source identity,
+2. add commissioning and operational adapters only after their source identity,
    freshness, and uncertainty contracts are explicit.
 
 ProofGraph does not itself establish regulatory approval, cleanroom

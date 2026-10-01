@@ -12,6 +12,7 @@ from cleanroomx.project import (
     save_project_document,
 )
 from cleanroomx.project_requirement_evidence_mappings import (
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
@@ -153,6 +154,9 @@ def _project_with_ambiguous_authoritative_mappings() -> ProjectDocument:
     alternate = copy.deepcopy(registry["mappings"][0])
     alternate["id"] = "MAP-ACH-ALT"
     registry["mappings"].append(alternate)
+    registry["schema_version"] = (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
     registry["evidence_authority"] = [
         {
             "requirement_id": "REQ-ACH",

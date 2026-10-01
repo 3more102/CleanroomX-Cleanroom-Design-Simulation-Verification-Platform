@@ -109,6 +109,31 @@ def test_requirements_digest_is_independent_of_input_order() -> None:
     assert left_requirements == right_requirements
 
 
+def test_requirements_digest_normalizes_scope_and_required_evidence_order() -> None:
+    left = _registry()
+    right = copy.deepcopy(left)
+    right_requirement = right["sets"][0]["requirements"][0]
+    left_requirement = left["sets"][0]["requirements"][0]
+    left_requirement["scope"] = ["ROOM-B", "ROOM-A"]
+    right_requirement["scope"] = ["ROOM-A", "ROOM-B"]
+    left_requirement["required_evidence"] = ["calculation", "design"]
+    right_requirement["required_evidence"] = ["design", "calculation"]
+
+    left_registry = ProjectDocument(
+        name="Left",
+        metadata={"requirements": left},
+    ).to_dict()["project"]["metadata"]["requirements"]
+    right_registry = ProjectDocument(
+        name="Right",
+        metadata={"requirements": right},
+    ).to_dict()["project"]["metadata"]["requirements"]
+
+    assert left_registry == right_registry
+    normalized = left_registry["sets"][0]["requirements"][1]
+    assert normalized["scope"] == ["ROOM-A", "ROOM-B"]
+    assert normalized["required_evidence"] == ["calculation", "design"]
+
+
 def test_project_rejects_requirements_digest_tampering() -> None:
     document = ProjectDocument(
         name="Digest project",

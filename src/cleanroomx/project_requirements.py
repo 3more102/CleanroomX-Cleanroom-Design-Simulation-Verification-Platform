@@ -225,14 +225,18 @@ class ProjectRequirement:
         object.__setattr__(
             self,
             "scope",
-            _string_tuple(self.scope, "requirement.scope"),
+            tuple(sorted(_string_tuple(self.scope, "requirement.scope"))),
         )
         object.__setattr__(
             self,
             "required_evidence",
-            _string_tuple(
-                self.required_evidence,
-                "requirement.required_evidence",
+            tuple(
+                sorted(
+                    _string_tuple(
+                        self.required_evidence,
+                        "requirement.required_evidence",
+                    )
+                )
             ),
         )
         object.__setattr__(

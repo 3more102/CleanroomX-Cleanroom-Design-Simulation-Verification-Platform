@@ -14,7 +14,7 @@ The registry uses:
 - `schema_version: 1`
 - deterministic `requirements_sha256` over the normalized registry body
 
-Requirement sets and requirements are normalized by stable ID before hashing. Equivalent input ordering therefore produces the same normalized registry and digest.
+Requirement sets and requirements are normalized by stable ID before hashing. Entity scope and required-evidence collections are also normalized because their order has no engineering meaning. Equivalent input ordering therefore produces the same normalized registry and digest; assumption order is preserved because narrative assumption sequencing can be intentional.
 
 The SHA-256 value is an integrity/revision identity, not an authenticity signature.
 

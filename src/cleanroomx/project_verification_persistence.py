@@ -228,9 +228,11 @@ def persist_project_requirements_workflow_run(
         _evidence_from_dict(item, index)
         for index, item in enumerate(workflow.evidence)
     )
+    evidence_authority = mappings.authority_for_analysis(analysis.id)
     canonical_verification = verify_project_requirements(
         requirements,
         evidence_objects,
+        evidence_authority=evidence_authority,
     )
     if not _same_json(canonical_verification, workflow.verification):
         raise ProjectVerificationPersistenceError(
@@ -242,6 +244,7 @@ def persist_project_requirements_workflow_run(
         for graph in proofgraphs_from_project_requirements_verification(
             requirements,
             evidence_objects,
+            evidence_authority=evidence_authority,
         )
     )
     if not _same_json(list(canonical_graphs), list(workflow.proofgraphs)):

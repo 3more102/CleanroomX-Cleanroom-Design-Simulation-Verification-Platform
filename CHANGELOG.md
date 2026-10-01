@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — standalone file-backed CLI output protection — 2026-10-01
+
+- Protects `cleanroomx-consistency --output` from replacing either engineering input and protects `cleanroomx-dossier --output` from replacing its manifest or any declared external engineering dependency.
+- Reuses one canonical CLI path-identity guard that detects resolved-path aliases and existing same-file aliases.
+- Rechecks protected-path identity inside the atomic writer's `before_replace` boundary so publication-time alias races fail closed while the prior destination remains intact.
+- Returns the existing operational/integrity exit code `3` for protected-output rejection and changes no solver equation, numerical tolerance, engineering acceptance criterion, or analysis result schema.
+
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.

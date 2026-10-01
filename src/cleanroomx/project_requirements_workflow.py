@@ -24,7 +24,10 @@ from .project_requirement_evidence_mappings import (
     ProjectRequirementEvidenceMappings,
     project_requirement_evidence_mappings_from_dict,
 )
-from .project_requirement_verification import verify_project_requirements
+from .project_requirement_verification import (
+    RequirementEvidence,
+    verify_project_requirements,
+)
 from .project_requirements import (
     PROJECT_REQUIREMENTS_METADATA_KEY,
     ProjectRequirements,
@@ -38,7 +41,7 @@ from .proofgraph_project_requirements import (
 
 
 PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA = "cleanroomx.project-requirements-workflow"
-PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA_VERSION = 1
+PROJECT_REQUIREMENTS_WORKFLOW_SCHEMA_VERSION = 2
 
 
 class ProjectRequirementsWorkflowError(RuntimeError):
@@ -148,6 +151,7 @@ class ProjectRequirementsWorkflowRun:
     analysis_id: str
     analysis_name: str
     analysis_kind: str
+    requirements: dict[str, Any]
     requirements_sha256: str
     mappings_sha256: str
     mapping_ids: tuple[str, ...]
@@ -172,6 +176,7 @@ class ProjectRequirementsWorkflowRun:
                 "kind": self.analysis_kind,
                 "mapping_ids": list(self.mapping_ids),
             },
+            "requirements": copy.deepcopy(self.requirements),
             "requirements_sha256": self.requirements_sha256,
             "mappings_sha256": self.mappings_sha256,
             "run": copy.deepcopy(self.run_bundle),
@@ -205,6 +210,7 @@ def run_project_requirements_workflow(
         ) from exc
 
     requirements = _project_requirements(project.metadata)
+    requirements_document = requirements.to_dict()
     mappings_registry = _project_mappings(project.metadata)
     persisted_mappings = mappings_registry.for_analysis(
         analysis.id,
@@ -298,6 +304,7 @@ def run_project_requirements_workflow(
         analysis_id=analysis.id,
         analysis_name=analysis.name,
         analysis_kind=analysis.kind,
+        requirements=copy.deepcopy(requirements_document),
         requirements_sha256=requirements.sha256,
         mappings_sha256=mappings_registry.sha256,
         mapping_ids=tuple(item.id for item in persisted_mappings),
@@ -684,6 +691,24 @@ def verify_project_requirements_workflow_run(
             sha256=workflow.source_revision,
         )
     )
+
+    requirements_document = copy.deepcopy(workflow.requirements)
+    try:
+        canonical_requirements = project_requirements_from_dict(
+            requirements_document
+        )
+    except ValueError as exc:
+        raise ProjectRequirementsWorkflowError(
+            f"workflow requirements snapshot is invalid: {exc}"
+        ) from exc
+    if canonical_requirements.to_dict() != requirements_document:
+        raise ProjectRequirementsWorkflowError(
+            "workflow requirements snapshot is not canonical"
+        )
+    if canonical_requirements.sha256 != workflow.requirements_sha256:
+        raise ProjectRequirementsWorkflowError(
+            "workflow requirements snapshot digest disagrees with workflow identity"
+        )
     verified_run = verify_analysis_run_bundle(copy.deepcopy(workflow.run_bundle))
     bundle_sha256 = verified_run.get("bundle_sha256")
     if not isinstance(bundle_sha256, str):
@@ -771,6 +796,36 @@ def verify_project_requirements_workflow_run(
         evidence["id"]: evidence
         for evidence in evidence_documents
     }
+    try:
+        canonical_evidence = tuple(
+            RequirementEvidence(**copy.deepcopy(evidence))
+            for evidence in evidence_documents
+        )
+    except (TypeError, ValueError) as exc:
+        raise ProjectRequirementsWorkflowError(
+            f"workflow evidence cannot be reconstructed canonically: {exc}"
+        ) from exc
+    if [item.to_dict() for item in canonical_evidence] != evidence_documents:
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence is not in canonical normalized form"
+        )
+
+    canonical_verification = verify_project_requirements(
+        canonical_requirements,
+        canonical_evidence,
+    )
+    if canonical_verification != verification:
+        raise ProjectRequirementsWorkflowError(
+            "workflow verification disagrees with canonical requirements and evidence"
+        )
+
+    expected_requirement_sets = {
+        graph.requirement_set.id: graph.requirement_set.to_dict()
+        for graph in proofgraphs_from_project_requirements_verification(
+            canonical_requirements,
+            canonical_evidence,
+        )
+    }
 
     canonical_findings = verification.get("findings")
     if not isinstance(canonical_findings, list):
@@ -792,6 +847,7 @@ def verify_project_requirements_workflow_run(
 
     proofgraph_requirement_ids: list[str] = []
     proofgraph_sha256: list[str] = []
+    actual_requirement_set_ids: set[str] = set()
     for document in workflow.proofgraphs:
         if not isinstance(document, dict):
             raise ProjectRequirementsWorkflowError(
@@ -803,6 +859,24 @@ def verify_project_requirements_workflow_run(
             raise ProjectRequirementsWorkflowError(
                 f"workflow ProofGraph integrity validation failed: {exc}"
             ) from exc
+        requirement_set_id = graph.requirement_set.id
+        if requirement_set_id in actual_requirement_set_ids:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraphs contain duplicate requirement set {requirement_set_id!r}"
+            )
+        actual_requirement_set_ids.add(requirement_set_id)
+        expected_requirement_set = expected_requirement_sets.get(
+            requirement_set_id
+        )
+        if expected_requirement_set is None:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph requirement set {requirement_set_id!r} is absent from the canonical requirements snapshot"
+            )
+        if graph.requirement_set.to_dict() != expected_requirement_set:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph requirement set {requirement_set_id!r} disagrees with canonical requirements snapshot"
+            )
+
         _verify_workflow_proofgraph_projection(
             graph,
             evidence_by_id=evidence_by_id,
@@ -815,6 +889,13 @@ def verify_project_requirements_workflow_run(
             requirement.id for requirement in graph.requirement_set.requirements
         )
         proofgraph_sha256.append(graph.to_dict()["graph_sha256"])
+
+    if actual_requirement_set_ids != set(expected_requirement_sets):
+        missing = sorted(set(expected_requirement_sets) - actual_requirement_set_ids)
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph requirement-set coverage disagrees with canonical requirements snapshot"
+            + (f"; missing: {', '.join(missing)}" if missing else "")
+        )
 
     if len(proofgraph_requirement_ids) != len(set(proofgraph_requirement_ids)):
         raise ProjectRequirementsWorkflowError(

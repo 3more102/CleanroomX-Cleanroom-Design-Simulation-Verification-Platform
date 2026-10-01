@@ -60,11 +60,13 @@ CleanroomX then evaluates:
 
     Re = V * D_h / nu
 
-For circular laminar flow with `Re < 2300`, it uses the Darcy relation:
+For circular laminar flow with `Re < 2000`, it uses the Darcy relation:
 
     f = 64 / Re
 
-For `Re >= 2300`, it solves the Colebrook equation iteratively using Reynolds number and relative roughness `epsilon / D_h`. Rectangular ducts use hydraulic diameter in the turbulent calculation.
+For turbulent flow with `Re > 4000`, it solves the Colebrook equation iteratively using Reynolds number and relative roughness `epsilon / D_h`. Rectangular ducts use hydraulic diameter in the turbulent calculation.
+
+For `2000 <= Re <= 4000`, automatic friction-factor resolution fails closed. CleanroomX does not interpolate between laminar and turbulent correlations or silently apply Colebrook in the transition region. Supply an explicit Darcy factor justified for the project, or use a separately qualified transition correlation outside this automatic model.
 
 Automatic laminar friction for noncircular ducts is deliberately rejected. The circular `64/Re` relation is not blindly applied to rectangular geometry because laminar noncircular friction depends on cross-sectional shape. Supply an explicit Darcy factor for that case.
 
@@ -81,6 +83,7 @@ Manual and automatic friction inputs are mutually exclusive so the calculation b
 
 ## References
 
+- NASA Kennedy Space Center, `KSC-STD-Z-0017 Rev A`, section 7.4.1: circular-pipe laminar friction for `Re < 2000` and Colebrook for turbulent flow at `Re > 4000`.
 - ASHRAE Handbook—Fundamentals, Chapter 21, Duct Design: Darcy friction, hydraulic diameter, dynamic losses, and combined sectional losses.
 - ASHRAE Duct Fitting Database / Standard 120 resources for fitting resistance and loss-coefficient testing.
 

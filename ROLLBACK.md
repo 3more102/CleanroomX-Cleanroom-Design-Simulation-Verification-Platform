@@ -1,11 +1,5 @@
 # Rollback Procedure
 
-## v0.103.0 Release 3 anchor
-
-The immutable `v0.103.0` tag is created only after successful CI on the exact current `main` commit by `.github/workflows/publish-v01030-release.yml`. The Release 3 engineering closure was validated at PR #707 head `875408729ec3587d96f4c86f77b14de80b6548be` by CI run `36875375370` with **1662 passed, 4 skipped** on Python 3.11/3.12/3.13 plus Windows launcher, installed-wheel, performance, and Tk/Xvfb smoke gates.
-
-For rollback, preserve the immutable v0.103.0 tag and revert through normal review/CI. The previous published stable anchor is `v0.102.1`; do not move either tag or force-reset shared `main`.
-
 ## Code rollback
 
 For the shared repository, prefer a Git revert of the release-changing commit or merge rather than rewriting shared history.

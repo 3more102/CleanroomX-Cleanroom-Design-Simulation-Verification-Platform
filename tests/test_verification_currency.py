@@ -231,7 +231,7 @@ def test_verification_currency_reports_stale_when_active_mapping_is_removed(tmp_
     assert "active_mapping_set_changed" in item["mismatch_reasons"]
 
 
-def test_verification_currency_fails_closed_for_matching_file_backed_verification(
+def test_verification_currency_proves_current_file_backed_verification(
     tmp_path,
 ):
     (tmp_path / "facility_project.json").write_bytes(
@@ -305,14 +305,37 @@ def test_verification_currency_fails_closed_for_matching_file_backed_verificatio
     )
 
     loaded = load_project_document(path)
-    result = assess_project_verification_currency(loaded)
 
+    without_base = assess_project_verification_currency(loaded)
+    assert without_base["analyses"][0]["state"] == "dependency_freshness_unverifiable"
+
+    result = assess_project_verification_currency(
+        loaded,
+        base_dir=tmp_path,
+    )
     item = result["analyses"][0]
-    assert item["state"] == "dependency_freshness_unverifiable"
-    assert item["current"] is False
+    assert item["state"] == "current"
+    assert item["current"] is True
     assert item["external_dependency_count"] == 2
     assert item["mismatch_reasons"] == []
-    assert result["summary"]["dependency_freshness_unverifiable_count"] == 1
+    assert item["latest_record"]["external_dependencies_recorded"] is True
+    assert result["summary"]["current_count"] == 1
+
+    dependency = tmp_path / "consistency_hvac_demo.json"
+    dependency.write_text(
+        dependency.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+    )
+    stale = assess_project_verification_currency(
+        loaded,
+        base_dir=tmp_path,
+    )
+    stale_item = stale["analyses"][0]
+    assert stale_item["state"] == "stale"
+    assert stale_item["current"] is False
+    assert stale_item["mismatch_reasons"] == [
+        "external_dependency_content_changed_or_unavailable"
+    ]
 
 
 def test_project_diagnostics_warn_when_persisted_verification_is_stale(tmp_path):

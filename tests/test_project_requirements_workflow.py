@@ -530,3 +530,59 @@ def test_workflow_verifier_rejects_resealed_extra_proofgraph_nodes(tmp_path):
         match="checks disagree with canonical verification projection",
     ):
         verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_finding_semantics(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["findings"][0]["actual"] = 999.0
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="finding .* disagrees with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_verdict_semantics(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["verdicts"][0]["reason"] = "tampered verdict reason"
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="verdict .* disagrees with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_requirement_criterion(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["requirement_set"]["requirements"][0]["criteria"][
+        "criterion"
+    ]["expected"] = 19.0
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="criteria disagree with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)

@@ -26,6 +26,7 @@ from .project_requirement_evidence_mappings import (
 )
 from .project_requirement_verification import (
     RequirementEvidence,
+    RequirementEvidenceAuthority,
     verify_project_requirements,
 )
 from .project_requirements import (
@@ -220,6 +221,7 @@ def run_project_requirements_workflow(
         raise ProjectRequirementsWorkflowError(
             f"analysis {analysis.id!r} has no active persisted requirement evidence mappings"
         )
+    evidence_authority = mappings_registry.authority_for_analysis(analysis.id)
 
     runtime_mappings = tuple(
         _runtime_mapping(item, actual_analysis_kind=analysis.kind)
@@ -269,7 +271,11 @@ def run_project_requirements_workflow(
             ),
         )
     )
-    verification = verify_project_requirements(requirements, bindings)
+    verification = verify_project_requirements(
+        requirements,
+        bindings,
+        evidence_authority=evidence_authority,
+    )
     if verification["evidence_sha256"] != _canonical_sha256(
         list(evidence_documents)
     ):
@@ -279,6 +285,7 @@ def run_project_requirements_workflow(
     proofgraphs = proofgraphs_from_project_requirements_verification(
         requirements,
         bindings,
+        evidence_authority=evidence_authority,
     )
     proofgraph_documents = tuple(graph.to_dict() for graph in proofgraphs)
 
@@ -810,9 +817,34 @@ def verify_project_requirements_workflow_run(
             "workflow evidence is not in canonical normalized form"
         )
 
+    raw_evidence_authority = verification.get("evidence_authority", [])
+    if not isinstance(raw_evidence_authority, list) or any(
+        not isinstance(item, dict) for item in raw_evidence_authority
+    ):
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence authority must be an array of objects"
+        )
+    try:
+        canonical_evidence_authority = tuple(
+            RequirementEvidenceAuthority(**copy.deepcopy(item))
+            for item in raw_evidence_authority
+        )
+    except (TypeError, ValueError) as exc:
+        raise ProjectRequirementsWorkflowError(
+            f"workflow evidence authority cannot be reconstructed canonically: {exc}"
+        ) from exc
+    if (
+        [item.to_dict() for item in canonical_evidence_authority]
+        != raw_evidence_authority
+    ):
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence authority is not in canonical normalized form"
+        )
+
     canonical_verification = verify_project_requirements(
         canonical_requirements,
         canonical_evidence,
+        evidence_authority=canonical_evidence_authority,
     )
     if canonical_verification != verification:
         raise ProjectRequirementsWorkflowError(
@@ -824,6 +856,7 @@ def verify_project_requirements_workflow_run(
         for graph in proofgraphs_from_project_requirements_verification(
             canonical_requirements,
             canonical_evidence,
+            evidence_authority=canonical_evidence_authority,
         )
     }
 

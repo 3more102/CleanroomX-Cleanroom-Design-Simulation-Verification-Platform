@@ -11,11 +11,11 @@ from typing import Callable, Sequence
 from . import __version__
 from .application import run_analysis
 from .markdown import markdown_text
+from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
     ProjectFileRevision,
-    atomic_write_text,
     capture_project_file_revision,
     load_project_document_with_revision,
     project_file_revision_matches,

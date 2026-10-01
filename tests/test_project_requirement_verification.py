@@ -587,3 +587,41 @@ def test_evidence_authority_rejects_inactive_or_unresolved_requirement() -> None
                 evidence,
                 evidence_authority=[authority],
             )
+
+
+def test_evidence_authority_digest_changes_when_rationale_changes() -> None:
+    requirements = _registry(_requirement())
+    evidence = [
+        _evidence(evidence_id="E-1", value=21.0),
+        _evidence(evidence_id="E-2", value=19.0),
+    ]
+
+    first = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[
+            RequirementEvidenceAuthority(
+                requirement_id="REQ-ACH",
+                subject_ref="ROOM-A",
+                evidence_id="E-1",
+                rationale="Approved design calculation.",
+            )
+        ],
+    )
+    second = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[
+            RequirementEvidenceAuthority(
+                requirement_id="REQ-ACH",
+                subject_ref="ROOM-A",
+                evidence_id="E-1",
+                rationale="Approved commissioning decision basis.",
+            )
+        ],
+    )
+
+    assert first["status"] == second["status"] == "pass"
+    assert first["findings"][0]["evidence_id"] == second["findings"][0]["evidence_id"] == "E-1"
+    assert first["evidence_authority_sha256"] != second["evidence_authority_sha256"]
+    assert first["verification_sha256"] != second["verification_sha256"]

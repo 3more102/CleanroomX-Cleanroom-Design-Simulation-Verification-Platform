@@ -259,6 +259,15 @@ def verification_history_record_currency_context(
     current_assessment: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Project current verification currency onto one immutable history record."""
+    if not isinstance(record, dict):
+        raise TypeError("verification history record must be a dictionary")
+
+    record_analysis_id = record.get("analysis_id")
+    if not isinstance(record_analysis_id, str) or not record_analysis_id:
+        raise ValueError(
+            "verification history record requires a non-empty analysis_id"
+        )
+
     if current_assessment is None:
         return {
             "state": "not_in_current_project",
@@ -271,7 +280,10 @@ def verification_history_record_currency_context(
             ),
         }
 
-    if current_assessment.get("analysis_id") != record.get("analysis_id"):
+    if not isinstance(current_assessment, dict):
+        raise TypeError("verification currency assessment must be a dictionary")
+
+    if current_assessment.get("analysis_id") != record_analysis_id:
         raise ValueError(
             "verification currency assessment analysis does not match retained record"
         )
@@ -293,7 +305,6 @@ def verification_history_record_currency_context(
             ),
         }
     return copy.deepcopy(current_assessment)
-
 
 def assess_project_verification_currency(
     project: ProjectDocument,

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
+
+- Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.
+- Represents measured qualification inputs as commissioning evidence and canonical conservative intervals/differential-pressure intervals as calculation evidence with explicit upstream lineage.
+- Preserves canonical PASS/FAIL/INDETERMINATE only when the measurements needed by the check carry source provenance; missing provenance fails closed to UNKNOWN while retaining the numerical result in verification-run metadata.
+- Adds deterministic round-trip regression coverage and changes no configured limits, solver equations, project schema, or certification claims.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

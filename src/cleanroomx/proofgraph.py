@@ -7,6 +7,7 @@ from .proofgraph_adapters import (
 from .proofgraph_ach import proofgraph_from_ach_design
 from .proofgraph_airflow import proofgraph_from_air_balance
 from .proofgraph_thermal import proofgraph_from_thermal_uncertainty
+from .proofgraph_qualification import proofgraph_from_qualification_uncertainty
 from .proofgraph_project_requirements import (
     proofgraphs_from_project_requirements_analysis_run,
     proofgraphs_from_project_requirements_verification,
@@ -63,6 +64,7 @@ __all__ = [
     "proofgraph_from_ach_design",
     "proofgraph_from_air_balance",
     "proofgraph_from_thermal_uncertainty",
+    "proofgraph_from_qualification_uncertainty",
     "proofgraphs_from_project_requirements_verification",
     "proofgraphs_from_project_requirements_analysis_run",
     "proofgraph_from_dict",

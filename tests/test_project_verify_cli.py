@@ -410,3 +410,192 @@ def test_project_verify_status_discards_result_if_project_changes_during_inspect
     assert captured.out == ""
     assert "project changed during verification-status inspection" in captured.err
 
+
+
+def test_project_verify_status_all_accepts_current_verified_project(tmp_path, capsys):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    exit_code = verify_cli.main(["status", str(path), "--all"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 0
+    assert payload["schema"] == "cleanroomx.project-verification-status-set"
+    assert payload["source"]["stable_during_inspection"] is True
+    assert payload["currency"]["summary"]["current_count"] == 1
+    assert payload["gate"] == {
+        "accepted": True,
+        "accepted_analysis_count": 1,
+        "accepted_analysis_ids": ["room-a"],
+        "all_current": True,
+        "all_verified_pass": True,
+        "configured_analysis_count": 1,
+        "rejected_analysis_count": 0,
+        "rejected_analysis_ids": [],
+    }
+
+
+def test_project_verify_status_all_rejects_unverified_configured_project(
+    tmp_path,
+    capsys,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+
+    exit_code = verify_cli.main(["status", str(path), "--all"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["summary"]["not_verified_count"] == 1
+    assert payload["gate"]["configured_analysis_count"] == 1
+    assert payload["gate"]["all_current"] is False
+    assert payload["gate"]["all_verified_pass"] is False
+    assert payload["gate"]["accepted"] is False
+
+
+def test_project_verify_status_all_rejects_vacuous_unconfigured_project(
+    tmp_path,
+    capsys,
+):
+    project = ProjectDocument(
+        name="No verification configuration",
+        analyses=[
+            AnalysisDocument(
+                id="room-a",
+                name="Room A verification",
+                kind="room_verification",
+                input=copy.deepcopy(ROOM_INPUT),
+            )
+        ],
+        active_analysis_id="room-a",
+    )
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        project,
+    )
+
+    exit_code = verify_cli.main(["status", str(path), "--all"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["summary"]["not_configured_count"] == 1
+    assert payload["gate"] == {
+        "accepted": False,
+        "accepted_analysis_count": 0,
+        "accepted_analysis_ids": [],
+        "all_current": False,
+        "all_verified_pass": False,
+        "configured_analysis_count": 0,
+        "rejected_analysis_count": 0,
+        "rejected_analysis_ids": [],
+    }
+
+
+def test_project_verify_status_all_requires_all_configured_rows_to_pass():
+    currency = {
+        "analyses": [
+            {
+                "analysis_id": "room-a",
+                "state": "current",
+                "latest_record": {"verified": True},
+            },
+            {
+                "analysis_id": "room-b",
+                "state": "current",
+                "latest_record": {"verified": False},
+            },
+            {
+                "analysis_id": "room-c",
+                "state": "not_configured",
+                "latest_record": None,
+            },
+        ]
+    }
+
+    gate = verify_cli._project_status_gate(currency)
+
+    assert gate == {
+        "accepted": False,
+        "accepted_analysis_count": 1,
+        "accepted_analysis_ids": ["room-a"],
+        "all_current": True,
+        "all_verified_pass": False,
+        "configured_analysis_count": 2,
+        "rejected_analysis_count": 1,
+        "rejected_analysis_ids": ["room-b"],
+    }
+
+
+def test_project_verify_status_requires_exactly_one_scope(tmp_path, capsys):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+
+    assert verify_cli.main(["status", str(path)]) == 2
+    missing = capsys.readouterr()
+    assert missing.out == ""
+    assert "requires an analysis_id or --all" in missing.err
+
+    assert verify_cli.main(["status", str(path), "room-a", "--all"]) == 2
+    conflicting = capsys.readouterr()
+    assert conflicting.out == ""
+    assert "either an analysis_id or --all" in conflicting.err
+
+
+def test_project_verify_status_all_accepts_current_verified_configured_set(
+    tmp_path,
+    capsys,
+):
+    project = _project()
+    room_b_input = copy.deepcopy(ROOM_INPUT)
+    room_b_input["name"] = "ROOM-B"
+    project.analyses.append(
+        AnalysisDocument(
+            id="room-b",
+            name="Room B verification",
+            kind="room_verification",
+            input=room_b_input,
+        )
+    )
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        project,
+    )
+
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    exit_code = verify_cli.main(["status", str(path), "--all"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 0
+    assert payload["schema"] == "cleanroomx.project-verification-status-set"
+    assert payload["source"]["stable_during_inspection"] is True
+    assert payload["currency"]["summary"]["analysis_count"] == 2
+    assert payload["currency"]["summary"]["configured_analysis_count"] == 1
+    assert payload["currency"]["summary"]["not_configured_count"] == 1
+    assert payload["gate"] == {
+        "configured_analysis_count": 1,
+        "accepted_analysis_count": 1,
+        "rejected_analysis_count": 0,
+        "accepted_analysis_ids": ["room-a"],
+        "rejected_analysis_ids": [],
+        "all_current": True,
+        "all_verified_pass": True,
+        "accepted": True,
+    }

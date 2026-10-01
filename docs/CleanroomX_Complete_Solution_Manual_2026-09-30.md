@@ -1,6 +1,6 @@
 ---
-revision: 2.1
-stable: v0.102.1
+revision: 3.0
+stable: v0.103.0
 baseline: Stable release baseline; development-preview features explicitly labeled
 date: 1 October 2026
 ---
@@ -11,12 +11,12 @@ date: 1 October 2026
 |---|---|
 | Document title | CleanroomX Professional Engineering User Manual & Verification Handbook |
 | Document ID | CX-UM-001 |
-| Revision | 2.1 |
+| Revision | 3.0 |
 | Issue date | 1 October 2026 |
 | Document class | Controlled engineering operating reference |
 | Approval record | Maintained by the adopting organization's document-control process |
-| Stable software baseline | v0.102.1 |
-| Stable release validation | 1008 passing tests on Python 3.11, 3.12 and 3.13 at the final deterministic-spatial-drag release gate |
+| Stable software baseline | v0.103.0 |
+| Stable release validation | 1662 passed, 4 skipped on Python 3.11, 3.12 and 3.13 at the Release 3 engineering closure gate; final tag publication additionally requires successful current-main CI |
 | Project schema | `cleanroomx.project`, schema version 1 |
 | Base package dependencies | None required by the package metadata |
 | Optional BIM dependency | `ifcopenshell` via `cleanroomx[bim]` |
@@ -30,6 +30,7 @@ date: 1 October 2026
 
 | Rev. | Date | Description |
 |---|---|---|
+| 3.0 | 2026-10-01 | Promoted the validated Release 3 requirements, evidence, verification, ProofGraph, traceability, plugin-trust, and assurance operator baseline to v0.103.0. |
 | 2.1 | 2026-10-01 | Added controlled-copy rules, operator decision gates, minimum project data-pack requirements, units/numerical conventions, deviation control, change-impact guidance, traceability matrix, and expanded official standards references. |
 | 2.0 | 2026-09-30 | Rebuilt the prior solution manual into an operator-focused, industry-style controlled manual with SOPs, release-status rules, acceptance gates, evidence handling, troubleshooting, administration, and engineering boundaries. |
 
@@ -49,8 +50,8 @@ A repository commit, SHA-256 digest, or successful CI run demonstrates software/
 
 ## Software status convention used in this manual
 
-**RELEASED** means the behavior is part of v0.102.1 and is supported by the release evidence.  
-**DEVELOPMENT PREVIEW** means the capability exists on current `main` after v0.102.1 but is not part of the stable release baseline.  
+**RELEASED** means the behavior is part of v0.103.0 and is supported by the release evidence.  
+**DEVELOPMENT PREVIEW** means the capability exists on current `main` after v0.103.0 but is not part of the stable release baseline.  
 **PENDING** means code exists only in an open pull request and is excluded from the operational baseline.
 
 For production or regulated work, use a pinned release/tag or an internally approved commit. Do not treat a moving development branch as a qualified baseline.
@@ -254,7 +255,7 @@ A typical structure is:
 {
   "schema": "cleanroomx.project",
   "schema_version": 1,
-  "application_version": "0.102.1",
+  "application_version": "0.103.0",
   "project": {
     "name": "Facility A - Cleanroom Upgrade",
     "metadata": {}

@@ -1,27 +1,36 @@
 # Changelog
 
-## Unreleased Release 3 — verification-history current-context hardening — 2026-10-01
+## v0.103.0 Release 3 — verification authority, traceability, and auditability closure — 2026-10-01
+
+- Promotes the post-v0.102.1 verification, ProofGraph, BIM/numerical-integrity, requirements, traceability, and auditability work into one supported Release 3 baseline.
+- Final functional closure is PR #707 at tested head `875408729ec3587d96f4c86f77b14de80b6548be`, CI #2229 / `36875375370`: success.
+- Complete suite: **1662 passed, 4 skipped** on Python 3.11, 3.12, and 3.13; focused Release 3 gate: **143 passed** on each.
+- Windows launcher, clean-wheel/install, installed CLI, performance, and Python 3.13 Tk/Xvfb GUI smoke gates passed.
+- Release publication is fail-closed to a successful CI SHA that still equals current `main`.
+- No solver equation, numerical tolerance, project schema version, requirement criterion, or historical-verdict semantic is intentionally changed by the release identity.
+
+### Release 3 — verification-history current-context hardening — 2026-10-01
 
 - Reuses the canonical verification-currency record-context helper in the desktop Verification History surface instead of maintaining duplicate GUI logic.
 - Validates retained-record and current-assessment input types and requires a non-empty stable analysis identity before projecting current context.
 - Extends focused regressions for historical/latest/orphaned record context, defensive-copy behavior, malformed inputs, and identity mismatch.
 - Changes no solver equation, numerical tolerance, requirement criterion, persisted verification record, ledger hash, dependency fingerprint, CLI schema, or project schema.
 
-## Unreleased Release 3 — desktop requirement evidence drill-down — 2026-10-01
+### Release 3 — desktop requirement evidence drill-down — 2026-10-01
 
 - Adds a structured read-only **Requirement Evidence** view inside **Analysis → Verification History...**.
 - Projects each retained canonical finding as requirement → bound evidence → historical verdict without recomputing the verdict against current project state.
 - Shows subject scope, explicit criterion, retained actual value/unit, evidence freshness, source, and exact result locator while preserving the complete canonical record in a separate tab.
 - Uses the already integrity-validated persisted verification record and changes no solver equation, acceptance criterion, persisted verification schema, historical verdict, or project schema.
 
-## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
+### Release 3 — project requirements traceability CLI — 2026-10-01
 
 - Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.
 - Reuses the canonical registry parsers and active-mapping cross-validation; retained disabled/superseded references remain historical and are not silently rebound when analysis identity or kind no longer matches.
 - Binds every report to one stable saved-project revision and protects both the project source and declared file-backed engineering dependencies from output overwrite.
 - Changes no solver equation, numerical tolerance, requirement acceptance criterion, verification verdict, persisted registry, or project schema.
 
-## Unreleased Release 3 — explicit evidence authority — 2026-10-01
+### Release 3 — explicit evidence authority — 2026-10-01
 
 - Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.
 - Requires the exact requirement ID, subject, selected already-bound evidence ID, authority source/issuer, decision reference, decision revision, and a non-empty rationale; stale, mismatched, duplicate, provenance-incomplete, or unnecessary authority decisions are rejected.
@@ -29,7 +38,7 @@
 - Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
 - Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
 
-## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
+### Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
 
 - Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.
 - Bumps the project-requirements workflow output to schema v2 and retains the complete canonical normalized requirements snapshot so its SHA-256 and full RequirementSet projection can be re-verified instead of trusting a lossy graph projection.
@@ -39,21 +48,21 @@
 - Adds regressions that deliberately reseal both `graph_sha256` and `workflow_sha256` after tampering, proving cross-artifact inconsistencies still fail closed.
 - Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
 
-## Unreleased Release 3 — external plugin trust gate — 2026-10-01
+### Release 3 — external plugin trust gate — 2026-10-01
 
 - Adds operator-controlled `trusted`, `disabled`, and `allowlist` modes for installed analysis plugins, with external plugins disabled by default until an operator explicitly opts in.
 - Applies deny decisions before `entry_point.load()`, so blocked external plugins are not imported through the CleanroomX plugin entry point.
 - Supports canonicalized distribution-name allowlisting with optional exact version pins and fails closed on invalid configuration, missing distribution identity, or pin mismatch.
 - Exposes the effective trust policy in application-registry diagnostics while preserving plugin API v1, built-in analyses, solver equations, engineering tolerances, and project schema.
 
-## Unreleased Release 3 — retained canonical ProofGraph verification evidence — 2026-10-01
+### Release 3 — retained canonical ProofGraph verification evidence — 2026-10-01
 
 - New persisted project-verification records retain the complete canonical ProofGraph documents alongside their existing SHA-256 identities.
 - Ledger validation reparses each retained graph, requires canonical serialization, unique digest ordering, and exact agreement with `proofgraph_sha256`; legacy hash-only schema-v1 records remain readable.
 - The configured verification-history byte budget now fails closed when the newest record alone exceeds it instead of silently retaining an oversized record.
 - No solver equation, requirement comparison, ProofGraph verdict rule, or historical verification identity semantic is changed.
 
-## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
+### Release 3 — canonical requirement unit conversion — 2026-10-01
 
 - Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.
 - Converts compatible numeric evidence into the persisted requirement unit before equality/minimum/maximum/range comparison, including affine temperature conversion.
@@ -61,27 +70,27 @@
 - Fails closed for unsupported unit spellings, incompatible dimensions, named-unit versus unitless mismatches, and non-numeric criteria with differing units.
 - Preserves the legacy exact-unit finding shape and changes no solver equations, requirement criteria, persisted project schema, or historical verification records.
 
-## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
+### Release 3 — qualification uncertainty ProofGraph — 2026-10-01
 
 - Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.
 - Represents measured qualification inputs as commissioning evidence and canonical conservative intervals/differential-pressure intervals as calculation evidence with explicit upstream lineage.
 - Preserves canonical PASS/FAIL/INDETERMINATE only when the measurements needed by the check carry source provenance; missing provenance fails closed to UNKNOWN while retaining the numerical result in verification-run metadata.
 - Adds deterministic round-trip regression coverage and changes no configured limits, solver equations, project schema, or certification claims.
 
-## Unreleased Release 3 — cooperative project batch cancellation — 2026-10-01
+### Release 3 — cooperative project batch cancellation — 2026-10-01
 
 - Adds cooperative cancellation to `cleanroomx.project_batch.run_project_file()` through an optional caller callback checked only between analyses.
 - Adds `cleanroomx-project-run --cancel-file PATH` so external automation can request a clean stop by creating a sentinel file without interrupting an active solver call.
 - Records cancellation state, boundary, and associated analysis id in schema-v2 strict-JSON and Markdown batch reports; exit code 4 distinguishes clean cancellation when no execution error or source-integrity failure takes precedence.
 - Preserves deterministic project order, exact source-revision checks, completed-run provenance, solver behavior, engineering tolerances, and project schema.
 
-## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
+### Release 3 — CI and installed operator-surface gate — 2026-10-01
 
 - Adds a focused Release 3 regression gate for persisted project requirements, requirement-evidence mappings, canonical requirements verification/workflow, guarded verification persistence, verification currency, project-native dossier output, project verification CLI, and verification-history CLI.
 - Extends clean-wheel installation checks to import and expose the Release 3 `cleanroomx-project-dossier`, `cleanroomx-project-verify`, and `cleanroomx-verification-history` entry points on every supported Python matrix job.
 - Keeps the complete suite as the final correctness authority while making Release 3 traceability/operator regressions visible as an independent release gate.
 
-## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
+### Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.
 - Reuses the canonical Release 3 requirements and mapping parsers and cross-validates active mappings against the current project analysis collection before display.
@@ -89,14 +98,14 @@
 - Preserves historical disabled/superseded mapping references as traceability context instead of silently rebinding them.
 - Changes no solver equation, acceptance comparison, requirement criterion, mapping registry, project schema, or persisted evidence.
 
-## Unreleased Release 3 — persisted verification status gate — 2026-10-01
+### Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.
 - Returns exit code 0 only when the latest retained verification is both current against the present engineering configuration/dependency content and a canonical verified PASS.
 - Separates verification currency from the historical verdict in strict JSON so a current FAIL and a stale historical PASS both fail closed for automation.
 - Rechecks project-file stability across inspection and reuses the existing verification-currency/dependency-fingerprint authority without re-running solvers or mutating evidence.
 
-## Unreleased Release 3 — diagnostics verification currency context — 2026-10-01
+### Release 3 — diagnostics verification currency context — 2026-10-01
 
 - Adds an explicit **Current verification currency** section to project-diagnostics Markdown output.
 - Keeps immutable historical verification status separate from current/stale/dependency-freshness-unverifiable/not-verified/not-configured state.
@@ -104,13 +113,13 @@
 - Reuses the canonical verification-currency authority and changes no solver equations, requirement verdict semantics, persisted records, or project schema.
 
 
-## Unreleased Release 3 — truthful current dependency currency explanation — 2026-10-01
+### Release 3 — truthful current dependency currency explanation — 2026-10-01
 
 - Corrects the canonical verification-currency explanation for file-backed analyses whose persisted dependency fingerprints still match current content.
 - Keeps the existing fail-closed current/stale/unverifiable state semantics unchanged while ensuring operator-facing provenance text never claims that verified file-backed analyses have no external dependencies.
 
 
-## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
+### Release 3 — desktop verification history currency context — 2026-10-01
 
 - Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.
 - Applies canonical current/stale/dependency-freshness-unverifiable state only to each analysis's latest retained record; older rows are explicitly labeled `historical`.
@@ -118,7 +127,7 @@
 - Reuses saved-project base-directory dependency checks and changes no solver equations, requirement verdicts, persisted verification records, or project schema.
 
 
-## Unreleased Release 3 — dossier verification currency context — 2026-10-01
+### Release 3 — dossier verification currency context — 2026-10-01
 
 - Separates each project-dossier latest retained verification's historical PASS/FAIL status from its present verification-currency assessment.
 - Attaches the canonical current/stale/dependency-freshness-unverifiable assessment to the corresponding retained record summary without rewriting historical evidence.
@@ -126,7 +135,7 @@
 - Reuses the existing verification-currency authority and changes no solver equations, requirements comparison semantics, persisted ledger records, or project schema.
 
 
-## Unreleased Release 3 — persisted verification dependency fingerprints — 2026-10-01
+### Release 3 — persisted verification dependency fingerprints — 2026-10-01
 
 - Persists stable external engineering dependency fingerprints from execution provenance into new project-verification ledger records.
 - Extends verification engineering identity to bind retained dependency fingerprints while remaining backward-compatible with legacy records that omit the optional field.
@@ -135,7 +144,7 @@
 - Reuses the existing immutable dependency-snapshot/provenance authority and does not change solver equations, requirement comparison semantics, or project file schema.
 
 
-## Unreleased Release 3 — desktop project requirements verification — 2026-10-01
+### Release 3 — desktop project requirements verification — 2026-10-01
 
 - Adds **Analysis → Verify Project Requirements** for read-only execution of the canonical saved-project requirements workflow.
 - Adds **Analysis → Verify & Persist Project Requirements** for guarded persistence of PASS, FAIL, or incomplete canonical verification evidence.
@@ -143,7 +152,7 @@
 - Blocks desktop verification for unsaved projects, unsaved edits, unavailable saved-revision identity, or external on-disk changes.
 - Reloads the committed project after verification persistence so desktop state, project revision identity, autosave, and history views remain synchronized with disk.
 
-## Unreleased Release 3 — verification currency — 2026-10-01
+### Release 3 — verification currency — 2026-10-01
 
 - Adds a deterministic, fail-closed assessment of whether retained canonical project-requirements verification still matches the current analysis input, requirements, mappings, and active mapping identities.
 - Exposes the canonical analysis-input SHA-256 and declared external-dependency introspection already used by execution provenance.
@@ -152,7 +161,7 @@
 - Adds actionable stale/unverifiable diagnostics without changing solver equations, numerical tolerances, requirement verdict semantics, or persisted verification history.
 
 
-## Unreleased Release 3 — project verification operator CLI — 2026-10-01
+### Release 3 — project verification operator CLI — 2026-10-01
 
 - Adds `cleanroomx-project-verify run` for read-only execution of the canonical saved-project requirements → evidence → verification → ProofGraph workflow.
 - Adds `cleanroomx-project-verify persist` to run the same workflow and append the canonical result to the guarded tamper-evident project verification ledger.
@@ -161,7 +170,7 @@
 - Preserves failed and incomplete verification as valid historical audit evidence when the operator chooses `persist`.
 
 
-## Unreleased Release 3 — desktop project dossier export — 2026-10-01
+### Release 3 — desktop project dossier export — 2026-10-01
 
 - Adds **File → Export Project Engineering Dossier...** to the desktop application.
 - Requires an explicitly saved, clean project so the exported artifact is bound to exact source bytes rather than unsaved editor state.
@@ -169,7 +178,7 @@
 - Supports complete strict-JSON dossier export and review-oriented Markdown export while preserving the existing canonical dossier SHA-256.
 
 
-## Unreleased Release 3 — project-native engineering dossier — 2026-10-01
+### Release 3 — project-native engineering dossier — 2026-10-01
 
 - Adds a deterministic project-native dossier that projects canonical analysis definitions, first-class requirements, explicit requirement-evidence mappings, retained immutable analysis runs, persisted canonical verification runs, and project diagnostics into one evidence artifact.
 - Binds every dossier to the exact saved source-project SHA-256 and adds an independent canonical dossier SHA-256.
@@ -178,7 +187,7 @@
 - Reuses the existing project-loader, run-ledger, verification-ledger, diagnostics, and output-safety authorities; no solver equation or requirement acceptance rule changes.
 
 
-## Unreleased Release 3 — verification history operator interface — 2026-10-01
+### Release 3 — verification history operator interface — 2026-10-01
 
 - Adds `cleanroomx-verification-history list/show` for stable, read-only inspection of persisted canonical verification evidence.
 - Binds inspection output to a stable source-file revision and emits strict JSON only after the project remains unchanged across the inspection.
@@ -186,7 +195,7 @@
 - Keeps solver equations, requirement acceptance semantics, persistence format, and historical verification records unchanged.
 
 
-## Unreleased Release 3 — persisted canonical verification runs — 2026-10-01
+### Release 3 — persisted canonical verification runs — 2026-10-01
 
 - Adds a bounded integrity-chained project verification history separate from solver analysis run history.
 - Persists exact source-project revision, immutable analysis bundle identity, analysis input identity, normalized requirements/mappings digests, exact evidence locators, canonical evidence, full canonical verification findings/completeness, ProofGraph identities, verifier implementation identity, CleanroomX version, runtime environment, and code revision provenance.
@@ -196,7 +205,7 @@
 - Validates the verification ledger during canonical project load/save and fails closed on evidence, digest, identity, or chain tampering.
 
 
-## Unreleased Release 3 — project-native requirements execution — 2026-10-01
+### Release 3 — project-native requirements execution — 2026-10-01
 
 - Adds a direct saved-project orchestration path from one selected project analysis through immutable execution, persisted explicit evidence mappings, canonical requirements verification, and ProofGraph.
 - Binds every workflow run to the exact loaded project SHA-256 and rechecks the source before and after analysis execution; source mutation prevents verification output.
@@ -206,7 +215,7 @@
 - Adds a deterministic workflow identity derived from project revision, normalized requirements/mappings, immutable run identity, canonical verification identity, and ProofGraph identity.
 
 
-## Unreleased Release 3 — persisted requirement evidence mappings — 2026-10-01
+### Release 3 — persisted requirement evidence mappings — 2026-10-01
 
 - Adds a strict, versioned project-owned requirement-to-analysis evidence mapping registry under `project.metadata.requirement_evidence_mappings`.
 - Persists explicit requirement ID, analysis ID, expected analysis kind, subject/entity scope, engineering property, exact result path, unit, evidence labels, lifecycle status, and notes without inferring solver semantics.
@@ -216,7 +225,7 @@
 - Does not add a second requirements verifier, unit-conversion path, standards criteria, or compliance claim.
 
 
-## Unreleased Release 3 — immutable analysis evidence binding — 2026-10-01
+### Release 3 — immutable analysis evidence binding — 2026-10-01
 
 - Connects integrity-verified immutable CleanroomX analysis-run bundles to the canonical project requirements verifier through explicit result mappings.
 - Derives requirement-evidence freshness from the exact current analysis input plus live content verification of the immutable run's recorded external dependencies instead of accepting a free-form current/stale assertion; the producing project SHA-256 remains provenance only.
@@ -225,7 +234,7 @@
 - Adds a direct immutable-analysis -> requirement verification -> ProofGraph workflow without duplicating comparison semantics.
 - Adds regressions for current/stale/unknown freshness, changed inputs, unstable dependencies, integrity tampering, missing/non-scalar results, deterministic mapping order, locator escaping, and end-to-end ProofGraph provenance.
 
-## Unreleased Release 3 — project requirements to ProofGraph — 2026-10-01
+### Release 3 — project requirements to ProofGraph — 2026-10-01
 
 - Adds a deterministic adapter from the canonical project requirements verifier into the existing ProofGraph schema instead of creating a parallel evidence or comparison model.
 - Emits one ProofGraph per non-empty persisted requirement set and preserves stable requirement identity, explicit criteria, source revision, lifecycle/applicability, evidence provenance, project/evidence/verification digests, and canonical source states.
@@ -233,7 +242,7 @@
 - Preserves native single evidence lifecycle kinds where unambiguous and uses neutral declared evidence for aggregate or unsupported labels rather than fabricating design/calculation/commissioning provenance.
 - Adds deterministic and strict-parser round-trip regressions for verified, stale, inactive, not-applicable, multi-set, multi-kind, missing-value, and empty-set cases.
 
-## Unreleased Release 3 — canonical project requirements verification — 2026-10-01
+### Release 3 — canonical project requirements verification — 2026-10-01
 
 - Adds the first canonical requirements -> evidence -> verdict engine over the persisted project requirements registry.
 - Requires an approved active requirement, explicit applicability, one unambiguous evidence binding per requirement/entity, current freshness, required evidence kinds, exact unit agreement, and an explicit acceptance criterion before a PASS can be issued.
@@ -242,7 +251,7 @@
 - Adds deterministic requirements/evidence/result SHA-256 identities and order-independent evidence normalization.
 - Adds fail-closed regressions for tolerance boundaries, missing/stale evidence, unit mismatch, ambiguous bindings, unresolved applicability, absent criteria, project-scope binding, and numeric canonicalization.
 
-## Unreleased Release 3 — first-class project requirements registry — 2026-10-01
+### Release 3 — first-class project requirements registry — 2026-10-01
 
 - Adds a strict, versioned project-owned requirements registry under `project.metadata.requirements` without changing the existing project schema version.
 - Captures stable requirement identity, discipline/category, versioned source/reference, unit/criteria/tolerance, applicability, entity scope, verification method, required evidence, lifecycle status, assumptions, and notes.
@@ -250,147 +259,147 @@
 - Canonicalizes requirement sets and requirements by stable ID and binds the normalized registry to a deterministic SHA-256 digest; supplied digest mismatches fail closed on project load/save.
 - Keeps existing design-requirements, solver, compliance, and ProofGraph calculation semantics unchanged; the persisted registry is the Release 3 project authority for later requirements -> evidence -> verdict integration.
 
-## Unreleased cross-study numerical integrity — full-precision standalone fan consistency — 2026-09-30
+### cross-study numerical integrity — full-precision standalone fan consistency — 2026-09-30
 
 - Recomputes dossier-owned standalone fan/system operating points through the canonical full-precision solver state when evaluating HVAC/fan airflow consistency.
 - Prevents the public three-decimal fan operating airflow from changing a fine user-supplied tolerance-boundary match/mismatch decision while preserving the public fan result schema.
 - Adds a regression where the canonical fan root is 1000.00055 m³/h but the displayed value is 1000.001 m³/h, proving the consistency verdict follows engineering state rather than presentation rounding.
 
-## Unreleased damper numerical integrity — full-precision redistribution metrics — 2026-09-30
+### damper numerical integrity — full-precision redistribution metrics — 2026-09-30
 
 - Computes damper-case edge airflow deltas and percent changes from canonical full-precision loop-network state instead of subtracting rounded public edge flows.
 - Reuses each baseline and case calculation for both engineering metrics and terminal public formatting, avoiding duplicate solves and preserving the existing result schema.
 - Adds a solver-tolerance-robust regression that deterministically finds a sub-display case where subtracting rounded edge flows disagrees with rounding the canonical airflow change.
 
-## Unreleased fan/loop numerical integrity — canonical reference and uncertainty state — 2026-09-30
+### fan/loop numerical integrity — canonical reference and uncertainty state — 2026-09-30
 
 - Derives two-terminal equivalent loop resistance from full-precision reference node pressures instead of the rounded public loop-network result.
 - Exposes one internal fan/loop calculation layer so public formatting remains a terminal boundary while downstream uncertainty analysis reuses canonical operating-point and edge-flow state.
 - Builds fan/loop uncertainty envelopes from full-precision corner calculations and rounds only the final presented bounds; adds regressions for reference-pressure and operating-root precision boundaries.
 
-## Unreleased ProofGraph thermal numerical integrity — full-precision evidence — 2026-09-30
+### ProofGraph thermal numerical integrity — full-precision evidence — 2026-09-30
 
 - Separates canonical full-precision thermal uncertainty calculations from the rounded presentation payload.
 - Stores those canonical load, airflow, cooling, and heating intervals in ProofGraph calculation evidence and finding actual/delta fields.
 - Adds a sub-display-resolution capacity boundary regression proving that a FAIL verdict remains reproducible from evidence even when the standalone report rounds the displayed upper bound.
 
-## Unreleased BIM import safety — bounded native IFC source size — 2026-09-30
+### BIM import safety — bounded native IFC source size — 2026-09-30
 
 - Rejects native IFC source files larger than 512 MiB before IfcOpenShell parsing and re-enforces the ceiling while streaming source SHA-256 provenance.
 - Prevents a growing or unexpectedly giant IFC input from consuming unbounded hashing/parser resources while preserving the existing before/after source-stability digest guard.
 - Adds focused rejection coverage and documentation without changing IFC semantic mapping, project schemas, solver equations, or engineering acceptance criteria.
 
-## Unreleased fan/loop numerical integrity — full-precision operating root — 2026-09-30
+### fan/loop numerical integrity — full-precision operating root — 2026-09-30
 
 - Carries the bounded fan/system operating-point root at full precision into the downstream loop-network solve instead of reusing the rounded public airflow value.
 - Computes the fan-minus-system pressure check from the full-precision fan pressure and equivalent-system pressure, preventing presentation rounding from creating a false residual.
 - Keeps the public result schema and display precision unchanged; adds a focused regression at a non-round operating point and documents the calculation/presentation boundary.
 
-## Unreleased pressure-design numerical integrity — full-precision verdicts — 2026-09-30
+### pressure-design numerical integrity — full-precision verdicts — 2026-09-30
 
 - Uses full-precision pressure-network node state for mapped design-pressure requirement comparisons instead of reusing the nine-decimal public node display.
 - Keeps the public pressure-network result schema and formatting unchanged while preventing presentation rounding from changing pass/fail at explicit fine tolerances.
 - Adds a sub-display-resolution regression and documents the calculation/presentation boundary.
 
-## Unreleased loop numerical integrity — full-precision variable-friction feedback — 2026-09-30
+### loop numerical integrity — full-precision variable-friction feedback — 2026-09-30
 
 - Separates the loop-network full-precision calculation state from public result formatting without changing the public solver schema.
 - Feeds exact solved edge airflows into variable-friction near-zero classification, Reynolds evaluation, Darcy friction updates, and resistance closure instead of reusing six-decimal presentation airflow.
 - Adds a threshold-boundary regression where 100.0000004 m³/h must remain above a configured 100.0 m³/h freeze threshold even though its displayed airflow is 100.0 m³/h.
 
-## Unreleased fan-network numerical integrity — full-precision composition — 2026-09-30
+### fan-network numerical integrity — full-precision composition — 2026-09-30
 
 - Carries the full-precision bounded fan operating point into passive parallel-network redistribution and system-pressure checks.
 - Prevents the public three-decimal fan airflow and rounded network pressure from becoming downstream engineering inputs.
 - Adds a rounding-boundary regression without changing equations, units, schemas, fan-curve interpolation, or public result formatting.
 
-## Unreleased ProofGraph integrity — globally unique provenance IDs — 2026-09-30
+### ProofGraph integrity — globally unique provenance IDs — 2026-09-30
 
 - Rejects reuse of one provenance-record ID across separate evidence records, removing ambiguity from graph-wide audit identity.
 - Preserves valid distinct provenance records, provenance DAG semantics, and current adapter-generated IDs with linear validation over provenance records.
 - Adds focused strict-parser success/failure regressions and documentation without changing schemas, solver equations, numerical tolerances, persistence formats, or requirement criteria.
 
-## Unreleased cross-study numerical integrity — full-precision HVAC/fan consistency — 2026-09-30
+### cross-study numerical integrity — full-precision HVAC/fan consistency — 2026-09-30
 
 - Uses the source HVAC project to recompute canonical aggregate governing airflow at full precision when the engineering dossier evaluates HVAC/fan operating-airflow consistency.
 - Prevents the public three-decimal HVAC presentation total from changing a user-supplied tolerance-boundary match/mismatch decision.
 - Preserves the existing public HVAC result shape, fan-study result shapes, equations, units, tolerance semantics, and dossier schema; adds a focused rounding-boundary regression.
 
-## Unreleased ProofGraph integrity — verification-run completeness — 2026-09-30
+### ProofGraph integrity — verification-run completeness — 2026-09-30
 
 - Rejects verification runs that declare checks with no verdict outcome, preventing silent unevaluated checks from appearing inside an otherwise auditable run.
 - Preserves explicit `not_checked` results as valid outcomes; every declared run check must be represented by at least one referenced verdict.
 - Adds strict-parser regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased recovery integrity — strict editor-draft comparison — 2026-09-30
+### recovery integrity — strict editor-draft comparison — 2026-09-30
 
 - Routes preserved crash-recovery editor drafts through the canonical strict JSON parser during semantic source comparison.
 - Treats legacy duplicate-key drafts as invalid recovery evidence instead of silently applying JSON last-key-wins behavior, even when an old artifact carries `editor_json_valid=true`.
 - Preserves the raw recovery artifact and existing invalid/incomplete operator semantics; no solver, schema, project-save, or automatic-restore behavior changes.
 
-## Unreleased ProofGraph integrity — PASS required-evidence closure — 2026-09-30
+### ProofGraph integrity — PASS required-evidence closure — 2026-09-30
 
 - Rejects PASS findings that do not reference at least one evidence record for every kind declared by their compliance check's `required_evidence_kinds`.
 - Keeps incomplete evidence representable for FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED findings instead of turning absence into success or a structural parse failure.
 - Adds focused strict-parser regressions and documentation without changing schemas, solver equations, numerical tolerances, persistence formats, or acceptance criteria.
 
-## Unreleased thermal uncertainty numerical integrity — full-precision governing airflow — 2026-09-30
+### thermal uncertainty numerical integrity — full-precision governing airflow — 2026-09-30
 
 - Keeps sensible-load airflow interval values at full precision while selecting the governing airflow candidate and conservative lower/upper bounds.
 - Applies six-decimal rounding only when formatting the returned thermal-airflow interval, preventing presentation rounding from changing the reported governing basis.
 - Adds a boundary regression where a rounded tie previously selected the wrong nominal airflow basis; no equations, units, capacity criteria, or uncertainty semantics change.
 
-## Unreleased ProofGraph integrity — evidence-backed PASS — 2026-09-30
+### ProofGraph integrity — evidence-backed PASS — 2026-09-30
 
 - Rejects PASS findings that declare evidence absent or reference no evidence, preventing absence of evidence from being serialized as successful compliance.
 - Preserves FAIL, WARNING, UNKNOWN, INDETERMINATE, and NOT_CHECKED missing-evidence semantics for workflows that intentionally report incomplete or unavailable evidence.
 - Adds focused model regressions and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased ProofGraph integrity — single-finding verdict status — 2026-09-30
+### ProofGraph integrity — single-finding verdict status — 2026-09-30
 
 - Rejects a verdict whose status disagrees with its sole referenced finding, preventing contradictory compliance state from being serialized as one auditable result.
 - Leaves multi-finding aggregation semantics unchanged until an explicit aggregation policy is defined.
 - Adds strict-parser regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased ProofGraph integrity — explicit project identity — 2026-09-30
+### ProofGraph integrity — explicit project identity — 2026-09-30
 
 - Rejects a ProofGraph that combines evidence carrying different explicit `project_id` values, preventing cross-project evidence contamination from being serialized as one auditable graph.
 - Keeps evidence without an explicit project identity compatible for source adapters that do not yet provide one.
 - Adds strict-parser regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased ProofGraph scalability — iterative provenance-cycle validation — 2026-09-30
+### ProofGraph scalability — iterative provenance-cycle validation — 2026-09-30
 
 - Replaces recursive provenance-cycle DFS with a deterministic explicit-stack traversal.
 - Preserves readable cycle-path rejection while allowing deep valid provenance chains beyond Python's recursion depth.
 - Adds a 1,200-link acyclic provenance regression without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased ProofGraph integrity — verification-run closure — 2026-09-30
+### ProofGraph integrity — verification-run closure — 2026-09-30
 
 - Rejects verification runs whose declared verdicts depend on findings from checks that are not listed in the same run.
 - Keeps extra explicitly executed checks valid while preventing hidden out-of-run check dependencies from entering run-level audit evidence.
 - Adds regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased ProofGraph integrity — acyclic evidence provenance — 2026-09-30
+### ProofGraph integrity — acyclic evidence provenance — 2026-09-30
 
 - Rejects multi-evidence provenance dependency cycles such as `A -> B -> A` in addition to existing direct self-reference protection.
 - Uses deterministic traversal and cycle diagnostics so malformed graphs fail closed reproducibly.
 - Adds regression coverage and documentation without changing schemas, solver equations, requirement criteria, numerical tolerances, or persistence formats.
 
-## Unreleased ProofGraph integrity — semantic cross-reference validation — 2026-09-30
+### ProofGraph integrity — semantic cross-reference validation — 2026-09-30
 
 - Rejects findings whose requirement identity disagrees with the referenced compliance check.
 - Rejects finding evidence that was not declared by the referenced check, preventing hidden evidence links from bypassing the check record.
 - Rejects verdicts that reference findings belonging to another requirement.
 - Adds strict-parser regressions for each inconsistent graph shape without changing solver equations, requirement criteria, numerical tolerances, or project persistence schemas.
 
-## Unreleased ProofGraph semantics — preserve canonical not-checked state — 2026-09-30
+### ProofGraph semantics — preserve canonical not-checked state — 2026-09-30
 
 - Stops collapsing canonical `not_checked` results into ProofGraph `unknown` in the compliance-rule-pack and pressure-design-consistency adapters.
 - Preserves missing rule-pack evidence and explicitly optional unmapped pressure targets as `not_checked`, including strict ProofGraph serialization round trips.
 - Keeps `unknown` distinct for cases where CleanroomX cannot issue a verified verdict from the available evidence/provenance, and keeps `indeterminate` distinct for evaluated uncertainty intervals that overlap a decision boundary.
 - Updates ProofGraph and pressure-consistency documentation without changing solver equations, numerical tolerances, persisted project schemas, or source-service acceptance semantics.
 
-## Unreleased ProofGraph integration — thermal uncertainty capacity evidence — 2026-09-29
+### ProofGraph integration — thermal uncertainty capacity evidence — 2026-09-29
 
 - Bridges canonical thermal uncertainty analysis into ProofGraph without duplicating psychrometric, load, airflow, or capacity equations.
 - Creates cooling/heating capacity requirements only for explicitly configured available capacities; missing capacity is not invented as a requirement.
@@ -400,7 +409,7 @@
 - Fails closed to `unknown` when canonical thermal inputs lack provenance while retaining the underlying thermal status in verification metadata.
 - Adds pass/fail/indeterminate, heating-only, missing-requirement, provenance-gap, strict round-trip, and determinism regressions.
 
-## Unreleased ProofGraph integration — airflow-balance evidence chain — 2026-09-29
+### ProofGraph integration — airflow-balance evidence chain — 2026-09-29
 
 - Bridges the canonical steady-state room airflow-balance calculation into ProofGraph without introducing a duplicate balance equation.
 - Preserves explicit supply, return, exhaust, transfer-in, transfer-out, and minimum-surplus design inputs plus calculated net surplus and signed surplus margin.
@@ -408,7 +417,7 @@
 - Preserves the canonical minimum-surplus PASS/FAIL result and explicitly records that the airflow-balance calculation does not calculate room pressure or invent unmodeled leakage.
 - Adds focused pass/fail, dependency, no-pressure-claim, strict round-trip, and determinism regressions.
 
-## Unreleased ProofGraph integration — ACH design evidence chain — 2026-09-29
+### ProofGraph integration — ACH design evidence chain — 2026-09-29
 
 - Bridges configured project minimum-ACH requirements into ProofGraph without adding a second airflow or ACH solver.
 - Reuses the canonical preliminary air-system design for governing supply airflow and the canonical room verification path for room volume, nominal supply ACH, and exact minimum-ACH pass/fail semantics.
@@ -416,7 +425,7 @@
 - Fails closed to UNKNOWN when the matching air-system room is absent or canonical design-consistency does not establish matching room geometry; missing/ambiguous evidence is never promoted to PASS.
 - Keeps design-consistency input tolerances separate from ACH compliance semantics and adds focused pass/fail/unknown, geometry-mismatch, strict round-trip, and determinism regressions.
 
-## Unreleased ProofGraph integration — IFC/BIM design evidence — 2026-09-29
+### ProofGraph integration — IFC/BIM design evidence — 2026-09-29
 
 - Adds a dedicated IFC-to-ProofGraph bridge that revalidates normalized IFC semantics and optional semantic SHA-256 identity before emitting design evidence.
 - Binds IFC evidence to the original source filename/SHA-256, normalized semantic SHA-256, IFC GlobalId, exact semantic field, and deterministic evidence identity.
@@ -425,7 +434,7 @@
 - Adds immutable evidence attachment to an existing ProofGraph while preserving its requirement set, checks, findings, verdicts, actions, and verification runs.
 - Adds strict digest-tamper, duplicate-attachment, round-trip, device/storey, and dimension-provenance regressions.
 
-## Unreleased ProofGraph integration — pressure design evidence chain — 2026-09-29
+### ProofGraph integration — pressure design evidence chain — 2026-09-29
 
 - Bridges the canonical pressure-design-consistency workflow into ProofGraph without adding a second solver path.
 - Records configured room pressure targets as DesignEvidence and solved signed node-to-reference differences as CalculationEvidence with separate deterministic source-revision digests.
@@ -433,7 +442,7 @@
 - Preserves source semantics: required missing mappings remain FAIL, intentionally unchecked mappings become UNKNOWN, and rooms with no configured pressure target are never converted into invented requirements.
 - Adds strict ProofGraph round-trip, failure, negative-pressure, missing-mapping, and determinism regressions plus documentation updates.
 
-## Unreleased ProofGraph foundation — continuous compliance evidence model — 2026-09-29
+### ProofGraph foundation — continuous compliance evidence model — 2026-09-29
 
 - Adds GUI-independent typed ProofGraph domain records for requirements, evidence sources/layers, provenance, confidence/uncertainty, checks, findings, verdicts, corrective actions, and verification runs.
 - Adds strict schema-v1 serialization/deserialization with deterministic whole-graph SHA-256 identity, finite-JSON validation, duplicate-ID rejection, and fail-closed cross-reference validation.
@@ -442,14 +451,14 @@
 - Encodes the future corrective-action safety boundary by requiring user approval on every modeled action.
 - Adds focused regression coverage and ProofGraph architecture documentation without changing GUI behavior, project persistence, standards limits, or existing solver equations.
 
-## Unreleased BIM auditability — IFC space dimension provenance — 2026-09-29
+### BIM auditability — IFC space dimension provenance — 2026-09-29
 
 - Records whether each natively extracted `IfcSpace` received Length/Width/Height from explicit IFC quantities (`ifc_quantities`) or the conservative IfcOpenShell rectangular-prism fallback (`ifcopenshell_geometry`).
 - Preserves that optional provenance in normalized IFC semantics and semantic SHA-256 identity while keeping older integration records without the field valid.
 - Makes a source-method change auditable as a semantic-only IFC re-import change when the resulting CleanroomX room geometry is otherwise unchanged.
 - Rejects invented/unknown `dimension_source` values instead of silently accepting ambiguous provenance.
 - Adds normalization, native extraction, and conflict-aware re-import regressions without changing spatial layout schema, solver equations, tolerances, or engineering acceptance semantics.
-## Unreleased next-level BIM — standards-aligned IFC space geometry fallback — 2026-09-29
+### next-level BIM — standards-aligned IFC space geometry fallback — 2026-09-29
 
 - Stops requiring non-standard \`Length\` and \`Width\` values to be present in \`Qto_SpaceBaseQuantities\` for every native \`IfcSpace\` import.
 - Preserves the existing quantity path when positive Length / Width / Height values are explicitly supplied by the source.
@@ -457,7 +466,7 @@
 - Rejects rotated arbitrary-angle, tilted, incomplete, and non-rectangular geometry instead of converting it to a misleading generic bounding box.
 - Adds helper- and extraction-level regression coverage without changing engineering solvers, project schema, numerical tolerances, or acceptance semantics.
 
-## Unreleased next-level BIM — orthogonal IFC space footprint fidelity — 2026-09-29
+### next-level BIM — orthogonal IFC space footprint fidelity — 2026-09-29
 
 - Preserves rectangular `IfcSpace` world-space footprints for 0°/90°/180°/270° plan rotations by transforming all four local rectangle corners.
 - Correctly shifts the imported room origin to the world-space minimum corner and swaps length/width when a quarter-turn requires it.
@@ -465,7 +474,7 @@
 - Adds helper- and native-extraction regression coverage without changing engineering solvers, numerical tolerances, acceptance criteria, project schema, or analysis synchronization.
 
 
-## Unreleased next-level BIM — generic IFC flow-terminal role safety — 2026-09-29
+### next-level BIM — generic IFC flow-terminal role safety — 2026-09-29
 
 - Stops treating generic `IfcFlowTerminal` occurrences as supply-air devices.
 - Maps generic flow terminals to equipment regardless of air-like free-text/predefined tokens; supply/return/exhaust classification remains limited to explicit `IfcAirTerminal` semantics.
@@ -473,7 +482,7 @@
 - Aligns the importer with buildingSMART's generic flow-terminal definition, which spans multiple distribution domains rather than HVAC supply only.
 - Adds helper-level, layout-level, and native-extraction regressions without changing engineering solvers, numerical tolerances, acceptance criteria, or analysis synchronization.
 
-## Unreleased next-level BIM — explicit IFC cleanroom semantics — 2026-09-29
+### next-level BIM — explicit IFC cleanroom semantics — 2026-09-29
 
 - Reads the project-defined `CleanroomX_Space` IFC user property set on `IfcSpace` entities.
 - Maps only `Classification` and `AnalysisRoomName` into existing CleanroomX room semantic fields.
@@ -482,7 +491,7 @@
 - Adds focused malformed-payload and end-to-end extraction regressions without changing solver equations, tolerances, or acceptance semantics.
 
 
-## Unreleased next-level BIM — IFC storey semantic fidelity — 2026-09-29
+### next-level BIM — IFC storey semantic fidelity — 2026-09-29
 
 - Preserves explicit `IfcBuildingStorey` identity, name, and world-space elevation on normalized `IfcSpace` semantic records.
 - Rejects conflicting name/elevation metadata for the same storey `GlobalId` instead of normalizing ambiguous provenance.
@@ -491,7 +500,7 @@
 - Adds focused normalization, layout-mapping, and native-extraction regressions without changing engineering inputs, solver equations, tolerances, or acceptance semantics.
 
 
-## Unreleased next-level BIM — IFC device orientation fidelity — 2026-09-29
+### next-level BIM — IFC device orientation fidelity — 2026-09-29
 
 - Preserves supported IFC device world-space plan orientation instead of defaulting every imported device to 0°.
 - Derives yaw from IfcOpenShell's full nested local-placement transform, so parent rotations are reflected in CleanroomX `orientation_deg`.
@@ -499,7 +508,7 @@
 - Adds focused unit and extraction regressions without changing room geometry assumptions, engineering inputs, solver equations, tolerances, or acceptance semantics.
 
 
-## Unreleased next-level BIM — IFC initial-import review integrity — 2026-09-29
+### next-level BIM — IFC initial-import review integrity — 2026-09-29
 
 - Adds a source-bound desktop preview before initial IFC mutation, showing the selected filename, extracted room/device counts, and source SHA-256.
 - Requires explicit confirmation when establishing the first IFC identity baseline as well as when replacing an existing unlinked spatial layout.
@@ -508,7 +517,7 @@
 - Adds focused GUI regressions for preview-before-mutation, review-to-apply source drift, and selected-file provenance mismatch without changing engineering inputs or acceptance semantics.
 
 
-## Unreleased next-level BIM — IFC placement and containment fidelity — 2026-09-29
+### next-level BIM — IFC placement and containment fidelity — 2026-09-29
 
 - Uses IfcOpenShell's full nested local-placement transform for imported element origins instead of translation-only accumulation, preserving world-position coordinates across rotated parent placements.
 - Resolves supported device-to-room links through explicit `IfcSpace` containment first and then IfcOpenShell's indirect spatial-container lookup, without geometric proximity inference.
@@ -517,13 +526,13 @@
 - Keeps the CleanroomX room footprint axis-aligned and does not change IFC geometry semantics, engineering inputs, solver equations, tolerances, or acceptance criteria.
 
 
-## Unreleased next-level BIM — IFC source stability — 2026-09-29
+### next-level BIM — IFC source stability — 2026-09-29
 
 - Streams SHA-256 before and after native IFC semantic extraction and fails closed if the source changes or disappears while IfcOpenShell is reading it.
 - Re-extracts a desktop re-import candidate after review/confirmation and requires both source and semantic digests to remain identical before project mutation.
 - Adds focused regressions for stable extraction, extraction-time source drift, and review-to-apply source drift without changing IFC mapping or engineering semantics.
 
-## Unreleased next-level BIM — desktop IFC review workflow — 2026-09-29
+### next-level BIM — desktop IFC review workflow — 2026-09-29
 
 - Adds a dedicated BIM menu to the desktop application for initial IFC spatial import, read-only re-import review, and guarded application of conflict-free IFC revisions.
 - Adds a per-entity review dialog showing IFC GlobalId, stable CleanroomX spatial identity, action classification, and local/source change state.
@@ -531,7 +540,7 @@
 - Keeps engineering inputs unsynchronized by default and leaves project persistence to the existing guarded Save workflow, preserving external-revision checks, save locking, revisions, autosave/recovery, and undo history.
 - Adds focused regression coverage for initial import, explicit replacement consent, read-only conflict review, stable-identity re-import, and conflict-blocked application.
 
-## Unreleased next-level BIM — conflict-aware IFC re-import — 2026-09-29
+### next-level BIM — conflict-aware IFC re-import — 2026-09-29
 
 - Upgrades IFC link metadata to schema v2 with deterministic GlobalId-to-spatial-ID bindings, source-record digests, source-derived spatial-object digests, and a canonical binding-table SHA-256.
 - Adds a read-only re-import planner that classifies unchanged, source-only, local-only, converged, added, removed, and conflicting IFC/spatial changes without mutating the project.
@@ -539,7 +548,7 @@
 - Keeps engineering solvers and analysis inputs untouched; IFC synchronization remains isolated to the existing spatial metadata boundary.
 - Adds regression coverage for stable identity, local-edit preservation, source add/remove, transactional conflict handling, and binding tamper detection.
 
-## Unreleased next-level Phase 1 — pressure evidence in design assurance — 2026-09-28
+### next-level Phase 1 — pressure evidence in design assurance — 2026-09-28
 
 - Extends `design_assurance` with an optional canonical `pressure_design_consistency` component while keeping legacy assurance inputs/results unchanged when the field is absent.
 - Aggregates explicit pressure pass/fail/not-checked findings into the assurance status and summary without inventing pressure mappings, reference rooms, tolerances, or standards criteria.
@@ -547,7 +556,7 @@
 - Makes design-assurance snapshots automatically freeze and replay the optional pressure component through their existing exact-source, result, traceability, and whole-snapshot digests; snapshot schema v1 remains unchanged.
 - Adds focused regression coverage for successful aggregation, failure propagation, Markdown evidence, parser fail-closed behavior, and snapshot replay.
 
-## Unreleased next-level Phase 1 — pressure design consistency — 2026-09-28
+### next-level Phase 1 — pressure design consistency — 2026-09-28
 
 - Adds a deterministic read-only `pressure_design_consistency` workflow that composes the canonical design-requirements service with the canonical room pressure-network solver.
 - Requires explicit room → pressure-node/reference-node mappings and compares the signed solved difference `pressure(node) - pressure(reference_node)` only against the configured room `pressure_target_pa`.
@@ -556,14 +565,14 @@
 - Registers the workflow in the shared application/project execution boundary with a real example, full workflow-matrix coverage, focused regression tests, and dedicated documentation.
 - Introduces no new pressure equation, leakage assumption, standards limit, project-schema change, certification semantics, or hidden reference-room inference.
 
-## Unreleased next-level Phase 1 — design assurance snapshots — 2026-09-28
+### next-level Phase 1 — design assurance snapshots — 2026-09-28
 
 - Adds deterministic self-contained `cleanroomx.design-assurance-snapshot` artifacts that bind the exact UTF-8 source bytes, normalized design-assurance result, result SHA-256, traceability SHA-256, producing CleanroomX version, and a canonical whole-snapshot SHA-256.
 - Adds independent snapshot verification that checks byte count/digest, embedded result digest, traceability linkage, whole-snapshot integrity, and deterministic replay through the canonical design-assurance parser/engine.
 - Adds strict JSON, duplicate-key rejection, stable-file reads, 16 MiB source and 64 MiB snapshot limits, atomic output persistence, source/output alias protection, tamper regression coverage, and an installed `cleanroomx-assurance-snapshot` CLI.
 - Keeps content digests explicitly separate from digital signatures or source-authenticity claims and introduces no engineering equation, standards limit, acceptance criterion, project-schema change, or certification semantics.
 
-## Unreleased hardening — compliance JSON equality — 2026-09-28
+### hardening — compliance JSON equality — 2026-09-28
 
 - Makes `equals` and `one_of` use JSON-aware equality instead of Python container equality.
 - Prevents boolean evidence from matching numeric criteria such as `true == 1` or nested boolean/number equivalents.
@@ -571,7 +580,7 @@
 - Adds focused regression coverage and documents the comparison semantics.
 
 
-## Unreleased next-level Phase 1 — design assurance matrix — 2026-09-28
+### next-level Phase 1 — design assurance matrix — 2026-09-28
 
 - Adds a read-only `design_assurance` workflow that composes the canonical `design_consistency` result with one or more versioned `compliance_check` evaluations.
 - Preserves complete component results plus compliance rule-pack identity, declared source, version, criteria SHA-256, exact supplied-evidence SHA-256, normalized component-result digests, and a deterministic traceability-manifest SHA-256 instead of flattening or reinterpreting evidence.
@@ -579,7 +588,7 @@
 - Integrates through the shared application parser/runner/reporter boundary with a real example, focused regression coverage, full workflow-matrix coverage, and dedicated documentation.
 - Introduces no new HVAC equations, standards limits, certification claims, implicit semantic mappings, project-schema changes, or engineering acceptance criteria.
 
-## Unreleased next-level Phase 1 — design consistency — 2026-09-26
+### next-level Phase 1 — design consistency — 2026-09-26
 
 - Adds a deterministic read-only `design_consistency` workflow that composes the canonical design-requirements and preliminary air-system engines rather than introducing a competing room or calculation model.
 - Cross-checks room-set identity, dimensions, minimum ACH, ACH-derived supply airflow, explicitly entered sensible load, and room-air temperature against the configured requirement range.
@@ -588,7 +597,7 @@
 - Integrates through the existing application parser/runner/reporter boundary with a real example and focused regression coverage.
 - Preserves project schema version 1, v0.102.1 release identity, existing solver equations/tolerances, and configured engineering acceptance criteria.
 
-## Unreleased bounded project-file ingestion
+### bounded project-file ingestion
 
 - Caps normal CleanroomX project JSON at 64 MiB before parsing and revision hashing, with bounded reads that detect growth beyond the ceiling.
 - Rejects invalid UTF-8 project bytes as project-format errors and refuses saves above the same limit.
@@ -596,14 +605,14 @@
 - Bounds saved project-revision envelopes and embedded project bytes before expensive decoding/restoration.
 - Preserves project schema version 1 and all engineering equations, tolerances, units, and configured acceptance semantics.
 
-## Unreleased portable project-bundle resource hardening
+### portable project-bundle resource hardening
 
 - Bounds untrusted portable-bundle inspection and extraction with explicit archive, manifest, project-member, dependency-member/count, and aggregate-payload ceilings.
 - Rejects oversized archive files before SHA-256 hashing and bounds member streaming so malformed inputs cannot silently expand beyond declared/accepted sizes during verification or extraction.
 - Applies the same project/dependency/manifest limits to export, preventing CleanroomX from publishing a portable bundle that this build would reject on re-open.
 - Preserves project schema version 1, bundle schema version 1, deterministic stored-ZIP format, solver behavior, and engineering acceptance semantics.
 
-## Unreleased next-level Phase 1 — project diagnostics
+### next-level Phase 1 — project diagnostics
 
 - Adds a deterministic read-only project diagnostics service that composes existing spatial validation, analysis parser validation, persisted engineering synchronization state, and run-history/application provenance instead of duplicating those authorities.
 - Reports structured severity, affected element, explanation, and corrective action for spatial conflicts, invalid analysis inputs, ambiguous analysis names, synchronization conflicts/staleness, never-run analyses, stale current inputs, stale external dependencies, and orphan run-history evidence.
@@ -612,7 +621,7 @@
 - Prevents `cleanroomx-project-check --output` from replacing the checked project or a declared external engineering dependency through the same path or an existing same-file alias.
 - Preserves project schema version 1, v0.102.1 release identity, solver equations/tolerances, configured engineering acceptance semantics, and project Undo/Redo state because diagnostics are read-only.
 
-## Unreleased next-level Phase 1 — design requirements and air-system design
+### next-level Phase 1 — design requirements and air-system design
 
 - Adds a data-driven `design_requirements` workflow that preserves explicit room/profile provenance and derives floor area, volume, ACH-based airflow targets, and explicitly entered sensible-load totals without inventing standards requirements.
 - Adds an `air_system_design` workflow that compares explicit ACH, sensible-load, and minimum-outdoor-air drivers, identifies the governing preliminary supply airflow, proposes return/makeup balance, and estimates capacity-based FFU/terminal counts from user-supplied equipment data.
@@ -620,7 +629,7 @@
 - Adds real example inputs, focused fail-closed/numerical tests, full application-catalog end-to-end coverage, Markdown reports, and `docs/DESIGN_FOUNDATION.md`.
 - Preserves the v0.102.1 release identity, project schema version, existing spatial model, existing solver equations/tolerances, and prior engineering acceptance semantics.
 
-## Unreleased next-level Phase 1 — room pressure network
+### next-level Phase 1 — room pressure network
 
 - Adds a first-class steady-state multizone room pressure/leakage network with explicit fixed-pressure boundaries and mechanical supply/return/exhaust inputs.
 - Supports user-parameterized power-law and orifice pressure paths for doors, windows, undercuts, transfer grilles, pass boxes, penetrations, cracks, intentional leakage, and generic openings.

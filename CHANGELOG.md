@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
+
+- Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.
+- Verifies ProofGraph source-finding metadata against the canonical verification findings for the graph's requirement set.
+- Verifies projected ProofGraph evidence and evidence sources against the exact bound workflow evidence, including value, unit, source revision, project revision, subject, locator provenance, calculation source, and evidence kind.
+- Adds regressions that deliberately reseal both `graph_sha256` and `workflow_sha256` after tampering, proving cross-artifact inconsistencies still fail closed.
+- Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
+
 ## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
 
 - Adds a focused Release 3 regression gate for persisted project requirements, requirement-evidence mappings, canonical requirements verification/workflow, guarded verification persistence, verification currency, project-native dossier output, project verification CLI, and verification-history CLI.

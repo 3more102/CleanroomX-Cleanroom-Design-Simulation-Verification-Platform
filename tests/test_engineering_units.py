@@ -35,8 +35,16 @@ def test_temperature_conversion_handles_affine_offset() -> None:
         target_unit="degF",
     )
 
+    celsius_alias = convert_engineering_value(
+        20.0,
+        source_unit="C",
+        target_unit="K",
+    )
+
     assert freezing.output_value == pytest.approx(0.0, abs=1e-12)
     assert boiling.output_value == pytest.approx(212.0, abs=1e-12)
+    assert celsius_alias.output_value == pytest.approx(293.15, abs=1e-12)
+    assert celsius_alias.source_canonical_unit == "degC"
 
 
 def test_airflow_aliases_share_one_canonical_dimension() -> None:
@@ -91,4 +99,28 @@ def test_finite_input_that_overflows_conversion_fails_closed() -> None:
             1.0e308,
             source_unit="bar",
             target_unit="Pa",
+        )
+
+
+def test_conversion_overflow_fails_with_authority_error() -> None:
+    with pytest.raises(
+        EngineeringUnitConversionError,
+        match="produced a non-finite value",
+    ):
+        convert_engineering_value(
+            1e308,
+            source_unit="kPa",
+            target_unit="Pa",
+        )
+
+
+def test_unrepresentable_integer_fails_with_authority_error() -> None:
+    with pytest.raises(
+        EngineeringUnitConversionError,
+        match="representable as a finite numeric value",
+    ):
+        convert_engineering_value(
+            10**400,
+            source_unit="Pa",
+            target_unit="kPa",
         )

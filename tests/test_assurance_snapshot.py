@@ -210,6 +210,39 @@ def test_snapshot_output_cannot_overwrite_input(tmp_path: Path) -> None:
         write_assurance_snapshot(source, source)
 
 
+def test_snapshot_output_identity_is_rechecked_before_replace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(DEMO.read_bytes())
+    output = tmp_path / "snapshot.json"
+    before = source.read_bytes()
+
+    def alias_before_replace(path, text, *, before_replace=None):
+        assert Path(path) == output
+        assert isinstance(text, str)
+        assert before_replace is not None
+        output.hardlink_to(source)
+        before_replace()
+        raise AssertionError("unsafe replacement should not be reached")
+
+    monkeypatch.setattr(
+        assurance_snapshot_module,
+        "atomic_write_text",
+        alias_before_replace,
+    )
+
+    with pytest.raises(
+        AssuranceSnapshotError,
+        match="different from the input source",
+    ):
+        write_assurance_snapshot(source, output)
+
+    assert source.read_bytes() == before
+    assert output.read_bytes() == before
+
+
 def test_input_size_limit_is_enforced(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -53,14 +53,27 @@ For text/boolean equality, a non-zero numeric tolerance is invalid.
 
 ## Units
 
-The current verification slice performs no implicit unit conversion.
+Release 3 now routes numeric requirement comparisons through the centralized,
+fail-closed engineering unit authority when evidence and requirement units use
+different exact spellings.
 
-Evidence units must exactly match the requirement unit, including both being
-unset for a deliberately unitless criterion. A mismatch is `invalid` and maps
-to the aggregate `not_checked` truth state.
+The authority allows only explicitly registered conversions inside one semantic
+engineering family. Current families include pressure (`Pa`/`kPa`),
+volumetric flow (`m3/s`, `m3/h`, `L/s`), generic rates
+(`1/s`, `1/min`, `1/h`), power, length, mass flow, and temperature
+(`C`/`K`). Conversion uses full floating-point precision and does not round
+for comparison.
 
-This is intentional until the centralized unit-conversion layer becomes the
-single canonical unit authority.
+The registry is intentionally stricter than dimensional analysis. `Hz` is a
+frequency family and is not silently treated as an air-change rate, even though
+both reduce dimensionally to inverse time. Unknown aliases and cross-family
+conversions fail closed as `invalid`; the verifier does not guess spellings,
+engineering intent, or unitless semantics.
+
+When conversion succeeds, `actual` is expressed in the requirement unit before
+criterion evaluation, so the persisted requirement tolerance remains in its
+declared unit. The original evidence value and unit remain bound by evidence ID
+and included in the evidence digest.
 
 ## Evidence completeness and freshness
 
@@ -132,7 +145,7 @@ Evidence input order does not change the verification result or digest.
 This slice establishes canonical comparison semantics and evidence binding. It
 does not yet:
 
-- convert units;
+- infer unregistered unit aliases or cross-family conversions;
 - select solver outputs automatically;
 - infer requirement-to-analysis mappings;
 - generate ProofGraph records automatically;

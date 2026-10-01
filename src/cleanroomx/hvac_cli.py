@@ -3,8 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .cli_output import dumps_strict_json
-from .project import atomic_write_text
+from .cli_output import CLIOutputError, dumps_strict_json, write_cli_output
 from .hvac import analyze_hvac_project
 from .hvac_io import load_hvac_project
 from .hvac_report import markdown_hvac_report
@@ -39,7 +38,15 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.project,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-hvac: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0

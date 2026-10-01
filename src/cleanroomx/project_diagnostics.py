@@ -15,6 +15,10 @@ from .application import (
 from .markdown import markdown_text
 from .project import ProjectDocument
 from .run_history import run_history_records
+from .verification_run_history import (
+    validate_project_verification_run_history,
+    verification_run_history_records,
+)
 from .spatial import engineering_sync_status, normalize_layout, validate_layout
 from .spatial_integrity import SPATIAL_METADATA_KEY
 
@@ -455,6 +459,39 @@ def _run_history_issues(
     return issues
 
 
+def _verification_history_summary(project: ProjectDocument) -> dict[str, Any]:
+    integrity = validate_project_verification_run_history(project.metadata)
+    records = verification_run_history_records(project.metadata)
+    latest_by_analysis: dict[str, dict[str, Any]] = {}
+    for record in records:
+        latest_by_analysis[record["analysis_id"]] = record
+
+    latest = []
+    for analysis_id in sorted(latest_by_analysis):
+        record = latest_by_analysis[analysis_id]
+        verification = record["verification"]
+        latest.append(
+            {
+                "analysis_id": record["analysis_id"],
+                "analysis_name": record["analysis_name"],
+                "analysis_kind": record["analysis_kind"],
+                "sequence": record["sequence"],
+                "completed_at_utc": record["completed_at_utc"],
+                "status": verification["status"],
+                "complete": verification["complete"],
+                "verified": verification["verified"],
+                "verification_identity_sha256": record[
+                    "verification_identity_sha256"
+                ],
+                "record_sha256": record["record_sha256"],
+            }
+        )
+    return {
+        **integrity,
+        "latest_by_analysis": latest,
+    }
+
+
 def analyze_project_diagnostics(
     project: ProjectDocument,
     *,
@@ -471,6 +508,8 @@ def analyze_project_diagnostics(
     base = Path(base_dir) if base_dir is not None else None
     layout_value = project.metadata.get(SPATIAL_METADATA_KEY)
     layout = normalize_layout(layout_value) if isinstance(layout_value, dict) else None
+
+    verification_history = _verification_history_summary(project)
 
     issues: list[dict[str, Any]] = []
     if layout is not None:
@@ -497,7 +536,9 @@ def analyze_project_diagnostics(
             "analysis_count": len(project.analyses),
             "spatial_room_count": len(layout["rooms"]) if layout is not None else 0,
             "spatial_device_count": len(layout["devices"]) if layout is not None else 0,
+            "verification_run_count": verification_history["record_count"],
         },
+        "verification_history": verification_history,
         "summary": {
             "status": status,
             "complete": True,
@@ -574,6 +615,39 @@ def markdown_project_diagnostics_report(result: dict[str, Any]) -> str:
                     element=markdown_text(element_text),
                     message=markdown_text(issue.get("message", "")),
                     action=markdown_text(issue.get("suggested_action", "")),
+                )
+            )
+        lines.append("")
+
+    verification_history = result.get("verification_history", {})
+    latest = verification_history.get("latest_by_analysis", [])
+    lines.extend(
+        [
+            "## Persisted verification evidence",
+            "",
+            f"- Retained records: **{verification_history.get('record_count', 0)}**",
+            f"- First sequence: **{verification_history.get('first_sequence')}**",
+            f"- Last sequence: **{verification_history.get('last_sequence')}**",
+            f"- Ledger head SHA-256: **{markdown_text(verification_history.get('head_record_sha256') or 'none')}**",
+            "",
+        ]
+    )
+    if latest:
+        lines.extend(
+            [
+                "| Analysis | Sequence | Status | Complete | Verified | Completed |",
+                "|---|---:|---|---|---|---|",
+            ]
+        )
+        for item in latest:
+            lines.append(
+                "| {analysis} | {sequence} | {status} | {complete} | {verified} | {completed} |".format(
+                    analysis=markdown_text(item.get("analysis_name") or item.get("analysis_id") or ""),
+                    sequence=item.get("sequence", ""),
+                    status=markdown_text(item.get("status", "")),
+                    complete=markdown_text(item.get("complete", False)),
+                    verified=markdown_text(item.get("verified", False)),
+                    completed=markdown_text(item.get("completed_at_utc", "")),
                 )
             )
         lines.append("")

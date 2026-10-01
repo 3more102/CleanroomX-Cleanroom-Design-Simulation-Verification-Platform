@@ -3832,7 +3832,14 @@ class CleanroomXApp:
     ) -> bool:
         target = Path(path)
         try:
-            atomic_write_text(target, content, before_replace=before_replace)
+            if before_replace is None:
+                atomic_write_text(target, content)
+            else:
+                atomic_write_text(
+                    target,
+                    content,
+                    before_replace=before_replace,
+                )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
             messagebox.showerror(

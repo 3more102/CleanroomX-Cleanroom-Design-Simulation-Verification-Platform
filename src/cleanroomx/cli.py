@@ -15,11 +15,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     verify = sub.add_parser("verify", help="Verify a room JSON file against configured project requirements")
     verify.add_argument("file")
+    verify.add_argument(
+        "--require-verified",
+        action="store_true",
+        help=(
+            "return exit code 2 unless verification is complete and the aggregate "
+            "status is pass"
+        ),
+    )
 
     verify_project_parser = sub.add_parser(
         "verify-project", help="Verify a multi-room project including configured pressure-cascade requirements"
     )
     verify_project_parser.add_argument("file")
+    verify_project_parser.add_argument(
+        "--require-verified",
+        action="store_true",
+        help=(
+            "return exit code 2 unless verification is complete and the aggregate "
+            "status is pass"
+        ),
+    )
 
     decay = sub.add_parser("decay", help="Run the well-mixed first-order concentration decay screening model")
     decay.add_argument("--initial", type=float, required=True)
@@ -40,11 +56,13 @@ def main() -> int:
     if args.command == "verify":
         report = verify_room(load_room(args.file))
         print(json.dumps(report.to_dict(), indent=2))
-        return 0 if report.passed else 2
+        accepted = report.verified if args.require_verified else report.passed
+        return 0 if accepted else 2
     if args.command == "verify-project":
         report = verify_project(load_project(args.file))
         print(json.dumps(report.to_dict(), indent=2))
-        return 0 if report.passed else 2
+        accepted = report.verified if args.require_verified else report.passed
+        return 0 if accepted else 2
     if args.command == "decay":
         value = decay_concentration(args.initial, args.ach, args.minutes, args.efficiency)
         print(json.dumps({"concentration_per_m3": value}, indent=2))

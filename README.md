@@ -155,11 +155,11 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.103.0 Release 3** release candidate is gated across Python **3.11 / 3.12 / 3.13** and Windows launcher smoke.
+The **v0.103.0 Release 3** release gate runs across Python **3.11 / 3.12 / 3.13**.
 
 Recorded release evidence includes:
 
-- the complete test suite on each supported Python version for the exact Release 3 candidate head;
+- full-suite and focused Release 3 requirements/verification gates on each supported Python version;
 - Windows PowerShell and CMD launcher smoke tests;
 - clean wheel build/install checks;
 - installed Tk GUI smoke testing;

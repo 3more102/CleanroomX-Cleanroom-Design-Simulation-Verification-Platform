@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
+from .cli_output import dumps_strict_json
+from .strict_json import StrictJSONError
 from .project import atomic_write_text
 from .fan_network import solve_fan_driven_parallel_network
 from .fan_network_io import load_fan_driven_parallel_network_study
@@ -25,11 +27,18 @@ def main() -> int:
     result = solve_fan_driven_parallel_network(
         load_fan_driven_parallel_network_study(args.study)
     )
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_fan_driven_parallel_network_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_fan_driven_parallel_network_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-fan-network: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if args.output:
         atomic_write_text(args.output, text)
     else:

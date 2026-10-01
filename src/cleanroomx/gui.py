@@ -3390,7 +3390,16 @@ class CleanroomXApp:
             )
             return
 
-        if not self._write_export_file(path, content, label=label):
+        if not self._write_export_file(
+            path,
+            content,
+            label=label,
+            before_replace=lambda: _assert_project_output_is_safe(
+                self.project,
+                source=self.project_path,
+                output=path,
+            ),
+        ):
             return
         messagebox.showinfo(
             "Project dossier exported",
@@ -3813,10 +3822,17 @@ class CleanroomXApp:
         self.status_var.set(f"Imported {source_path.name}")
         self._update_title()
 
-    def _write_export_file(self, path: str, content: str, *, label: str) -> bool:
+    def _write_export_file(
+        self,
+        path: str,
+        content: str,
+        *,
+        label: str,
+        before_replace=None,
+    ) -> bool:
         target = Path(path)
         try:
-            atomic_write_text(target, content)
+            atomic_write_text(target, content, before_replace=before_replace)
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
             messagebox.showerror(

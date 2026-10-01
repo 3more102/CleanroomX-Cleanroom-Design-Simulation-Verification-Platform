@@ -383,3 +383,62 @@ def test_project_diagnostics_warn_when_persisted_verification_is_stale(tmp_path)
     assert issue["severity"] == "warning"
     assert "analysis_input_changed" in issue["details"]["mismatch_reasons"]
     assert result["verification_currency"]["summary"]["stale_count"] == 1
+
+
+def def test_release3_consolidated_verification_currency_hardening():
+    try:
+        verification_history_record_currency_context("bad-record", None)
+    except TypeError as exc:
+        assert "record must be a dictionary" in str(exc)
+    else:
+        raise AssertionError("non-dictionary verification record was accepted")
+
+    try:
+        verification_history_record_currency_context(
+            {"analysis_id": "", "sequence": 1},
+            None,
+        )
+    except ValueError as exc:
+        assert "non-empty analysis_id" in str(exc)
+    else:
+        raise AssertionError("empty verification analysis identity was accepted")
+
+    try:
+        verification_history_record_currency_context(
+            {"analysis_id": "room-a", "sequence": 1},
+            "bad-assessment",
+        )
+    except TypeError as exc:
+        assert "assessment must be a dictionary" in str(exc)
+    else:
+        raise AssertionError("non-dictionary currency assessment was accepted")
+
+    assessment = {
+        "analysis_id": "room-a",
+        "state": "current",
+        "current": True,
+        "complete": True,
+        "mismatch_reasons": [],
+        "latest_record": {"sequence": 2},
+        "explanation": "Current verification matches the project.",
+    }
+    historical = verification_history_record_currency_context(
+        {"analysis_id": "room-a", "sequence": 1},
+        assessment,
+    )
+    assert historical["state"] == "historical"
+    assert historical["current"] is False
+
+    latest = verification_history_record_currency_context(
+        {"analysis_id": "room-a", "sequence": 2},
+        assessment,
+    )
+    assert latest == assessment
+    assert latest is not assessment
+
+    orphaned = verification_history_record_currency_context(
+        {"analysis_id": "removed-analysis", "sequence": 7},
+        None,
+    )
+    assert orphaned["state"] == "not_in_current_project"
+    assert orphaned["current"] is False

@@ -61,6 +61,7 @@ single canonical unit authority.
 
 A PASS requires all of the following:
 
+- requirement lifecycle status is explicitly `approved`;
 - requirement applicability is explicitly `applicable`;
 - exactly one authoritative evidence binding exists for the requirement/entity;
 - evidence freshness is explicitly `current`;
@@ -78,6 +79,12 @@ A requirement marked `not_applicable` is retained explicitly but excluded from
 the active comparison set. `unknown` and `conditional` applicability remain
 unresolved until another project workflow explicitly resolves them.
 
+Lifecycle is also fail-closed. A `draft` requirement remains incomplete and
+blocks a verified outcome. `superseded` and `withdrawn` requirements are
+retained as explicit `inactive` findings but excluded from the active comparison
+set. Evidence IDs are unique across the complete verification input so one audit
+identity cannot resolve to multiple records.
+
 ## Truth states
 
 Per-finding engineering state is richer than the existing aggregate verification
@@ -89,6 +96,7 @@ status:
 - `stale`
 - `incomplete`
 - `invalid`
+- `inactive`
 - `not_applicable`
 
 The aggregate result deliberately reuses CleanroomX's established truth model:

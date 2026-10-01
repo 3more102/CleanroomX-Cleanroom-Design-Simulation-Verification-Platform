@@ -153,3 +153,28 @@ The Release 2 integration adds durable project-state and evidence workflows arou
 - **Analysis plugins** use the versioned plugin API and are isolated from built-in registry keys. See [Plugins](PLUGINS.md).
 
 Stale cached results are rejected when the active analysis input or recorded external dependency revision no longer matches the completed run.
+
+## Requirements traceability review
+
+**Analysis → Requirements Traceability...** opens a read-only view of the
+canonical project-owned requirements registry and requirement-evidence mapping
+registry. The view is built through the same strict parsers and active-mapping
+cross-validation used by project persistence; it does not parse or reinterpret
+raw project JSON independently.
+
+The requirements tab shows lifecycle status, applicability, discipline,
+category, scope, and the explicit persisted criterion. The mappings tab shows
+requirement identity, analysis identity, expected analysis kind, lifecycle,
+engineering property, and exact result path. Registry SHA-256 identities are
+shown so an operator can correlate the view with persisted project evidence.
+
+Disabled and superseded mappings remain historical traceability. A retained
+mapping is shown as currently resolved only when both its stable analysis ID and
+its recorded analysis kind still match the current project. Reuse of the same
+analysis ID for another kind is displayed as an identity mismatch rather than
+silently rebound.
+
+This surface is inspection-only. It does not edit requirements or mappings,
+infer standards limits, convert units, run requirement comparisons, execute
+analysis, or rewrite persisted verification evidence.
+

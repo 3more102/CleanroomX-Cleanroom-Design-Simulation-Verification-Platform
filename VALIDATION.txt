@@ -1,6 +1,31 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
+Release: CleanroomX v0.103.0
+Candidate date: 2026-10-01
+
+FINAL RELEASE GATE
+==================
+
+PASS REQUIRED - Python 3.11 complete suite
+PASS REQUIRED - Python 3.12 complete suite
+PASS REQUIRED - Python 3.13 complete suite
+PASS REQUIRED - Release 3 requirements/verification focused gate
+PASS REQUIRED - clean wheel build/install and installed operator surfaces
+PASS REQUIRED - Windows PowerShell/CMD launcher smoke
+PASS REQUIRED - package/runtime/demo/CI identity equals 0.103.0
+PASS REQUIRED - project-batch output cannot overwrite source or dependencies
+
+Publication rule:
+create v0.103.0 only after successful CI for the exact current main SHA;
+never move an existing release tag.
+
+HISTORICAL VALIDATION BASELINES
+===============================
+
+CLEANROOMX RELEASE VALIDATION
+=============================
+
 Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 

@@ -410,6 +410,7 @@ def test_project_verify_status_discards_result_if_project_changes_during_inspect
     assert captured.out == ""
     assert "project changed during verification-status inspection" in captured.err
 
+
 def test_project_verify_status_without_analysis_id_accepts_configured_project(
     tmp_path,
     capsys,

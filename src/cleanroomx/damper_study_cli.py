@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+from .cli_output import CLIOutputError, write_cli_output
 import json
 
-from .project import atomic_write_text
 from .damper_study import solve_loop_damper_study
 from .damper_study_io import load_loop_damper_study
 from .damper_study_report import markdown_loop_damper_study_report
@@ -35,7 +37,15 @@ def main() -> int:
         else markdown_loop_damper_study_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.study,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-damper-study: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0

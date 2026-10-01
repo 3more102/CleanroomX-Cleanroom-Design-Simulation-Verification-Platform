@@ -259,11 +259,11 @@ def test_plugin_discovery_disables_all_duplicate_plugin_keys():
     assert all("all contenders disabled" in issue.error for issue in discovery.issues)
 
 
-def test_plugin_trust_policy_defaults_to_disabled():
+def test_plugin_trust_policy_defaults_to_trusted_for_v1_compatibility():
     policy = plugin_trust_policy_from_environment({})
 
-    assert policy.mode == "disabled"
-    assert policy.configured_mode == "disabled"
+    assert policy.mode == "trusted"
+    assert policy.configured_mode == "trusted"
     assert policy.configuration_error is None
 
 

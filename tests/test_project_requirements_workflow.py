@@ -527,7 +527,7 @@ def test_workflow_verifier_rejects_resealed_extra_proofgraph_nodes(tmp_path):
 
     with pytest.raises(
         ProjectRequirementsWorkflowError,
-        match="checks disagree with canonical verification projection",
+        match="checks do not exactly match canonical verification",
     ):
         verify_project_requirements_workflow_run(result)
 

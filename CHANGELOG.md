@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — external plugin trust gate — 2026-10-01
+
+- Adds operator-controlled `trusted`, `disabled`, and `allowlist` modes for installed analysis plugins, with external plugins disabled by default until an operator explicitly opts in.
+- Applies deny decisions before `entry_point.load()`, so blocked external plugins are not imported through the CleanroomX plugin entry point.
+- Supports canonicalized distribution-name allowlisting with optional exact version pins and fails closed on invalid configuration, missing distribution identity, or pin mismatch.
+- Exposes the effective trust policy in application-registry diagnostics while preserving plugin API v1, built-in analyses, solver equations, engineering tolerances, and project schema.
+
 ## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
 
 - Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.

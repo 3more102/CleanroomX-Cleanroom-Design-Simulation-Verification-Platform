@@ -322,10 +322,20 @@ def test_verification_currency_proves_current_file_backed_verification(
     assert result["summary"]["current_count"] == 1
 
     dependency = tmp_path / "consistency_hvac_demo.json"
-    dependency.write_text(
-        dependency.read_text(encoding="utf-8") + "\n",
-        encoding="utf-8",
+    original_dependency = dependency.read_bytes()
+    dependency.unlink()
+
+    unavailable = assess_project_verification_currency(
+        loaded,
+        base_dir=tmp_path,
     )
+    unavailable_item = unavailable["analyses"][0]
+    assert unavailable_item["state"] == "dependency_freshness_unverifiable"
+    assert unavailable_item["current"] is False
+    assert unavailable_item["complete"] is False
+    assert unavailable_item["mismatch_reasons"] == []
+
+    dependency.write_bytes(original_dependency + b"\n")
     stale = assess_project_verification_currency(
         loaded,
         base_dir=tmp_path,
@@ -333,8 +343,9 @@ def test_verification_currency_proves_current_file_backed_verification(
     stale_item = stale["analyses"][0]
     assert stale_item["state"] == "stale"
     assert stale_item["current"] is False
+    assert stale_item["complete"] is True
     assert stale_item["mismatch_reasons"] == [
-        "external_dependency_content_changed_or_unavailable"
+        "external_dependency_content_changed"
     ]
 
 

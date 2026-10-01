@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — psychrometric dew-point convergence hardening — 2026-10-01
+
+- Keeps the ASHRAE/IAPWS ice-below-0 °C and liquid-water-at/above-0 °C saturation equations unchanged while making dew-point inversion stay on one continuous phase branch.
+- Detects the narrow 0 °C phase-switch vapor-pressure interval that has no root in the implemented piecewise saturation function and fails explicitly instead of returning a false fixed-iteration bisection result.
+- Verifies the final inversion pressure residual and preserves explicit failure below the supported -100 °C inversion bound.
+- Adds regressions for saturated air exactly at 0 °C and the phase-switch no-root interval.
+
 ## Unreleased — CI supply-chain hardening — 2026-10-01
 
 - Pins every third-party GitHub Action used by the repository workflows to a reviewed immutable commit SHA while retaining human-readable upstream version comments.

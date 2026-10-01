@@ -214,24 +214,50 @@ def bind_analysis_run_requirement_evidence(
     run_bundle: dict[str, Any],
     mappings: Iterable[AnalysisRequirementEvidenceMapping],
     *,
-    source_project_revision: str,
     current_analysis_input: dict[str, Any] | None,
+    source_project_revision: str | None = None,
     base_dir: str | Path | None = None,
 ) -> tuple[RequirementEvidence, ...]:
     """Bind verified immutable analysis output to explicit project requirements.
 
-    Freshness is derived from project content identity and run external-dependency
-    provenance. It is never accepted as a free-form caller assertion.
+    Freshness is derived from exact analysis input and external-dependency
+    provenance. Project revision comes from the integrity-verified run when the
+    execution boundary recorded it; legacy/unbound runs require an explicit
+    trusted revision.
     """
-    source_revision = _sha256(
-        source_project_revision,
-        "source_project_revision",
+    supplied_source_revision = (
+        None
+        if source_project_revision is None
+        else _sha256(source_project_revision, "source_project_revision")
     )
     if not isinstance(run_bundle, dict):
         raise AnalysisRequirementEvidenceError(
             "run_bundle must be a CleanroomX analysis-run object"
         )
     verified = verify_analysis_run_bundle(copy.deepcopy(run_bundle))
+    embedded_source_revision = verified.get("project_source_revision")
+    if embedded_source_revision is not None:
+        embedded_source_revision = _sha256(
+            embedded_source_revision,
+            "verified_analysis.project_source_revision",
+        )
+        if (
+            supplied_source_revision is not None
+            and supplied_source_revision != embedded_source_revision
+        ):
+            raise AnalysisRequirementEvidenceError(
+                "source_project_revision disagrees with the project revision "
+                "bound into the verified analysis run"
+            )
+        source_revision = embedded_source_revision
+    elif supplied_source_revision is not None:
+        source_revision = supplied_source_revision
+    else:
+        raise AnalysisRequirementEvidenceError(
+            "analysis run is not bound to a project revision; provide "
+            "source_project_revision from a trusted project execution boundary"
+        )
+
     result = run_bundle.get("result")
     if not isinstance(result, dict):
         raise AnalysisRequirementEvidenceError(
@@ -302,8 +328,8 @@ def verify_project_requirements_from_analysis_run(
     run_bundle: dict[str, Any],
     mappings: Iterable[AnalysisRequirementEvidenceMapping],
     *,
-    source_project_revision: str,
     current_analysis_input: dict[str, Any] | None,
+    source_project_revision: str | None = None,
     base_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Bind one verified analysis run and evaluate through the canonical verifier."""

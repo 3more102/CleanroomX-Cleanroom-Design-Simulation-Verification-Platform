@@ -17,6 +17,15 @@ from .proofgraph_ifc import (
     ifc_design_evidence_bundle,
     proofgraph_with_ifc_design_evidence,
 )
+from .proofgraph_evidence_policy import (
+    EVIDENCE_PRECEDENCE_DECISION_SCOPE,
+    EVIDENCE_PRECEDENCE_SCHEMA,
+    EVIDENCE_PRECEDENCE_SCHEMA_VERSION,
+    EvidencePrecedencePolicy,
+    EvidencePrecedenceReport,
+    EvidenceResolution,
+    assess_evidence_precedence,
+)
 from .proofgraph_models import (
     PROOFGRAPH_SCHEMA,
     PROOFGRAPH_SCHEMA_VERSION,
@@ -42,6 +51,9 @@ from .proofgraph_models import (
 __all__ = [
     "PROOFGRAPH_SCHEMA",
     "PROOFGRAPH_SCHEMA_VERSION",
+    "EVIDENCE_PRECEDENCE_DECISION_SCOPE",
+    "EVIDENCE_PRECEDENCE_SCHEMA",
+    "EVIDENCE_PRECEDENCE_SCHEMA_VERSION",
     "CalculationEvidence",
     "CommissioningEvidence",
     "ComplianceCheck",
@@ -52,6 +64,9 @@ __all__ = [
     "DesignEvidence",
     "Evidence",
     "EvidenceSource",
+    "EvidencePrecedencePolicy",
+    "EvidencePrecedenceReport",
+    "EvidenceResolution",
     "OperationalEvidence",
     "ProofGraph",
     "ProvenanceRecord",
@@ -70,4 +85,5 @@ __all__ = [
     "proofgraph_from_dict",
     "ifc_design_evidence_bundle",
     "proofgraph_with_ifc_design_evidence",
+    "assess_evidence_precedence",
 ]

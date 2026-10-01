@@ -1695,14 +1695,14 @@ def test_verification_history_currency_context_applies_only_to_latest_record():
         "latest_record": {"sequence": 9},
     }
 
-    latest_context = gui_module.verification_history_record_currency_context(
+    latest_context = gui_module.verification_record_currency_context(
         latest_record,
         current_assessment,
     )
     assert latest_context == current_assessment
     assert latest_context is not current_assessment
 
-    historical_context = gui_module.verification_history_record_currency_context(
+    historical_context = gui_module.verification_record_currency_context(
         {"sequence": 8, "analysis_id": "room-a"},
         current_assessment,
     )
@@ -1710,7 +1710,7 @@ def test_verification_history_currency_context_applies_only_to_latest_record():
     assert historical_context["current"] is False
     assert historical_context["mismatch_reasons"] == []
 
-    removed_context = gui_module.verification_history_record_currency_context(
+    removed_context = gui_module.verification_record_currency_context(
         {"sequence": 3, "analysis_id": "removed-analysis"},
         None,
     )

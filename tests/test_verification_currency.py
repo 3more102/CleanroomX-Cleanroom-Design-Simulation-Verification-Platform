@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 from cleanroomx.project import (
     AnalysisDocument,
@@ -8,6 +9,7 @@ from cleanroomx.project import (
     load_project_document,
     save_project_document,
 )
+from cleanroomx.project_diagnostics import analyze_project_diagnostics
 from cleanroomx.project_requirement_evidence_mappings import (
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
@@ -26,6 +28,9 @@ from cleanroomx.verification_currency import (
     VERIFICATION_CURRENCY_SCHEMA,
     assess_project_verification_currency,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 ROOM_INPUT = {
@@ -208,25 +213,102 @@ def test_verification_currency_distinguishes_not_verified_from_not_configured():
     assert unconfigured_result["analyses"][0]["state"] == "not_configured"
 
 
-def test_verification_currency_fails_closed_for_file_backed_dependencies(tmp_path):
-    project = _project()
-    project.analyses[0] = AnalysisDocument(
-        id="room-a",
-        name="Consistency",
-        kind="consistency",
-        input={
-            "verification_project": "facility.json",
-            "hvac_project": "hvac.json",
-            "room_airflow_abs_tolerance_m3_h": 0.0,
-            "require_same_room_set": True,
+def test_verification_currency_fails_closed_for_matching_file_backed_verification(
+    tmp_path,
+):
+    (tmp_path / "facility_project.json").write_bytes(
+        (ROOT / "examples" / "facility_project.json").read_bytes()
+    )
+    (tmp_path / "consistency_hvac_demo.json").write_bytes(
+        (ROOT / "examples" / "consistency_hvac_demo.json").read_bytes()
+    )
+    requirements = _requirements()
+    requirement = requirements["sets"][0]["requirements"][0]
+    requirement.update(
+        {
+            "id": "REQ-CONSISTENCY",
+            "title": "Cross-model consistency",
+            "description": "Verification and HVAC airflow models must agree.",
+            "category": "cross_model_consistency",
+            "unit": None,
+            "target": "pass",
+            "minimum": None,
+            "maximum": None,
+            "tolerance": 0.0,
+            "scope": [],
+            "required_evidence": ["calculation"],
+        }
+    )
+    mappings = _mappings()
+    mapping = mappings["mappings"][0]
+    mapping.update(
+        {
+            "id": "MAP-CONSISTENCY",
+            "requirement_id": "REQ-CONSISTENCY",
+            "analysis_id": "consistency",
+            "expected_analysis_kind": "consistency",
+            "subject_ref": None,
+            "property_name": "consistency_status",
+            "result_path": ["status"],
+            "unit": None,
+        }
+    )
+    project = ProjectDocument(
+        name="File-backed verification currency",
+        analyses=[
+            AnalysisDocument(
+                id="consistency",
+                name="Consistency",
+                kind="consistency",
+                input={
+                    "verification_project": "facility_project.json",
+                    "hvac_project": "consistency_hvac_demo.json",
+                    "room_airflow_abs_tolerance_m3_h": 0.0,
+                    "require_same_room_set": True,
+                },
+            )
+        ],
+        active_analysis_id="consistency",
+        metadata={
+            PROJECT_REQUIREMENTS_METADATA_KEY: requirements,
+            PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY: mappings,
         },
     )
+    path = save_project_document(
+        tmp_path / "file-backed.cleanroomx.json",
+        project,
+    )
+    workflow = run_project_requirements_workflow(path, "consistency")
+    assert workflow.verification["verified"] is True
+    persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T12:10:00Z",
+    )
 
-    # This unit test exercises the fail-closed decision without creating an
-    # impossible mixed-kind persisted record. A matching schema-v1 record would
-    # still lack dependency hashes, so dependency freshness cannot be proven.
-    result = assess_project_verification_currency(project)
+    loaded = load_project_document(path)
+    result = assess_project_verification_currency(loaded)
 
     item = result["analyses"][0]
-    assert item["state"] == "not_verified"
+    assert item["state"] == "dependency_freshness_unverifiable"
+    assert item["current"] is False
     assert item["external_dependency_count"] == 2
+    assert item["mismatch_reasons"] == []
+    assert result["summary"]["dependency_freshness_unverifiable_count"] == 1
+
+
+def test_project_diagnostics_warn_when_persisted_verification_is_stale(tmp_path):
+    path = _persisted(tmp_path)
+    project = load_project_document(path)
+    project.analyses[0].input["supply_airflow_m3_h"] += 1.0
+
+    result = analyze_project_diagnostics(project, base_dir=tmp_path)
+
+    issue = next(
+        item
+        for item in result["issues"]
+        if item["rule"] == "verification_currency.stale"
+    )
+    assert issue["severity"] == "warning"
+    assert "analysis_input_changed" in issue["details"]["mismatch_reasons"]
+    assert result["verification_currency"]["summary"]["stale_count"] == 1

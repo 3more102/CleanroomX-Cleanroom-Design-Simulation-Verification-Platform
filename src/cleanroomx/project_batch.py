@@ -21,8 +21,8 @@ from .project import (
     project_file_revision_matches,
 )
 from .project_diagnostics_cli import (
-    _assert_output_is_distinct_from_dependencies,
-    _assert_output_is_distinct_from_source,
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
 )
 
 PROJECT_BATCH_SCHEMA = "cleanroomx.project-batch-run"
@@ -435,10 +435,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         project, revision = load_project_document_with_revision(source)
         if args.output:
-            _assert_output_is_distinct_from_source(source, args.output)
-            _assert_output_is_distinct_from_dependencies(
+            _assert_project_output_is_safe(
                 project,
-                base_dir=source.parent,
+                source=source,
                 output=args.output,
             )
         batch = _run_loaded_project(
@@ -453,7 +452,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
-            atomic_write_text(args.output, text)
+            _assert_project_publication_safe(
+                project,
+                source=source,
+                revision=revision,
+                output=args.output,
+            )
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=lambda: _assert_project_publication_safe(
+                    project,
+                    source=source,
+                    revision=revision,
+                    output=args.output,
+                ),
+            )
         else:
             sys.stdout.write(text)
         return project_batch_exit_code(batch)

@@ -172,11 +172,21 @@ class RequirementEvidence:
 class RequirementEvidenceAuthority:
     requirement_id: str
     evidence_id: str
+    authority_source: str
+    decision_reference: str
+    decision_revision: str
     rationale: str
     subject_ref: str | None = None
 
     def __post_init__(self) -> None:
-        for name in ("requirement_id", "evidence_id", "rationale"):
+        for name in (
+            "requirement_id",
+            "evidence_id",
+            "authority_source",
+            "decision_reference",
+            "decision_revision",
+            "rationale",
+        ):
             object.__setattr__(
                 self,
                 name,
@@ -199,6 +209,9 @@ class RequirementEvidenceAuthority:
             "requirement_id": self.requirement_id,
             "subject_ref": self.subject_ref,
             "evidence_id": self.evidence_id,
+            "authority_source": self.authority_source,
+            "decision_reference": self.decision_reference,
+            "decision_revision": self.decision_revision,
             "rationale": self.rationale,
         }
 

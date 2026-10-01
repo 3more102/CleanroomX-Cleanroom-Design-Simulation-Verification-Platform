@@ -28,6 +28,10 @@ from .project_requirement_evidence_mappings import (
     validate_project_requirement_evidence_mappings,
 )
 from .run_history import RunHistoryIntegrityError, validate_run_history
+from .verification_run_history import (
+    VerificationRunHistoryIntegrityError,
+    validate_project_verification_run_history,
+)
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
 
@@ -222,6 +226,12 @@ class ProjectDocument:
         except ProjectRequirementEvidenceMappingsFormatError as exc:
             raise ProjectFormatError(
                 f"invalid project requirement evidence mappings: {exc}"
+            ) from exc
+        try:
+            validate_project_verification_run_history(metadata)
+        except VerificationRunHistoryIntegrityError as exc:
+            raise ProjectFormatError(
+                f"invalid project verification run history: {exc}"
             ) from exc
         project_block = _merge_extra_fields(
             self.project_extra_fields,
@@ -560,6 +570,12 @@ def project_from_dict_with_migration_info(
         validate_run_history(metadata)
     except RunHistoryIntegrityError as exc:
         raise ProjectFormatError(f"invalid project run history: {exc}") from exc
+    try:
+        validate_project_verification_run_history(metadata)
+    except VerificationRunHistoryIntegrityError as exc:
+        raise ProjectFormatError(
+            f"invalid project verification run history: {exc}"
+        ) from exc
 
     raw_analyses = data.get("analyses", [])
     if not isinstance(raw_analyses, list):

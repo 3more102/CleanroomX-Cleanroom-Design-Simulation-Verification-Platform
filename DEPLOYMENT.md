@@ -66,4 +66,4 @@ Deployment does not convert CleanroomX screening/numerical outputs into cleanroo
 
 ## Installed-wheel release verification
 
-The Release 2/v0.101 CI release gate builds a wheel on Python 3.11, 3.12, and 3.13, installs it into a clean virtual environment, runs `cleanroomx-gui --check`, verifies packaged demo resources, and on Python 3.13 launches the installed `cleanroomx-gui --demo --smoke` under Xvfb.
+The current CI release gate builds a wheel on Python 3.11, 3.12, and 3.13, installs it into a clean virtual environment, runs `cleanroomx-gui --check`, verifies packaged demo resources and installed Release 3 operator CLIs, and on Python 3.13 launches the installed `cleanroomx-gui --demo --smoke` under Xvfb.

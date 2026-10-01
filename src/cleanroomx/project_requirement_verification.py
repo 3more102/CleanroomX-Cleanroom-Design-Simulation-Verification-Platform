@@ -411,8 +411,8 @@ def _evaluate(
                     state="invalid",
                     explanation=(
                         "Evidence unit does not exactly match the requirement unit; "
-                        "no implicit conversion was performed because the canonical "
-                        f"unit authority rejected the conversion: {exc}."
+                        "no implicit conversion was performed. "
+                        f"Canonical unit authority rejected the conversion: {exc}."
                     ),
                     evidence=evidence,
                 )

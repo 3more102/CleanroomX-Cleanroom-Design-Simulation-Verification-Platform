@@ -400,6 +400,9 @@ def test_explicit_evidence_authority_resolves_conflict_without_deleting_candidat
         requirement_id="REQ-ACH",
         subject_ref="ROOM-A",
         evidence_id="E-PASS",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
         rationale="Approved calculation is the project decision basis.",
     )
 
@@ -418,6 +421,69 @@ def test_explicit_evidence_authority_resolves_conflict_without_deleting_candidat
     assert finding["evidence_authority"] == authority.to_dict()
     assert result["evidence_authority"] == [authority.to_dict()]
     assert len(result["evidence_authority_sha256"]) == 64
+    assert finding["evidence_authority"]["authority_source"] == "Project verification authority"
+    assert finding["evidence_authority"]["decision_reference"] == "DEC-REQ-AUTH"
+    assert finding["evidence_authority"]["decision_revision"] == "Rev 1"
+
+
+def test_evidence_authority_identity_is_required_and_hash_bound() -> None:
+    requirements = _registry(_requirement())
+    evidence = [
+        _evidence(evidence_id="E-1", value=21.0),
+        _evidence(evidence_id="E-2", value=19.0),
+    ]
+    baseline = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-001",
+        decision_revision="Rev 1",
+        rationale="Approved calculation is the project decision basis.",
+    )
+    revised = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-001",
+        decision_revision="Rev 2",
+        rationale="Approved calculation is the project decision basis.",
+    )
+
+    baseline_result = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[baseline],
+    )
+    revised_result = verify_project_requirements(
+        requirements,
+        evidence,
+        evidence_authority=[revised],
+    )
+
+    assert baseline_result["evidence_authority_sha256"] != revised_result["evidence_authority_sha256"]
+    assert baseline_result["verification_sha256"] != revised_result["verification_sha256"]
+    assert baseline_result["evidence_authority"][0]["decision_revision"] == "Rev 1"
+
+    with pytest.raises(TypeError):
+        RequirementEvidenceAuthority(
+            requirement_id="REQ-ACH",
+            subject_ref="ROOM-A",
+            evidence_id="E-1",
+            rationale="Missing decision identity must not be accepted.",
+        )
+
+    with pytest.raises(ValueError, match="authority_source"):
+        RequirementEvidenceAuthority(
+            requirement_id="REQ-ACH",
+            subject_ref="ROOM-A",
+            evidence_id="E-1",
+            authority_source=" ",
+            decision_reference="DEC-REQ-001",
+            decision_revision="Rev 1",
+            rationale="Blank authority source must fail closed.",
+        )
 
 
 def test_evidence_authority_can_select_a_failure_over_a_passing_candidate() -> None:
@@ -433,6 +499,9 @@ def test_evidence_authority_can_select_a_failure_over_a_passing_candidate() -> N
                 requirement_id="REQ-ACH",
                 subject_ref="ROOM-A",
                 evidence_id="E-FAIL",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
                 rationale="Signed-off calculation supersedes the exploratory run.",
             )
         ],
@@ -470,12 +539,18 @@ def test_evidence_authority_is_order_independent_and_digest_stable() -> None:
             requirement_id="REQ-ACH-B",
             subject_ref="ROOM-B",
             evidence_id="E-B-APPROVED",
+            authority_source="Project verification authority",
+            decision_reference="DEC-REQ-AUTH",
+            decision_revision="Rev 1",
             rationale="Approved ROOM-B calculation.",
         ),
         RequirementEvidenceAuthority(
             requirement_id="REQ-ACH",
             subject_ref="ROOM-A",
             evidence_id="E-A-APPROVED",
+            authority_source="Project verification authority",
+            decision_reference="DEC-REQ-AUTH",
+            decision_revision="Rev 1",
             rationale="Approved ROOM-A calculation.",
         ),
     ]
@@ -511,6 +586,9 @@ def test_evidence_authority_rejects_stale_or_mismatched_policy() -> None:
                     requirement_id="REQ-ACH",
                     subject_ref="ROOM-A",
                     evidence_id="E-MISSING",
+                    authority_source="Project verification authority",
+                    decision_reference="DEC-REQ-AUTH",
+                    decision_revision="Rev 1",
                     rationale="Stale operator selection.",
                 )
             ],
@@ -525,6 +603,9 @@ def test_evidence_authority_rejects_stale_or_mismatched_policy() -> None:
                     requirement_id="REQ-ACH",
                     subject_ref="ROOM-A",
                     evidence_id="E-ONLY",
+                    authority_source="Project verification authority",
+                    decision_reference="DEC-REQ-AUTH",
+                    decision_revision="Rev 1",
                     rationale="Unnecessary selection.",
                 )
             ],
@@ -541,12 +622,18 @@ def test_duplicate_evidence_authority_for_one_binding_is_rejected() -> None:
         requirement_id="REQ-ACH",
         subject_ref="ROOM-A",
         evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
         rationale="First decision.",
     )
     second = RequirementEvidenceAuthority(
         requirement_id="REQ-ACH",
         subject_ref="ROOM-A",
         evidence_id="E-2",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
         rationale="Conflicting decision.",
     )
 
@@ -567,6 +654,9 @@ def test_evidence_authority_rejects_inactive_or_unresolved_requirement() -> None
         requirement_id="REQ-ACH",
         subject_ref="ROOM-A",
         evidence_id="E-1",
+        authority_source="Project verification authority",
+        decision_reference="DEC-REQ-AUTH",
+        decision_revision="Rev 1",
         rationale="Operator decision must not activate an unresolved requirement.",
     )
 
@@ -604,6 +694,9 @@ def test_evidence_authority_digest_changes_when_rationale_changes() -> None:
                 requirement_id="REQ-ACH",
                 subject_ref="ROOM-A",
                 evidence_id="E-1",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
                 rationale="Approved design calculation.",
             )
         ],
@@ -616,6 +709,9 @@ def test_evidence_authority_digest_changes_when_rationale_changes() -> None:
                 requirement_id="REQ-ACH",
                 subject_ref="ROOM-A",
                 evidence_id="E-1",
+                authority_source="Project verification authority",
+                decision_reference="DEC-REQ-AUTH",
+                decision_revision="Rev 1",
                 rationale="Approved commissioning decision basis.",
             )
         ],

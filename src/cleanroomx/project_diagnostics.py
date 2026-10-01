@@ -19,6 +19,7 @@ from .verification_run_history import (
     validate_project_verification_run_history,
     verification_run_history_records,
 )
+from .verification_currency import assess_project_verification_currency
 from .spatial import engineering_sync_status, normalize_layout, validate_layout
 from .spatial_integrity import SPATIAL_METADATA_KEY
 
@@ -492,6 +493,107 @@ def _verification_history_summary(project: ProjectDocument) -> dict[str, Any]:
     }
 
 
+def _verification_currency_issues(
+    currency: dict[str, Any],
+) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for item in currency["analyses"]:
+        state = item["state"]
+        if state == "stale":
+            issues.append(
+                _issue(
+                    rule="verification_currency.stale",
+                    category="traceability",
+                    severity="warning",
+                    element_type="analysis",
+                    element_id=item["analysis_id"],
+                    element_name=item["analysis_name"],
+                    message=(
+                        "The latest persisted project-requirements verification "
+                        "does not match the current engineering configuration."
+                    ),
+                    suggested_action=(
+                        "Review the reported identity mismatches and run/persist "
+                        "canonical project requirements verification again."
+                    ),
+                    details={
+                        "mismatch_reasons": item["mismatch_reasons"],
+                        "latest_sequence": item["latest_record"]["sequence"],
+                    },
+                )
+            )
+        elif state == "dependency_freshness_unverifiable":
+            issues.append(
+                _issue(
+                    rule="verification_currency.dependency_freshness_unverifiable",
+                    category="traceability",
+                    severity="warning",
+                    element_type="analysis",
+                    element_id=item["analysis_id"],
+                    element_name=item["analysis_name"],
+                    message=(
+                        "The persisted verification configuration still matches, "
+                        "but file-backed dependency freshness cannot be proven from "
+                        "the schema-v1 verification record."
+                    ),
+                    suggested_action=(
+                        "Re-run and persist canonical verification against the "
+                        "intended current dependency files before relying on the "
+                        "historical verdict."
+                    ),
+                    details={
+                        "latest_sequence": item["latest_record"]["sequence"],
+                        "external_dependencies": item["external_dependencies"],
+                    },
+                )
+            )
+        elif state == "not_verified":
+            issues.append(
+                _issue(
+                    rule="verification_currency.not_verified",
+                    category="traceability",
+                    severity="info",
+                    element_type="analysis",
+                    element_id=item["analysis_id"],
+                    element_name=item["analysis_name"],
+                    message=(
+                        "Active requirement-evidence mappings exist, but no "
+                        "persisted canonical project-requirements verification "
+                        "record is retained for this analysis."
+                    ),
+                    suggested_action=(
+                        "Run and persist canonical project requirements verification "
+                        "when auditable requirement evidence is required."
+                    ),
+                )
+            )
+
+    for orphan in currency["orphaned_latest_records"]:
+        issues.append(
+            _issue(
+                rule="verification_currency.orphan_record",
+                category="traceability",
+                severity="warning",
+                element_type="analysis",
+                element_id=orphan["analysis_id"],
+                element_name=orphan["analysis_name"],
+                message=(
+                    "Persisted project-requirements verification evidence references "
+                    "an analysis that no longer exists in the current project."
+                ),
+                suggested_action=(
+                    "Retain the record only as historical audit evidence; do not "
+                    "treat it as verification of any current analysis."
+                ),
+                details={
+                    "latest_sequence": orphan["sequence"],
+                    "record_sha256": orphan["record_sha256"],
+                },
+            )
+        )
+    return issues
+
+
 def analyze_project_diagnostics(
     project: ProjectDocument,
     *,
@@ -510,6 +612,7 @@ def analyze_project_diagnostics(
     layout = normalize_layout(layout_value) if isinstance(layout_value, dict) else None
 
     verification_history = _verification_history_summary(project)
+    verification_currency = assess_project_verification_currency(project)
 
     issues: list[dict[str, Any]] = []
     if layout is not None:
@@ -518,6 +621,7 @@ def analyze_project_diagnostics(
     if layout is not None:
         issues.extend(_sync_issues(project, layout))
     issues.extend(_run_history_issues(project, base_dir=base))
+    issues.extend(_verification_currency_issues(verification_currency))
 
     for sequence, issue in enumerate(issues, start=1):
         issue["sequence"] = sequence
@@ -539,6 +643,7 @@ def analyze_project_diagnostics(
             "verification_run_count": verification_history["record_count"],
         },
         "verification_history": verification_history,
+        "verification_currency": verification_currency,
         "summary": {
             "status": status,
             "complete": True,

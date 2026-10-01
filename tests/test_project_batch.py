@@ -303,6 +303,18 @@ def test_project_batch_cli_uses_same_loaded_revision_for_guard_and_execution(
     assert output_path.is_file()
 
 
+def test_project_batch_cli_reports_project_path_resolution_errors(monkeypatch, capsys):
+    def fail_resolve(self, strict=False):
+        raise OSError("cannot resolve project path")
+
+    monkeypatch.setattr(project_batch.Path, "resolve", fail_resolve)
+
+    code = main(["broken.cleanroomx.json"])
+
+    assert code == 2
+    assert "cannot resolve project path" in capsys.readouterr().err
+
+
 def test_project_batch_cli_refuses_project_source_as_output(tmp_path, capsys):
     project_path = save_project_document(
         tmp_path / "batch.cleanroomx.json",
@@ -365,6 +377,113 @@ def test_project_batch_cli_refuses_to_overwrite_external_dependency(tmp_path):
 
     assert code == 2
     assert dependency.read_bytes() == before
+
+
+def test_project_batch_cli_rechecks_output_alias_before_publication(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    output_path = tmp_path / "batch-result.json"
+    before = project_path.read_bytes()
+    original_run = project_batch._run_loaded_project
+
+    def create_alias_before_publication(*args, **kwargs):
+        batch = original_run(*args, **kwargs)
+        output_path.hardlink_to(project_path)
+        return batch
+
+    monkeypatch.setattr(
+        project_batch,
+        "_run_loaded_project",
+        create_alias_before_publication,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 2
+    assert project_path.read_bytes() == before
+    assert output_path.read_bytes() == before
+    assert "output path must be different from the project source" in capsys.readouterr().err
+
+
+def test_project_batch_cli_rechecks_dependency_alias_before_publication(
+    tmp_path, monkeypatch
+):
+    verification = tmp_path / "verification.json"
+    dependency = tmp_path / "hvac.json"
+    verification.write_text("{}\n", encoding="utf-8")
+    dependency.write_text("protected dependency\n", encoding="utf-8")
+    before = dependency.read_bytes()
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        ProjectDocument(
+            name="Protected dependency batch",
+            analyses=[
+                AnalysisDocument(
+                    id="consistency",
+                    name="Consistency",
+                    kind="consistency",
+                    input={
+                        "verification_project": verification.name,
+                        "hvac_project": dependency.name,
+                        "room_airflow_abs_tolerance_m3_h": 0.0,
+                        "require_same_room_set": True,
+                    },
+                )
+            ],
+            active_analysis_id="consistency",
+        ),
+    )
+    output_path = tmp_path / "batch-result.json"
+    original_run = project_batch._run_loaded_project
+
+    def create_dependency_alias_before_publication(*args, **kwargs):
+        batch = original_run(*args, **kwargs)
+        output_path.hardlink_to(dependency)
+        return batch
+
+    monkeypatch.setattr(
+        project_batch,
+        "_run_loaded_project",
+        create_dependency_alias_before_publication,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 2
+    assert dependency.read_bytes() == before
+    assert output_path.read_bytes() == before
+
+
+def test_project_batch_cli_rechecks_source_revision_before_publication(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    output_path = tmp_path / "batch-result.json"
+    original_run = project_batch._run_loaded_project
+
+    def mutate_source_after_run(*args, **kwargs):
+        batch = original_run(*args, **kwargs)
+        project_path.write_bytes(project_path.read_bytes() + b"\n")
+        return batch
+
+    monkeypatch.setattr(
+        project_batch,
+        "_run_loaded_project",
+        mutate_source_after_run,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 2
+    assert not output_path.exists()
+    assert "project source changed before output publication" in capsys.readouterr().err
 
 
 def test_project_batch_markdown_summarizes_traceability_without_dumping_result(tmp_path):

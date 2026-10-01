@@ -15,6 +15,7 @@ from cleanroomx.project import (
 from cleanroomx.project_requirement_evidence_mappings import (
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
 )
 from cleanroomx.project_requirements import (
@@ -138,6 +139,64 @@ def _project() -> ProjectDocument:
             PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY: _mappings(),
         },
     )
+
+
+def _project_with_authority() -> ProjectDocument:
+    project = _project()
+    registry = project.metadata[
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    ]
+    alternate = copy.deepcopy(registry["mappings"][0])
+    alternate["id"] = "MAP-ACH-ALT"
+    registry["mappings"].append(alternate)
+    registry["schema_version"] = (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
+    registry["evidence_authority"] = [
+        {
+            "requirement_id": "REQ-ACH",
+            "subject_ref": "ROOM-A",
+            "evidence_id": "MAP-ACH",
+            "authority_source": "Project verification authority",
+            "decision_reference": "DEC-REQ-AUTH",
+            "decision_revision": "Rev 1",
+            "rationale": "Approved calculation evidence selection.",
+        }
+    ]
+    return project
+
+
+def test_persisted_verification_run_preserves_explicit_evidence_authority(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "verified-authority.cleanroomx.json",
+        _project_with_authority(),
+    )
+    workflow = run_project_requirements_workflow(path, "room-a")
+
+    persisted = persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T09:00:00Z",
+    )
+
+    assert persisted.record["mapping_ids"] == ["MAP-ACH", "MAP-ACH-ALT"]
+    assert persisted.record["verification"]["verified"] is True
+    assert persisted.record["verification"]["evidence_authority"][0][
+        "evidence_id"
+    ] == "MAP-ACH"
+    assert persisted.record["verification"]["findings"][0][
+        "candidate_evidence_ids"
+    ] == ["MAP-ACH", "MAP-ACH-ALT"]
+    assert len(persisted.record["proofgraphs"][0]["evidence"]) == 2
+    assert persisted.record["proofgraphs"][0]["findings"][0][
+        "evidence_ids"
+    ] == ["MAP-ACH"]
+
+    loaded = load_project_document(path)
+    records = verification_run_history_records(loaded.metadata)
+    assert records == [persisted.record]
 
 
 def test_persisted_verification_run_preserves_canonical_engineering_evidence(tmp_path):

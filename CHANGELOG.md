@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — persisted explicit evidence authority — 2026-10-01
+
+- Persists optional explicit requirement-evidence authority decisions in the canonical project requirement-evidence mapping registry and propagates the same decision through project-native execution, canonical replay, ProofGraph projection, guarded verification history, and read-only traceability.
+- Keeps ambiguous evidence fail-closed unless one validated authority decision selects an already-active candidate from the same analysis; all competing candidates remain retained as evidence.
+- Evolves the mapping registry compatibly: mapping-only metadata remains schema v1, while persisted authority uses schema v2; v1 payloads with authority and empty-authority v2 payloads are rejected.
+- Preserves the previous v1 representation and mapping digest when no authority is configured; no solver equation, engineering-unit rule, numerical tolerance, requirement criterion, or project schema version changes.
+
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.

@@ -121,6 +121,16 @@ and rationale, receives its own SHA-256 and participates in the verification SHA
 Omitting authority preserves the previous fail-closed
 ambiguous-binding behavior and result shape.
 
+For saved projects, Release 3 can persist these decisions inside
+`project.metadata.requirement_evidence_mappings.evidence_authority`. Persisted
+authority is accepted only for an actually ambiguous active binding whose
+candidate mappings all belong to the same analysis. The selected
+`evidence_id` is the stable mapping/evidence identity. The project-native
+workflow, ProofGraph projection, guarded verification-history persistence, and
+requirements traceability all consume that same canonical decision.
+
+Registry compatibility is explicit: mapping-only metadata remains schema v1. Metadata that persists `evidence_authority` uses schema v2. Serializing a registry without authority therefore preserves the existing v1 representation and digest contract. A v1 payload that carries authority, or a v2 payload with no authority decision, is rejected rather than silently reinterpreted.
+
 Stale evidence is surfaced as `stale` and is not used to issue PASS or FAIL.
 Unknown freshness and missing required evidence are `incomplete`.
 
@@ -173,16 +183,14 @@ Evidence input order does not change the verification result or digest.
 
 ## Current boundary
 
-This slice establishes canonical comparison semantics and evidence binding. It
-does not yet:
+This module establishes canonical comparison semantics and evidence binding. It
+does not itself infer unsupported units, invent requirement-to-analysis
+mappings, guess solver-output semantics, or claim certification,
+commissioning/TAB acceptance, regulatory approval, or completeness of external
+standards.
 
-- infer or guess unsupported engineering units;
-- select solver outputs automatically;
-- infer requirement-to-analysis mappings;
-- generate ProofGraph records automatically;
-- persist verification runs into project history;
-- claim certification, commissioning/TAB acceptance, regulatory approval, or
-  completeness of external standards.
-
-Those integrations should consume this engine rather than reproduce its
-comparison logic.
+Project-native orchestration is implemented separately: the saved-project
+workflow consumes explicit persisted mappings and optional persisted evidence
+authority, projects canonical results into ProofGraph, and can persist guarded
+verification history. Those integrations consume this engine rather than
+reproduce its comparison logic.

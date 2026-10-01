@@ -14,6 +14,7 @@ from cleanroomx.project import (
 from cleanroomx.project_requirement_evidence_mappings import (
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
 )
 from cleanroomx.project_requirements import (
@@ -145,6 +146,31 @@ def _project(
     )
 
 
+def _project_with_ambiguous_authoritative_mappings() -> ProjectDocument:
+    project = _project()
+    registry = project.metadata[
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    ]
+    alternate = copy.deepcopy(registry["mappings"][0])
+    alternate["id"] = "MAP-ACH-ALT"
+    registry["mappings"].append(alternate)
+    registry["schema_version"] = (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
+    registry["evidence_authority"] = [
+        {
+            "requirement_id": "REQ-ACH",
+            "subject_ref": "ROOM-A",
+            "evidence_id": "MAP-ACH",
+            "authority_source": "Project verification authority",
+            "decision_reference": "DEC-REQ-AUTH",
+            "decision_revision": "Rev 1",
+            "rationale": "Approved calculation evidence selection.",
+        }
+    ]
+    return project
+
+
 def test_project_native_workflow_executes_persisted_mapping_end_to_end(tmp_path):
     path = save_project_document(
         tmp_path / "workflow.cleanroomx.json",
@@ -182,6 +208,29 @@ def test_project_native_workflow_executes_persisted_mapping_end_to_end(tmp_path)
         == result.source_revision
     )
     assert result.workflow_sha256
+
+
+def test_project_native_workflow_applies_persisted_evidence_authority(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow-authority.cleanroomx.json",
+        _project_with_ambiguous_authoritative_mappings(),
+    )
+
+    result = run_project_requirements_workflow(path, "room-a")
+    verified_workflow = verify_project_requirements_workflow_run(result)
+    finding = result.verification["findings"][0]
+
+    assert result.mapping_ids == ("MAP-ACH", "MAP-ACH-ALT")
+    assert result.verification["verified"] is True
+    assert result.verification["status"] == "pass"
+    assert finding["evidence_ids"] == ["MAP-ACH"]
+    assert finding["candidate_evidence_ids"] == ["MAP-ACH", "MAP-ACH-ALT"]
+    assert finding["evidence_authority"]["decision_reference"] == "DEC-REQ-AUTH"
+    assert result.verification["evidence_authority"][0]["evidence_id"] == "MAP-ACH"
+    assert len(result.verification["evidence_authority_sha256"]) == 64
+    assert len(result.proofgraphs[0]["evidence"]) == 2
+    assert result.proofgraphs[0]["findings"][0]["evidence_ids"] == ["MAP-ACH"]
+    assert verified_workflow["workflow_sha256"] == result.workflow_sha256
 
 
 def test_project_native_workflow_identity_is_deterministic_for_same_saved_revision(

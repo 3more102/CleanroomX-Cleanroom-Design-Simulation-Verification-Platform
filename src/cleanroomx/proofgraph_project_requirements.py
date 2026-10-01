@@ -10,6 +10,7 @@ from .project_requirement_analysis_evidence import (
 )
 from .project_requirement_verification import (
     RequirementEvidence,
+    RequirementEvidenceAuthority,
     verify_project_requirements,
 )
 from .project_requirements import ProjectRequirement, ProjectRequirements
@@ -147,6 +148,8 @@ def _check_required_kinds(
 def proofgraphs_from_project_requirements_verification(
     requirements: ProjectRequirements,
     evidence: Iterable[RequirementEvidence],
+    *,
+    evidence_authority: Iterable[RequirementEvidenceAuthority] = (),
 ) -> tuple[ProofGraph, ...]:
     """Map canonical project-requirement verification into deterministic ProofGraphs.
 
@@ -158,7 +161,12 @@ def proofgraphs_from_project_requirements_verification(
         raise TypeError("requirements must be a ProjectRequirements value")
 
     evidence_list = tuple(evidence)
-    result = verify_project_requirements(requirements, evidence_list)
+    authority_list = tuple(evidence_authority)
+    result = verify_project_requirements(
+        requirements,
+        evidence_list,
+        evidence_authority=authority_list,
+    )
 
     source_findings = {
         _binding_key(item["requirement_id"], item["subject_ref"]): item

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+from .cli_output import CLIOutputError, write_cli_output
 import json
 
-from .project import atomic_write_text
 from .fan_duct_network import analyze_fan_duct_network
 from .fan_duct_network_io import load_fan_duct_network_study
 from .fan_duct_network_report import markdown_fan_duct_network_report
@@ -40,7 +42,15 @@ def main() -> int:
         else markdown_fan_duct_network_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.study,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-fan-duct: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0 if result["status"] == "solved" else 2

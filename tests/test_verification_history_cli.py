@@ -146,6 +146,7 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["schema"] == VERIFICATION_HISTORY_INSPECTION_SCHEMA
+    assert payload["schema_version"] == 2
     assert payload["history"]["record_count"] == 1
     assert payload["selection"] == {
         "analysis_id": None,
@@ -156,10 +157,36 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     assert record["analysis_id"] == "room-a"
     assert record["verification"]["status"] == "pass"
     assert record["verification"]["verified"] is True
+    assert record["current_assessment"]["state"] == "current"
+    assert record["current_assessment"]["current"] is True
     assert record["record_sha256"] == persisted.record["record_sha256"]
     assert payload["source"]["stable_during_inspection"] is True
     assert len(payload["source"]["sha256"]) == 64
     json.dumps(payload, allow_nan=False)
+
+
+def test_verification_history_cli_marks_older_records_historical(tmp_path, capsys):
+    path, _first = _persist_one(tmp_path)
+    workflow = run_project_requirements_workflow(path, "room-a")
+    second = persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T10:05:00Z",
+    )
+
+    exit_code = verification_history_main(["list", str(path)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["selection"]["record_count"] == 2
+    first, latest = payload["records"]
+    assert first["sequence"] == 1
+    assert first["current_assessment"]["state"] == "historical"
+    assert first["current_assessment"]["current"] is False
+    assert latest["sequence"] == 2
+    assert latest["record_sha256"] == second.record["record_sha256"]
+    assert latest["current_assessment"]["state"] == "current"
+    assert latest["current_assessment"]["current"] is True
 
 
 def test_verification_history_cli_filters_by_analysis_id(tmp_path, capsys):
@@ -186,6 +213,8 @@ def test_verification_history_cli_shows_full_record(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["record"] == persisted.record
+    assert payload["record_currency"]["state"] == "current"
+    assert payload["record_currency"]["current"] is True
     assert payload["record"]["evidence"][0]["evidence_locator"] == "/result/ach"
     assert payload["record"]["verification"]["verified"] is True
 

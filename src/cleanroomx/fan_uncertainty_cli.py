@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+from .cli_output import CLIOutputError, write_cli_output
 import json
 
-from .project import atomic_write_text
 from .fan_uncertainty import analyze_fan_system_uncertainty
 from .fan_uncertainty_io import load_fan_system_uncertainty
 from .fan_uncertainty_report import markdown_fan_system_uncertainty_report
@@ -33,7 +35,15 @@ def main() -> int:
         else markdown_fan_system_uncertainty_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.study,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-fan-uncertainty: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0 if result["status"] == "complete" else 3

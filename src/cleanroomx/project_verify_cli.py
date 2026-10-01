@@ -118,6 +118,17 @@ def _project_status_gate(currency: dict[str, Any]) -> dict[str, Any]:
         for item in currency["analyses"]
         if item["state"] != "not_configured"
     ]
+    accepted_analysis_ids: list[str] = []
+    rejected_analysis_ids: list[str] = []
+    for item in configured:
+        verified_pass = (
+            isinstance(item.get("latest_record"), dict)
+            and item["latest_record"].get("verified") is True
+        )
+        accepted = item["state"] == "current" and verified_pass
+        target = accepted_analysis_ids if accepted else rejected_analysis_ids
+        target.append(item["analysis_id"])
+
     all_current = bool(configured) and all(
         item["state"] == "current" for item in configured
     )
@@ -128,11 +139,14 @@ def _project_status_gate(currency: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "configured_analysis_count": len(configured),
+        "accepted_analysis_count": len(accepted_analysis_ids),
+        "rejected_analysis_count": len(rejected_analysis_ids),
+        "accepted_analysis_ids": accepted_analysis_ids,
+        "rejected_analysis_ids": rejected_analysis_ids,
         "all_current": all_current,
         "all_verified_pass": all_verified_pass,
         "accepted": all_current and all_verified_pass,
     }
-
 
 def _status_payload(
     source: Path,

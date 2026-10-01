@@ -93,8 +93,10 @@
 
 - Adds `cleanroomx-verification-history list/show` for stable, read-only inspection of persisted canonical verification evidence.
 - Binds inspection output to a stable source-file revision and emits strict JSON only after the project remains unchanged across the inspection.
+- Upgrades inspection output to schema version 2 with explicit per-record current, historical, and removed-analysis currency context derived from the canonical verification-currency authority.
+- Adds a fail-closed analysis-identity guard so current-project currency cannot be projected onto a retained record from another analysis.
 - Adds compact ledger and latest-per-analysis verification summaries to project diagnostics and Markdown reports without reinterpreting historical evidence as current certification.
-- Keeps solver equations, requirement acceptance semantics, persistence format, and historical verification records unchanged.
+- Keeps solver equations, requirement acceptance semantics, persistence format, ledger hashes, and historical verification records unchanged.
 
 
 ## Unreleased Release 3 — persisted canonical verification runs — 2026-10-01

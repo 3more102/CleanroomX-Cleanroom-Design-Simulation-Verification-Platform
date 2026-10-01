@@ -19,6 +19,7 @@ def _requirement(
     requirement_id: str = "REQ-ACH",
     *,
     applicability: str = "applicable",
+    status: str = "approved",
     target=None,
     minimum: float | None = 20.0,
     maximum: float | None = None,
@@ -47,7 +48,7 @@ def _requirement(
         "required_evidence": (
             ["calculation"] if required_evidence is None else required_evidence
         ),
-        "status": "approved",
+        "status": status,
         "assumptions": [],
         "notes": None,
     }
@@ -238,6 +239,53 @@ def test_unresolved_applicability_and_no_criterion_never_pass() -> None:
     assert unchecked["findings"][0]["state"] == "not_checked"
     assert unchecked["findings"][0]["criterion"] is None
     assert unchecked["verified"] is False
+
+
+def test_draft_requirement_blocks_verified_outcome() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(status="draft")),
+        [_evidence()],
+    )
+
+    finding = result["findings"][0]
+    assert finding["state"] == "incomplete"
+    assert finding["requirement_status"] == "draft"
+    assert result["status"] == "not_checked"
+    assert result["verified"] is False
+
+
+def test_superseded_and_withdrawn_requirements_are_explicitly_inactive() -> None:
+    requirements = _registry(
+        _requirement("REQ-SUPERSEDED", status="superseded", scope=["ROOM-A"]),
+        _requirement("REQ-WITHDRAWN", status="withdrawn", scope=["ROOM-B"]),
+    )
+
+    result = verify_project_requirements(requirements, [])
+
+    assert [item["state"] for item in result["findings"]] == [
+        "inactive",
+        "inactive",
+    ]
+    assert all(item["included"] is False for item in result["findings"])
+    assert result["summary"]["inactive_count"] == 2
+    assert result["status"] == "not_checked"
+    assert result["verified"] is False
+
+
+def test_duplicate_evidence_ids_are_rejected_graph_wide() -> None:
+    requirements = _registry(
+        _requirement("REQ-ACH", scope=["ROOM-A"]),
+        _requirement("REQ-ACH-B", scope=["ROOM-B"]),
+    )
+    first = _evidence(evidence_id="E-DUP")
+    second = _evidence(
+        evidence_id="E-DUP",
+        requirement_id="REQ-ACH-B",
+        subject_ref="ROOM-B",
+    )
+
+    with pytest.raises(ValueError, match="duplicate ids"):
+        verify_project_requirements(requirements, [first, second])
 
 
 def test_not_applicable_requirement_is_explicitly_excluded() -> None:

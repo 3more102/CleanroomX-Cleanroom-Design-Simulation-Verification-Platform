@@ -21,11 +21,12 @@ No occupancy gains, weather conditions, ventilation quantity, ISO-to-ACH mapping
 
 ## Psychrometrics
 
-The implemented saturation-vapor-pressure approximation is:
+Saturation vapor pressure is phase-aware and follows the reference formulations used by the 2025 ASHRAE Handbook—Fundamentals, Chapter 1:
 
-    e_w = 6.112 exp(17.62 t / (243.12 + t)) hPa
+- below 0 °C: IAPWS R14-08(2011) ice-Ih sublimation-pressure correlation;
+- at and above 0 °C: IAPWS-IF97 Region 4 liquid-water saturation-pressure equation.
 
-and is limited by the software to -45 to 60 °C.
+The `AirState` model remains intentionally limited to -45 to 60 °C. Dew point is solved deterministically by inverting the same phase-aware saturation-pressure model, rather than mixing a separate Magnus approximation into the result. If the implied dew point is below -100 °C, CleanroomX fails explicitly because that is outside the supported inversion range.
 
 The humidity-ratio molecular-mass coefficient is 0.621945. Approximate moist-air enthalpy is:
 

@@ -98,7 +98,10 @@ def _load_stable_project(path: Path):
     project, revision_before = load_project_document_with_revision(path)
     history_summary = validate_project_verification_run_history(project.metadata)
     records = verification_run_history_records(project.metadata)
-    currency = assess_project_verification_currency(project)
+    currency = assess_project_verification_currency(
+        project,
+        base_dir=path.parent,
+    )
     revision_after = capture_project_file_revision(path)
     if not project_file_revision_matches(revision_before, revision_after):
         raise RuntimeError(

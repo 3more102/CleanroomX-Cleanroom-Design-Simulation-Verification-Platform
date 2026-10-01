@@ -147,6 +147,30 @@ def build_project_requirements_traceability(
                 }
             )
 
+    authority_rows: list[dict[str, Any]] = []
+    if mappings is not None:
+        for authority in mappings.evidence_authority:
+            candidate_mappings = [
+                mapping
+                for mapping in mappings.mappings
+                if mapping.status == "active"
+                and mapping.requirement_id == authority.requirement_id
+                and mapping.subject_ref == authority.subject_ref
+            ]
+            authority_rows.append(
+                {
+                    **authority.to_dict(),
+                    "analysis_id": (
+                        candidate_mappings[0].analysis_id
+                        if candidate_mappings
+                        else None
+                    ),
+                    "candidate_mapping_ids": [
+                        mapping.id for mapping in candidate_mappings
+                    ],
+                }
+            )
+
     active_mapping_count = sum(
         1 for mapping in mapping_rows if mapping["status"] == "active"
     )
@@ -184,10 +208,12 @@ def build_project_requirements_traceability(
             "mapping_count": len(mapping_rows),
             "active_mapping_count": active_mapping_count,
             "active_mapped_requirement_count": len(active_requirement_ids),
+            "evidence_authority_count": len(authority_rows),
             "historical_reference_count": historical_reference_count,
         },
         "requirements": requirement_rows,
         "mappings": mapping_rows,
+        "evidence_authority": authority_rows,
     }
 
 
@@ -224,6 +250,7 @@ def markdown_project_requirements_traceability(traceability: dict[str, Any]) -> 
         f"- Requirements: {summary['requirement_count']}",
         f"- Mappings: {summary['mapping_count']} ({summary['active_mapping_count']} active)",
         f"- Actively mapped requirements: {summary['active_mapped_requirement_count']}",
+        f"- Explicit evidence-authority decisions: {summary['evidence_authority_count']}",
         f"- Historical/unresolved retained mapping references: {summary['historical_reference_count']}",
         "",
         "## Requirements",
@@ -275,6 +302,35 @@ def markdown_project_requirements_traceability(traceability: dict[str, Any]) -> 
             )
             + " |"
         )
+
+    if traceability["evidence_authority"]:
+        lines.extend(
+            [
+                "",
+                "## Explicit evidence authority",
+                "",
+                "| Requirement | Subject | Analysis | Selected mapping | Candidates | Decision | Revision | Authority | Rationale |",
+                "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for authority in traceability["evidence_authority"]:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _markdown_cell(authority["requirement_id"]),
+                        _markdown_cell(authority["subject_ref"] or "project"),
+                        _markdown_cell(authority["analysis_id"]),
+                        _markdown_cell(authority["evidence_id"]),
+                        _markdown_cell(authority["candidate_mapping_ids"]),
+                        _markdown_cell(authority["decision_reference"]),
+                        _markdown_cell(authority["decision_revision"]),
+                        _markdown_cell(authority["authority_source"]),
+                        _markdown_cell(authority["rationale"]),
+                    ]
+                )
+                + " |"
+            )
 
     lines.extend(
         [

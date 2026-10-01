@@ -77,6 +77,11 @@ def _parse_plugin_allowlist(raw: str) -> tuple[tuple[str, str | None], ...]:
                 raise ValueError(
                     f"{PLUGIN_ALLOWLIST_ENV} entry {item!r} has an empty version pin"
                 )
+            if "=" in name_text or "=" in version:
+                raise ValueError(
+                    f"{PLUGIN_ALLOWLIST_ENV} entry {item!r} must use exactly one "
+                    "'==' version separator"
+                )
         else:
             name_text = item
             version = None

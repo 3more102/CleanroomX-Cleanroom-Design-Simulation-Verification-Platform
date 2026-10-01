@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — fail-closed ProofGraph cross-artifact authority — 2026-10-01
+
+- Verifies exact requirement and evidence coverage across project-requirements ProofGraphs instead of validating only the projection elements that remain present.
+- Reconstructs canonical check, finding, verdict, verification-run, and graph identities from retained canonical verification findings and bound workflow evidence.
+- Cross-checks requirement metadata, evidence/source projection, canonical source findings, and deterministic run identities before accepting a resealed workflow.
+- Adds regressions that delete retained evidence or rewrite a verdict, recompute both `graph_sha256` and `workflow_sha256`, and still require fail-closed rejection.
+- Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

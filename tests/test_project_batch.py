@@ -135,6 +135,70 @@ def test_project_batch_fail_fast_stops_after_first_execution_error(tmp_path):
     assert batch.source_stable_during_run is True
 
 
+
+def test_project_batch_cancellation_before_first_analysis_is_audited(tmp_path):
+    path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
+
+    batch = run_project_file(path, cancel_requested=lambda: True)
+
+    assert batch.source_stable_during_run is True
+    assert batch.cancelled is True
+    assert batch.cancellation_stage == "before-analysis"
+    assert batch.cancellation_analysis_id == "room-a"
+    assert batch.attempted_count == 0
+    assert project_batch_exit_code(batch) == 4
+
+    payload = batch.to_dict()
+    assert payload["schema_version"] == 2
+    assert payload["execution"]["cancelled"] is True
+    assert payload["execution"]["cancellation_stage"] == "before-analysis"
+    assert payload["execution"]["cancellation_analysis_id"] == "room-a"
+    assert "Cancelled: yes" in render_project_batch_markdown(batch)
+
+
+def test_project_batch_cancellation_after_completed_analysis_stops_next_schedule(tmp_path):
+    path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
+    checks = iter((False, True))
+
+    batch = run_project_file(path, cancel_requested=lambda: next(checks))
+
+    assert batch.source_stable_during_run is True
+    assert batch.cancelled is True
+    assert batch.cancellation_stage == "after-analysis"
+    assert batch.cancellation_analysis_id == "room-a"
+    assert batch.attempted_count == 1
+    assert batch.completed_count == 1
+    assert batch.outcomes[0].analysis_id == "room-a"
+    assert project_batch_exit_code(batch) == 4
+
+
+def test_project_batch_cli_cancel_file_emits_report_without_running_analysis(tmp_path):
+    project_path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
+    cancel_path = tmp_path / "stop.batch"
+    cancel_path.write_text("stop\n", encoding="utf-8")
+    output_path = tmp_path / "batch-cancelled.json"
+
+    code = main(
+        [
+            str(project_path),
+            "--cancel-file",
+            str(cancel_path),
+            "--format",
+            "json",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert code == 4
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 2
+    assert payload["execution"]["cancelled"] is True
+    assert payload["execution"]["attempted_count"] == 0
+    assert payload["execution"]["cancellation_stage"] == "before-analysis"
+    assert payload["analyses"] == []
+
+
 def test_project_batch_stops_scheduling_when_source_changes_mid_run(tmp_path, monkeypatch):
     path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
     original_run_analysis = project_batch.run_analysis

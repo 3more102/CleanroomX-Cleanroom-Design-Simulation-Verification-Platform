@@ -26,6 +26,14 @@ Stop scheduling analyses after the first execution error:
 cleanroomx-project-run project.cleanroomx.json --fail-fast
 ```
 
+Cooperatively cancel a long batch from another process by creating a sentinel file. The sentinel is checked before and after each analysis; an already-running solver call is allowed to finish so CleanroomX does not interrupt engineering code at an arbitrary state:
+
+```bash
+cleanroomx-project-run project.cleanroomx.json --cancel-file stop.batch
+# from another shell/process:
+python -c "from pathlib import Path; Path('stop.batch').touch()"
+```
+
 Write a machine-readable report atomically:
 
 ```bash
@@ -56,6 +64,8 @@ The runner:
 - checks the project-file revision before and after every attempted analysis;
 - stops scheduling new analyses when the source project changes or becomes unreadable;
 - isolates an ordinary analysis exception into that analysis's outcome and continues unless `--fail-fast` is requested;
+- optionally checks a caller-provided cancellation callback, or CLI `--cancel-file`, only between analyses;
+- records whether cancellation happened before or after an analysis and the associated analysis id;
 - never writes back to the project file.
 
 The batch report preserves each completed `AnalysisRun`, including its application execution provenance and canonical input SHA-256. Each completed run is also integrity-bound to the exact source project SHA-256 captured by the batch before execution, so downstream requirements/ProofGraph evidence can recover project revision provenance from the verified run bundle rather than trusting a free-form caller value.
@@ -67,6 +77,7 @@ The batch report preserves each completed `AnalysisRun`, including its applicati
 | `0` | Every scheduled analysis executed without an execution exception, and the project source remained unchanged. |
 | `2` | The project could not be loaded/selected, output failed, or at least one scheduled analysis raised an execution/validation error. |
 | `3` | The project source changed or could no longer be verified during the batch. Further analyses were not scheduled. |
+| `4` | Cooperative cancellation was requested and no execution error took precedence. Further analyses were not scheduled. |
 
 An engineering result such as PASS, FAIL, indeterminate, incomplete, or another workflow-specific status is retained as analysis output. It is not reinterpreted as a process exit code by the batch layer.
 
@@ -92,6 +103,7 @@ batch = run_project_file(
     "project.cleanroomx.json",
     analysis_ids=["room-verification", "hvac-analysis"],
     fail_fast=False,
+    cancel_requested=lambda: False,
 )
 payload = batch.to_dict()
 ```
@@ -104,7 +116,7 @@ payload = batch.to_dict()
 - Existing application, solver, reporter, CLI, GUI, autosave, recovery, and project-save APIs are unchanged.
 - No engineering equation, tolerance, convergence rule, acceptance criterion, or unit convention is changed.
 - Execution is intentionally sequential. This avoids introducing solver concurrency assumptions and keeps scheduling deterministic.
-- The current runner does not provide resume, result caching, process isolation, or cancellation.
+- The current runner does not provide resume, result caching, process isolation, or in-flight solver interruption. Cancellation is cooperative and takes effect only between analyses.
 - A batch report is execution/provenance evidence; it is not a substitute for an engineering dossier, certification, commissioning/TAB evidence, CFD validation, or manufacturer approval.
 
 ## Markdown safety

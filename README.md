@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -74,6 +74,10 @@ Spatial and engineering data remain deliberately separated.
 - Portable project bundles and engineering reports.
 - Deterministic self-verifying design-assurance snapshots that bind exact source bytes, normalized results, optional pressure-design evidence, and traceability digests.
 - SHA-256 based numerical/provenance evidence for supported solver workflows.
+- First-class project requirements, explicit requirement-to-analysis evidence mappings, canonical verification history, and verification-currency assessment.
+- ProofGraph evidence retention, cross-artifact integrity validation, explicit evidence authority, and assessment-only evidence precedence/conflict reporting.
+- Fail-closed external plugin trust controls and canonical engineering-unit conversion for requirement verification.
+- Protected project-batch output paths that cannot overwrite the source project, same-file aliases, or declared engineering dependencies.
 
 ## Quick start
 
@@ -155,17 +159,15 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0 Release 3** line is gated by the complete CI matrix on the exact release commit across Python **3.11 / 3.12 / 3.13** plus Windows launcher smoke.
 
-Recorded release evidence includes:
+Recorded pre-release closure evidence includes:
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
-- Windows PowerShell and CMD launcher smoke tests;
-- clean wheel build/install checks;
-- installed Tk GUI smoke testing;
-- synchronized 2D/3D spatial regression coverage;
-- autosave completion-race regression coverage;
-- solver/provenance compatibility gates.
+- PR **#707** exact tested head `875408729ec3587d96f4c86f77b14de80b6548be`, CI run `36875375370`: **1662 passed, 4 skipped** on each supported Python version;
+- PR **#709** ProofGraph evidence-precedence closure merged after exact-head CI passed;
+- PR **#711** CI security hardening merged after exact-head CI passed;
+- the final v0.103.0 publisher runs only after successful CI for a SHA that still equals current `main`;
+- wheel/install, representative CLI, Linux GUI, performance, and Windows launcher gates remain part of the repository release CI.
 
 The exact release evidence is preserved in:
 
@@ -198,4 +200,4 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Release
 
-**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+**Latest stable:** [CleanroomX v0.103.0](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)

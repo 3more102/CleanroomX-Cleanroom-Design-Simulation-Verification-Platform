@@ -411,3 +411,33 @@ provenance without using unrelated project-file changes as a freshness switch.
 
 A changed analysis input, changed/unavailable dependency, missing result field,
 or unavailable current input therefore cannot be promoted into ProofGraph PASS.
+
+## Qualification uncertainty evidence integration
+
+`proofgraph_from_qualification_uncertainty` maps the canonical
+`analyze_qualification_uncertainty` workflow into ProofGraph without duplicating
+the interval decision engine.
+
+Each configured qualification measurement becomes CommissioningEvidence retaining
+the observed nominal value, complete absolute-uncertainty interval, unit, source
+identity, revision, and measurement date when supplied. The conservative interval
+used by the canonical workflow is retained separately as CalculationEvidence with
+an explicit upstream dependency on the measured value. The corresponding
+ProofGraph requirement criterion names `qualification_interval`, matching the
+calculation evidence that actually drives the canonical conservative comparison.
+
+Pressure-cascade checks retain both measured pressure inputs as commissioning
+evidence and the canonical signed differential-pressure interval as calculation
+evidence derived from those inputs.
+
+The adapter preserves canonical PASS, FAIL, and INDETERMINATE outcomes only when
+all measurement inputs needed by that check carry source provenance. If a
+measurement lacks provenance, the canonical numerical result remains in
+VerificationRun metadata, but the ProofGraph finding/verdict is UNKNOWN so an
+untraceable measurement cannot become verified compliance evidence.
+
+This adapter does not introduce cleanroom class limits, pressure targets, particle
+limits, certification rules, or statistical uncertainty models. Requirements
+remain the explicit project-configured limits already consumed by the canonical
+qualification workflow.
+

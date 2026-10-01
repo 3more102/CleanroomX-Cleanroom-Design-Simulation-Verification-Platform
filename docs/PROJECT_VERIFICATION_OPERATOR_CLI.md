@@ -61,6 +61,11 @@ A non-PASS verification can still be persisted. This is intentional: failed or
 incomplete engineering verification is audit evidence and must not disappear
 merely because the verdict is adverse.
 
+For new schema-v2 verification records, `persist` also retains the exact
+SHA-256 and byte size of every declared file-backed engineering dependency from
+the immutable execution snapshot. These fingerprints support later freshness
+assessment without rewriting legacy schema-v1 records.
+
 ## Desktop workflow
 
 The desktop **Analysis** menu exposes the same canonical authorities:

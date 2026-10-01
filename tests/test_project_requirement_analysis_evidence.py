@@ -52,13 +52,14 @@ def _run_bundle(
         "schema_version": 1,
         "analysis_kind": "room_verification",
         "cleanroomx_version": __version__,
-        "project_source_revision": project_source_revision,
         "input_canonicalization": "json-sort-keys-compact-utf8-v1",
         "input_sha256": _canonical_sha256(payload),
         "external_dependency_count": 0,
         "external_dependencies_stable": external_dependencies_stable,
         "external_dependencies": [],
     }
+    if project_source_revision is not None:
+        provenance["project_source_revision"] = project_source_revision
     return AnalysisRun(
         kind="room_verification",
         title="Room verification",

@@ -365,19 +365,19 @@ def test_project_dossier_cli_rechecks_output_identity_before_publication(
     )
     output_path = tmp_path / "dossier.json"
     output_path.write_text("previous-valid-report\n", encoding="utf-8")
-    real_guard = dossier_cli._assert_project_output_is_safe
+    real_guard = dossier_cli._assert_project_publication_safe
     guard_calls = 0
 
-    def race_guard(project, *, source, output):
+    def race_guard(project, *, source, revision, output):
         nonlocal guard_calls
         guard_calls += 1
-        if guard_calls == 3:
+        if guard_calls == 2:
             raise ValueError("output path identity changed before publication")
-        real_guard(project, source=source, output=output)
+        real_guard(project, source=source, revision=revision, output=output)
 
     monkeypatch.setattr(
         dossier_cli,
-        "_assert_project_output_is_safe",
+        "_assert_project_publication_safe",
         race_guard,
     )
 
@@ -386,7 +386,7 @@ def test_project_dossier_cli_rechecks_output_identity_before_publication(
     )
 
     assert exit_code == 2
-    assert guard_calls == 3
+    assert guard_calls == 2
     assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
 
 def test_project_dossier_cli_rechecks_source_revision_at_atomic_replace_boundary(

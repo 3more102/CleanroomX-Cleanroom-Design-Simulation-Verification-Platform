@@ -10,6 +10,7 @@ from .proofgraph_models import EVIDENCE_KINDS, Evidence, ProofGraph
 
 EVIDENCE_PRECEDENCE_SCHEMA = "cleanroomx.proofgraph-evidence-precedence"
 EVIDENCE_PRECEDENCE_SCHEMA_VERSION = 1
+EVIDENCE_PRECEDENCE_DECISION_SCOPE = "assessment_only"
 EVIDENCE_RESOLUTION_STATUSES = frozenset(
     {"single", "selected", "equivalent", "conflict"}
 )
@@ -155,6 +156,8 @@ class EvidencePrecedenceReport:
         return {
             "schema": EVIDENCE_PRECEDENCE_SCHEMA,
             "schema_version": EVIDENCE_PRECEDENCE_SCHEMA_VERSION,
+            "decision_scope": EVIDENCE_PRECEDENCE_DECISION_SCOPE,
+            "changes_canonical_verification": False,
             "policy": self.policy.to_dict(),
             "has_conflicts": self.has_conflicts,
             "counts": counts,
@@ -194,6 +197,11 @@ def assess_evidence_precedence(
     is strongest-first by evidence kind and then source id. Unlisted kinds/sources
     rank after explicitly listed entries. No unit conversion, timestamp inference,
     confidence weighting, or solver recomputation is performed.
+
+    This report is assessment-only. A selected_evidence_id identifies the preferred
+    claim inside this precedence assessment; it does not authorize that evidence
+    for canonical project-requirements verification and cannot change an existing
+    ProofGraph finding or verdict.
     """
     if not isinstance(graph, ProofGraph):
         raise ValueError("graph must be a ProofGraph")

@@ -27,6 +27,7 @@ The list output is strict JSON and contains:
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
 - compact per-record verification status;
+- fail-closed verification-currency assessment against the current project configuration;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -53,17 +54,37 @@ during the operation.
 The command is read-only. It does not rewrite the project, recompute historical
 verdicts, or silently bind old evidence to current project state.
 
+## Verification currency
+
+The operator output also assesses each current analysis against its latest retained
+verification record.
+
+A record is reported as `current` only when its analysis kind, canonical input
+SHA-256, requirements SHA-256, mappings SHA-256, and active mapping identities all
+still match and the analysis declares no file-backed external engineering inputs.
+
+If configuration changed, the state is `stale`. If active mappings exist but no
+record is retained, the state is `not_verified`. Analyses without active mappings
+are `not_configured`.
+
+Schema-v1 verification records do not retain the file fingerprints needed to prove
+that external dependency bytes are unchanged. Therefore a matching file-backed
+analysis is reported as `dependency_freshness_unverifiable`, never as current.
+
 ## Project diagnostics integration
 
 `cleanroomx-project-check` now exposes:
 
 - `project.verification_run_count`;
 - top-level `verification_history` integrity/sequence summary;
-- `verification_history.latest_by_analysis` compact latest-record summaries.
+- `verification_history.latest_by_analysis` compact latest-record summaries;
+- top-level `verification_currency` with current/stale/unverifiable coverage.
 
 The diagnostics report treats persisted verification evidence as historical
 traceability. It does not reinterpret an old verdict as current-project
-certification and does not change diagnostics pass/warning/error semantics.
+certification. Stale or dependency-unverifiable configured verification is emitted
+as an actionable warning; mapped analyses with no persisted verification are
+informational.
 
 ## Engineering boundary
 

@@ -1,6 +1,22 @@
-# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
+# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
 
 ## Verified final baseline
+
+## v0.103.0 Release 3 final baseline
+
+Validation date: 2026-10-01
+
+- PR **#707 — Release 3 final closure restack on current main**
+  - exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`
+  - PR CI **#2229** / id `36875375370`: **success**
+  - merged main commit: `165b0c61f776270f58e8b691171181d694857570`
+  - Python **3.11 / 3.12 / 3.13** complete suites: **success**
+  - Windows PowerShell/CMD launcher smoke: **success**
+  - clean-wheel build/install and representative CLI smoke: **success**
+  - Python 3.13 installed Tk/Xvfb desktop smoke: **success**
+  - Release 3 focused requirements/verification/traceability gates: **success**
+
+The Release 3 closure adds project-owned requirements and mappings, exact analysis-run evidence binding, canonical requirements verification and ProofGraph projection, immutable integrity-checked verification history, fail-closed verification currency, explicit evidence authority, deny-by-default external plugin trust, canonical engineering-unit conversion, project traceability CLI/desktop review surfaces, and requirement → evidence → historical verdict drill-down. This release identity closure does not alter solver equations, numerical tolerances, requirement acceptance criteria, or persisted project schema.
 
 Validation date: 2026-09-25
 

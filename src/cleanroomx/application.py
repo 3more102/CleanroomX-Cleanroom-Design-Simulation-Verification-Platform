@@ -24,7 +24,9 @@ from .input_contracts import (
 from .plugins import (
     PLUGIN_API_VERSION,
     PluginOrigin,
+    PluginTrustPolicy,
     discover_analysis_plugins,
+    plugin_trust_policy_from_environment,
 )
 
 
@@ -524,8 +526,10 @@ _ANALYSES = (
 )
 
 _BUILTIN_ANALYSES = _ANALYSES
+_PLUGIN_TRUST_POLICY: PluginTrustPolicy = plugin_trust_policy_from_environment()
 _PLUGIN_DISCOVERY = discover_analysis_plugins(
-    spec.key for spec in _BUILTIN_ANALYSES
+    (spec.key for spec in _BUILTIN_ANALYSES),
+    trust_policy=_PLUGIN_TRUST_POLICY,
 )
 _PLUGIN_ANALYSES = tuple(
     AnalysisSpec(
@@ -568,6 +572,11 @@ def analysis_catalog() -> list[dict]:
 def plugin_discovery_issues() -> tuple[dict, ...]:
     """Return deterministic plugin discovery problems for diagnostics/UI."""
     return tuple(issue.to_dict() for issue in _PLUGIN_DISCOVERY.issues)
+
+
+def plugin_trust_policy() -> dict:
+    """Return the effective installed-plugin policy for diagnostics/UI."""
+    return _PLUGIN_TRUST_POLICY.to_dict()
 
 
 def _load_callable(target: BindingTarget) -> Callable[..., Any]:
@@ -663,6 +672,7 @@ def validate_application_registry() -> dict:
         "plugin_analysis_count": len(_PLUGIN_ANALYSES),
         "plugin_issue_count": len(issues),
         "plugin_issues": list(issues),
+        "plugin_trust_policy": plugin_trust_policy(),
         "callable_target_count": callable_target_count,
         "custom_adapter_count": len(_CUSTOM_APPLICATION_ADAPTERS),
         "custom_adapters": sorted(_CUSTOM_APPLICATION_ADAPTERS),

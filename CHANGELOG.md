@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — retained canonical ProofGraph verification evidence — 2026-10-01
+
+- New persisted project-verification records retain the complete canonical ProofGraph documents alongside their existing SHA-256 identities.
+- Ledger validation reparses each retained graph, requires canonical serialization, unique digest ordering, and exact agreement with `proofgraph_sha256`; legacy hash-only schema-v1 records remain readable.
+- The configured verification-history byte budget now fails closed when the newest record alone exceeds it instead of silently retaining an oversized record.
+- No solver equation, requirement comparison, ProofGraph verdict rule, or historical verification identity semantic is changed.
+
 ## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
 
 - Adds a focused Release 3 regression gate for persisted project requirements, requirement-evidence mappings, canonical requirements verification/workflow, guarded verification persistence, verification currency, project-native dossier output, project verification CLI, and verification-history CLI.

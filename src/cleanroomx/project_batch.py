@@ -20,6 +20,10 @@ from .project import (
     load_project_document_with_revision,
     project_file_revision_matches,
 )
+from .project_diagnostics_cli import (
+    _assert_output_is_distinct_from_dependencies,
+    _assert_output_is_distinct_from_source,
+)
 
 PROJECT_BATCH_SCHEMA = "cleanroomx.project-batch-run"
 PROJECT_BATCH_SCHEMA_VERSION = 2
@@ -152,24 +156,17 @@ def _source_revision_state(
     return project_file_revision_matches(expected, current), None
 
 
-def run_project_file(
-    path: str | Path,
+def _run_loaded_project(
+    source: Path,
+    project: ProjectDocument,
+    revision: ProjectFileRevision,
     *,
     analysis_ids: Sequence[str] | None = None,
     fail_fast: bool = False,
     cancel_requested: Callable[[], bool] | None = None,
 ) -> ProjectBatchRun:
-    """Execute project analyses against one stable in-memory project revision.
+    """Execute one already-loaded project revision without reloading source bytes."""
 
-    The project file is never modified. The source revision is checked before
-    every scheduled analysis and again after each completed/failed analysis.
-    If the source changes, no further analyses are scheduled. An optional
-    cooperative cancellation callback is checked only between analyses, never
-    from inside an active solver call.
-    """
-
-    source = Path(path).expanduser().resolve(strict=False)
-    project, revision = load_project_document_with_revision(source)
     if not revision.exists or revision.size is None or revision.sha256 is None:
         raise OSError(f"project source is not a readable regular file: {source}")
 
@@ -262,6 +259,33 @@ def run_project_file(
         cancellation_analysis_id=cancellation_analysis_id,
     )
 
+
+def run_project_file(
+    path: str | Path,
+    *,
+    analysis_ids: Sequence[str] | None = None,
+    fail_fast: bool = False,
+    cancel_requested: Callable[[], bool] | None = None,
+) -> ProjectBatchRun:
+    """Execute project analyses against one stable in-memory project revision.
+
+    The project file is never modified. The source revision is checked before
+    every scheduled analysis and again after each completed/failed analysis.
+    If the source changes, no further analyses are scheduled. An optional
+    cooperative cancellation callback is checked only between analyses, never
+    from inside an active solver call.
+    """
+
+    source = Path(path).expanduser().resolve(strict=False)
+    project, revision = load_project_document_with_revision(source)
+    return _run_loaded_project(
+        source,
+        project,
+        revision,
+        analysis_ids=analysis_ids,
+        fail_fast=fail_fast,
+        cancel_requested=cancel_requested,
+    )
 
 def render_project_batch_markdown(batch: ProjectBatchRun) -> str:
     lines = [
@@ -402,14 +426,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    source = Path(args.project).expanduser().resolve(strict=False)
     try:
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file
             else None
         )
-        batch = run_project_file(
-            args.project,
+        project, revision = load_project_document_with_revision(source)
+        if args.output:
+            _assert_output_is_distinct_from_source(source, args.output)
+            _assert_output_is_distinct_from_dependencies(
+                project,
+                base_dir=source.parent,
+                output=args.output,
+            )
+        batch = _run_loaded_project(
+            source,
+            project,
+            revision,
             analysis_ids=args.analysis_ids,
             fail_fast=args.fail_fast,
             cancel_requested=(
@@ -418,6 +453,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
+            output_project, output_revision = load_project_document_with_revision(source)
+            if not project_file_revision_matches(revision, output_revision):
+                raise ValueError(
+                    "project file changed after batch execution; report was discarded"
+                )
+            _assert_output_is_distinct_from_source(source, args.output)
+            _assert_output_is_distinct_from_dependencies(
+                output_project,
+                base_dir=source.parent,
+                output=args.output,
+            )
             atomic_write_text(args.output, text)
         else:
             sys.stdout.write(text)

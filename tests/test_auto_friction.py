@@ -6,7 +6,10 @@ from cleanroomx.branch_network import analyze_branch_flow_network
 from cleanroomx.duct import DuctSection, analyze_duct_section
 from cleanroomx.fan_duct_network import analyze_fan_duct_network
 from cleanroomx.fan_duct_network_io import fan_duct_network_study_from_dict
-from cleanroomx.friction import colebrook_darcy_friction_factor
+from cleanroomx.friction import (
+    colebrook_darcy_friction_factor,
+    rectangular_laminar_darcy_friction_factor,
+)
 from cleanroomx.hvac_io import (
     branch_flow_network_from_dict,
     duct_network_from_dict,
@@ -30,6 +33,42 @@ def test_colebrook_solver_matches_equation_residual() -> None:
         )
     )
     assert residual == pytest.approx(0.0, abs=1e-10)
+
+
+@pytest.mark.parametrize(
+    ("aspect_ratio", "expected_poiseuille"),
+    [
+        (1.0, 56.9184),
+        (0.5, 62.2293),
+        (0.25, 72.936065625),
+    ],
+)
+def test_rectangular_laminar_darcy_factor_matches_shape_correlation(
+    aspect_ratio: float,
+    expected_poiseuille: float,
+) -> None:
+    reynolds = 1000.0
+    friction_factor = rectangular_laminar_darcy_friction_factor(
+        reynolds,
+        aspect_ratio,
+    )
+    assert friction_factor * reynolds == pytest.approx(
+        expected_poiseuille,
+        rel=1e-12,
+    )
+
+
+@pytest.mark.parametrize("aspect_ratio", [0.0, -0.1, 1.01, float("nan")])
+def test_rectangular_laminar_darcy_factor_rejects_invalid_aspect_ratio(
+    aspect_ratio: float,
+) -> None:
+    with pytest.raises(ValueError, match="aspect_ratio"):
+        rectangular_laminar_darcy_friction_factor(1000.0, aspect_ratio)
+
+
+def test_rectangular_laminar_darcy_factor_rejects_turbulent_reynolds() -> None:
+    with pytest.raises(ValueError, match="Reynolds number < 2300"):
+        rectangular_laminar_darcy_friction_factor(2300.0, 0.5)
 
 
 def test_duct_section_auto_friction_uses_colebrook() -> None:
@@ -76,21 +115,25 @@ def test_circular_laminar_auto_friction_uses_64_over_re() -> None:
     )
 
 
-def test_rectangular_laminar_auto_friction_requires_explicit_factor() -> None:
-    section = DuctSection(
-        name="Laminar rectangular",
-        length_m=5.0,
-        airflow_m3_h=10.0,
-        friction_factor=None,
-        air_density_kg_m3=1.2,
-        width_m=0.5,
-        height_m=0.25,
-        absolute_roughness_m=0.00009,
-        kinematic_viscosity_m2_s=1.5e-5,
+def test_rectangular_laminar_auto_friction_uses_shape_correlation() -> None:
+    result = analyze_duct_section(
+        DuctSection(
+            name="Laminar rectangular",
+            length_m=5.0,
+            airflow_m3_h=10.0,
+            friction_factor=None,
+            air_density_kg_m3=1.2,
+            width_m=0.5,
+            height_m=0.25,
+            absolute_roughness_m=0.00009,
+            kinematic_viscosity_m2_s=1.5e-5,
+        )
     )
 
-    with pytest.raises(ValueError, match="only for circular ducts"):
-        analyze_duct_section(section)
+    assert result["friction_factor_method"] == "laminar_rectangular_shah_london"
+    assert result["reynolds_number"] == pytest.approx(493.827, abs=0.001)
+    assert result["friction_factor"] == pytest.approx(0.126014, abs=1e-6)
+    assert result["friction_pressure_drop_pa"] == pytest.approx(0.0006, abs=1e-4)
 
 
 def test_manual_and_auto_friction_inputs_are_mutually_exclusive() -> None:

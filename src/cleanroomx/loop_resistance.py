@@ -137,6 +137,15 @@ class LoopedDuctResistanceInput:
             self.width_m + self.height_m
         )
 
+    @property
+    def rectangular_aspect_ratio(self) -> float | None:
+        if self.diameter_m is not None:
+            return None
+        assert self.width_m is not None and self.height_m is not None
+        return min(self.width_m, self.height_m) / max(
+            self.width_m, self.height_m
+        )
+
 
 def derive_loop_edge_resistance(spec: LoopedDuctResistanceInput) -> dict:
     """Derive fixed R in deltaP = R*Q*abs(Q) from explicit duct geometry."""
@@ -158,6 +167,7 @@ def derive_loop_edge_resistance(spec: LoopedDuctResistanceInput) -> dict:
             kinematic_viscosity_m2_s=spec.kinematic_viscosity_m2_s,
             absolute_roughness_m=spec.absolute_roughness_m,
             circular_geometry=spec.shape == "circular",
+            rectangular_aspect_ratio=spec.rectangular_aspect_ratio,
         )
         friction_factor = friction["friction_factor"]
         friction_method = friction["method"]

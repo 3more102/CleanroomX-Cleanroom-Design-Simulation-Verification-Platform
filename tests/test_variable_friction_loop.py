@@ -252,6 +252,47 @@ def test_near_zero_threshold_uses_full_precision_solved_airflow() -> None:
     ] == pytest.approx(100.0000004, abs=1e-10)
 
 
+def test_rectangular_automatic_geometry_converges_in_laminar_regime() -> None:
+    network = looped_flow_network_from_dict(
+        {
+            "name": "Rectangular laminar automatic edge",
+            "reference_node": "A",
+            "node_injections_m3_h": {"A": 10.0, "B": -10.0},
+            "edges": [
+                {
+                    "name": "Rectangular",
+                    "start_node": "A",
+                    "end_node": "B",
+                    "duct_geometry": {
+                        "length_m": 8.0,
+                        "air_density_kg_m3": 1.2,
+                        "local_loss_coefficient": 0.4,
+                        "width_m": 0.5,
+                        "height_m": 0.25,
+                        "absolute_roughness_m": 0.00009,
+                        "kinematic_viscosity_m2_s": 1.5e-5,
+                        "reference_airflow_m3_h": 20.0,
+                    },
+                }
+            ],
+        }
+    )
+    result = solve_variable_friction_looped_network(
+        network,
+        relaxation=1.0,
+        resistance_relative_tolerance=1e-9,
+    )
+    evidence = result["edges"][0]["resistance_evidence"]
+    assert result["status"] == "solved"
+    assert result["variable_friction"]["converged"] is True
+    assert evidence["friction_factor_method"] == "laminar_rectangular_shah_london"
+    assert evidence["reynolds_number"] < 2300.0
+    assert evidence["friction_factor"] == pytest.approx(
+        62.2293 / evidence["reynolds_number"],
+        rel=1e-10,
+    )
+
+
 def test_rectangular_automatic_geometry_can_be_reconstructed() -> None:
     network = looped_flow_network_from_dict(
         {

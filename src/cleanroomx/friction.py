@@ -76,6 +76,41 @@ def colebrook_darcy_friction_factor(
     return 1.0 / inverse_sqrt_f**2
 
 
+def rectangular_laminar_darcy_friction_factor(
+    reynolds: float,
+    aspect_ratio: float,
+) -> float:
+    """Return Darcy f for fully developed laminar flow in a rectangular duct.
+
+    Aspect ratio is the short-side/long-side ratio in (0, 1], and Reynolds
+    number is based on hydraulic diameter.
+    """
+    reynolds = _positive(reynolds, "reynolds_number")
+    if reynolds >= 2300:
+        raise ValueError(
+            "rectangular laminar friction factor requires Reynolds number < 2300"
+        )
+    aspect_ratio = float(aspect_ratio)
+    if (
+        not math.isfinite(aspect_ratio)
+        or aspect_ratio <= 0.0
+        or aspect_ratio > 1.0
+    ):
+        raise ValueError("rectangular aspect_ratio must be finite and in (0, 1]")
+
+    alpha = aspect_ratio
+    shape_polynomial = (
+        1.0
+        - 1.3553 * alpha
+        + 1.9467 * alpha**2
+        - 1.7012 * alpha**3
+        + 0.9564 * alpha**4
+        - 0.2537 * alpha**5
+    )
+    poiseuille_number = 96.0 * shape_polynomial
+    return poiseuille_number / reynolds
+
+
 def resolve_darcy_friction_factor(
     *,
     velocity_m_s: float,
@@ -83,6 +118,7 @@ def resolve_darcy_friction_factor(
     kinematic_viscosity_m2_s: float,
     absolute_roughness_m: float,
     circular_geometry: bool,
+    rectangular_aspect_ratio: float | None = None,
 ) -> dict:
     reynolds = reynolds_number(
         velocity_m_s,
@@ -98,13 +134,20 @@ def resolve_darcy_friction_factor(
 
     relative_roughness = roughness / hydraulic_diameter
     if reynolds < 2300:
-        if not circular_geometry:
-            raise ValueError(
-                "automatic laminar friction is supported only for circular ducts; "
-                "provide an explicit friction_factor for noncircular laminar flow"
+        if circular_geometry:
+            friction_factor = 64.0 / reynolds
+            method = "laminar_64_over_re"
+        elif rectangular_aspect_ratio is not None:
+            friction_factor = rectangular_laminar_darcy_friction_factor(
+                reynolds,
+                rectangular_aspect_ratio,
             )
-        friction_factor = 64.0 / reynolds
-        method = "laminar_64_over_re"
+            method = "laminar_rectangular_shah_london"
+        else:
+            raise ValueError(
+                "automatic laminar friction for noncircular ducts requires a "
+                "supported shape correlation or an explicit friction_factor"
+            )
     else:
         friction_factor = colebrook_darcy_friction_factor(
             reynolds, relative_roughness

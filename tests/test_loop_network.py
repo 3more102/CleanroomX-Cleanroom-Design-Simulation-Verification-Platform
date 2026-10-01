@@ -292,6 +292,24 @@ def test_geometry_can_resolve_friction_once_at_reference_airflow() -> None:
     assert result["resistance_pa_per_m3_s_squared"] > 0.0
 
 
+def test_rectangular_geometry_can_resolve_laminar_friction() -> None:
+    spec = LoopedDuctResistanceInput(
+        length_m=5.0,
+        air_density_kg_m3=1.2,
+        local_loss_coefficient=0.2,
+        width_m=0.5,
+        height_m=0.25,
+        absolute_roughness_m=0.00009,
+        kinematic_viscosity_m2_s=1.5e-5,
+        reference_airflow_m3_h=10.0,
+    )
+    result = derive_loop_edge_resistance(spec)
+    assert result["friction_factor_method"] == "laminar_rectangular_shah_london"
+    assert result["reynolds_number"] == pytest.approx(493.8271604938272)
+    assert result["friction_factor"] == pytest.approx(0.1260143325)
+    assert result["resistance_pa_per_m3_s_squared"] > 0.0
+
+
 def test_loader_accepts_geometry_derived_edges_and_preserves_evidence() -> None:
     network = looped_flow_network_from_dict(
         {

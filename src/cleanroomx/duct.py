@@ -133,6 +133,15 @@ class DuctSection:
             self.width_m + self.height_m
         )
 
+    @property
+    def rectangular_aspect_ratio(self) -> float | None:
+        if self.diameter_m is not None:
+            return None
+        assert self.width_m is not None and self.height_m is not None
+        return min(self.width_m, self.height_m) / max(
+            self.width_m, self.height_m
+        )
+
     def friction_analysis(self) -> dict:
         if self.friction_factor is not None:
             return {
@@ -154,6 +163,7 @@ class DuctSection:
             kinematic_viscosity_m2_s=self.kinematic_viscosity_m2_s,
             absolute_roughness_m=self.absolute_roughness_m,
             circular_geometry=self.shape == "circular",
+            rectangular_aspect_ratio=self.rectangular_aspect_ratio,
         )
 
 

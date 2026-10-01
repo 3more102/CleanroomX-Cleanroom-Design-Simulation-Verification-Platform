@@ -12,8 +12,8 @@ Application workflow bindings are fixed in `src/cleanroomx/application.py`. The 
 
 Installed analysis plugins remain executable Python packages. CleanroomX now
 applies an operator-controlled trust decision before entry-point import:
-`CLEANROOMX_PLUGIN_MODE=disabled` is the default and blocks all external
-plugins, `trusted` explicitly enables the historical behavior, and `allowlist`
+`CLEANROOMX_PLUGIN_MODE=trusted` is the backward-compatible default,
+`disabled` blocks all external plugins, and `allowlist`
 admits only normalized
 distribution names listed in `CLEANROOMX_PLUGIN_ALLOWLIST`, optionally with exact
 `NAME==VERSION` pins. Invalid policy configuration, missing distribution identity

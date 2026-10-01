@@ -1,4 +1,31 @@
-# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
+# CleanroomX v0.103.0 Release 3 Closure Test Evidence
+
+## Verified Release 3 functional baseline
+
+Validation date: 2026-10-01
+
+- Exact current-main functional baseline: `165b0c61f776270f58e8b691171181d694857570`
+- GitHub Actions CI run **#2232** / id `36876058969`: **success**
+- Python 3.11: complete suite, Release 3 focused gate, clean-wheel/install, and representative CLI gates: **success**
+- Python 3.12: complete suite, Release 3 focused gate, clean-wheel/install, and representative CLI gates: **success**
+- Python 3.13: complete suite, Release 3 focused gate, performance evidence, clean-wheel/install, Tk/Xvfb desktop smoke, real-Tk spatial editing, and representative CLI gates: **success**
+- Windows PowerShell and CMD checkout launchers: **success**
+
+The validated Release 3 baseline consolidates project-owned requirements, explicit
+requirement-to-evidence mappings, canonical requirements verification, retained
+tamper-evident verification history, current/stale verification-currency
+assessment, project-native dossiers, project verification and traceability
+operator CLIs, ProofGraph cross-artifact integrity, qualification uncertainty
+ProofGraph evidence, explicit evidence authority, external-plugin trust gating,
+and cooperative project-batch cancellation. These surfaces reuse the established
+engineering backends and do not intentionally change solver equations,
+numerical tolerances, project schema version, or configured acceptance criteria.
+
+The v0.103.0 release-identity closure synchronizes package/runtime/demo/CI/docs
+identity and adds an immutable publisher. The exact tagged release remains gated
+by a successful current-main CI run after the closure is merged.
+
+## Historical v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline
 

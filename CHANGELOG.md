@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — canonical engineering unit conversion — 2026-10-01
+
+- Adds a centralized, deterministic, exact-spelling engineering-unit conversion authority for requirement verification.
+- Converts compatible finite numeric evidence into the persisted requirement unit before applying the requirement's absolute tolerance.
+- Keeps engineering semantic families fail-closed (for example, `Hz` is not treated as an air-change rate) and rejects unknown aliases or cross-family conversions.
+- Preserves missing-value semantics as `incomplete` before any conversion attempt.
+
 ## Unreleased Release 3 — explicit evidence authority — 2026-10-01
 
 - Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.

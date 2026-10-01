@@ -280,8 +280,8 @@ class ProjectRequirementEvidenceMappings:
             analysis_ids = {item.analysis_id for item in active}
             if len(analysis_ids) != 1:
                 raise ProjectRequirementEvidenceMappingsFormatError(
-                    "ambiguous active requirement evidence mappings for one "
-                    "requirement/subject must belong to the same analysis"
+                    "ambiguous requirement/subject active mappings must belong "
+                    "to the same analysis"
                 )
             if authority is None:
                 raise ProjectRequirementEvidenceMappingsFormatError(

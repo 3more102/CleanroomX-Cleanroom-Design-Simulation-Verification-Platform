@@ -1,5 +1,9 @@
 # Changelog
 
+## CleanroomX v0.103.0 — Release 3 — 2026-10-01
+
+Release 3 promotes the requirements, evidence, verification, assurance, traceability, and operator hardening line on top of v0.102.1. The release keeps project schema version 1 and does not intentionally change validated solver equations, numerical tolerances, unit conventions, or engineering acceptance criteria.
+
 ## v0.103.0 — Release 3 verification and assurance closure — 2026-10-01
 
 - Promotes the completed Release 3 requirements, evidence, verification-history, ProofGraph, traceability, unit-conversion, plugin-trust, and operator-surface work to the stable `v0.103.0` release line.

@@ -101,6 +101,11 @@ FAIL/incomplete causes the complete-project gate to fail. Historical orphaned
 records remain visible in the currency payload but are not silently rebound to a
 current analysis.
 
+The aggregate `gate` object also reports configured, accepted, and rejected
+analysis counts plus deterministic accepted/rejected analysis-ID lists, so CI
+can identify the exact configured analyses that block release without
+reinterpreting the canonical currency payload.
+
 ## Exit codes
 
 For `run` and `persist`:

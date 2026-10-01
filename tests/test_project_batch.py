@@ -367,6 +367,64 @@ def test_project_batch_cli_refuses_to_overwrite_external_dependency(tmp_path):
     assert dependency.read_bytes() == before
 
 
+def test_project_batch_cli_rechecks_output_alias_before_publication(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    output_path = tmp_path / "batch-result.json"
+    before = project_path.read_bytes()
+    original_run = project_batch._run_loaded_project
+
+    def create_alias_before_publication(*args, **kwargs):
+        batch = original_run(*args, **kwargs)
+        output_path.hardlink_to(project_path)
+        return batch
+
+    monkeypatch.setattr(
+        project_batch,
+        "_run_loaded_project",
+        create_alias_before_publication,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 2
+    assert project_path.read_bytes() == before
+    assert output_path.read_bytes() == before
+    assert "output path must be different from the project source" in capsys.readouterr().err
+
+
+def test_project_batch_cli_rechecks_source_revision_before_publication(
+    tmp_path, monkeypatch, capsys
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    output_path = tmp_path / "batch-result.json"
+    original_run = project_batch._run_loaded_project
+
+    def mutate_source_after_run(*args, **kwargs):
+        batch = original_run(*args, **kwargs)
+        project_path.write_bytes(project_path.read_bytes() + b"\n")
+        return batch
+
+    monkeypatch.setattr(
+        project_batch,
+        "_run_loaded_project",
+        mutate_source_after_run,
+    )
+
+    code = main([str(project_path), "--output", str(output_path)])
+
+    assert code == 2
+    assert not output_path.exists()
+    assert "project source changed before output publication" in capsys.readouterr().err
+
+
 def test_project_batch_markdown_summarizes_traceability_without_dumping_result(tmp_path):
     path = save_project_document(tmp_path / "batch.cleanroomx.json", _project())
 

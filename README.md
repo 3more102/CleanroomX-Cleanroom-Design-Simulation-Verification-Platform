@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -155,17 +155,18 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0** Release 3 functional baseline was validated on exact commit `165b0c61f776270f58e8b691171181d694857570` by CI run **#2232** / id `36876058969`.
 
-Recorded release evidence includes:
+The successful gate covered:
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
+- the complete test suite on Python **3.11 / 3.12 / 3.13**;
+- the focused Release 3 requirements/verification regression gate;
 - Windows PowerShell and CMD launcher smoke tests;
-- clean wheel build/install checks;
-- installed Tk GUI smoke testing;
-- synchronized 2D/3D spatial regression coverage;
-- autosave completion-race regression coverage;
-- solver/provenance compatibility gates.
+- clean wheel build/install and installed operator CLI checks;
+- Python 3.13 performance evidence, Tk/Xvfb desktop smoke, and real-Tk spatial editing;
+- legacy solver/provenance compatibility gates.
+
+The immutable v0.103.0 publisher is allowed to tag only a successful CI SHA that still equals current `main`.
 
 The exact release evidence is preserved in:
 
@@ -181,8 +182,11 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Documentation
 
-- [Professional Engineering User & Validation Manual (PDF)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf)
-- [Professional manual source (Markdown)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md)
+- [v0.102.1 Professional Engineering User & Validation Manual (PDF, historical baseline)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.pdf)
+- [v0.102.1 manual source (Markdown, historical baseline)](docs/CleanroomX_Complete_Solution_Manual_2026-09-30.md)
+- [Release 3 ProofGraph](docs/PROOFGRAPH.md)
+- [Release 3 project requirements traceability](docs/PROJECT_REQUIREMENTS_TRACEABILITY.md)
+- [Release 3 verification-history operator interface](docs/VERIFICATION_HISTORY_OPERATOR_INTERFACE.md)
 
 - [Application & GUI](docs/APPLICATION_GUI.md)
 - [2D + 3D spatial workspace](docs/LAYOUT_2D_3D.md)
@@ -198,4 +202,4 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Release
 
-**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+**Latest stable:** [CleanroomX v0.103.0](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)

@@ -69,6 +69,41 @@ def _run_bundle(
     ).to_dict()
 
 
+def _file_backed_run_bundle(filename: str, data: bytes) -> tuple[dict, dict]:
+    payload = {"verification_project": filename}
+    dependency_sha256 = sha256(data).hexdigest()
+    provenance = {
+        "schema": "cleanroomx.application-execution-provenance",
+        "schema_version": 1,
+        "analysis_kind": "consistency",
+        "cleanroomx_version": __version__,
+        "input_canonicalization": "json-sort-keys-compact-utf8-v1",
+        "input_sha256": _canonical_sha256(payload),
+        "external_dependency_count": 1,
+        "external_dependencies_stable": True,
+        "external_dependencies": [
+            {
+                "field": "verification_project",
+                "declared_path": filename,
+                "sha256_after": dependency_sha256,
+                "size_bytes_after": len(data),
+                "stable_during_run": True,
+            }
+        ],
+    }
+    bundle = AnalysisRun(
+        kind="consistency",
+        title="Consistency",
+        status="PASS",
+        result={"rooms": [{"ach": 20.0}]},
+        markdown="# Result\n",
+        diagnostics={"application_execution_provenance": provenance},
+        plot=None,
+        input_snapshot=payload,
+    ).to_dict()
+    return bundle, payload
+
+
 def _requirements():
     return project_requirements_from_dict(
         {
@@ -200,6 +235,32 @@ def test_unstable_external_dependency_cannot_be_current_evidence() -> None:
 
     assert result["verified"] is False
     assert result["findings"][0]["state"] == "stale"
+
+
+def test_external_dependency_content_change_marks_evidence_stale(tmp_path) -> None:
+    source = tmp_path / "verification.json"
+    original = b'{"revision":1}'
+    source.write_bytes(original)
+    bundle, payload = _file_backed_run_bundle(source.name, original)
+
+    current = bind_analysis_run_requirement_evidence(
+        bundle,
+        [_mapping()],
+        source_project_revision=SOURCE_PROJECT_REVISION,
+        current_analysis_input=payload,
+        base_dir=tmp_path,
+    )[0]
+    assert current.freshness == "current"
+
+    source.write_bytes(b'{"revision":2}')
+    stale = bind_analysis_run_requirement_evidence(
+        bundle,
+        [_mapping()],
+        source_project_revision=SOURCE_PROJECT_REVISION,
+        current_analysis_input=payload,
+        base_dir=tmp_path,
+    )[0]
+    assert stale.freshness == "stale"
 
 
 def test_missing_result_path_becomes_incomplete_evidence_not_pass() -> None:

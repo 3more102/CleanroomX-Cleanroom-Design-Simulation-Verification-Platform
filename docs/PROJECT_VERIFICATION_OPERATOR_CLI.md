@@ -79,9 +79,12 @@ cleanroomx-project-verify status-project project.cleanroomx.json
 ```
 
 This command performs one stable, read-only verification-currency inspection and
-gates every analysis that currently has active requirement-evidence mappings.
-Analyses with no active mappings remain explicit `not_configured` entries in the
-currency payload and are not promoted into the configured gate set.
+gates the same fail-closed configured-analysis set used by the canonical currency
+assessment. Analyses that have never been configured remain explicit
+`not_configured` entries and are excluded from the gate. If an analysis retains
+verification evidence but its engineering configuration or active mapping set has
+since changed or been removed, it remains in the gate as stale evidence rather
+than being silently ignored.
 
 The project-wide gate succeeds only when:
 

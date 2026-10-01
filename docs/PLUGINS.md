@@ -78,6 +78,39 @@ reports disabled plugins. If a project references an unavailable plugin
 analysis, project loading fails closed with an actionable error rather than
 silently substituting a different workflow.
 
+## Operator trust policy
+
+Plugin code still executes with the same Python/OS privileges as CleanroomX, so
+discovery supports a **pre-import trust gate** controlled before process startup. External plugin loading is disabled by default:
+
+- `CLEANROOMX_PLUGIN_MODE=disabled` — secure default; no external analysis
+  entry point is imported. Built-in analyses remain available and each blocked
+  entry point is reported in plugin diagnostics.
+- `CLEANROOMX_PLUGIN_MODE=trusted` — explicit compatibility opt-in that permits
+  installed plugin entry points to use the existing validation and
+  failure-isolation rules.
+- `CLEANROOMX_PLUGIN_MODE=allowlist` — only distributions named in
+  `CLEANROOMX_PLUGIN_ALLOWLIST` may be imported. The allowlist is a
+  comma-separated set of distribution names with optional exact version pins,
+  for example `cleanroomx-example,acme-hvac==2.4.1`.
+
+Distribution names are normalized case-insensitively across `-`, `_`, and
+`.` separators before comparison. A version pin uses exact installed metadata
+text. When `CLEANROOMX_PLUGIN_MODE` is unset, CleanroomX therefore starts with
+external plugin loading disabled. Deployments that intentionally rely on
+third-party plugins must opt in explicitly with `trusted` or, preferably, an
+`allowlist`. Missing distribution identity, a non-matching version pin,
+malformed allowlist syntax, or an invalid mode fails closed rather than relaxing
+the policy. `cleanroomx-gui --check` exposes the
+effective mode, normalized allowlist, configuration errors, and blocked-plugin
+issues.
+
+The policy check occurs before `entry_point.load()`. It therefore prevents
+blocked packages from being imported through the CleanroomX plugin entry point.
+It is an operator execution-control mechanism, **not** package authentication:
+distribution metadata can identify an installed package/version but is not a
+digital signature and does not prove publisher authenticity.
+
 ## Execution boundary
 
 Registered plugin analyses use the normal CleanroomX application execution path:

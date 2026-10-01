@@ -13,7 +13,7 @@ from .project import (
     load_project_document_with_revision,
     project_file_revision_matches,
 )
-from .project_diagnostics_cli import _assert_project_output_is_safe
+from .project_diagnostics_cli import (\n    _assert_project_output_is_safe,\n    _assert_project_publication_safe,\n)
 from .project_requirements_traceability import (
     build_project_requirements_traceability,
     markdown_project_requirements_traceability,
@@ -88,17 +88,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             else markdown_project_requirements_traceability(result)
         )
         if args.output:
-            _assert_project_output_is_safe(
+            _assert_project_publication_safe(
                 project,
                 source=source,
+                revision=revision_before,
                 output=args.output,
             )
             atomic_write_text(
                 args.output,
                 text,
-                before_replace=lambda: _assert_project_output_is_safe(
+                before_replace=lambda: _assert_project_publication_safe(
                     project,
                     source=source,
+                    revision=revision_before,
                     output=args.output,
                 ),
             )

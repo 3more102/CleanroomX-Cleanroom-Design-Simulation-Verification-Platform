@@ -4,14 +4,13 @@ import argparse
 from pathlib import Path
 import sys
 
-from .cli_output import dumps_strict_json
+from .cli_output import CLIOutputError, dumps_strict_json, write_cli_output
 from .strict_json import StrictJSONError, load_strict_json
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
     run_analysis,
 )
-from .project import atomic_write_text
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,7 +49,15 @@ def main() -> int:
         return 1
 
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.manifest,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-dossier: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 2 if result["executive_summary"]["state"] == "attention_required" else 0

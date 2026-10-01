@@ -195,6 +195,33 @@ def test_verification_history_cli_shows_full_record(tmp_path, capsys):
     assert payload["current_project_context"]["current"] is True
 
 
+
+def test_verification_history_cli_labels_older_record_historical(tmp_path, capsys):
+    path, _ = _persist_one(tmp_path)
+    project = load_project_document(path)
+    project.analyses[0].input["supply_airflow_m3_h"] += 1.0
+    save_project_document(path, project)
+
+    workflow = run_project_requirements_workflow(path, "room-a")
+    persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T10:05:00Z",
+    )
+
+    exit_code = verification_history_main(["list", str(path)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert [item["sequence"] for item in payload["records"]] == [1, 2]
+    assert [
+        item["current_project_context"]["state"]
+        for item in payload["records"]
+    ] == ["historical", "current"]
+    assert payload["records"][0]["verification"]["status"] == "pass"
+    assert payload["records"][1]["verification"]["status"] == "pass"
+
+
 def test_verification_history_cli_rejects_missing_sequence(tmp_path, capsys):
     path, _ = _persist_one(tmp_path)
 

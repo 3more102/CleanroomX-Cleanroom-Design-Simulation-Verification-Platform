@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output
 from .fan_curve import solve_fan_operating_point
 from .fan_curve_io import load_fan_operating_point_study
 from .fan_curve_report import markdown_fan_operating_point_report
@@ -31,7 +31,11 @@ def main() -> int:
         else markdown_fan_operating_point_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.study,),
+        )
     else:
         print(text)
     return 0 if result["status"] == "solved" else 2

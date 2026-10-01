@@ -572,7 +572,11 @@ def test_evidence_authority_rejects_inactive_or_unresolved_requirement() -> None
 
     for requirement in (
         _requirement(status="draft"),
+        _requirement(status="superseded"),
+        _requirement(status="withdrawn"),
         _requirement(applicability="not_applicable"),
+        _requirement(applicability="unknown"),
+        _requirement(applicability="conditional"),
     ):
         with pytest.raises(
             ValueError,

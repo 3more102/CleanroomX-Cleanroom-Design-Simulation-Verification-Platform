@@ -122,12 +122,15 @@ Omitting authority preserves the previous fail-closed
 ambiguous-binding behavior and result shape.
 
 For saved projects, Release 3 can persist these decisions inside
-`project.metadata.requirement_evidence_mappings.evidence_authority`. Persisted
-authority is accepted only for an actually ambiguous active binding whose
-candidate mappings all belong to the same analysis. The selected
-`evidence_id` is the stable mapping/evidence identity. The project-native
-workflow, ProofGraph projection, guarded verification-history persistence, and
-requirements traceability all consume that same canonical decision.
+`project.metadata.requirement_evidence_mappings.evidence_authority`. Registries
+without authority retain the legacy mapping-registry schema v1 shape and digest;
+authority-bearing registries use mapping-registry schema v2, and v1 documents
+cannot carry the new field. Persisted authority is accepted only for an actually
+ambiguous active binding whose candidate mappings all belong to the same
+analysis. The selected `evidence_id` is the stable mapping/evidence identity.
+The project-native workflow, ProofGraph projection, guarded verification-history
+persistence, and requirements traceability all consume that same canonical
+decision.
 
 Stale evidence is surfaced as `stale` and is not used to issue PASS or FAIL.
 Unknown freshness and missing required evidence are `incomplete`.

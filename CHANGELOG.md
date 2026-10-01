@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
+
+- Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.
+- Converts compatible numeric evidence into the persisted requirement unit before equality/minimum/maximum/range comparison, including affine temperature conversion.
+- Retains raw evidence value/unit alongside converted findings and records the exact source/target canonical units, scale, offset, and engineering dimension used.
+- Fails closed for unsupported unit spellings, incompatible dimensions, named-unit versus unitless mismatches, and non-numeric criteria with differing units.
+- Preserves the legacy exact-unit finding shape and changes no solver equations, requirement criteria, persisted project schema, or historical verification records.
+
+## Unreleased Release 3 — persisted verification status gate — 2026-10-01
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

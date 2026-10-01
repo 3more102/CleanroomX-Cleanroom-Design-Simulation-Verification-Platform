@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — project-wide persisted verification status gate — 2026-10-01
+
+- Extends `cleanroomx-project-verify status` with `--all` for read-only CI/release gating across the complete configured verification set.
+- Passes only when at least one analysis is configured and every configured analysis is both current and backed by a latest retained canonical verified PASS.
+- Keeps unrelated unconfigured analyses out of the gate while preserving stale, unverifiable, missing, failed, and orphaned verification context in the canonical currency payload.
+- Rechecks source-project stability during inspection and does not re-run engineering analyses or mutate persisted evidence.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

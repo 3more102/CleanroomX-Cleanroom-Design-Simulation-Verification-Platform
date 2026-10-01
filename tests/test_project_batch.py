@@ -301,6 +301,51 @@ def test_project_batch_cli_refuses_existing_same_file_output_alias(tmp_path, cap
     assert "output path must be different from the project source" in capsys.readouterr().err
 
 
+def test_project_batch_cli_rechecks_dependencies_against_executed_revision(
+    tmp_path, monkeypatch
+):
+    project_path = save_project_document(
+        tmp_path / "batch.cleanroomx.json",
+        _project(),
+    )
+    verification = tmp_path / "verification.json"
+    dependency = tmp_path / "hvac.json"
+    verification.write_text("{}\n", encoding="utf-8")
+    dependency.write_text("protected dependency\n", encoding="utf-8")
+    before = dependency.read_bytes()
+    original_run_project_file = project_batch.run_project_file
+
+    def run_after_project_change(path, **kwargs):
+        save_project_document(
+            path,
+            ProjectDocument(
+                name="Changed dependency batch",
+                analyses=[
+                    AnalysisDocument(
+                        id="consistency",
+                        name="Consistency",
+                        kind="consistency",
+                        input={
+                            "verification_project": verification.name,
+                            "hvac_project": dependency.name,
+                            "room_airflow_abs_tolerance_m3_h": 0.0,
+                            "require_same_room_set": True,
+                        },
+                    )
+                ],
+                active_analysis_id="consistency",
+            ),
+        )
+        return original_run_project_file(path, **kwargs)
+
+    monkeypatch.setattr(project_batch, "run_project_file", run_after_project_change)
+
+    code = main([str(project_path), "--output", str(dependency)])
+
+    assert code == 2
+    assert dependency.read_bytes() == before
+
+
 def test_project_batch_cli_refuses_to_overwrite_external_dependency(tmp_path):
     verification = tmp_path / "verification.json"
     dependency = tmp_path / "hvac.json"

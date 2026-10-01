@@ -18,6 +18,10 @@ from .persistence import (
     AtomicWriteDurabilityError,
     atomic_write_text as _shared_atomic_write_text,
 )
+from .project_requirements import (
+    ProjectRequirementsFormatError,
+    normalize_project_requirements_metadata,
+)
 from .run_history import RunHistoryIntegrityError, validate_run_history
 from .strict_json import StrictJSONError, clone_strict_json, strict_json_loads
 from .spatial_integrity import SpatialLayoutFormatError, validate_project_spatial_metadata
@@ -195,12 +199,19 @@ class ProjectDocument:
         self.top_level_extra_fields = _copy_extra_fields(self.top_level_extra_fields)
 
     def to_dict(self) -> dict:
+        metadata = _project_json_snapshot(self.metadata)
+        try:
+            metadata = normalize_project_requirements_metadata(metadata)
+        except ProjectRequirementsFormatError as exc:
+            raise ProjectFormatError(
+                f"invalid project requirements metadata: {exc}"
+            ) from exc
         project_block = _merge_extra_fields(
             self.project_extra_fields,
             {
                 "name": self.name,
                 "description": self.description,
-                "metadata": _project_json_snapshot(self.metadata),
+                "metadata": metadata,
             },
         )
         return _merge_extra_fields(
@@ -509,6 +520,12 @@ def project_from_dict_with_migration_info(
     metadata = project_data.get("metadata", {})
     if not isinstance(metadata, dict):
         raise ProjectFormatError("project.metadata must be an object")
+    try:
+        metadata = normalize_project_requirements_metadata(metadata)
+    except ProjectRequirementsFormatError as exc:
+        raise ProjectFormatError(
+            f"invalid project requirements metadata: {exc}"
+        ) from exc
     try:
         validate_project_spatial_metadata(metadata)
     except SpatialLayoutFormatError as exc:

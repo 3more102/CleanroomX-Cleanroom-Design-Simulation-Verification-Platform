@@ -77,3 +77,19 @@ merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
+## v0.103.0 Release 3 verification/evidence closure anchor
+
+The Release 3 functional baseline is `165b0c61f776270f58e8b691171181d694857570`,
+validated by current-main CI run #2232 / `36876058969` on 2026-10-01.
+Python 3.11, 3.12, and 3.13 complete-suite jobs passed, together with the
+Release 3 focused requirements/verification gate, Windows PowerShell/CMD
+launcher smoke, clean-wheel/install checks, Python 3.13 performance evidence,
+installed Tk/Xvfb desktop smoke, and real-Tk spatial-editing coverage.
+
+The v0.103.0 release-identity closure changes package/demo/documentation/publisher
+identity only; it does not intentionally change solver equations, numerical
+tolerances, requirement criteria, project schema, or engineering acceptance
+semantics. The immutable publisher may create `v0.103.0` only from a successful
+CI SHA that is still the current `main`. Preserve all prior release tags and
+rollback through normal revert + CI rather than moving published history.
+

@@ -1,3 +1,27 @@
+# CleanroomX v0.103.0 Release 3 Verification & Assurance Test Evidence
+
+## Verified functional closure
+
+- Merge commit: `165b0c61f776270f58e8b691171181d694857570`
+- PR: #707
+- Exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`
+- CI run: #2229 / `36875375370` — **success**
+- Python 3.11: **1662 passed, 4 skipped**
+- Python 3.12: **1662 passed, 4 skipped**
+- Python 3.13: **1662 passed, 4 skipped**
+- Windows PowerShell/CMD launcher smoke: **pass**
+- wheel/install/CLI smoke: **pass**
+- Tk/Xvfb desktop smoke: **pass**
+- Release 2 performance evidence: **pass**
+- Release 3 requirements/verification focused gate: **pass**
+- v0.91-v0.95 compatibility gates: **pass**
+
+The release-identity-only closure changes versioning, release documentation, and
+publication gating; it does not intentionally change engineering equations,
+numerical tolerances, acceptance semantics, or project schema version.
+
+## Prior release evidence
+
 # CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline

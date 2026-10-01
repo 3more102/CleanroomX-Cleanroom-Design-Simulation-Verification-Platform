@@ -1,4 +1,29 @@
-# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
+# CleanroomX v0.103.0 Release 3 Final Verification Closure Test Evidence
+
+## Verified Release 3 functional baseline
+
+Validation date: 2026-10-01
+
+- PR **#707 — Release 3 final closure restack on current main**
+- exact tested head: `875408729ec3587d96f4c86f77b14de80b6548be`
+- merged `main` commit: `165b0c61f776270f58e8b691171181d694857570`
+- PR CI **#2229** / run id `36875375370`: **success**
+- Python 3.11 complete suite: **1662 passed, 4 skipped**
+- Python 3.12 complete suite: **1662 passed, 4 skipped**
+- Python 3.13 complete suite: **1662 passed, 4 skipped**
+- Release 3 requirements/verification focused gate: **143 passed** on each supported interpreter
+- Windows PowerShell/CMD checkout launcher smoke: **success**
+- clean wheel build/install and installed application/CLI checks: **success**
+- installed `cleanroomx-project-traceability --help`: **success**
+- Python 3.13 installed Tk/Xvfb GUI smoke: **CleanroomX GUI smoke: PASS**
+
+The verified Release 3 tree closes first-class requirements, evidence mappings, immutable canonical verification history, ProofGraph retention and cross-artifact validation, verification currency, project-native dossier/traceability surfaces, explicit evidence authority, plugin trust gating, canonical engineering-unit conversion, cooperative batch cancellation, and operator-facing historical evidence drill-down.
+
+No solver equation, numerical tolerance, no-extrapolation/root-selection rule, project schema version, requirement criterion, or historical verification verdict semantic is intentionally changed by the v0.103.0 release identity.
+
+The publisher may create `v0.103.0` only from a successful CI SHA that still equals current `main`.
+
+## Historical v0.102.1 evidence
 
 ## Verified final baseline
 

@@ -7,6 +7,10 @@ import json
 import math
 from typing import Any, Iterable
 
+from .engineering_units import (
+    EngineeringUnitConversionError,
+    convert_engineering_value,
+)
 from .project_requirements import ProjectRequirement, ProjectRequirements
 from .verification import aggregate_verification_status
 
@@ -295,18 +299,6 @@ def _evaluate(
             ),
             evidence=evidence,
         )
-    if evidence.unit != requirement.unit:
-        return _unresolved(
-            requirement,
-            subject_ref,
-            state="invalid",
-            explanation=(
-                "Evidence unit does not exactly match the requirement unit; "
-                "no implicit conversion was performed."
-            ),
-            evidence=evidence,
-        )
-
     if evidence.value is None:
         return _unresolved(
             requirement,
@@ -319,7 +311,9 @@ def _evaluate(
     operator = criterion["operator"]
     expected = criterion["expected"]
     tolerance = float(criterion["tolerance"])
-    actual = evidence.value
+    raw_actual = evidence.value
+    comparison_actual = raw_actual
+    conversion_details: dict[str, Any] | None = None
     delta: float | None = None
 
     if operator == "equals" and isinstance(expected, (str, bool)):
@@ -331,10 +325,57 @@ def _evaluate(
                 explanation="A non-numeric equality requirement cannot use numeric tolerance.",
                 evidence=evidence,
             )
-        passed = _json_equal(actual, expected)
+        if evidence.unit != requirement.unit:
+            return _unresolved(
+                requirement,
+                subject_ref,
+                state="invalid",
+                explanation=(
+                    "Non-numeric equality evidence units must match exactly; "
+                    "numeric unit conversion is not applicable."
+                ),
+                evidence=evidence,
+            )
+        passed = _json_equal(raw_actual, expected)
     else:
+        if evidence.unit != requirement.unit:
+            if evidence.unit is None or requirement.unit is None:
+                return _unresolved(
+                    requirement,
+                    subject_ref,
+                    state="invalid",
+                    explanation=(
+                        "Evidence and requirement units differ, and conversion "
+                        "between a named unit and an unset unit is not defined."
+                    ),
+                    evidence=evidence,
+                )
+            try:
+                conversion = convert_engineering_value(
+                    raw_actual,
+                    source_unit=evidence.unit,
+                    target_unit=requirement.unit,
+                )
+            except EngineeringUnitConversionError as exc:
+                return _unresolved(
+                    requirement,
+                    subject_ref,
+                    state="invalid",
+                    explanation=(
+                        "Evidence unit does not exactly match the requirement unit; "
+                        "no implicit conversion was performed. "
+                        f"Canonical unit authority rejected the conversion: {exc}."
+                    ),
+                    evidence=evidence,
+                )
+            comparison_actual = conversion.output_value
+            conversion_details = conversion.to_dict()
+
         try:
-            actual_number = _finite(actual, "requirement evidence actual")
+            actual_number = _finite(
+                comparison_actual,
+                "requirement evidence actual",
+            )
         except ValueError:
             return _unresolved(
                 requirement,
@@ -377,7 +418,7 @@ def _evaluate(
             "status": "pass" if passed else "fail",
             "state": "pass" if passed else "fail",
             "included": True,
-            "actual": copy.deepcopy(actual),
+            "actual": copy.deepcopy(comparison_actual),
             "delta": delta,
             "evidence_id": evidence.id,
             "evidence_ids": [evidence.id],
@@ -388,12 +429,32 @@ def _evaluate(
             "freshness": evidence.freshness,
             "evidence_kinds": list(evidence.evidence_kinds),
             "explanation": (
-                "Current evidence satisfies the explicit requirement criterion."
-                if passed
-                else "Current evidence does not satisfy the explicit requirement criterion."
+                (
+                    "Current evidence satisfies the explicit requirement criterion "
+                    "after canonical unit conversion."
+                )
+                if passed and conversion_details is not None
+                else (
+                    "Current evidence does not satisfy the explicit requirement "
+                    "criterion after canonical unit conversion."
+                )
+                if conversion_details is not None
+                else (
+                    "Current evidence satisfies the explicit requirement criterion."
+                    if passed
+                    else "Current evidence does not satisfy the explicit requirement criterion."
+                )
             ),
         }
     )
+    if conversion_details is not None:
+        finding.update(
+            {
+                "evidence_actual": copy.deepcopy(raw_actual),
+                "evidence_unit": evidence.unit,
+                "unit_conversion": conversion_details,
+            }
+        )
     return finding
 
 

@@ -25,6 +25,7 @@ from .plugins import (
     PLUGIN_API_VERSION,
     PluginOrigin,
     discover_analysis_plugins,
+    plugin_trust_policy_from_environment,
 )
 
 
@@ -524,8 +525,10 @@ _ANALYSES = (
 )
 
 _BUILTIN_ANALYSES = _ANALYSES
+_PLUGIN_TRUST_POLICY = plugin_trust_policy_from_environment()
 _PLUGIN_DISCOVERY = discover_analysis_plugins(
-    spec.key for spec in _BUILTIN_ANALYSES
+    (spec.key for spec in _BUILTIN_ANALYSES),
+    trust_policy=_PLUGIN_TRUST_POLICY,
 )
 _PLUGIN_ANALYSES = tuple(
     AnalysisSpec(
@@ -661,6 +664,7 @@ def validate_application_registry() -> dict:
         "builtin_analysis_count": len(_BUILTIN_ANALYSES),
         "plugin_api_version": PLUGIN_API_VERSION,
         "plugin_analysis_count": len(_PLUGIN_ANALYSES),
+        "plugin_trust_policy": _PLUGIN_DISCOVERY.trust_policy.to_dict(),
         "plugin_issue_count": len(issues),
         "plugin_issues": list(issues),
         "callable_target_count": callable_target_count,

@@ -42,11 +42,9 @@ def test_colebrook_rejects_non_turbulent_reynolds_numbers() -> None:
 
 @pytest.mark.parametrize("reynolds", [2000.0, 2300.0, 3000.0, 4000.0])
 def test_auto_friction_rejects_transition_region(reynolds: float) -> None:
-    hydraulic_diameter_m = 0.2
-    kinematic_viscosity_m2_s = 1.5e-5
-    velocity_m_s = (
-        reynolds * kinematic_viscosity_m2_s / hydraulic_diameter_m
-    )
+    hydraulic_diameter_m = 1.0
+    kinematic_viscosity_m2_s = 1.0
+    velocity_m_s = reynolds
 
     with pytest.raises(ValueError, match="transition region"):
         resolve_darcy_friction_factor(
@@ -59,18 +57,18 @@ def test_auto_friction_rejects_transition_region(reynolds: float) -> None:
 
 
 def test_auto_friction_regime_boundaries_are_fail_closed() -> None:
-    hydraulic_diameter_m = 0.2
-    kinematic_viscosity_m2_s = 1.5e-5
+    hydraulic_diameter_m = 1.0
+    kinematic_viscosity_m2_s = 1.0
 
     laminar = resolve_darcy_friction_factor(
-        velocity_m_s=1999.0 * kinematic_viscosity_m2_s / hydraulic_diameter_m,
+        velocity_m_s=1999.0,
         hydraulic_diameter_m=hydraulic_diameter_m,
         kinematic_viscosity_m2_s=kinematic_viscosity_m2_s,
         absolute_roughness_m=0.00001,
         circular_geometry=True,
     )
     turbulent = resolve_darcy_friction_factor(
-        velocity_m_s=4001.0 * kinematic_viscosity_m2_s / hydraulic_diameter_m,
+        velocity_m_s=4001.0,
         hydraulic_diameter_m=hydraulic_diameter_m,
         kinematic_viscosity_m2_s=kinematic_viscosity_m2_s,
         absolute_roughness_m=0.00001,

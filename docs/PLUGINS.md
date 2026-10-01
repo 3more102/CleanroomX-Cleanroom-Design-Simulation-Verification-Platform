@@ -59,9 +59,9 @@ CleanroomX applies the installed-plugin trust decision **before** calling an ent
 point's `load()` method. Set `CLEANROOMX_PLUGIN_MODE` before starting the
 application:
 
-- `trusted` (default) preserves the historical plugin API v1 behavior and loads
+- `disabled` (default) blocks every external analysis plugin before import;
+- `trusted` explicitly opts in to the historical plugin API v1 behavior and loads
   valid installed plugins after the normal deterministic metadata checks;
-- `disabled` blocks every external analysis plugin before import;
 - `allowlist` loads only distributions named in `CLEANROOMX_PLUGIN_ALLOWLIST`.
 
 The allowlist is a comma-separated sequence of distribution names with optional

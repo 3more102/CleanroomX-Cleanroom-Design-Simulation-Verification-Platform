@@ -234,7 +234,15 @@ def convert_engineering_value(
         )
 
     base_value = numeric * source.scale_to_base + source.offset_to_base
+    if not math.isfinite(base_value):
+        raise EngineeringUnitConversionError(
+            "engineering unit conversion produced a non-finite base value"
+        )
     output = (base_value - target.offset_to_base) / target.scale_to_base
+    if not math.isfinite(output):
+        raise EngineeringUnitConversionError(
+            "engineering unit conversion produced a non-finite output value"
+        )
     output = 0.0 if output == 0.0 else output
     scale = source.scale_to_base / target.scale_to_base
     offset = (

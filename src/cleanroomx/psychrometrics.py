@@ -7,6 +7,10 @@ from .numeric import finite_float, nonnegative_float
 
 MOLECULAR_MASS_RATIO_WATER_TO_DRY_AIR = 0.621945
 DRY_AIR_GAS_CONSTANT_KJ_KG_K = 0.287042
+IAPWS_SUBLIMATION_MIN_TEMPERATURE_K = 50.0
+IAPWS_SUBLIMATION_MIN_TEMPERATURE_C = (
+    IAPWS_SUBLIMATION_MIN_TEMPERATURE_K - 273.15
+)
 
 
 def _saturation_vapor_pressure_iapws_kpa(temperature_c: float) -> float:
@@ -15,7 +19,13 @@ def _saturation_vapor_pressure_iapws_kpa(temperature_c: float) -> float:
 
     if temperature_c < 0.0:
         # IAPWS R14-08(2011), ice-Ih sublimation curve as reproduced by
-        # ASHRAE Handbook—Fundamentals 2025, Chapter 1.
+        # ASHRAE Handbook—Fundamentals 2025, Chapter 1. The IAPWS release
+        # states that this correlation is valid from 50 K to 273.16 K.
+        if temperature_k < IAPWS_SUBLIMATION_MIN_TEMPERATURE_K:
+            raise ValueError(
+                "IAPWS sublimation-pressure correlation is valid only at or "
+                "above 50 K"
+            )
         theta = temperature_k / 273.16
         coefficients = (-21.2144006, 27.3203819, -6.10598130)
         exponents = (0.00333333333, 1.20666667, 1.70333333)

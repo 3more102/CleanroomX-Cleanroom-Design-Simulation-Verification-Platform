@@ -131,3 +131,10 @@ cleanroomx-project-verify persist project.cleanroomx.json <analysis-id>
 A canonical FAIL or incomplete result is still persisted when the workflow itself
 is valid; the command returns exit code 1 so CI/operator scripts can distinguish
 that outcome from verified PASS (0) and operational/integrity failure (2).
+
+
+## Desktop requirement evidence drill-down
+
+**Analysis → Verification History...** presents each validated retained record in two read-only views. **Requirement Evidence** projects the historical canonical findings into requirement → bound evidence → verdict rows, including subject, criterion, retained actual value/unit, freshness, source, and exact evidence locator. Missing or unretained evidence remains explicit. **Canonical Record** preserves the complete validated record JSON.
+
+The desktop derives per-record current-project context through the same canonical `verification_history_record_currency_context()` authority used by other operator surfaces. The helper rejects malformed records, empty analysis identities, malformed current assessments, and cross-analysis projection. Historical verdicts are never recomputed from current project state.

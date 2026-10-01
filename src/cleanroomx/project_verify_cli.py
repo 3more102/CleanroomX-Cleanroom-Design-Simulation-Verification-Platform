@@ -98,12 +98,6 @@ def _verification_exit_code(workflow: ProjectRequirementsWorkflowRun) -> int:
 
 
 def _analysis_status_gate(assessment: dict[str, Any]) -> dict[str, bool]:
-    latest_record = assessment.get("latest_record")
-    verified_pass = (
-        isinstance(latest_record, dict)
-        and latest_record.get("verified") is True
-    )
-    current = assessment.get("state") == "current"
     return {
         "current": current,
         "verified_pass": verified_pass,
@@ -115,12 +109,19 @@ def _status_exit_code(assessment: dict[str, Any]) -> int:
     return 0 if _analysis_status_gate(assessment)["accepted"] else 1
 
 
-def _project_status_exit_code(currency: dict[str, Any]) -> int:
-    configured = [
+def _configured_status_assessments(
+    currency: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return the canonical fail-closed project gate set in stable analysis order."""
+    return [
         item
         for item in currency["analyses"]
         if item.get("state") != "not_configured"
     ]
+
+
+def _project_status_exit_code(currency: dict[str, Any]) -> int:
+    configured = _configured_status_assessments(currency)
     return (
         0
         if configured
@@ -165,11 +166,7 @@ def _project_status_payload(
     revision,
     currency: dict[str, Any],
 ) -> dict[str, Any]:
-    configured = [
-        item
-        for item in currency["analyses"]
-        if item.get("state") != "not_configured"
-    ]
+    configured = _configured_status_assessments(currency)
     analysis_gates = [
         {
             "analysis_id": item["analysis_id"],

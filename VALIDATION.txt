@@ -1,6 +1,33 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
+Release: CleanroomX v0.103.0
+Validation date: 2026-10-01
+
+RELEASE 3 CODE CLOSURE BASELINE
+PR #707 — Release 3 final closure restack on current main
+Merged main commit:
+165b0c61f776270f58e8b691171181d694857570
+Post-merge main CI run #2232
+run id 36876058969
+conclusion SUCCESS
+
+PASS - Python 3.11 complete suite: 1662 passed, 4 skipped
+PASS - Python 3.12 complete suite: 1662 passed, 4 skipped
+PASS - Python 3.13 complete suite: 1662 passed, 4 skipped
+PASS - windows-latest PowerShell/CMD checkout launcher smoke
+PASS - clean wheel build/install and installed Release 3 CLI checks
+PASS - Python 3.13 installed Tk/Xvfb GUI smoke
+
+RELEASE IDENTITY GATE
+v0.103.0 changes package/runtime/demo/documentation identity and adds an immutable current-main publisher.
+The release identity must pass the same repository CI before merge.
+The publisher refuses stale successful CI SHAs and publishes only when the successful CI SHA still equals current main.
+No solver equation, numerical tolerance, convergence rule, requirement criterion, persisted project schema, or historical verification semantic is intentionally changed by this closure.
+
+PRIOR RELEASE VALIDATION
+========================
+
 Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 

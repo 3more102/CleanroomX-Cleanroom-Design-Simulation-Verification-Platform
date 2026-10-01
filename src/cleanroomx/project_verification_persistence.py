@@ -265,6 +265,7 @@ def persist_project_requirements_workflow_run(
     code_revision = provenance.get("code_revision")
     cleanroomx_version = provenance.get("cleanroomx_version")
     input_sha256 = provenance.get("input_sha256")
+    external_dependencies = provenance.get("external_dependencies")
     if not isinstance(runtime_environment, dict) or not isinstance(code_revision, dict):
         raise ProjectVerificationPersistenceError(
             "workflow execution provenance lacks runtime/code identity"
@@ -280,6 +281,14 @@ def persist_project_requirements_workflow_run(
     if not isinstance(input_sha256, str):
         raise ProjectVerificationPersistenceError(
             "workflow execution provenance lacks analysis input identity"
+        )
+    if (
+        not isinstance(external_dependencies, list)
+        or provenance.get("external_dependency_count") != len(external_dependencies)
+        or provenance.get("external_dependencies_stable") is not True
+    ):
+        raise ProjectVerificationPersistenceError(
+            "workflow execution provenance lacks stable external dependency evidence"
         )
 
     proofgraph_sha256 = sorted(
@@ -305,6 +314,7 @@ def persist_project_requirements_workflow_run(
         "cleanroomx_version": cleanroomx_version,
         "runtime_environment": copy.deepcopy(runtime_environment),
         "code_revision": copy.deepcopy(code_revision),
+        "external_dependencies": copy.deepcopy(external_dependencies),
     }
     body["verification_identity_sha256"] = verification_run_identity_sha256(body)
 

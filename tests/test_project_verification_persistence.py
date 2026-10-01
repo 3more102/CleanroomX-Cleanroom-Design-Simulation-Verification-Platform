@@ -32,8 +32,10 @@ from cleanroomx.project_verification_persistence import (
 )
 from cleanroomx.verification_run_history import (
     VERIFICATION_RUN_HISTORY_METADATA_KEY,
+    append_project_verification_run_record,
     validate_project_verification_run_history,
     verification_run_history_records,
+    verification_run_identity_sha256,
 )
 
 
@@ -156,6 +158,7 @@ def test_persisted_verification_run_preserves_canonical_engineering_evidence(tmp
     assert persisted.record["evidence"][0]["evidence_locator"] == "/result/ach"
     assert persisted.record["verification"]["verified"] is True
     assert persisted.record["verification"]["status"] == "pass"
+    assert persisted.record["external_dependencies"] == []
     assert persisted.record["verification_identity_sha256"]
     assert persisted.record["record_sha256"]
     assert (
@@ -168,6 +171,54 @@ def test_persisted_verification_run_preserves_canonical_engineering_evidence(tmp
     records = verification_run_history_records(loaded.metadata)
     assert summary["record_count"] == 1
     assert records == [persisted.record]
+
+
+def test_project_loader_accepts_legacy_verification_record_without_dependency_fingerprints(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "verified.cleanroomx.json",
+        _project(),
+    )
+    workflow = run_project_requirements_workflow(path, "room-a")
+    persisted = persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T07:30:00Z",
+    )
+
+    project = load_project_document(path)
+    project.metadata.pop(VERIFICATION_RUN_HISTORY_METADATA_KEY)
+    excluded = {
+        "sequence",
+        "completed_at_utc",
+        "previous_record_sha256",
+        "record_sha256",
+        "verification_identity_sha256",
+        "external_dependencies",
+    }
+    body = {
+        key: copy.deepcopy(value)
+        for key, value in persisted.record.items()
+        if key not in excluded
+    }
+    body["verification_identity_sha256"] = verification_run_identity_sha256(body)
+    legacy_record = append_project_verification_run_record(
+        project.metadata,
+        body,
+        completed_at_utc="2026-10-01T07:30:00Z",
+    )
+    assert "external_dependencies" not in legacy_record
+
+    save_project_document(path, project)
+    loaded = load_project_document(path)
+    records = verification_run_history_records(loaded.metadata)
+
+    assert len(records) == 1
+    assert "external_dependencies" not in records[0]
+    assert records[0]["verification_identity_sha256"] == (
+        legacy_record["verification_identity_sha256"]
+    )
 
 
 def test_persisted_verification_history_chains_across_project_revisions(tmp_path):

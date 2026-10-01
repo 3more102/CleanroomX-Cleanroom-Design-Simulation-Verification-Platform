@@ -27,7 +27,7 @@ The list output is strict JSON and contains:
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
 - compact per-record verification status;
-- fail-closed verification-currency assessment against the current project configuration;
+- fail-closed verification-currency assessment against the current project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -61,15 +61,21 @@ verification record.
 
 A record is reported as `current` only when its analysis kind, canonical input
 SHA-256, requirements SHA-256, mappings SHA-256, and active mapping identities all
-still match and the analysis declares no file-backed external engineering inputs.
+still match. For file-backed analyses, the retained dependency SHA-256 and byte
+size must also match the current dependency content.
 
 If configuration changed, the state is `stale`. If active mappings exist but no
 record is retained, the state is `not_verified`. Analyses without active mappings
 are `not_configured`.
 
-Schema-v1 verification records do not retain the file fingerprints needed to prove
-that external dependency bytes are unchanged. Therefore a matching file-backed
-analysis is reported as `dependency_freshness_unverifiable`, never as current.
+New verification records retain the stable external engineering dependency
+fingerprints captured by execution provenance. When a project base directory is
+available, those files are re-fingerprinted and the verification is reported as
+`current` only if the retained SHA-256 and byte size still match.
+
+Legacy verification records created before dependency-fingerprint persistence
+remain valid. If such a record is otherwise configuration-identical, it is
+reported as `dependency_freshness_unverifiable` rather than assumed current.
 
 ## Project diagnostics integration
 

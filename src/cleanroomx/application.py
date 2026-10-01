@@ -1117,25 +1117,13 @@ def analysis_run_matches_input(run: AnalysisRun, kind: str, payload: dict) -> bo
     return recorded_sha256 == current_sha256
 
 
-def analysis_run_external_dependencies_current(
-    run: AnalysisRun,
+def external_dependency_fingerprints_current(
+    dependencies: list[dict],
     *,
     base_dir=None,
 ) -> bool:
-    """Return whether every file-backed run dependency still matches by content."""
-    if not isinstance(run, AnalysisRun) or not isinstance(run.diagnostics, dict):
-        return False
-    provenance = run.diagnostics.get("application_execution_provenance")
-    if not isinstance(provenance, dict):
-        return False
-    if provenance.get("schema") != "cleanroomx.application-execution-provenance":
-        return False
-    dependencies = provenance.get("external_dependencies")
+    """Return whether persisted dependency fingerprints still match by content."""
     if not isinstance(dependencies, list):
-        return False
-    if provenance.get("external_dependency_count") != len(dependencies):
-        return False
-    if provenance.get("external_dependencies_stable") is not True:
         return False
 
     base = Path(base_dir) if base_dir is not None else None
@@ -1167,6 +1155,32 @@ def analysis_run_external_dependencies_current(
         ):
             return False
     return True
+
+
+def analysis_run_external_dependencies_current(
+    run: AnalysisRun,
+    *,
+    base_dir=None,
+) -> bool:
+    """Return whether every file-backed run dependency still matches by content."""
+    if not isinstance(run, AnalysisRun) or not isinstance(run.diagnostics, dict):
+        return False
+    provenance = run.diagnostics.get("application_execution_provenance")
+    if not isinstance(provenance, dict):
+        return False
+    if provenance.get("schema") != "cleanroomx.application-execution-provenance":
+        return False
+    dependencies = provenance.get("external_dependencies")
+    if not isinstance(dependencies, list):
+        return False
+    if provenance.get("external_dependency_count") != len(dependencies):
+        return False
+    if provenance.get("external_dependencies_stable") is not True:
+        return False
+    return external_dependency_fingerprints_current(
+        dependencies,
+        base_dir=base_dir,
+    )
 
 
 def analysis_run_is_current(

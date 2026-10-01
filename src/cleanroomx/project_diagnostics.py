@@ -534,7 +534,7 @@ def _verification_currency_issues(
                     message=(
                         "The persisted verification configuration still matches, "
                         "but file-backed dependency freshness cannot be proven from "
-                        "the schema-v1 verification record."
+                        "the retained record and available project context."
                     ),
                     suggested_action=(
                         "Re-run and persist canonical verification against the "
@@ -612,7 +612,10 @@ def analyze_project_diagnostics(
     layout = normalize_layout(layout_value) if isinstance(layout_value, dict) else None
 
     verification_history = _verification_history_summary(project)
-    verification_currency = assess_project_verification_currency(project)
+    verification_currency = assess_project_verification_currency(
+        project,
+        base_dir=base,
+    )
 
     issues: list[dict[str, Any]] = []
     if layout is not None:

@@ -1510,12 +1510,11 @@ def _application_execution_provenance(
             "project_source_revision must be a lowercase SHA-256 digest"
         )
 
-    return {
+    provenance = {
         "schema": "cleanroomx.application-execution-provenance",
         "schema_version": 1,
         "cleanroomx_version": __version__,
         "analysis_kind": kind,
-        "project_source_revision": project_source_revision,
         "implementation": implementation,
         "execution_binding": _analysis_binding_provenance(kind),
         "runtime_environment": _runtime_environment_provenance(),
@@ -1539,6 +1538,9 @@ def _application_execution_provenance(
         ),
         "external_dependencies": dependencies,
     }
+    if project_source_revision is not None:
+        provenance["project_source_revision"] = project_source_revision
+    return provenance
 
 
 def _validate_dossier(payload: dict, base_dir: Path | None) -> None:

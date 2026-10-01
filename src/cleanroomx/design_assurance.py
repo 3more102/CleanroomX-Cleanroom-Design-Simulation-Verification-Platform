@@ -259,11 +259,16 @@ def analyze_design_assurance(study: DesignAssuranceStudy) -> dict:
             "rule packs are complete."
         )
 
+    no_failures_detected = fail_count == 0
+    verified = complete and status == "pass"
+
     return {
         "study": study.name,
         "status": status,
         "complete": complete,
-        "passed": fail_count == 0,
+        "verified": verified,
+        "no_failures_detected": no_failures_detected,
+        "passed": no_failures_detected,
         "summary": {
             "component_count": (
                 1

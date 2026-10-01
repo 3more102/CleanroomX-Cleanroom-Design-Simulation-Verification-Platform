@@ -70,6 +70,9 @@ from .project_dossier import (
     markdown_project_engineering_dossier,
 )
 from .project_requirements_workflow import run_project_requirements_workflow
+from .requirements_traceability import (
+    build_project_requirements_traceability_snapshot,
+)
 from .project_verification_persistence import (
     persist_project_requirements_workflow_run,
 )
@@ -366,6 +369,236 @@ class RunHistoryDialog(tk.Toplevel):
             json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False),
         )
         self.detail.configure(state="disabled")
+
+
+class RequirementsTraceabilityDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Misc, snapshot: dict):
+        super().__init__(parent)
+        self.title("Project Requirements Traceability")
+        self.geometry("1460x760")
+        self.minsize(1080, 600)
+        self.transient(parent)
+
+        requirements = snapshot["requirements"]
+        mappings = snapshot["mappings"]
+        ttk.Label(
+            self,
+            text=(
+                f"Requirements: {requirements['count']} — "
+                f"Mappings: {mappings['count']} "
+                f"({mappings['active_count']} active, "
+                f"{mappings['historical_count']} historical)"
+            ),
+        ).pack(fill="x", padx=10, pady=(10, 3))
+        ttk.Label(
+            self,
+            text=(
+                "Read-only canonical registry view. Historical disabled/superseded "
+                "mappings resolve only when both the stable analysis ID and recorded "
+                "analysis kind still match the current project."
+            ),
+        ).pack(fill="x", padx=10, pady=(0, 6))
+
+        digest_parts = []
+        if requirements["sha256"]:
+            digest_parts.append(
+                f"requirements SHA-256 {requirements['sha256']}"
+            )
+        if mappings["sha256"]:
+            digest_parts.append(f"mappings SHA-256 {mappings['sha256']}")
+        if digest_parts:
+            ttk.Label(self, text=" | ".join(digest_parts)).pack(
+                fill="x", padx=10, pady=(0, 8)
+            )
+
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self._build_requirements_tab(notebook, requirements["items"])
+        self._build_mappings_tab(notebook, mappings["items"])
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+    @staticmethod
+    def _detail_text(parent: tk.Misc) -> tk.Text:
+        detail = tk.Text(parent, wrap="word", height=12)
+        detail.configure(state="disabled")
+        return detail
+
+    @staticmethod
+    def _show_detail(detail: tk.Text, payload: dict) -> None:
+        detail.configure(state="normal")
+        detail.delete("1.0", "end")
+        detail.insert(
+            "1.0",
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False),
+        )
+        detail.configure(state="disabled")
+
+    def _build_requirements_tab(self, notebook: ttk.Notebook, items: list[dict]) -> None:
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text=f"Requirements ({len(items)})")
+        pane = ttk.Panedwindow(frame, orient="vertical")
+        pane.pack(fill="both", expand=True)
+
+        table_frame = ttk.Frame(pane)
+        columns = (
+            "id",
+            "status",
+            "applicability",
+            "discipline",
+            "category",
+            "scope",
+            "criterion",
+        )
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings")
+        headings = {
+            "id": "Requirement",
+            "status": "Lifecycle",
+            "applicability": "Applicability",
+            "discipline": "Discipline",
+            "category": "Category",
+            "scope": "Scope",
+            "criterion": "Criterion",
+        }
+        widths = {
+            "id": 150,
+            "status": 100,
+            "applicability": 110,
+            "discipline": 110,
+            "category": 180,
+            "scope": 220,
+            "criterion": 260,
+        }
+        for column in columns:
+            tree.heading(column, text=headings[column])
+            tree.column(column, width=widths[column], anchor="w", stretch=True)
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        detail = self._detail_text(pane)
+        by_id = {item["id"]: item for item in items}
+        for item in items:
+            criterion = item["criterion"]
+            criterion_text = criterion["kind"]
+            if criterion["kind"] == "target":
+                criterion_text += f" {criterion['target']!r}"
+            elif criterion["kind"] == "minimum":
+                criterion_text += f" >= {criterion['minimum']}"
+            elif criterion["kind"] == "maximum":
+                criterion_text += f" <= {criterion['maximum']}"
+            elif criterion["kind"] == "range":
+                criterion_text += (
+                    f" {criterion['minimum']}..{criterion['maximum']}"
+                )
+            if criterion.get("unit"):
+                criterion_text += f" {criterion['unit']}"
+            tree.insert(
+                "",
+                "end",
+                iid=item["id"],
+                values=(
+                    item["id"],
+                    item["status"],
+                    item["applicability"],
+                    item["discipline"],
+                    item["category"],
+                    ", ".join(item["scope"]) or "project",
+                    criterion_text,
+                ),
+            )
+
+        def show_selected(event=None) -> None:
+            selection = tree.selection()
+            if selection:
+                self._show_detail(detail, by_id[selection[0]])
+
+        tree.bind("<<TreeviewSelect>>", show_selected)
+        pane.add(table_frame, weight=3)
+        pane.add(detail, weight=2)
+        children = tree.get_children()
+        if children:
+            tree.selection_set(children[0])
+            tree.focus(children[0])
+            show_selected()
+
+    def _build_mappings_tab(self, notebook: ttk.Notebook, items: list[dict]) -> None:
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text=f"Mappings ({len(items)})")
+        pane = ttk.Panedwindow(frame, orient="vertical")
+        pane.pack(fill="both", expand=True)
+
+        table_frame = ttk.Frame(pane)
+        columns = (
+            "id",
+            "status",
+            "requirement",
+            "analysis",
+            "resolution",
+            "property",
+            "path",
+        )
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings")
+        headings = {
+            "id": "Mapping",
+            "status": "Lifecycle",
+            "requirement": "Requirement",
+            "analysis": "Analysis",
+            "resolution": "Current resolution",
+            "property": "Property",
+            "path": "Result path",
+        }
+        widths = {
+            "id": 150,
+            "status": 100,
+            "requirement": 150,
+            "analysis": 150,
+            "resolution": 170,
+            "property": 180,
+            "path": 270,
+        }
+        for column in columns:
+            tree.heading(column, text=headings[column])
+            tree.column(column, width=widths[column], anchor="w", stretch=True)
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        detail = self._detail_text(pane)
+        by_id = {item["id"]: item for item in items}
+        for item in items:
+            tree.insert(
+                "",
+                "end",
+                iid=item["id"],
+                values=(
+                    item["id"],
+                    item["status"],
+                    item["requirement_id"],
+                    item["analysis_id"],
+                    item["analysis_resolution"],
+                    item["property_name"],
+                    item["result_path_text"],
+                ),
+            )
+
+        def show_selected(event=None) -> None:
+            selection = tree.selection()
+            if selection:
+                self._show_detail(detail, by_id[selection[0]])
+
+        tree.bind("<<TreeviewSelect>>", show_selected)
+        pane.add(table_frame, weight=3)
+        pane.add(detail, weight=2)
+        children = tree.get_children()
+        if children:
+            tree.selection_set(children[0])
+            tree.focus(children[0])
+            show_selected()
 
 
 class VerificationHistoryDialog(tk.Toplevel):
@@ -728,6 +961,10 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Run History...", command=self.show_run_history)
+        analysis_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
         analysis_menu.add_command(
             label="Verify Project Requirements",
             command=self.run_project_requirements_verification,
@@ -1298,6 +1535,32 @@ class CleanroomXApp:
             )
             return False
         RunHistoryDialog(self.root, self.project.metadata)
+        return True
+
+    def show_requirements_traceability(self) -> bool:
+        try:
+            snapshot = build_project_requirements_traceability_snapshot(self.project)
+        except Exception as exc:
+            self.status_var.set("Requirements traceability validation failed")
+            messagebox.showerror(
+                "Requirements traceability unavailable",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        if (
+            snapshot["requirements"]["count"] == 0
+            and snapshot["mappings"]["count"] == 0
+        ):
+            messagebox.showinfo(
+                "Project Requirements Traceability",
+                "No project requirements or requirement evidence mappings are configured.",
+                parent=self.root,
+            )
+            return False
+
+        RequirementsTraceabilityDialog(self.root, snapshot)
         return True
 
     def show_verification_history(self) -> bool:

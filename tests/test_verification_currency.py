@@ -27,6 +27,7 @@ from cleanroomx.project_verification_persistence import (
 from cleanroomx.verification_currency import (
     VERIFICATION_CURRENCY_SCHEMA,
     assess_project_verification_currency,
+    verification_history_record_currency_context,
 )
 
 
@@ -142,6 +143,83 @@ def _persisted(tmp_path):
         completed_at_utc="2026-10-01T12:00:00Z",
     )
     return path
+
+
+def test_verification_history_record_currency_context_rejects_mismatched_analysis():
+    record = {"analysis_id": "room-a", "sequence": 1}
+    assessment = {
+        "analysis_id": "room-b",
+        "latest_record": {"sequence": 1},
+    }
+
+    try:
+        verification_history_record_currency_context(record, assessment)
+    except ValueError as exc:
+        assert "analysis does not match retained record" in str(exc)
+    else:
+        raise AssertionError("mismatched verification analysis identity was accepted")
+
+
+def test_verification_history_record_currency_context_validates_inputs():
+    try:
+        verification_history_record_currency_context("bad-record", None)
+    except TypeError as exc:
+        assert "record must be a dictionary" in str(exc)
+    else:
+        raise AssertionError("non-dictionary verification record was accepted")
+
+    try:
+        verification_history_record_currency_context(
+            {"analysis_id": "", "sequence": 1},
+            None,
+        )
+    except ValueError as exc:
+        assert "non-empty analysis_id" in str(exc)
+    else:
+        raise AssertionError("empty verification analysis identity was accepted")
+
+    try:
+        verification_history_record_currency_context(
+            {"analysis_id": "room-a", "sequence": 1},
+            "bad-assessment",
+        )
+    except TypeError as exc:
+        assert "assessment must be a dictionary" in str(exc)
+    else:
+        raise AssertionError("non-dictionary currency assessment was accepted")
+
+
+def test_verification_history_record_currency_context_is_record_specific():
+    assessment = {
+        "analysis_id": "room-a",
+        "state": "current",
+        "current": True,
+        "complete": True,
+        "mismatch_reasons": [],
+        "latest_record": {"sequence": 2},
+        "explanation": "Current verification matches the project.",
+    }
+
+    historical = verification_history_record_currency_context(
+        {"analysis_id": "room-a", "sequence": 1},
+        assessment,
+    )
+    assert historical["state"] == "historical"
+    assert historical["current"] is False
+
+    latest = verification_history_record_currency_context(
+        {"analysis_id": "room-a", "sequence": 2},
+        assessment,
+    )
+    assert latest == assessment
+    assert latest is not assessment
+
+    orphaned = verification_history_record_currency_context(
+        {"analysis_id": "removed-analysis", "sequence": 7},
+        None,
+    )
+    assert orphaned["state"] == "not_in_current_project"
+    assert orphaned["current"] is False
 
 
 def test_verification_currency_reports_current_for_matching_inline_analysis(tmp_path):

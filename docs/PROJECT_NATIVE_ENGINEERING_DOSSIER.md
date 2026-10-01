@@ -58,7 +58,8 @@ The dossier includes:
 - normalized explicit requirement-evidence mappings and their SHA-256 identity;
 - complete retained analysis-run ledger records and ledger integrity summary;
 - complete retained project-verification ledger records and integrity summary;
-- compact latest-retained verification summary per analysis;
+- compact latest-retained verification summary per analysis, with the current
+  verification-currency assessment attached to that historical record;
 - deterministic project diagnostics, including spatial/model/provenance findings;
 - explicit engineering-boundary statements.
 
@@ -76,6 +77,15 @@ is the newest retained record.
 
 The exact source hashes remain visible so a reviewer can determine what evidence
 was generated from which revision.
+
+The latest-retained verification table deliberately separates **Historical
+status** from **Current currency**. A retained historical `pass` therefore remains
+a truthful statement about the revision that was verified, while the adjacent
+currency state reports whether the same verification still matches the current
+analysis input, requirements, mappings, active mapping set, and—when provable—the
+content of file-backed engineering dependencies. Proven configuration/content
+changes are shown as `stale`; unresolved dependency freshness remains
+`dependency_freshness_unverifiable` rather than being promoted to current.
 
 ## Output safety
 

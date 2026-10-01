@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased Release 3 — verification-history current-context hardening — 2026-10-01
+
+- Reuses the canonical verification-currency record-context helper in the desktop Verification History surface instead of maintaining duplicate GUI logic.
+- Validates retained-record and current-assessment input types and requires a non-empty stable analysis identity before projecting current context.
+- Extends focused regressions for historical/latest/orphaned record context, defensive-copy behavior, malformed inputs, and identity mismatch.
+- Changes no solver equation, numerical tolerance, requirement criterion, persisted verification record, ledger hash, dependency fingerprint, CLI schema, or project schema.
+
+## Unreleased Release 3 — desktop requirement evidence drill-down — 2026-10-01
+
+- Adds a structured read-only **Requirement Evidence** view inside **Analysis → Verification History...**.
+- Projects each retained canonical finding as requirement → bound evidence → historical verdict without recomputing the verdict against current project state.
+- Shows subject scope, explicit criterion, retained actual value/unit, evidence freshness, source, and exact result locator while preserving the complete canonical record in a separate tab.
+- Uses the already integrity-validated persisted verification record and changes no solver equation, acceptance criterion, persisted verification schema, historical verdict, or project schema.
+
+## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
+
+- Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.
+- Reuses the canonical registry parsers and active-mapping cross-validation; retained disabled/superseded references remain historical and are not silently rebound when analysis identity or kind no longer matches.
+- Binds every report to one stable saved-project revision and protects both the project source and declared file-backed engineering dependencies from output overwrite.
+- Changes no solver equation, numerical tolerance, requirement acceptance criterion, verification verdict, persisted registry, or project schema.
+
+## Unreleased Release 3 — explicit evidence authority — 2026-10-01
+
+- Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.
+- Requires the exact requirement ID, subject, selected already-bound evidence ID, authority source/issuer, decision reference, decision revision, and a non-empty rationale; stale, mismatched, duplicate, provenance-incomplete, or unnecessary authority decisions are rejected.
+- Retains every competing evidence record in the canonical evidence collection and finding candidate list while evaluating only the explicitly selected authority.
+- Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
+- Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
+
 ## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
 
 - Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.

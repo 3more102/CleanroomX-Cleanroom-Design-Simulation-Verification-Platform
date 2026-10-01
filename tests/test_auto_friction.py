@@ -6,7 +6,10 @@ from cleanroomx.branch_network import analyze_branch_flow_network
 from cleanroomx.duct import DuctSection, analyze_duct_section
 from cleanroomx.fan_duct_network import analyze_fan_duct_network
 from cleanroomx.fan_duct_network_io import fan_duct_network_study_from_dict
-from cleanroomx.friction import colebrook_darcy_friction_factor
+from cleanroomx.friction import (
+    colebrook_darcy_friction_factor,
+    resolve_darcy_friction_factor,
+)
 from cleanroomx.hvac_io import (
     branch_flow_network_from_dict,
     duct_network_from_dict,
@@ -30,6 +33,56 @@ def test_colebrook_solver_matches_equation_residual() -> None:
         )
     )
     assert residual == pytest.approx(0.0, abs=1e-10)
+
+
+def test_colebrook_rejects_non_turbulent_reynolds_numbers() -> None:
+    with pytest.raises(ValueError, match="> 4000"):
+        colebrook_darcy_friction_factor(4000.0, 0.0001)
+
+
+@pytest.mark.parametrize("reynolds", [2000.0, 2300.0, 3000.0, 4000.0])
+def test_auto_friction_rejects_transition_region(reynolds: float) -> None:
+    hydraulic_diameter_m = 0.2
+    kinematic_viscosity_m2_s = 1.5e-5
+    velocity_m_s = (
+        reynolds * kinematic_viscosity_m2_s / hydraulic_diameter_m
+    )
+
+    with pytest.raises(ValueError, match="transition region"):
+        resolve_darcy_friction_factor(
+            velocity_m_s=velocity_m_s,
+            hydraulic_diameter_m=hydraulic_diameter_m,
+            kinematic_viscosity_m2_s=kinematic_viscosity_m2_s,
+            absolute_roughness_m=0.00001,
+            circular_geometry=True,
+        )
+
+
+def test_auto_friction_regime_boundaries_are_fail_closed() -> None:
+    hydraulic_diameter_m = 0.2
+    kinematic_viscosity_m2_s = 1.5e-5
+
+    laminar = resolve_darcy_friction_factor(
+        velocity_m_s=1999.0 * kinematic_viscosity_m2_s / hydraulic_diameter_m,
+        hydraulic_diameter_m=hydraulic_diameter_m,
+        kinematic_viscosity_m2_s=kinematic_viscosity_m2_s,
+        absolute_roughness_m=0.00001,
+        circular_geometry=True,
+    )
+    turbulent = resolve_darcy_friction_factor(
+        velocity_m_s=4001.0 * kinematic_viscosity_m2_s / hydraulic_diameter_m,
+        hydraulic_diameter_m=hydraulic_diameter_m,
+        kinematic_viscosity_m2_s=kinematic_viscosity_m2_s,
+        absolute_roughness_m=0.00001,
+        circular_geometry=True,
+    )
+
+    assert laminar["method"] == "laminar_64_over_re"
+    assert laminar["friction_factor"] == pytest.approx(
+        64.0 / laminar["reynolds_number"], rel=1e-12
+    )
+    assert turbulent["method"] == "colebrook"
+    assert turbulent["reynolds_number"] == pytest.approx(4001.0)
 
 
 def test_duct_section_auto_friction_uses_colebrook() -> None:

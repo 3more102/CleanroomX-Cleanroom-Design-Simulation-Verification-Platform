@@ -12,7 +12,10 @@ from .project import (
     load_project_document_with_revision,
     project_file_revision_matches,
 )
-from .project_diagnostics_cli import (\n    _assert_project_output_is_safe,\n    _assert_project_publication_safe,\n)
+from .project_diagnostics_cli import (
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
+)
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,

@@ -13,7 +13,16 @@ from .verification import aggregate_verification_status
 
 REQUIREMENT_EVIDENCE_FRESHNESS = frozenset({"current", "stale", "unknown"})
 REQUIREMENT_VERIFICATION_STATES = frozenset(
-    {"pass", "fail", "not_checked", "stale", "incomplete", "invalid", "not_applicable"}
+    {
+        "pass",
+        "fail",
+        "not_checked",
+        "stale",
+        "incomplete",
+        "invalid",
+        "inactive",
+        "not_applicable",
+    }
 )
 
 
@@ -397,6 +406,9 @@ def verify_project_requirements(
     evidence_list = tuple(evidence)
     if not all(isinstance(item, RequirementEvidence) for item in evidence_list):
         raise TypeError("evidence must contain RequirementEvidence values")
+    evidence_ids = [item.id for item in evidence_list]
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise ValueError("requirement evidence contains duplicate ids")
 
     evidence_by_binding: dict[
         tuple[str, str | None], list[RequirementEvidence]
@@ -430,6 +442,33 @@ def verify_project_requirements(
             tuple(requirement.scope) if requirement.scope else (None,)
         )
         for subject_ref in subjects:
+            if requirement.status in {"superseded", "withdrawn"}:
+                findings.append(
+                    _unresolved(
+                        requirement,
+                        subject_ref,
+                        state="inactive",
+                        explanation=(
+                            "Requirement lifecycle status is "
+                            f"{requirement.status!r}; it is not an active criterion."
+                        ),
+                        included=False,
+                    )
+                )
+                continue
+            if requirement.status != "approved":
+                findings.append(
+                    _unresolved(
+                        requirement,
+                        subject_ref,
+                        state="incomplete",
+                        explanation=(
+                            "Requirement lifecycle status is not approved; "
+                            "no engineering verdict was issued."
+                        ),
+                    )
+                )
+                continue
             if requirement.applicability == "not_applicable":
                 findings.append(
                     _unresolved(
@@ -528,6 +567,7 @@ def verify_project_requirements(
                 item["state"] == "incomplete" for item in findings
             ),
             "invalid_count": sum(item["state"] == "invalid" for item in findings),
+            "inactive_count": sum(item["state"] == "inactive" for item in findings),
         },
         "findings": findings,
     }

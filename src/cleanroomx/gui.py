@@ -84,6 +84,7 @@ from .run_history import (
     run_history_records,
     validate_run_history,
 )
+from .verification_currency import assess_project_verification_currency
 from .verification_run_history import (
     VerificationRunHistoryIntegrityError,
     validate_project_verification_run_history,
@@ -442,6 +443,125 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.detail.configure(state="disabled")
 
 
+class VerificationCurrencyDialog(tk.Toplevel):
+    """Read-only current-verification coverage for the exact saved project state."""
+
+    def __init__(self, parent: tk.Misc, report: dict):
+        super().__init__(parent)
+        self.title("Project Verification Status")
+        self.geometry("1120x680")
+        self.minsize(860, 520)
+        self.transient(parent)
+
+        summary = report.get("summary", {})
+        ttk.Label(
+            self,
+            text=(
+                f"Configured analyses: {summary.get('configured_analysis_count', 0)} — "
+                f"current {summary.get('current_count', 0)}, "
+                f"stale {summary.get('stale_count', 0)}, "
+                f"unverifiable "
+                f"{summary.get('dependency_freshness_unverifiable_count', 0)}, "
+                f"not verified {summary.get('not_verified_count', 0)}."
+            ),
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(anchor="w", padx=10, pady=(10, 6))
+
+        ttk.Label(
+            self,
+            text=(
+                "Current means the latest retained verification still matches the "
+                "saved engineering configuration and any provable dependency content."
+            ),
+        ).pack(anchor="w", padx=10, pady=(0, 8))
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        list_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(list_frame, weight=1)
+        body.add(detail_frame, weight=2)
+
+        self.items = {
+            item["analysis_id"]: item
+            for item in report.get("analyses", [])
+            if isinstance(item, dict) and isinstance(item.get("analysis_id"), str)
+        }
+        self.tree = ttk.Treeview(
+            list_frame,
+            columns=("analysis", "kind", "state", "current", "latest"),
+            show="headings",
+            height=10,
+        )
+        self.tree.heading("analysis", text="Analysis")
+        self.tree.heading("kind", text="Kind")
+        self.tree.heading("state", text="Verification state")
+        self.tree.heading("current", text="Current")
+        self.tree.heading("latest", text="Latest record")
+        self.tree.column("analysis", width=250)
+        self.tree.column("kind", width=185)
+        self.tree.column("state", width=250)
+        self.tree.column("current", width=85, stretch=False)
+        self.tree.column("latest", width=100, stretch=False)
+
+        scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+
+        for analysis_id, item in self.items.items():
+            latest = item.get("latest_record")
+            sequence = latest.get("sequence") if isinstance(latest, dict) else None
+            self.tree.insert(
+                "",
+                "end",
+                iid=analysis_id,
+                values=(
+                    item.get("analysis_name", analysis_id),
+                    item.get("analysis_kind", ""),
+                    item.get("state", "unknown"),
+                    "yes" if item.get("current") is True else "no",
+                    sequence if sequence is not None else "—",
+                ),
+            )
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+
+        self.detail = tk.Text(detail_frame, wrap="none")
+        detail_scroll = ttk.Scrollbar(
+            detail_frame,
+            orient="vertical",
+            command=self.detail.yview,
+        )
+        self.detail.configure(yscrollcommand=detail_scroll.set)
+        self.detail.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children[0])
+            self.tree.focus(children[0])
+            self._show_selected()
+
+    def _show_selected(self, event=None) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        item = self.items.get(selection[0])
+        if item is None:
+            return
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        self.detail.insert(
+            "1.0",
+            json.dumps(item, indent=2, sort_keys=True, ensure_ascii=False),
+        )
+        self.detail.configure(state="disabled")
+
+
 class IfcReimportPlanDialog(tk.Toplevel):
     """Read-only review of the deterministic IFC re-import plan."""
 
@@ -654,6 +774,10 @@ class CleanroomXApp:
         analysis_menu.add_command(
             label="Verify & Persist Project Requirements",
             command=self.persist_project_requirements_verification,
+        )
+        analysis_menu.add_command(
+            label="Verification Status...",
+            command=self.show_verification_status,
         )
         analysis_menu.add_command(
             label="Verification History...",
@@ -1217,6 +1341,91 @@ class CleanroomXApp:
             )
             return False
         RunHistoryDialog(self.root, self.project.metadata)
+        return True
+
+    def show_verification_status(self) -> bool:
+        if self._running:
+            messagebox.showwarning(
+                "Analysis running",
+                "Abandon the current run before reviewing verification status.",
+                parent=self.root,
+            )
+            return False
+        if self.project_path is None:
+            self.status_var.set(
+                "Save the project before reviewing verification status."
+            )
+            messagebox.showinfo(
+                "Save project first",
+                (
+                    "Verification currency is bound to exact saved project bytes. "
+                    "Save the project first."
+                ),
+                parent=self.root,
+            )
+            return False
+        if self._has_unsaved_changes():
+            self.status_var.set(
+                "Save project changes before reviewing verification status."
+            )
+            messagebox.showinfo(
+                "Save project changes first",
+                (
+                    "The project has unsaved changes. Save them before reviewing "
+                    "verification status so the result cannot ignore editor-only state."
+                ),
+                parent=self.root,
+            )
+            return False
+
+        expected_revision = getattr(self, "_project_file_revision", None)
+        if expected_revision is None:
+            self.status_var.set("Saved project revision identity is unavailable.")
+            messagebox.showerror(
+                "Verification status blocked",
+                (
+                    "CleanroomX cannot prove which saved project revision is open. "
+                    "Save or reopen the project, then retry."
+                ),
+                parent=self.root,
+            )
+            return False
+
+        try:
+            revision_before = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(
+                expected_revision,
+                revision_before,
+            ):
+                raise RuntimeError(
+                    "project file changed on disk after it was opened or saved"
+                )
+            report = assess_project_verification_currency(
+                self.project,
+                base_dir=self.project_path.parent,
+            )
+            revision_after = capture_project_file_revision(self.project_path)
+            if not project_file_revision_matches(revision_before, revision_after):
+                raise RuntimeError(
+                    "project file changed during verification-status inspection"
+                )
+        except Exception as exc:
+            self.status_var.set("Verification status inspection blocked")
+            messagebox.showerror(
+                "Verification status blocked",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        summary = report.get("summary", {})
+        current_count = summary.get("current_count", 0)
+        configured_count = summary.get("configured_analysis_count", 0)
+        self.status_var.set(
+            f"Verification status — {current_count}/{configured_count} "
+            "configured analyses current"
+        )
+        VerificationCurrencyDialog(self.root, report)
         return True
 
     def show_verification_history(self) -> bool:

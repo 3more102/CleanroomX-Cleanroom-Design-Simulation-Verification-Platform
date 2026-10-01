@@ -7,11 +7,12 @@ import sys
 
 import pytest
 
+import cleanroomx.cli_output as cli_output
 import cleanroomx.dossier_cli as dossier_cli
 import cleanroomx.duct_flow_cli as duct_flow_cli
 import cleanroomx.hvac_cli as hvac_cli
 import cleanroomx.recovery_cli as recovery_cli
-from cleanroomx.cli_output import dumps_strict_json
+from cleanroomx.cli_output import CLIOutputError, dumps_strict_json, write_cli_output
 from cleanroomx.strict_json import StrictJSONError
 
 
@@ -178,3 +179,142 @@ def test_dossier_cli_rejects_nonfinite_json_before_output_write(
     assert captured.out == ""
     assert "non-finite" in captured.err
     assert output.read_bytes() == previous
+
+def test_protected_cli_writer_refuses_direct_input_overwrite(tmp_path: Path) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(b'{"engineering": "source"}\n')
+    before = source.read_bytes()
+
+    with pytest.raises(CLIOutputError, match="protected input"):
+        write_cli_output(
+            source,
+            '{"report": true}\n',
+            protected_inputs=(source,),
+        )
+
+    assert source.read_bytes() == before
+
+
+def test_protected_cli_writer_refuses_hardlink_input_alias(tmp_path: Path) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(b'{"engineering": "source"}\n')
+    alias = tmp_path / "report.json"
+    alias.hardlink_to(source)
+    before = source.read_bytes()
+
+    with pytest.raises(CLIOutputError, match="protected input"):
+        write_cli_output(
+            alias,
+            '{"report": true}\n',
+            protected_inputs=(source,),
+        )
+
+    assert source.read_bytes() == before
+    assert alias.read_bytes() == before
+
+
+def test_protected_cli_writer_rechecks_identity_before_replace(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "input.json"
+    source.write_bytes(b'{"engineering": "source"}\n')
+    output = tmp_path / "report.json"
+    output.write_bytes(b'{"report": "previous"}\n')
+    source_before = source.read_bytes()
+
+    def race_atomic_write(path, text, *, before_replace=None):
+        target = Path(path)
+        target.unlink()
+        target.hardlink_to(source)
+        assert before_replace is not None
+        before_replace()
+        pytest.fail("protected output identity recheck should have failed")
+
+    monkeypatch.setattr(cli_output, "atomic_write_text", race_atomic_write)
+
+    with pytest.raises(CLIOutputError, match="protected input"):
+        write_cli_output(
+            output,
+            '{"report": "new"}\n',
+            protected_inputs=(source,),
+        )
+
+    assert source.read_bytes() == source_before
+
+
+def test_hvac_cli_refuses_to_replace_its_input(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    source = tmp_path / "hvac.json"
+    source.write_bytes(b'{"engineering": "source"}\n')
+    before = source.read_bytes()
+    monkeypatch.setattr(hvac_cli, "load_hvac_project", lambda _path: object())
+    monkeypatch.setattr(
+        hvac_cli,
+        "analyze_hvac_project",
+        lambda _project: {"status": "complete"},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-hvac",
+            str(source),
+            "--format",
+            "json",
+            "--output",
+            str(source),
+        ],
+    )
+
+    assert hvac_cli.main() == 1
+    captured = capsys.readouterr()
+    assert "protected input" in captured.err
+    assert source.read_bytes() == before
+
+
+def test_dossier_cli_refuses_to_replace_declared_dependency(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    manifest = tmp_path / "dossier.json"
+    manifest.write_text("{}\n", encoding="utf-8")
+    dependency = tmp_path / "verification.json"
+    dependency.write_bytes(b'{"engineering": "dependency"}\n')
+    before = dependency.read_bytes()
+
+    monkeypatch.setattr(
+        dossier_cli,
+        "load_strict_json",
+        lambda _path: {"verification_project": dependency.name},
+    )
+    monkeypatch.setattr(
+        dossier_cli,
+        "run_analysis",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            result={"executive_summary": {"state": "complete"}},
+            markdown="dossier\n",
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanroomx-dossier",
+            str(manifest),
+            "--format",
+            "json",
+            "--output",
+            str(dependency),
+        ],
+    )
+
+    assert dossier_cli.main() == 1
+    captured = capsys.readouterr()
+    assert "protected input" in captured.err
+    assert dependency.read_bytes() == before
+

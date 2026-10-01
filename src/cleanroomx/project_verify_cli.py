@@ -57,7 +57,6 @@ def build_parser() -> argparse.ArgumentParser:
     persist_parser.add_argument("project", help="CleanroomX project file")
     persist_parser.add_argument("analysis_id", help="Stable project analysis id")
 
-
     status_parser = sub.add_parser(
         "status",
         help=(
@@ -98,6 +97,12 @@ def _verification_exit_code(workflow: ProjectRequirementsWorkflowRun) -> int:
 
 
 def _analysis_status_gate(assessment: dict[str, Any]) -> dict[str, bool]:
+    latest_record = assessment.get("latest_record")
+    verified_pass = (
+        isinstance(latest_record, dict)
+        and latest_record.get("verified") is True
+    )
+    current = assessment.get("state") == "current"
     return {
         "current": current,
         "verified_pass": verified_pass,
@@ -136,12 +141,6 @@ def _status_payload(
     revision,
     assessment: dict[str, Any],
 ) -> dict[str, Any]:
-    latest_record = assessment.get("latest_record")
-    verified_pass = (
-        isinstance(latest_record, dict)
-        and latest_record.get("verified") is True
-    )
-    current = assessment.get("state") == "current"
     return {
         "schema": "cleanroomx.project-verification-status",
         "schema_version": 1,

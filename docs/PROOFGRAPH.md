@@ -393,3 +393,18 @@ distinction between `project_verified` and
 `project_no_failures_detected`.
 
 Empty persisted requirement sets do not produce fabricated empty ProofGraphs.
+
+
+### Immutable analysis-run evidence
+
+The Release 3 analysis-run binding can feed this adapter directly through
+`proofgraphs_from_project_requirements_analysis_run`.
+
+That path validates the analysis-run bundle integrity first, derives evidence
+freshness from project SHA-256 identity plus the run's external-dependency
+stability record, preserves the exact `/result/...` locator, executes the
+canonical requirements verifier, and only then projects the issued verdict into
+ProofGraph.
+
+A changed project revision, unstable dependency, missing result field, or
+unknown current revision therefore cannot be promoted into ProofGraph PASS.

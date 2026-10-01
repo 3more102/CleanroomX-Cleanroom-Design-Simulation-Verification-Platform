@@ -479,7 +479,11 @@ def _verify_workflow_proofgraph_projection(
     checks_by_id = {item.id: item for item in graph.checks}
     findings_by_id = {item.id: item for item in graph.findings}
     verdicts_by_id = {item.id: item for item in graph.verdicts}
-    expected_graph_evidence_ids: set[str] = set()
+    expected_graph_evidence_ids = {
+        evidence_id
+        for evidence_id, evidence in evidence_by_id.items()
+        if evidence.get("requirement_id") in graph_requirement_ids
+    }
     expected_check_ids: set[str] = set()
     expected_finding_ids: set[str] = set()
     expected_verdict_ids: set[str] = set()
@@ -508,7 +512,6 @@ def _verify_workflow_proofgraph_projection(
                 "workflow canonical verification finding evidence identities are invalid"
             )
         expected_evidence_ids = tuple(raw_evidence_ids)
-        expected_graph_evidence_ids.update(expected_evidence_ids)
         if any(
             evidence_id not in evidence_by_id
             for evidence_id in expected_evidence_ids

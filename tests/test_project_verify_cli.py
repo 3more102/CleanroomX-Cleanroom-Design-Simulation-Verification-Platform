@@ -410,3 +410,37 @@ def test_project_verify_status_discards_result_if_project_changes_during_inspect
     assert captured.out == ""
     assert "project changed during verification-status inspection" in captured.err
 
+def test_project_verify_run_rechecks_output_identity_before_publication(
+    tmp_path,
+    monkeypatch,
+):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    output = tmp_path / "workflow.json"
+    output.write_text("previous-valid-workflow\n", encoding="utf-8")
+    real_guard = verify_cli._assert_project_output_is_safe
+    guard_calls = 0
+
+    def race_guard(project, *, source, output):
+        nonlocal guard_calls
+        guard_calls += 1
+        if guard_calls == 2:
+            raise ValueError("output path identity changed before publication")
+        real_guard(project, source=source, output=output)
+
+    monkeypatch.setattr(
+        verify_cli,
+        "_assert_project_output_is_safe",
+        race_guard,
+    )
+
+    exit_code = verify_cli.main(
+        ["run", str(path), "room-a", "--output", str(output)]
+    )
+
+    assert exit_code == 2
+    assert guard_calls == 2
+    assert output.read_text(encoding="utf-8") == "previous-valid-workflow\n"
+

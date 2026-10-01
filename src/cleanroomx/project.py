@@ -850,9 +850,23 @@ def _project_document_text(project: ProjectDocument) -> str:
     return text
 
 
-def atomic_write_text(path: str | Path, text: str) -> Path:
-    """Backward-compatible project-domain re-export of the shared durable writer."""
-    return _shared_atomic_write_text(path, text)
+def atomic_write_text(
+    path: str | Path,
+    text: str,
+    *,
+    before_replace=None,
+) -> Path:
+    """Project-domain re-export of the shared durable writer.
+
+    The optional pre-replace guard runs after the staged payload is durable and
+    verified but immediately before destination replacement, so project-facing
+    publishers can revalidate protected path identity at the commit boundary.
+    """
+    return _shared_atomic_write_text(
+        path,
+        text,
+        before_replace=before_replace,
+    )
 
 
 def _atomic_write_text(

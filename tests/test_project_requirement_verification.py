@@ -209,6 +209,19 @@ def test_unit_mismatch_is_invalid_without_implicit_conversion() -> None:
     assert "no implicit conversion" in result["findings"][0]["explanation"]
 
 
+def test_missing_value_remains_incomplete_before_unit_conversion() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(minimum=1000.0, unit="Pa")),
+        [_evidence(value=None, unit="kPa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is False
+    assert finding["state"] == "incomplete"
+    assert finding["actual"] is None
+    assert "does not contain an engineering value" in finding["explanation"]
+
+
 def test_compatible_pressure_units_are_converted_before_comparison() -> None:
     result = verify_project_requirements(
         _registry(_requirement(minimum=1000.0, unit="Pa")),

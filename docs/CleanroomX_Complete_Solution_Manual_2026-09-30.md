@@ -1,8 +1,8 @@
 ---
-revision: 2.0
+revision: 2.1
 stable: v0.102.1
 baseline: Stable release baseline; development-preview features explicitly labeled
-date: 30 September 2026
+date: 1 October 2026
 ---
 
 # 0. Document control
@@ -11,8 +11,10 @@ date: 30 September 2026
 |---|---|
 | Document title | CleanroomX Professional Engineering User Manual & Verification Handbook |
 | Document ID | CX-UM-001 |
-| Revision | 2.0 |
-| Issue date | 30 September 2026 |
+| Revision | 2.1 |
+| Issue date | 1 October 2026 |
+| Document class | Controlled engineering operating reference |
+| Approval record | Maintained by the adopting organization's document-control process |
 | Stable software baseline | v0.102.1 |
 | Stable release validation | 1008 passing tests on Python 3.11, 3.12 and 3.13 at the final deterministic-spatial-drag release gate |
 | Project schema | `cleanroomx.project`, schema version 1 |
@@ -28,7 +30,22 @@ date: 30 September 2026
 
 | Rev. | Date | Description |
 |---|---|---|
+| 2.1 | 2026-10-01 | Added controlled-copy rules, operator decision gates, minimum project data-pack requirements, units/numerical conventions, deviation control, change-impact guidance, traceability matrix, and expanded official standards references. |
 | 2.0 | 2026-09-30 | Rebuilt the prior solution manual into an operator-focused, industry-style controlled manual with SOPs, release-status rules, acceptance gates, evidence handling, troubleshooting, administration, and engineering boundaries. |
+
+## Document approval and controlled-copy rules
+
+This manual is an engineering operating reference, not an approval signature. Organizations adopting CleanroomX should record **prepared by**, **technical review**, **QA/document-control review**, **approval**, **effective date**, and **superseded revision** in their own authorized document-control system.
+
+Controlled-use rules:
+
+- verify the manual revision against the approved software baseline before use;
+- do not use an uncontrolled local copy as the sole basis for a released engineering package;
+- preserve superseded manuals when required for reconstruction of historical work;
+- record deviations from this manual in the project's change/deviation record;
+- keep project approval signatures outside CleanroomX unless an organization has separately implemented an authorized electronic-signature process.
+
+A repository commit, SHA-256 digest, or successful CI run demonstrates software/document identity and automated test status. It does **not** identify or authenticate the human approver of a project.
 
 ## Software status convention used in this manual
 
@@ -47,6 +64,23 @@ This manual is written for engineers, verification specialists, project reviewer
 The intended operating pattern is:
 
 **requirements -> controlled inputs -> model validation -> engineering run -> result review -> consistency/assurance checks -> report/evidence export -> independent approval**.
+
+## 1.3 Operator quick path
+
+For day-to-day use, the minimum controlled path is:
+
+| Gate | Operator action | Release condition |
+|---|---|---|
+| G0 - Baseline | Identify CleanroomX version/commit and Python/runtime | Approved baseline is known and reproducible |
+| G1 - Inputs | Confirm source documents, units, assumptions, criteria and mappings | Inputs are complete enough for the intended analysis |
+| G2 - Validate | Run the workflow validation path | No unresolved validation errors |
+| G3 - Execute | Run the analysis without changing its inputs mid-run | Run completes with an understood solver/result state |
+| G4 - Review | Inspect normalized result, diagnostics/provenance and human-readable report | Result is fresh, plausible and traceable |
+| G5 - Cross-check | Perform independent hand checks and applicable consistency/assurance checks | No unexplained contradictions or unresolved critical findings |
+| G6 - Package | Generate report, bundle and/or assurance snapshot as applicable | Evidence is bound to the approved revision |
+| G7 - Approve | Independent engineering/quality approval outside the calculation engine | Package is formally released by the responsible organization |
+
+**Stop rule:** if any gate is not satisfied, do not skip forward by interpreting an error, stale result, unknown state or integrity failure as acceptable.
 
 ## 1.1 What CleanroomX should be used for
 
@@ -84,6 +118,26 @@ A professional workflow should assign responsibilities explicitly.
 
 **Segregation of duties recommendation:** for high-consequence work, the person approving a final engineering package should not rely only on the same unchecked input preparation that produced it. Independent review of inputs, assumptions, units, source documents, and critical outputs is recommended.
 
+## 2.1 Minimum project data pack
+
+Before a project is treated as ready for controlled analysis, the responsible engineer should identify the source for each applicable item.
+
+| Data class | Typical controlled source | Required review |
+|---|---|---|
+| Room geometry | Approved drawings, BIM/IFC model, survey | Dimensions, elevations, room identity |
+| Cleanliness/classification criteria | Approved project requirement and applicable standard | Edition, occupancy state, particle sizes, limits |
+| Pressure cascade | Approved room-pressure philosophy / URS / design basis | Reference room, sign convention, target differentials |
+| Airflow and ACH | Design air schedule, TAB basis, measured data | Supply/return/exhaust basis and units |
+| HVAC/thermal inputs | Load schedule, psychrometric design basis | Design conditions, safety factors, units |
+| Duct/network data | Duct schedule, fittings, branch topology | Geometry, roughness/loss coefficients, topology |
+| Fan data | Manufacturer-approved curve or qualified test data | Speed, density basis, interpolation domain |
+| Leakage/pressure-network data | Test data or approved engineering assumptions | Model form, coefficient, exponent/orifice properties |
+| Uncertainty bounds | Measurement specification or approved engineering basis | Distribution/bounds and correlation assumptions |
+| Acceptance criteria | Controlled requirement/rule pack | Applicability, revision and approval |
+| External evidence files | Approved source documents/data exports | Revision, file identity and path stability |
+
+Missing data must be treated as a documented limitation, not silently replaced by a default assumption unless that default is explicitly authorized and recorded.
+
 # 3. Release and qualification policy
 
 ## 3.1 Recommended production baseline
@@ -110,6 +164,21 @@ Before a controlled project begins, record:
 - external source documents and manufacturer data revisions.
 
 Do not silently upgrade the software in the middle of an approved verification package. If the software baseline changes, rerun the affected analyses and document the change.
+
+## 3.4 Units, rounding and numerical-use convention
+
+CleanroomX workflows are built around explicit engineering units defined by their input contracts. The operator is responsible for confirming that each source value has been converted to the unit expected by the selected workflow.
+
+For controlled calculations:
+
+- store and calculate with the canonical numerical state provided by the workflow;
+- treat rounded values in tables, reports and plots as presentation unless the workflow explicitly defines them as an input;
+- do not copy a rounded displayed result back into a downstream calculation when a canonical machine-readable result is available;
+- record any manual unit conversion used to create a controlled input;
+- verify sign conventions for pressure, flow direction and reference nodes before interpreting results;
+- use an independent reasonableness calculation for critical outputs.
+
+CleanroomX development explicitly protects several composed workflows from feeding presentation rounding back into engineering calculations. That implementation protection does not remove the operator's responsibility to check source units and physical meaning.
 
 # 4. Installation and readiness
 
@@ -702,6 +771,21 @@ Use `--help` on each command as the authoritative command-line syntax for the in
 
 When the software reports invalid, stale, unknown, indeterminate, not checked, unresolved dependency, failed verification, or integrity mismatch, the operator must not convert that state into PASS by interpretation alone. Resolve the cause or document the exception through the project's formal engineering/quality process.
 
+## 24.2 Deviation and exception control
+
+If a project must proceed with an unresolved non-critical limitation, create a controlled deviation record before release. The record should identify:
+
+- project and analysis identity;
+- software/manual baseline;
+- exact warning, limitation or unavailable check;
+- engineering reason the condition does not invalidate the intended decision;
+- compensating verification or independent calculation;
+- affected deliverables;
+- responsible reviewer and approver;
+- required follow-up and closure condition.
+
+A deviation record must not be used to relabel a failed calculation or violated acceptance criterion as PASS. It documents the disposition and approval of an exception; it does not alter the calculated evidence.
+
 # 25. Security and deployment
 
 ## 25.1 Security principles
@@ -730,6 +814,19 @@ A practical qualification package may include:
 - data-integrity checks: save/reopen, stale-result protection, external-write guard, bundle/snapshot verification;
 - change-control regression: selected golden cases rerun after upgrades.
 
+### Change-impact / revalidation guide
+
+| Change | Minimum response before controlled reuse |
+|---|---|
+| Documentation-only change | Confirm no software behavior changed; retain approval record |
+| Patch to report formatting only | Recheck affected report rendering and evidence identity |
+| Solver/numerical implementation change | Rerun representative golden calculations and affected project analyses |
+| Input schema or persistence change | Test open/save/migration, rollback path and historical project compatibility |
+| GUI workflow change | Repeat readiness and representative operator workflow checks |
+| Dependency/runtime upgrade | Repeat installation/readiness, CLI and GUI smoke checks; rerun project golden cases |
+| Rule-pack/acceptance-criteria change | Reapprove criteria and rerun all affected verdicts |
+| External source-file revision | Revalidate provenance and rerun dependent analyses |
+
 This is an organizational quality recommendation, not a claim that CleanroomX is already qualified for every regulated application.
 
 # 27. External standards and regulatory references
@@ -740,6 +837,7 @@ Relevant official references include:
 
 - **ISO 14644-1:2015**, *Cleanrooms and associated controlled environments - Part 1: Classification of air cleanliness by particle concentration*. ISO states this edition remains current following review/confirmation in 2021. Official information: https://www.iso.org/standard/53394.html
 - **ISO 14644-2:2015**, *Cleanrooms and associated controlled environments - Part 2: Monitoring to provide evidence of cleanroom performance related to air cleanliness by particle concentration*. Official information: https://www.iso.org/standard/53393.html
+- **ISO 14644-3:2019**, *Cleanrooms and associated controlled environments - Part 3: Test methods*. Official information: https://committee.iso.org/standard/60598.html
 - **EU GMP Annex 1 - Manufacture of Sterile Medicinal Products**, revision published 25 August 2022; most provisions came into operation 25 August 2023, with point 8.123 deferred to 25 August 2024. Official European Commission information: https://health.ec.europa.eu/latest-updates/revision-manufacture-sterile-medicinal-products-2022-08-25_en
 
 Do not copy a limit from a secondary source into a CleanroomX rule pack without confirming applicability, edition, facility type, operating state, measurement method and contractual/regulatory context.
@@ -747,6 +845,23 @@ Do not copy a limit from a secondary source into a CleanroomX rule pack without 
 # 28. Controlled release checklist
 
 Use this checklist before issuing a CleanroomX engineering package.
+
+## 28.1 Engineering traceability matrix
+
+The released package should allow a reviewer to move from requirement to source input, calculation, result and approval without relying on memory.
+
+| Traceability element | Minimum evidence |
+|---|---|
+| Requirement | Controlled requirement identifier, source document/rule pack and revision |
+| Source input | Project field or external file reference, unit, revision/hash where applicable |
+| Calculation | Analysis kind, software version/commit and execution evidence |
+| Result | Normalized result plus status/completeness and critical numerical values |
+| Provenance | Input digest, dependency identity and freshness/diagnostic evidence |
+| Review | Independent plausibility/consistency check and disposition of exceptions |
+| Issued artifact | Report/bundle/snapshot identity tied to the approved project revision |
+| Approval | Authorized human approval in the organization's controlled process |
+
+If any row cannot be reconstructed for a critical requirement, the package is not yet ready for controlled issue.
 
 ## Baseline
 

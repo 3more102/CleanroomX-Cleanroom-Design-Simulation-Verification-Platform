@@ -80,3 +80,15 @@ def test_unknown_or_incompatible_units_fail_closed() -> None:
 def test_non_numeric_or_non_finite_conversion_values_are_rejected(value) -> None:
     with pytest.raises(EngineeringUnitConversionError):
         convert_engineering_value(value, source_unit="Pa", target_unit="kPa")
+
+
+def test_finite_input_that_overflows_conversion_fails_closed() -> None:
+    with pytest.raises(
+        EngineeringUnitConversionError,
+        match="non-finite base value",
+    ):
+        convert_engineering_value(
+            1.0e308,
+            source_unit="bar",
+            target_unit="Pa",
+        )

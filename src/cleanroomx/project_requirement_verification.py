@@ -362,8 +362,9 @@ def _evaluate(
                     subject_ref,
                     state="invalid",
                     explanation=(
-                        "Evidence unit cannot be converted to the requirement unit "
-                        f"by the canonical unit authority: {exc}."
+                        "Evidence unit does not exactly match the requirement unit; "
+                        "no implicit conversion was performed because the canonical "
+                        f"unit authority rejected the conversion: {exc}."
                     ),
                     evidence=evidence,
                 )

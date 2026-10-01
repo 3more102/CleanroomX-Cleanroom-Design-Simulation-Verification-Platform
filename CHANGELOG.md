@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — external plugin trust policy — 2026-10-01
+
+- Adds a pre-import execution gate for installed analysis plugins while preserving built-in analysis behavior and plugin API v1.
+- Supports `trusted` (default), `disabled`, and distribution `allowlist` modes through `CLEANROOMX_PLUGIN_MODE` and `CLEANROOMX_PLUGIN_ALLOWLIST`.
+- Canonicalizes distribution names, supports optional exact version pins, and fails closed on malformed policy, missing distribution identity, or version mismatch.
+- Makes the allow/deny decision before `entry_point.load()`, with deterministic blocked-plugin diagnostics and effective-policy registry diagnostics.
+- This is execution control only; it does not claim package authenticity, publisher trust, dependency isolation, signing, or sandboxing.
+
 ## Unreleased Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.

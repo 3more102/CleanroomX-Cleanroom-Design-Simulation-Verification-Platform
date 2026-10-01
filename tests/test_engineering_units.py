@@ -47,6 +47,20 @@ def test_temperature_conversion_handles_affine_offset() -> None:
     assert celsius_alias.source_canonical_unit == "degC"
 
 
+def test_conventional_water_column_pressure_factors_are_explicit() -> None:
+    inch = convert_engineering_value(1.0, source_unit="inH2O", target_unit="Pa")
+    millimeter = convert_engineering_value(1.0, source_unit="mmH2O", target_unit="Pa")
+
+    assert inch.output_value == pytest.approx(249.0889)
+    assert millimeter.output_value == pytest.approx(9.80665)
+
+
+def test_btu_per_hour_uses_international_table_btu() -> None:
+    conversion = convert_engineering_value(1.0, source_unit="Btu/h", target_unit="W")
+
+    assert conversion.output_value == pytest.approx(1_055.055_852_62 / 3_600.0)
+
+
 def test_airflow_aliases_share_one_canonical_dimension() -> None:
     conversion = convert_engineering_value(
         3600.0,

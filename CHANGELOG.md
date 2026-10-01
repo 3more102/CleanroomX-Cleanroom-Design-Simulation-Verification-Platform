@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — cooperative project batch cancellation — 2026-10-01
+
+- Adds cooperative cancellation to `cleanroomx.project_batch.run_project_file()` through an optional caller callback checked only between analyses.
+- Adds `cleanroomx-project-run --cancel-file PATH` so external automation can request a clean stop by creating a sentinel file without interrupting an active solver call.
+- Records cancellation state, boundary, and associated analysis id in schema-v2 strict-JSON and Markdown batch reports; exit code 4 distinguishes clean cancellation when no execution error or source-integrity failure takes precedence.
+- Preserves deterministic project order, exact source-revision checks, completed-run provenance, solver behavior, engineering tolerances, and project schema.
+
 ## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
 
 - Adds a focused Release 3 regression gate for persisted project requirements, requirement-evidence mappings, canonical requirements verification/workflow, guarded verification persistence, verification currency, project-native dossier output, project verification CLI, and verification-history CLI.

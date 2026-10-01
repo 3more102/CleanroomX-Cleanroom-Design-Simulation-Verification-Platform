@@ -150,6 +150,32 @@ def test_missing_evidence_is_not_checked_not_pass() -> None:
     assert result["findings"][0]["state"] == "not_checked"
 
 
+def test_missing_bound_evidence_value_is_incomplete_not_fail() -> None:
+    requirement = _requirement(
+        target="HEPA",
+        minimum=None,
+        tolerance=0.0,
+        unit=None,
+        required_evidence=[],
+    )
+
+    result = verify_project_requirements(
+        _registry(requirement),
+        [
+            _evidence(
+                value=None,
+                unit=None,
+                kinds=(),
+            )
+        ],
+    )
+
+    assert result["status"] == "not_checked"
+    assert result["findings"][0]["state"] == "incomplete"
+    assert result["findings"][0]["actual"] is None
+    assert result["verified"] is False
+
+
 def test_stale_and_unknown_freshness_fail_closed() -> None:
     requirements = _registry(_requirement())
 

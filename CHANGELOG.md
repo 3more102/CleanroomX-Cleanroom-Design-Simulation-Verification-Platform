@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — project-native engineering dossier — 2026-10-01
+
+- Adds a deterministic project-native dossier that projects canonical analysis definitions, first-class requirements, explicit requirement-evidence mappings, retained immutable analysis runs, persisted canonical verification runs, and project diagnostics into one evidence artifact.
+- Binds every dossier to the exact saved source-project SHA-256 and adds an independent canonical dossier SHA-256.
+- Adds `cleanroomx-project-dossier` with strict JSON and Markdown output plus guarded atomic report publication.
+- Preserves historical verification semantics: a retained verification record remains bound to its own recorded source revision and is never silently reclassified as verification of later project edits.
+- Reuses the existing project-loader, run-ledger, verification-ledger, diagnostics, and output-safety authorities; no solver equation or requirement acceptance rule changes.
+
+
 ## Unreleased Release 3 — verification history operator interface — 2026-10-01
 
 - Adds `cleanroomx-verification-history list/show` for stable, read-only inspection of persisted canonical verification evidence.

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — verification history CLI currency context — 2026-10-01
+
+- Upgrades `cleanroomx-verification-history` inspection output to schema version 2 with explicit per-record current-project context.
+- Labels only each analysis's latest retained record with canonical current/stale/dependency-freshness-unverifiable state; older records are `historical` and removed-analysis records are `not_in_current_project`.
+- Uses one shared row-context authority for CLI and desktop history so operator surfaces cannot silently diverge.
+- Preserves immutable historical verification records and changes no solver equations, requirement verdicts, persistence format, or project schema.
+
+
 ## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
 
 - Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.

@@ -249,17 +249,26 @@ def _analysis_currency(
                 ),
             }
 
+    current_explanation = (
+        "The latest retained verification matches the current analysis input, "
+        "requirements, mappings, and active mapping identities."
+    )
+    if dependencies:
+        current_explanation += (
+            " Every declared file-backed engineering dependency also matches the "
+            "persisted execution content fingerprint."
+        )
+    else:
+        current_explanation += (
+            " This analysis declares no file-backed external engineering dependencies."
+        )
     return {
         **base,
         "latest_record": record_summary,
         "state": _CURRENT,
         "current": True,
         "complete": True,
-        "explanation": (
-            "The latest retained verification matches the current analysis input, "
-            "requirements, mappings, and active mapping identities, and this "
-            "analysis declares no file-backed external engineering dependencies."
-        ),
+        "explanation": current_explanation,
     }
 
 
@@ -270,9 +279,9 @@ def assess_project_verification_currency(
 ) -> dict[str, Any]:
     """Assess whether retained project-verification evidence matches current state.
 
-    This is deliberately fail-closed. A matching configuration with file-backed
-    dependencies is not called current because persisted verification records do
-    not retain dependency fingerprints in schema version 1.
+    This is deliberately fail-closed. File-backed verification is current only
+    when a v2 record retains exact dependency fingerprints and the currently
+    resolved dependency bytes match them.
     """
     if not isinstance(project, ProjectDocument):
         raise TypeError("verification currency requires a ProjectDocument")

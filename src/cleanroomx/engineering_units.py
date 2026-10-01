@@ -139,6 +139,7 @@ _UNIT_DEFINITIONS: dict[str, _UnitDefinition] = {
     "h⁻¹": _ACH,
     "ACH": _ACH,
     "K": _K,
+    "C": _DEGC,
     "degC": _DEGC,
     "°C": _DEGC,
     "degF": _DEGF,
@@ -191,7 +192,12 @@ def _finite_number(value: Any, field_name: str) -> float:
         raise EngineeringUnitConversionError(
             f"{field_name} must be a finite numeric value"
         )
-    result = float(value)
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise EngineeringUnitConversionError(
+            f"{field_name} must be representable as a finite numeric value"
+        ) from exc
     if not math.isfinite(result):
         raise EngineeringUnitConversionError(
             f"{field_name} must be a finite numeric value"

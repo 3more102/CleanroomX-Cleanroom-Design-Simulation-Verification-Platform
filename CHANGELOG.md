@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — canonical verification-history record currency — 2026-10-01
+
+- Centralizes retained verification-record current-project context in the canonical verification-currency module and reuses it from desktop and CLI.
+- Bumps `cleanroomx-verification-history` inspection output to schema version 2 with explicit per-record `current_currency` plus separate `record_currency` for full-record inspection.
+- Labels older records `historical` and removed-analysis records `not_in_current_project`, while fail-closing analysis-identity mismatches instead of projecting currency onto the wrong record.
+- Preserves persisted verification evidence, dependency fingerprints, solver equations, numerical tolerances, requirement verdicts, and project schema unchanged.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

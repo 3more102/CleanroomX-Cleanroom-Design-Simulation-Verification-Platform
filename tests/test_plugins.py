@@ -343,6 +343,14 @@ def test_plugin_trust_policy_environment_defaults_to_trusted():
     assert policy.configuration_error is None
 
 
+def test_plugin_trust_policy_environment_defaults_to_disabled():
+    policy = plugin_trust_policy_from_environment({})
+
+    assert policy.mode == "disabled"
+    assert policy.allowlist == ()
+    assert policy.configuration_error is None
+
+
 def test_plugin_trust_policy_environment_invalid_configuration_fails_closed():
     policy = plugin_trust_policy_from_environment(
         {

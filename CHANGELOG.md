@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — project requirements to ProofGraph — 2026-10-01
+
+- Adds a deterministic adapter from the canonical project requirements verifier into the existing ProofGraph schema instead of creating a parallel evidence or comparison model.
+- Emits one ProofGraph per non-empty persisted requirement set and preserves stable requirement identity, explicit criteria, source revision, lifecycle/applicability, evidence provenance, project/evidence/verification digests, and canonical source states.
+- Maps PASS/FAIL directly, maps explicit inactive/not-applicable/not-checked states to NOT_CHECKED, and maps stale/incomplete/invalid evidence to UNKNOWN without promoting unresolved evidence to PASS.
+- Preserves native single evidence lifecycle kinds where unambiguous and uses neutral declared evidence for aggregate or unsupported labels rather than fabricating design/calculation/commissioning provenance.
+- Adds deterministic and strict-parser round-trip regressions for verified, stale, inactive, not-applicable, multi-set, multi-kind, missing-value, and empty-set cases.
+
 ## Unreleased Release 3 — canonical project requirements verification — 2026-10-01
 
 - Adds the first canonical requirements -> evidence -> verdict engine over the persisted project requirements registry.

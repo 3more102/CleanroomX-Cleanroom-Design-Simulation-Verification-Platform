@@ -1,13 +1,19 @@
 # Changelog
 
-## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
+## v0.103.0 — Release 3 — 2026-10-01
+
+Release 3 closes the project requirements → evidence → verdict traceability line on top of the v0.102.1 spatial baseline. It includes persisted requirements and evidence mappings, canonical verification and unit conversion, tamper-evident verification history and currency, ProofGraph integrity and precedence assessment, project-native verification/dossier/traceability operator surfaces, external-plugin trust controls, and protected project-batch report publication.
+
+The previously verified Release 3 functional closure at PR #707 head `875408729ec3587d96f4c86f77b14de80b6548be` passed CI run `36875375370` on Python 3.11, 3.12, and 3.13 plus Windows launcher smoke. Subsequent Release 3 hardening is included in this release candidate. The immutable `v0.103.0` tag/release may be published only from a successful CI workflow whose head SHA is still the exact current `main` SHA.
+
+### project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.
 - Reuses the canonical project/dependency path-identity guard already used by other project-facing operator surfaces.
 - Adds focused regressions for direct source overwrite, same-file alias overwrite, and external dependency overwrite.
 - Changes no solver equation, numerical tolerance, analysis input, project schema, project-batch schema, or execution-order semantics.
 
-## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01
+### ProofGraph evidence precedence and conflict policy — 2026-10-01
 
 - Adds an explicit strongest-first evidence-kind/source precedence policy over existing ProofGraph evidence without mutating or deleting historical records.
 - Resolves a claim only when policy precedence produces one unique preferred item; equally preferred disagreements fail closed as explicit conflicts.
@@ -16,28 +22,28 @@
 - Marks the report machine-readably as `decision_scope=assessment_only` and `changes_canonical_verification=false` so precedence inspection cannot be mistaken for canonical requirement-verdict authority.
 - Adds regression coverage for precedence selection, source tie-breaking, equal-value peers, fail-closed value/unit conflicts, deterministic ordering, subject isolation, and graph immutability.
 
-## Unreleased Release 3 — verification-history current-context hardening — 2026-10-01
+### verification-history current-context hardening — 2026-10-01
 
 - Reuses the canonical verification-currency record-context helper in the desktop Verification History surface instead of maintaining duplicate GUI logic.
 - Validates retained-record and current-assessment input types and requires a non-empty stable analysis identity before projecting current context.
 - Extends focused regressions for historical/latest/orphaned record context, defensive-copy behavior, malformed inputs, and identity mismatch.
 - Changes no solver equation, numerical tolerance, requirement criterion, persisted verification record, ledger hash, dependency fingerprint, CLI schema, or project schema.
 
-## Unreleased Release 3 — desktop requirement evidence drill-down — 2026-10-01
+### desktop requirement evidence drill-down — 2026-10-01
 
 - Adds a structured read-only **Requirement Evidence** view inside **Analysis → Verification History...**.
 - Projects each retained canonical finding as requirement → bound evidence → historical verdict without recomputing the verdict against current project state.
 - Shows subject scope, explicit criterion, retained actual value/unit, evidence freshness, source, and exact result locator while preserving the complete canonical record in a separate tab.
 - Uses the already integrity-validated persisted verification record and changes no solver equation, acceptance criterion, persisted verification schema, historical verdict, or project schema.
 
-## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
+### project requirements traceability CLI — 2026-10-01
 
 - Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.
 - Reuses the canonical registry parsers and active-mapping cross-validation; retained disabled/superseded references remain historical and are not silently rebound when analysis identity or kind no longer matches.
 - Binds every report to one stable saved-project revision and protects both the project source and declared file-backed engineering dependencies from output overwrite.
 - Changes no solver equation, numerical tolerance, requirement acceptance criterion, verification verdict, persisted registry, or project schema.
 
-## Unreleased Release 3 — explicit evidence authority — 2026-10-01
+### explicit evidence authority — 2026-10-01
 
 - Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.
 - Requires the exact requirement ID, subject, selected already-bound evidence ID, authority source/issuer, decision reference, decision revision, and a non-empty rationale; stale, mismatched, duplicate, provenance-incomplete, or unnecessary authority decisions are rejected.
@@ -45,7 +51,7 @@
 - Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
 - Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
 
-## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
+### workflow ProofGraph cross-artifact integrity — 2026-10-01
 
 - Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.
 - Bumps the project-requirements workflow output to schema v2 and retains the complete canonical normalized requirements snapshot so its SHA-256 and full RequirementSet projection can be re-verified instead of trusting a lossy graph projection.
@@ -55,21 +61,21 @@
 - Adds regressions that deliberately reseal both `graph_sha256` and `workflow_sha256` after tampering, proving cross-artifact inconsistencies still fail closed.
 - Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
 
-## Unreleased Release 3 — external plugin trust gate — 2026-10-01
+### external plugin trust gate — 2026-10-01
 
 - Adds operator-controlled `trusted`, `disabled`, and `allowlist` modes for installed analysis plugins, with external plugins disabled by default until an operator explicitly opts in.
 - Applies deny decisions before `entry_point.load()`, so blocked external plugins are not imported through the CleanroomX plugin entry point.
 - Supports canonicalized distribution-name allowlisting with optional exact version pins and fails closed on invalid configuration, missing distribution identity, or pin mismatch.
 - Exposes the effective trust policy in application-registry diagnostics while preserving plugin API v1, built-in analyses, solver equations, engineering tolerances, and project schema.
 
-## Unreleased Release 3 — retained canonical ProofGraph verification evidence — 2026-10-01
+### retained canonical ProofGraph verification evidence — 2026-10-01
 
 - New persisted project-verification records retain the complete canonical ProofGraph documents alongside their existing SHA-256 identities.
 - Ledger validation reparses each retained graph, requires canonical serialization, unique digest ordering, and exact agreement with `proofgraph_sha256`; legacy hash-only schema-v1 records remain readable.
 - The configured verification-history byte budget now fails closed when the newest record alone exceeds it instead of silently retaining an oversized record.
 - No solver equation, requirement comparison, ProofGraph verdict rule, or historical verification identity semantic is changed.
 
-## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
+### canonical requirement unit conversion — 2026-10-01
 
 - Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.
 - Converts compatible numeric evidence into the persisted requirement unit before equality/minimum/maximum/range comparison, including affine temperature conversion.
@@ -77,27 +83,27 @@
 - Fails closed for unsupported unit spellings, incompatible dimensions, named-unit versus unitless mismatches, and non-numeric criteria with differing units.
 - Preserves the legacy exact-unit finding shape and changes no solver equations, requirement criteria, persisted project schema, or historical verification records.
 
-## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
+### qualification uncertainty ProofGraph — 2026-10-01
 
 - Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.
 - Represents measured qualification inputs as commissioning evidence and canonical conservative intervals/differential-pressure intervals as calculation evidence with explicit upstream lineage.
 - Preserves canonical PASS/FAIL/INDETERMINATE only when the measurements needed by the check carry source provenance; missing provenance fails closed to UNKNOWN while retaining the numerical result in verification-run metadata.
 - Adds deterministic round-trip regression coverage and changes no configured limits, solver equations, project schema, or certification claims.
 
-## Unreleased Release 3 — cooperative project batch cancellation — 2026-10-01
+### cooperative project batch cancellation — 2026-10-01
 
 - Adds cooperative cancellation to `cleanroomx.project_batch.run_project_file()` through an optional caller callback checked only between analyses.
 - Adds `cleanroomx-project-run --cancel-file PATH` so external automation can request a clean stop by creating a sentinel file without interrupting an active solver call.
 - Records cancellation state, boundary, and associated analysis id in schema-v2 strict-JSON and Markdown batch reports; exit code 4 distinguishes clean cancellation when no execution error or source-integrity failure takes precedence.
 - Preserves deterministic project order, exact source-revision checks, completed-run provenance, solver behavior, engineering tolerances, and project schema.
 
-## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
+### CI and installed operator-surface gate — 2026-10-01
 
 - Adds a focused Release 3 regression gate for persisted project requirements, requirement-evidence mappings, canonical requirements verification/workflow, guarded verification persistence, verification currency, project-native dossier output, project verification CLI, and verification-history CLI.
 - Extends clean-wheel installation checks to import and expose the Release 3 `cleanroomx-project-dossier`, `cleanroomx-project-verify`, and `cleanroomx-verification-history` entry points on every supported Python matrix job.
 - Keeps the complete suite as the final correctness authority while making Release 3 traceability/operator regressions visible as an independent release gate.
 
-## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
+### desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.
 - Reuses the canonical Release 3 requirements and mapping parsers and cross-validates active mappings against the current project analysis collection before display.
@@ -105,14 +111,14 @@
 - Preserves historical disabled/superseded mapping references as traceability context instead of silently rebinding them.
 - Changes no solver equation, acceptance comparison, requirement criterion, mapping registry, project schema, or persisted evidence.
 
-## Unreleased Release 3 — persisted verification status gate — 2026-10-01
+### persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.
 - Returns exit code 0 only when the latest retained verification is both current against the present engineering configuration/dependency content and a canonical verified PASS.
 - Separates verification currency from the historical verdict in strict JSON so a current FAIL and a stale historical PASS both fail closed for automation.
 - Rechecks project-file stability across inspection and reuses the existing verification-currency/dependency-fingerprint authority without re-running solvers or mutating evidence.
 
-## Unreleased Release 3 — diagnostics verification currency context — 2026-10-01
+### diagnostics verification currency context — 2026-10-01
 
 - Adds an explicit **Current verification currency** section to project-diagnostics Markdown output.
 - Keeps immutable historical verification status separate from current/stale/dependency-freshness-unverifiable/not-verified/not-configured state.
@@ -120,13 +126,13 @@
 - Reuses the canonical verification-currency authority and changes no solver equations, requirement verdict semantics, persisted records, or project schema.
 
 
-## Unreleased Release 3 — truthful current dependency currency explanation — 2026-10-01
+### truthful current dependency currency explanation — 2026-10-01
 
 - Corrects the canonical verification-currency explanation for file-backed analyses whose persisted dependency fingerprints still match current content.
 - Keeps the existing fail-closed current/stale/unverifiable state semantics unchanged while ensuring operator-facing provenance text never claims that verified file-backed analyses have no external dependencies.
 
 
-## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
+### desktop verification history currency context — 2026-10-01
 
 - Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.
 - Applies canonical current/stale/dependency-freshness-unverifiable state only to each analysis's latest retained record; older rows are explicitly labeled `historical`.
@@ -134,7 +140,7 @@
 - Reuses saved-project base-directory dependency checks and changes no solver equations, requirement verdicts, persisted verification records, or project schema.
 
 
-## Unreleased Release 3 — dossier verification currency context — 2026-10-01
+### dossier verification currency context — 2026-10-01
 
 - Separates each project-dossier latest retained verification's historical PASS/FAIL status from its present verification-currency assessment.
 - Attaches the canonical current/stale/dependency-freshness-unverifiable assessment to the corresponding retained record summary without rewriting historical evidence.
@@ -142,7 +148,7 @@
 - Reuses the existing verification-currency authority and changes no solver equations, requirements comparison semantics, persisted ledger records, or project schema.
 
 
-## Unreleased Release 3 — persisted verification dependency fingerprints — 2026-10-01
+### persisted verification dependency fingerprints — 2026-10-01
 
 - Persists stable external engineering dependency fingerprints from execution provenance into new project-verification ledger records.
 - Extends verification engineering identity to bind retained dependency fingerprints while remaining backward-compatible with legacy records that omit the optional field.
@@ -151,7 +157,7 @@
 - Reuses the existing immutable dependency-snapshot/provenance authority and does not change solver equations, requirement comparison semantics, or project file schema.
 
 
-## Unreleased Release 3 — desktop project requirements verification — 2026-10-01
+### desktop project requirements verification — 2026-10-01
 
 - Adds **Analysis → Verify Project Requirements** for read-only execution of the canonical saved-project requirements workflow.
 - Adds **Analysis → Verify & Persist Project Requirements** for guarded persistence of PASS, FAIL, or incomplete canonical verification evidence.
@@ -159,7 +165,7 @@
 - Blocks desktop verification for unsaved projects, unsaved edits, unavailable saved-revision identity, or external on-disk changes.
 - Reloads the committed project after verification persistence so desktop state, project revision identity, autosave, and history views remain synchronized with disk.
 
-## Unreleased Release 3 — verification currency — 2026-10-01
+### verification currency — 2026-10-01
 
 - Adds a deterministic, fail-closed assessment of whether retained canonical project-requirements verification still matches the current analysis input, requirements, mappings, and active mapping identities.
 - Exposes the canonical analysis-input SHA-256 and declared external-dependency introspection already used by execution provenance.
@@ -168,7 +174,7 @@
 - Adds actionable stale/unverifiable diagnostics without changing solver equations, numerical tolerances, requirement verdict semantics, or persisted verification history.
 
 
-## Unreleased Release 3 — project verification operator CLI — 2026-10-01
+### project verification operator CLI — 2026-10-01
 
 - Adds `cleanroomx-project-verify run` for read-only execution of the canonical saved-project requirements → evidence → verification → ProofGraph workflow.
 - Adds `cleanroomx-project-verify persist` to run the same workflow and append the canonical result to the guarded tamper-evident project verification ledger.
@@ -177,7 +183,7 @@
 - Preserves failed and incomplete verification as valid historical audit evidence when the operator chooses `persist`.
 
 
-## Unreleased Release 3 — desktop project dossier export — 2026-10-01
+### desktop project dossier export — 2026-10-01
 
 - Adds **File → Export Project Engineering Dossier...** to the desktop application.
 - Requires an explicitly saved, clean project so the exported artifact is bound to exact source bytes rather than unsaved editor state.
@@ -185,7 +191,7 @@
 - Supports complete strict-JSON dossier export and review-oriented Markdown export while preserving the existing canonical dossier SHA-256.
 
 
-## Unreleased Release 3 — project-native engineering dossier — 2026-10-01
+### project-native engineering dossier — 2026-10-01
 
 - Adds a deterministic project-native dossier that projects canonical analysis definitions, first-class requirements, explicit requirement-evidence mappings, retained immutable analysis runs, persisted canonical verification runs, and project diagnostics into one evidence artifact.
 - Binds every dossier to the exact saved source-project SHA-256 and adds an independent canonical dossier SHA-256.
@@ -194,7 +200,7 @@
 - Reuses the existing project-loader, run-ledger, verification-ledger, diagnostics, and output-safety authorities; no solver equation or requirement acceptance rule changes.
 
 
-## Unreleased Release 3 — verification history operator interface — 2026-10-01
+### verification history operator interface — 2026-10-01
 
 - Adds `cleanroomx-verification-history list/show` for stable, read-only inspection of persisted canonical verification evidence.
 - Binds inspection output to a stable source-file revision and emits strict JSON only after the project remains unchanged across the inspection.
@@ -202,7 +208,7 @@
 - Keeps solver equations, requirement acceptance semantics, persistence format, and historical verification records unchanged.
 
 
-## Unreleased Release 3 — persisted canonical verification runs — 2026-10-01
+### persisted canonical verification runs — 2026-10-01
 
 - Adds a bounded integrity-chained project verification history separate from solver analysis run history.
 - Persists exact source-project revision, immutable analysis bundle identity, analysis input identity, normalized requirements/mappings digests, exact evidence locators, canonical evidence, full canonical verification findings/completeness, ProofGraph identities, verifier implementation identity, CleanroomX version, runtime environment, and code revision provenance.
@@ -212,7 +218,7 @@
 - Validates the verification ledger during canonical project load/save and fails closed on evidence, digest, identity, or chain tampering.
 
 
-## Unreleased Release 3 — project-native requirements execution — 2026-10-01
+### project-native requirements execution — 2026-10-01
 
 - Adds a direct saved-project orchestration path from one selected project analysis through immutable execution, persisted explicit evidence mappings, canonical requirements verification, and ProofGraph.
 - Binds every workflow run to the exact loaded project SHA-256 and rechecks the source before and after analysis execution; source mutation prevents verification output.
@@ -222,7 +228,7 @@
 - Adds a deterministic workflow identity derived from project revision, normalized requirements/mappings, immutable run identity, canonical verification identity, and ProofGraph identity.
 
 
-## Unreleased Release 3 — persisted requirement evidence mappings — 2026-10-01
+### persisted requirement evidence mappings — 2026-10-01
 
 - Adds a strict, versioned project-owned requirement-to-analysis evidence mapping registry under `project.metadata.requirement_evidence_mappings`.
 - Persists explicit requirement ID, analysis ID, expected analysis kind, subject/entity scope, engineering property, exact result path, unit, evidence labels, lifecycle status, and notes without inferring solver semantics.
@@ -232,7 +238,7 @@
 - Does not add a second requirements verifier, unit-conversion path, standards criteria, or compliance claim.
 
 
-## Unreleased Release 3 — immutable analysis evidence binding — 2026-10-01
+### immutable analysis evidence binding — 2026-10-01
 
 - Connects integrity-verified immutable CleanroomX analysis-run bundles to the canonical project requirements verifier through explicit result mappings.
 - Derives requirement-evidence freshness from the exact current analysis input plus live content verification of the immutable run's recorded external dependencies instead of accepting a free-form current/stale assertion; the producing project SHA-256 remains provenance only.
@@ -241,7 +247,7 @@
 - Adds a direct immutable-analysis -> requirement verification -> ProofGraph workflow without duplicating comparison semantics.
 - Adds regressions for current/stale/unknown freshness, changed inputs, unstable dependencies, integrity tampering, missing/non-scalar results, deterministic mapping order, locator escaping, and end-to-end ProofGraph provenance.
 
-## Unreleased Release 3 — project requirements to ProofGraph — 2026-10-01
+### project requirements to ProofGraph — 2026-10-01
 
 - Adds a deterministic adapter from the canonical project requirements verifier into the existing ProofGraph schema instead of creating a parallel evidence or comparison model.
 - Emits one ProofGraph per non-empty persisted requirement set and preserves stable requirement identity, explicit criteria, source revision, lifecycle/applicability, evidence provenance, project/evidence/verification digests, and canonical source states.
@@ -249,7 +255,7 @@
 - Preserves native single evidence lifecycle kinds where unambiguous and uses neutral declared evidence for aggregate or unsupported labels rather than fabricating design/calculation/commissioning provenance.
 - Adds deterministic and strict-parser round-trip regressions for verified, stale, inactive, not-applicable, multi-set, multi-kind, missing-value, and empty-set cases.
 
-## Unreleased Release 3 — canonical project requirements verification — 2026-10-01
+### canonical project requirements verification — 2026-10-01
 
 - Adds the first canonical requirements -> evidence -> verdict engine over the persisted project requirements registry.
 - Requires an approved active requirement, explicit applicability, one unambiguous evidence binding per requirement/entity, current freshness, required evidence kinds, exact unit agreement, and an explicit acceptance criterion before a PASS can be issued.
@@ -258,7 +264,7 @@
 - Adds deterministic requirements/evidence/result SHA-256 identities and order-independent evidence normalization.
 - Adds fail-closed regressions for tolerance boundaries, missing/stale evidence, unit mismatch, ambiguous bindings, unresolved applicability, absent criteria, project-scope binding, and numeric canonicalization.
 
-## Unreleased Release 3 — first-class project requirements registry — 2026-10-01
+### first-class project requirements registry — 2026-10-01
 
 - Adds a strict, versioned project-owned requirements registry under `project.metadata.requirements` without changing the existing project schema version.
 - Captures stable requirement identity, discipline/category, versioned source/reference, unit/criteria/tolerance, applicability, entity scope, verification method, required evidence, lifecycle status, assumptions, and notes.

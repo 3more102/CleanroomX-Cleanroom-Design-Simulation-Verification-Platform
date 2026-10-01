@@ -169,11 +169,12 @@ def plugin_trust_policy_from_environment(
 ) -> PluginTrustPolicy:
     """Return the effective fail-closed plugin trust policy.
 
-    Invalid mode or allowlist configuration disables all external plugins rather
-    than falling back to the permissive trusted mode.
+    Missing configuration defaults to disabled. Invalid mode or allowlist
+    configuration also disables all external plugins rather than falling back to
+    the permissive trusted mode.
     """
     source = os.environ if environ is None else environ
-    raw_mode = source.get(PLUGIN_TRUST_MODE_ENV, "trusted")
+    raw_mode = source.get(PLUGIN_TRUST_MODE_ENV, "disabled")
     configured_mode = str(raw_mode).strip().lower()
     if configured_mode not in _PLUGIN_TRUST_MODES:
         return PluginTrustPolicy(

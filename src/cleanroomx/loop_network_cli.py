@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+from .cli_output import CLIOutputError, write_cli_output
 import json
 
-from .project import atomic_write_text
 from .loop_network import solve_looped_network
 from .loop_network_io import load_looped_flow_network
 from .loop_network_report import markdown_looped_network_report
@@ -45,7 +47,15 @@ def main() -> int:
         else markdown_looped_network_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.network,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-loop-flow: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0

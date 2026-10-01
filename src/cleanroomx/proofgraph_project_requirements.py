@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 from typing import Any, Iterable
 
 from .project_requirement_analysis_evidence import (
@@ -375,7 +376,7 @@ def proofgraphs_from_project_requirements_analysis_run(
     *,
     source_project_revision: str,
     current_analysis_input: dict[str, Any] | None,
-    base_dir: str | None = None,
+    base_dir: str | Path | None = None,
 ) -> tuple[ProofGraph, ...]:
     """Bind one immutable analysis run and project it into canonical ProofGraphs."""
     bindings = bind_analysis_run_requirement_evidence(

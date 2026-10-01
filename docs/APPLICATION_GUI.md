@@ -153,3 +153,35 @@ The Release 2 integration adds durable project-state and evidence workflows arou
 - **Analysis plugins** use the versioned plugin API and are isolated from built-in registry keys. See [Plugins](PLUGINS.md).
 
 Stale cached results are rejected when the active analysis input or recorded external dependency revision no longer matches the completed run.
+
+
+## Project requirements traceability review
+
+Use **Analysis → Requirements Traceability...** to inspect the project-owned
+requirements registry and persisted requirement-to-analysis evidence mappings
+without opening the raw project JSON.
+
+The dialog is read-only and is built from the canonical Release 3 parsers. Before
+displaying mappings, it reuses the canonical cross-project mapping validation
+against the current analysis collection. It shows:
+
+- requirements and mappings SHA-256 revision identities;
+- requirement-set, requirement, mapping, active-mapping, and actively mapped
+  requirement counts;
+- requirement lifecycle status, applicability, entity scope, and explicit
+  acceptance criteria;
+- mapping lifecycle status, subject reference, resolved analysis identity,
+  engineering property name, and exact result path;
+- complete normalized requirement or mapping JSON for the selected row.
+
+Disabled or superseded mappings may intentionally retain historical requirement
+or analysis references. The dialog labels unresolved retained references as
+historical context and does not silently rebind them. A retained analysis ID is
+only treated as resolved when the current analysis also matches the mapping's
+recorded analysis kind; an ID reused for a different analysis kind remains
+historical context.
+
+This interface does not edit requirements or mappings, infer standards limits,
+convert units, run comparisons, or issue verification verdicts. Project
+requirements verification remains under the canonical Release 3 workflow and
+verification engine.

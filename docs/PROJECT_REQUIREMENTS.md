@@ -87,3 +87,12 @@ The new persisted registry is the project-owned requirements authority that subs
 `requirement -> applicable entity -> evidence -> comparison -> verdict -> ProofGraph`
 
 That later mapping must remain explicit; this foundation does not silently convert room classifications, BIM properties, or external standards into acceptance criteria.
+
+
+## Desktop traceability review
+
+The desktop application exposes the persisted registry through
+**Analysis → Requirements Traceability...**. The view is read-only, reports the
+canonical registry SHA-256, and shows each requirement's set, lifecycle status,
+applicability, scope, source revision, and explicit criterion. It does not edit or
+infer requirements and it does not issue a verification verdict.

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
+import sys
 
+from .cli_output import dumps_strict_json
+from .strict_json import StrictJSONError
 from .project import atomic_write_text
 from .fan_loop_speed import analyze_fan_loop_speed_study
 from .fan_loop_speed_io import load_fan_loop_speed_study
@@ -27,11 +29,18 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     result = analyze_fan_loop_speed_study(load_fan_loop_speed_study(args.study))
-    text = (
-        json.dumps(result, indent=2)
-        if args.format == "json"
-        else markdown_fan_loop_speed_report(result)
-    )
+    try:
+        text = (
+            dumps_strict_json(result)
+            if args.format == "json"
+            else markdown_fan_loop_speed_report(result)
+        )
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-fan-loop-speed: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if args.output:
         atomic_write_text(args.output, text)
     else:

@@ -108,3 +108,17 @@ Project loading and saving validate the verification ledger at the canonical
 project boundary. Tampered record content, evidence digests, verification
 digests, engineering identities, record hashes or chain links cause project
 validation to fail closed.
+
+
+## Operator CLI
+
+Use the project verification command to produce and persist a new ledger record
+from a saved project analysis:
+
+```text
+cleanroomx-project-verify persist project.cleanroomx.json <analysis-id>
+```
+
+A canonical FAIL or incomplete result is still persisted when the workflow itself
+is valid; the command returns exit code 1 so CI/operator scripts can distinguish
+that outcome from verified PASS (0) and operational/integrity failure (2).

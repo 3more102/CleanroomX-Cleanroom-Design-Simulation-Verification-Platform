@@ -760,6 +760,77 @@ def markdown_project_diagnostics_report(result: dict[str, Any]) -> str:
             )
         lines.append("")
 
+    verification_currency = result.get("verification_currency", {})
+    currency_summary = verification_currency.get("summary", {})
+    currency_analyses = verification_currency.get("analyses", [])
+    orphaned_currency_records = verification_currency.get(
+        "orphaned_latest_records",
+        [],
+    )
+    lines.extend(
+        [
+            "## Current verification currency",
+            "",
+            (
+                "Historical verification status above remains immutable evidence. "
+                "Current currency below assesses whether each present analysis still "
+                "matches the latest retained verification identity and dependency state."
+            ),
+            "",
+            f"- Configured analyses: **{currency_summary.get('configured_analysis_count', 0)}**",
+            f"- Current: **{currency_summary.get('current_count', 0)}**",
+            f"- Stale: **{currency_summary.get('stale_count', 0)}**",
+            (
+                "- Dependency freshness unverifiable: "
+                f"**{currency_summary.get('dependency_freshness_unverifiable_count', 0)}**"
+            ),
+            f"- Not verified: **{currency_summary.get('not_verified_count', 0)}**",
+            f"- Not configured: **{currency_summary.get('not_configured_count', 0)}**",
+            f"- Orphaned latest records: **{len(orphaned_currency_records)}**",
+            (
+                "- All configured analyses current: **"
+                + (
+                    "yes"
+                    if currency_summary.get("all_configured_analyses_current") is True
+                    else "no"
+                )
+                + "**"
+            ),
+            "",
+        ]
+    )
+    if currency_analyses:
+        lines.extend(
+            [
+                "| Analysis | Currency state | Current | Complete | Mismatch reasons | Latest sequence |",
+                "|---|---|---|---|---|---:|",
+            ]
+        )
+        for item in currency_analyses:
+            latest_record = item.get("latest_record")
+            latest_sequence = (
+                latest_record.get("sequence")
+                if isinstance(latest_record, dict)
+                else "—"
+            )
+            mismatch_reasons = item.get("mismatch_reasons", [])
+            mismatch_text = ", ".join(
+                str(reason) for reason in mismatch_reasons
+            ) or "—"
+            lines.append(
+                "| {analysis} | {state} | {current} | {complete} | {reasons} | {sequence} |".format(
+                    analysis=markdown_text(
+                        item.get("analysis_name") or item.get("analysis_id") or ""
+                    ),
+                    state=markdown_text(item.get("state", "")),
+                    current="yes" if item.get("current") is True else "no",
+                    complete="yes" if item.get("complete") is True else "no",
+                    reasons=markdown_text(mismatch_text),
+                    sequence=latest_sequence,
+                )
+            )
+        lines.append("")
+
     lines.extend(
         [
             "## Engineering boundary",

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — verification currency operator context integration — 2026-10-01
+
+- Centralizes per-record verification-currency context in the canonical verification-currency authority and reuses it across desktop and CLI history inspection.
+- Upgrades verification-history inspection JSON to schema version 2 with explicit current, historical, and removed-analysis record context.
+- Preserves the diagnostics currency reporting and verification status gate already merged on main instead of duplicating them.
+- Keeps historical verification evidence immutable and preserves fail-closed dependency freshness semantics; no solver equation, numerical tolerance, requirement criterion, ledger hash, or project schema is changed.
+
+
 ## Unreleased Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.

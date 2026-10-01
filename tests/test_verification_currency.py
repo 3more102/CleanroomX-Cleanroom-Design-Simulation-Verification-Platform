@@ -27,6 +27,7 @@ from cleanroomx.project_verification_persistence import (
 from cleanroomx.verification_currency import (
     VERIFICATION_CURRENCY_SCHEMA,
     assess_project_verification_currency,
+    verification_history_record_currency_context,
 )
 
 
@@ -142,6 +143,22 @@ def _persisted(tmp_path):
         completed_at_utc="2026-10-01T12:00:00Z",
     )
     return path
+
+
+def test_verification_history_record_currency_context_rejects_mismatched_analysis():
+    record = {"analysis_id": "room-a", "sequence": 1}
+    assessment = {
+        "analysis_id": "room-b",
+        "latest_record": {"sequence": 1},
+    }
+
+    try:
+        verification_history_record_currency_context(record, assessment)
+    except ValueError as exc:
+        assert "analysis does not match retained record" in str(exc)
+    else:
+        raise AssertionError("mismatched verification analysis identity was accepted")
+
 
 
 def test_verification_currency_reports_current_for_matching_inline_analysis(tmp_path):

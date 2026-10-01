@@ -345,3 +345,51 @@ not lost, but an unverifiable input chain is never promoted to a verified verdic
 This remains conservative engineering screening. It does not claim equipment
 selection, hourly load simulation, statistical uncertainty, certification, or
 any external standard requirement.
+
+
+## Project requirements verification integration
+
+`proofgraphs_from_project_requirements_verification` connects the Release 3
+project-owned requirements registry and canonical requirements verifier to
+ProofGraph without introducing another comparison engine.
+
+The adapter calls the canonical verifier once, then maps its already-issued
+results into ProofGraph. It emits one graph per non-empty persisted requirement
+set because ProofGraph schema v1 owns exactly one `RequirementSet` per graph.
+
+Each persisted requirement retains its stable ID, title, source/reference,
+scope, discipline/category, source revision, lifecycle status, applicability,
+explicit acceptance criterion, unit, verification method, required evidence
+labels, assumptions, and notes in the graph requirement record.
+
+Bound engineering evidence retains:
+
+- stable evidence identity;
+- source and source revision;
+- engineering property, value, and unit;
+- subject/entity reference;
+- project revision in the evidence version field when supplied;
+- originating calculation in provenance;
+- deterministic source identity.
+
+The adapter does not manufacture evidence layers. When one canonical evidence
+binding declares exactly one native ProofGraph lifecycle kind, that kind is
+preserved. If a binding represents multiple evidence labels or a label outside
+ProofGraph's lifecycle vocabulary, it is represented as neutral `declared`
+evidence. The complete required-evidence labels remain in the requirement
+criteria and the canonical verifier remains authoritative for their completeness.
+
+Canonical PASS and FAIL map directly to ProofGraph PASS and FAIL. Source
+`not_checked`, `inactive`, and `not_applicable` states map to ProofGraph
+`not_checked`. Stale, incomplete, and invalid source states map to
+`unknown` because they cannot support a verified engineering verdict.
+The exact canonical source state is retained structurally in
+`VerificationRun.metadata.source_findings`; it is not discarded during the
+status projection.
+
+The verification run also retains the project requirements digest, evidence
+digest, canonical verification digest, project-level truth state, and the
+distinction between `project_verified` and
+`project_no_failures_detected`.
+
+Empty persisted requirement sets do not produce fabricated empty ProofGraphs.

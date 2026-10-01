@@ -5,12 +5,13 @@ import json
 from pathlib import Path
 import sys
 
+from .cli_output import CLIOutputError, write_cli_output
+
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
     run_analysis,
 )
-from .project import atomic_write_text
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,7 +70,15 @@ def main() -> int:
     result = run.result
     text = json.dumps(result, indent=2) if args.format == "json" else run.markdown
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.verification_project, args.hvac_project),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-consistency: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 2 if result["status"] == "fail" else 0

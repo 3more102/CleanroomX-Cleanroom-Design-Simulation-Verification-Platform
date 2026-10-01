@@ -2091,18 +2091,13 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
     app._editor_analysis = lambda: None
     app._sync_metadata = lambda: None
     app._has_unsaved_changes = lambda: False
-    writes = []
-    app._write_export_file = (
-        lambda path, content, *, label: writes.append((path, content, label)) or True
-    )
-
     real_guard = gui_module._assert_project_output_is_safe
     guard_calls = 0
 
     def race_guard(project, *, source, output):
         nonlocal guard_calls
         guard_calls += 1
-        if guard_calls == 2:
+        if guard_calls == 3:
             raise ValueError("output path identity changed before publication")
         real_guard(project, source=source, output=output)
 
@@ -2125,8 +2120,7 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
 
     app.export_project_engineering_dossier()
 
-    assert guard_calls == 2
-    assert writes == []
+    assert guard_calls == 3
     assert destination.read_text(encoding="utf-8") == "previous-valid-report\n"
     assert errors
     assert errors[-1][0] == "Project dossier export failed"

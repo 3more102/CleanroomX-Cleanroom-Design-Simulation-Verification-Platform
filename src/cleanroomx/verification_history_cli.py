@@ -145,8 +145,8 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = Path(args.project).expanduser().resolve(strict=False)
         project, revision, history_summary, records, currency = _load_stable_project(source)
         currency_by_analysis = {
             item["analysis_id"]: item

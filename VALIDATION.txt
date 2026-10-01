@@ -1,3 +1,12 @@
+RELEASE 3 / v0.103.0 RELEASE IDENTITY CANDIDATE
+Prepared: 2026-10-01
+- Release 3 functional closure is merged through main commit 165b0c61f776270f58e8b691171181d694857570.
+- v0.103.0 publication is permitted only after successful CI for the exact current main SHA.
+- Required CI coverage: Python 3.11/3.12/3.13 complete suite, focused Release 3 regressions, clean wheel/install checks, and Windows launcher smoke.
+- The publisher rechecks package/demo identity and refuses publication if main has advanced beyond the successful CI SHA.
+- Project schema remains cleanroomx.project schema_version 1.
+- No solver equation, numerical tolerance, unit convention, or configured engineering acceptance criterion is changed by the release-identity patch.
+
 CLEANROOMX RELEASE VALIDATION
 =============================
 

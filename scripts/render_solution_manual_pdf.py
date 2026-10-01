@@ -37,6 +37,7 @@ LIGHT_RED = colors.HexColor("#FCEDEC")
 BORDER = colors.HexColor("#D6DEE5")
 WHITE = colors.white
 CODE_FENCE = chr(96) * 3
+MANUAL_META = {"revision": "unknown", "date": "undated", "stable": "uncontrolled"}
 
 
 def register_fonts():
@@ -105,14 +106,17 @@ class ManualDoc(BaseDocTemplate):
         canvas.rect(0, h-13*mm, w, 13*mm, fill=1, stroke=0)
         canvas.setFillColor(WHITE)
         canvas.setFont(FONT_BOLD, 7.4)
-        canvas.drawString(16*mm, h-8.3*mm, "CLEANROOMX | ENGINEERING USER & VALIDATION MANUAL")
+        canvas.drawString(16*mm, h-8.3*mm, "CLEANROOMX | PROFESSIONAL ENGINEERING USER MANUAL")
         canvas.setFont(FONT, 7)
         canvas.drawRightString(w-16*mm, h-8.3*mm, self.current_chapter[:64])
         canvas.setStrokeColor(BORDER)
         canvas.line(16*mm, 14*mm, w-16*mm, 14*mm)
         canvas.setFillColor(MUTED)
         canvas.setFont(FONT, 7)
-        canvas.drawString(16*mm, 9.2*mm, "Revision 2.0 | 30 Sep 2026 | Verify software version before use")
+        revision = MANUAL_META.get("revision", "unknown")
+        issue_date = MANUAL_META.get("date", "undated")
+        stable = MANUAL_META.get("stable", "uncontrolled")
+        canvas.drawString(16*mm, 9.2*mm, f"Revision {revision} | {issue_date} | Stable baseline {stable}")
         canvas.drawRightString(w-16*mm, 9.2*mm, f"Page {doc.page}")
         canvas.restoreState()
 
@@ -365,10 +369,10 @@ def cover(meta):
     usable = A4[0]-34*mm
     rows = [
         ["Document","Engineering User & Validation Manual"],
-        ["Revision",meta.get("revision","2.0")],
-        ["Stable release",meta.get("stable","v0.102.1")],
+        ["Revision",meta.get("revision","unknown")],
+        ["Stable release",meta.get("stable","uncontrolled")],
         ["Engineering baseline",meta.get("baseline","")],
-        ["Manual date",meta.get("date","30 September 2026")],
+        ["Manual date",meta.get("date","undated")],
     ]
     data = [[Paragraph(inline(a),ST["TableHead"] if i==0 else ST["Table"]),Paragraph(inline(b),ST["TableHead"] if i==0 else ST["Table"])] for i,(a,b) in enumerate(rows)]
     t = Table(data,colWidths=[44*mm,116*mm])
@@ -396,6 +400,8 @@ def cover(meta):
 def parse(source):
     lines = Path(source).read_text(encoding="utf-8").splitlines()
     meta, lines = front_matter(lines)
+    MANUAL_META.clear()
+    MANUAL_META.update(meta)
     story = cover(meta)
     story.append(Paragraph("Contents",ST["TOCHead"]))
     toc = TableOfContents()

@@ -143,7 +143,6 @@ _UNIT_DEFINITIONS: dict[str, _UnitDefinition] = {
     "h⁻¹": _ACH,
     "ACH": _ACH,
     "K": _K,
-    "C": _DEGC,
     "degC": _DEGC,
     "°C": _DEGC,
     "degF": _DEGF,

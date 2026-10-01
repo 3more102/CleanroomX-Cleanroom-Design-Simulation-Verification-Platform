@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
+
+- Adds a focused Release 3 regression gate for persisted project requirements, requirement-evidence mappings, canonical requirements verification/workflow, guarded verification persistence, verification currency, project-native dossier output, project verification CLI, and verification-history CLI.
+- Extends clean-wheel installation checks to import and expose the Release 3 `cleanroomx-project-dossier`, `cleanroomx-project-verify`, and `cleanroomx-verification-history` entry points on every supported Python matrix job.
+- Keeps the complete suite as the final correctness authority while making Release 3 traceability/operator regressions visible as an independent release gate.
+
 ## Unreleased Release 3 — desktop requirements traceability — 2026-10-01
 
 - Adds **Analysis → Requirements Traceability...** as a dedicated read-only desktop inspection surface for persisted project requirements and requirement-to-analysis evidence mappings.

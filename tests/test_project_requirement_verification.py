@@ -209,6 +209,99 @@ def test_unit_mismatch_is_invalid_without_implicit_conversion() -> None:
     assert "no implicit conversion" in result["findings"][0]["explanation"]
 
 
+def test_compatible_pressure_units_are_converted_before_comparison() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(minimum=1000.0, unit="Pa")),
+        [_evidence(value=1.0, unit="kPa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["status"] == "pass"
+    assert finding["actual"] == pytest.approx(1000.0)
+    assert finding["evidence_actual"] == 1.0
+    assert finding["evidence_unit"] == "kPa"
+    assert finding["unit"] == "Pa"
+    assert finding["unit_conversion"]["dimension"] == "pressure"
+    assert finding["unit_conversion"]["scale"] == pytest.approx(1000.0)
+    assert finding["delta"] == pytest.approx(0.0)
+
+
+def test_airflow_units_are_converted_with_explicit_trace() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(minimum=1.0, unit="m3/s")),
+        [_evidence(value=3600.0, unit="m3/h")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["actual"] == pytest.approx(1.0)
+    assert finding["unit_conversion"]["source_canonical_unit"] == "m3/h"
+    assert finding["unit_conversion"]["target_canonical_unit"] == "m3/s"
+
+
+def test_temperature_units_apply_affine_conversion_before_tolerance() -> None:
+    result = verify_project_requirements(
+        _registry(
+            _requirement(
+                target=20.0,
+                minimum=None,
+                tolerance=0.01,
+                unit="degC",
+            )
+        ),
+        [_evidence(value=68.0, unit="degF")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["actual"] == pytest.approx(20.0, abs=1e-12)
+    assert finding["delta"] == pytest.approx(0.0, abs=1e-12)
+    assert finding["unit_conversion"]["offset"] != 0.0
+
+
+def test_equivalent_air_change_rate_aliases_are_explicitly_supported() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(minimum=20.0, unit="1/h")),
+        [_evidence(value=20.0, unit="ACH")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["actual"] == pytest.approx(20.0)
+    assert finding["unit_conversion"]["dimension"] == "air_change_rate"
+
+
+def test_incompatible_named_and_unitless_values_fail_closed() -> None:
+    requirement = _requirement(
+        target=20.0,
+        minimum=None,
+        unit=None,
+    )
+    result = verify_project_requirements(
+        _registry(requirement),
+        [_evidence(value=20.0, unit="Pa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is False
+    assert finding["state"] == "invalid"
+    assert "unset unit" in finding["explanation"]
+
+
+def test_exact_unit_comparison_keeps_legacy_finding_shape() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(unit="Pa", minimum=1000.0)),
+        [_evidence(value=1000.0, unit="Pa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert "unit_conversion" not in finding
+    assert "evidence_actual" not in finding
+    assert "evidence_unit" not in finding
+
+
 def test_missing_required_evidence_kind_is_incomplete() -> None:
     result = verify_project_requirements(
         _registry(

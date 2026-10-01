@@ -81,14 +81,14 @@ silently substituting a different workflow.
 ## Operator trust policy
 
 Plugin code still executes with the same Python/OS privileges as CleanroomX, so
-discovery supports a **pre-import trust gate** controlled before process startup:
+discovery supports a **pre-import trust gate** controlled before process startup. External plugin loading is disabled by default:
 
-- `CLEANROOMX_PLUGIN_MODE=trusted` — backward-compatible default; installed
-  plugin entry points are discovered and imported using the existing validation
-  and failure-isolation rules.
-- `CLEANROOMX_PLUGIN_MODE=disabled` — no external analysis entry point is
-  imported. Built-in analyses remain available and each blocked entry point is
-  reported in plugin diagnostics.
+- `CLEANROOMX_PLUGIN_MODE=disabled` — secure default; no external analysis
+  entry point is imported. Built-in analyses remain available and each blocked
+  entry point is reported in plugin diagnostics.
+- `CLEANROOMX_PLUGIN_MODE=trusted` — explicit compatibility opt-in that permits
+  installed plugin entry points to use the existing validation and
+  failure-isolation rules.
 - `CLEANROOMX_PLUGIN_MODE=allowlist` — only distributions named in
   `CLEANROOMX_PLUGIN_ALLOWLIST` may be imported. The allowlist is a
   comma-separated set of distribution names with optional exact version pins,

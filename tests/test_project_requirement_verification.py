@@ -555,3 +555,30 @@ def test_duplicate_evidence_authority_for_one_binding_is_rejected() -> None:
             evidence,
             evidence_authority=[first, second],
         )
+
+
+def test_evidence_authority_rejects_inactive_or_unresolved_requirement() -> None:
+    evidence = [
+        _evidence(evidence_id="E-1"),
+        _evidence(evidence_id="E-2"),
+    ]
+    authority = RequirementEvidenceAuthority(
+        requirement_id="REQ-ACH",
+        subject_ref="ROOM-A",
+        evidence_id="E-1",
+        rationale="Operator decision must not activate an unresolved requirement.",
+    )
+
+    for requirement in (
+        _requirement(status="draft"),
+        _requirement(applicability="not_applicable"),
+    ):
+        with pytest.raises(
+            ValueError,
+            match="approved, applicable requirements",
+        ):
+            verify_project_requirements(
+                _registry(requirement),
+                evidence,
+                evidence_authority=[authority],
+            )

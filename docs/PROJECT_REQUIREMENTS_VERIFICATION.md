@@ -53,14 +53,41 @@ For text/boolean equality, a non-zero numeric tolerance is invalid.
 
 ## Units
 
-The current verification slice performs no implicit unit conversion.
+Numeric requirement verification uses the centralized CleanroomX engineering-unit
+authority. Conversion occurs only when both unit spellings are explicitly
+registered and belong to the same engineering dimension.
 
-Evidence units must exactly match the requirement unit, including both being
-unset for a deliberately unitless criterion. A mismatch is `invalid` and maps
-to the aggregate `not_checked` truth state.
+The non-SI factors follow NIST SI conversion guidance. In particular,
+`inH2O` and `mmH2O` use the NIST **conventional** water-column values
+(249.0889 Pa/inH2O and 9.80665 Pa/mmH2O), not a temperature-specific fluid
+column. The `Btu/h` token means **International Table Btu per hour**;
+thermochemical or other historical Btu definitions are intentionally not aliased.
 
-This is intentional until the centralized unit-conversion layer becomes the
-single canonical unit authority.
+Reference: NIST SP 811, Appendix B conversion factors and footnotes.
+
+The initial canonical registry covers cleanroom/HVAC requirement families for:
+
+- pressure;
+- volumetric airflow;
+- air-change rate aliases;
+- temperature, including affine Celsius/Fahrenheit/Kelvin conversion;
+- length, area, and volume;
+- velocity;
+- power;
+- mass flow;
+- humidity ratio.
+
+Each converted finding retains the raw evidence value/unit and adds an explicit
+`unit_conversion` record containing the source/target canonical units,
+engineering dimension, converted value, scale, and offset. The finding's
+`actual` and `delta` are expressed in the requirement unit.
+
+The authority is deliberately fail-closed. Unsupported spellings, incompatible
+dimensions, named-unit versus unitless mismatches, and unit changes on
+non-numeric equality criteria are `invalid`; CleanroomX does not guess a unit
+or silently treat unrelated dimensional quantities as equivalent. Exact-unit
+comparisons retain the pre-conversion finding shape so existing canonical
+verification evidence is not rewritten merely by enabling the new authority.
 
 ## Evidence completeness and freshness
 
@@ -71,7 +98,7 @@ A PASS requires all of the following:
 - exactly one authoritative evidence binding exists for the requirement/entity;
 - evidence freshness is explicitly `current`;
 - every `required_evidence` kind is present;
-- units agree exactly;
+- evidence units either match exactly or have an explicit compatible canonical conversion;
 - the explicit criterion evaluates successfully.
 
 The engine never chooses silently between multiple evidence values for one
@@ -132,7 +159,7 @@ Evidence input order does not change the verification result or digest.
 This slice establishes canonical comparison semantics and evidence binding. It
 does not yet:
 
-- convert units;
+- infer or guess unsupported engineering units;
 - select solver outputs automatically;
 - infer requirement-to-analysis mappings;
 - generate ProofGraph records automatically;

@@ -927,7 +927,7 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
 
     captured = {}
 
-    def fail_write(path, content):
+    def fail_write(path, content, *, before_replace=None):
         raise OSError("disk full")
 
     monkeypatch.setattr(gui_module, "atomic_write_text", fail_write)

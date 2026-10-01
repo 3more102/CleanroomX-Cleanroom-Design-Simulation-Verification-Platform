@@ -114,12 +114,13 @@ def moist_air_cp_kj_kg_da_k(state: AirState) -> float:
 def dew_point_c(state: AirState) -> float:
     """Solve dew point from the same phase-aware saturation model."""
     target_pressure_kpa = vapor_pressure_kpa(state)
-    lower_c = -100.0
+    lower_c = IAPWS_SUBLIMATION_MIN_TEMPERATURE_C
     upper_c = state.dry_bulb_c
 
     if target_pressure_kpa < _saturation_vapor_pressure_iapws_kpa(lower_c):
         raise ValueError(
-            "dew point is below -100 C, outside the supported IAPWS inversion range"
+            "dew point is below the IAPWS R14 sublimation-pressure domain "
+            "(50 K / -223.15 C)"
         )
 
     # Relative humidity is constrained to <= 100%, so dew point cannot exceed

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
+from .strict_json import StrictJSONError
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
     run_analysis,
 )
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output, dumps_strict_json
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,9 +67,20 @@ def main() -> int:
         return 3
 
     result = run.result
-    text = json.dumps(result, indent=2) if args.format == "json" else run.markdown
+    try:
+        text = dumps_strict_json(result) if args.format == "json" else run.markdown
+    except StrictJSONError as exc:
+        print(
+            f"cleanroomx-consistency: error: analysis result is not strict JSON: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.verification_project, args.hvac_project),
+        )
     else:
         print(text)
     return 2 if result["status"] == "fail" else 0

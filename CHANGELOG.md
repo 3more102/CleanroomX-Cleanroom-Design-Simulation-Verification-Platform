@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — project-wide persisted verification status gate — 2026-10-01
+
+- Extends `cleanroomx-project-verify status` so omitting the analysis ID gates every analysis with active requirement-evidence mappings in one deterministic strict-JSON inspection.
+- Fails closed unless at least one analysis is configured and every configured analysis is both current against the canonical verification-currency authority and backed by a persisted verified PASS.
+- Preserves the existing per-analysis status command and schema while emitting a separate versioned aggregate status schema with accepted/rejected analysis identities.
+- Reuses the existing project-revision stability guard and dependency-fingerprint checks; no solver equation, requirement verdict, persisted verification record, project schema, or engineering acceptance semantic is changed.
+
 ## Unreleased Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.

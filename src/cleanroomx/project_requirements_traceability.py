@@ -62,9 +62,11 @@ def build_project_requirements_traceability(
                         "set": {
                             "id": requirement_set.id,
                             "title": requirement_set.title,
+                            "description": requirement_set.description,
                             "source": requirement_set.source,
                             "source_revision": requirement_set.source_revision,
                         },
+                        "description": requirement.description,
                         "discipline": requirement.discipline,
                         "category": requirement.category,
                         "source": requirement.source,

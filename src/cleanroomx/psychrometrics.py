@@ -9,11 +9,21 @@ MOLECULAR_MASS_RATIO_WATER_TO_DRY_AIR = 0.621945
 DRY_AIR_GAS_CONSTANT_KJ_KG_K = 0.287042
 
 
-def _saturation_vapor_pressure_iapws_kpa(temperature_c: float) -> float:
-    """Return saturation pressure in kPa using the ASHRAE/IAPWS phase model."""
-    temperature_k = temperature_c + 273.15
+def _saturation_vapor_pressure_iapws_kpa(
+    temperature_c: float,
+    *,
+    over_ice: bool | None = None,
+) -> float:
+    """Return IAPWS saturation pressure in kPa for the selected phase.
 
-    if temperature_c < 0.0:
+    When over_ice is omitted, ASHRAE's normal phase switch is applied:
+    ice below 0 C and liquid water at/above 0 C. Dew-point inversion can force
+    one branch so a numerical bracket never crosses the discontinuous switch.
+    """
+    temperature_k = temperature_c + 273.15
+    use_ice = temperature_c < 0.0 if over_ice is None else over_ice
+
+    if use_ice:
         # IAPWS R14-08(2011), ice-Ih sublimation curve as reproduced by
         # ASHRAE Handbook—Fundamentals 2025, Chapter 1.
         theta = temperature_k / 273.16
@@ -102,28 +112,78 @@ def moist_air_cp_kj_kg_da_k(state: AirState) -> float:
 
 
 def dew_point_c(state: AirState) -> float:
-    """Solve dew point from the same phase-aware saturation model."""
+    """Solve dew point on one continuous ASHRAE/IAPWS phase branch."""
     target_pressure_kpa = vapor_pressure_kpa(state)
-    lower_c = -100.0
-    upper_c = state.dry_bulb_c
-
-    if target_pressure_kpa < _saturation_vapor_pressure_iapws_kpa(lower_c):
+    minimum_c = -100.0
+    minimum_pressure_kpa = _saturation_vapor_pressure_iapws_kpa(
+        minimum_c,
+        over_ice=True,
+    )
+    if target_pressure_kpa < minimum_pressure_kpa:
         raise ValueError(
             "dew point is below -100 C, outside the supported IAPWS inversion range"
         )
 
-    # Relative humidity is constrained to <= 100%, so dew point cannot exceed
-    # dry-bulb temperature under this model. Bisection is deterministic and
-    # avoids mixing a separate dew-point approximation with the saturation model.
+    ice_zero_pressure_kpa = _saturation_vapor_pressure_iapws_kpa(
+        0.0,
+        over_ice=True,
+    )
+    water_zero_pressure_kpa = _saturation_vapor_pressure_iapws_kpa(
+        0.0,
+        over_ice=False,
+    )
+
+    if target_pressure_kpa <= ice_zero_pressure_kpa:
+        lower_c = minimum_c
+        upper_c = min(state.dry_bulb_c, 0.0)
+        over_ice = True
+    elif target_pressure_kpa >= water_zero_pressure_kpa:
+        lower_c = 0.0
+        upper_c = state.dry_bulb_c
+        over_ice = False
+    else:
+        raise ValueError(
+            "dew point is indeterminate in the ASHRAE/IAPWS 0 C phase-switch "
+            "pressure gap; no root exists on either implemented saturation branch"
+        )
+
+    def pressure_at(temperature_c: float) -> float:
+        return _saturation_vapor_pressure_iapws_kpa(
+            temperature_c,
+            over_ice=over_ice,
+        )
+
+    lower_pressure_kpa = pressure_at(lower_c)
+    upper_pressure_kpa = pressure_at(upper_c)
+    pressure_tolerance_kpa = max(1e-12, abs(target_pressure_kpa) * 1e-12)
+
+    if target_pressure_kpa < lower_pressure_kpa - pressure_tolerance_kpa:
+        raise ValueError("dew-point inversion target is below its selected phase bracket")
+    if target_pressure_kpa > upper_pressure_kpa + pressure_tolerance_kpa:
+        raise ValueError("dew-point inversion target is above its selected phase bracket")
+    if abs(target_pressure_kpa - lower_pressure_kpa) <= pressure_tolerance_kpa:
+        return lower_c
+    if abs(target_pressure_kpa - upper_pressure_kpa) <= pressure_tolerance_kpa:
+        return upper_c
+
+    # Relative humidity is constrained to <= 100%, so the selected continuous
+    # phase branch brackets the root. Fixed-iteration bisection is deterministic.
     for _ in range(100):
         midpoint_c = 0.5 * (lower_c + upper_c)
-        midpoint_pressure_kpa = _saturation_vapor_pressure_iapws_kpa(midpoint_c)
+        midpoint_pressure_kpa = pressure_at(midpoint_c)
         if midpoint_pressure_kpa < target_pressure_kpa:
             lower_c = midpoint_c
         else:
             upper_c = midpoint_c
 
-    return 0.5 * (lower_c + upper_c)
+    result_c = 0.5 * (lower_c + upper_c)
+    residual_kpa = pressure_at(result_c) - target_pressure_kpa
+    if abs(residual_kpa) > pressure_tolerance_kpa:
+        raise ValueError(
+            "dew-point inversion did not converge within the pressure residual "
+            f"tolerance ({residual_kpa:+.6g} kPa residual)"
+        )
+    return result_c
 
 
 def dry_air_mass_flow_kg_s(airflow_m3_h: float, state: AirState) -> float:

@@ -5,7 +5,7 @@
 - Persists stable external engineering dependency fingerprints from execution provenance into new project-verification ledger records.
 - Extends verification engineering identity to bind retained dependency fingerprints while remaining backward-compatible with legacy records that omit the optional field.
 - Rechecks file-backed dependency SHA-256 and byte size during verification-currency assessment when the project base directory is known.
-- Allows matching file-backed verification to be proven current; changed or unavailable dependencies make verification stale, while legacy records remain explicitly freshness-unverifiable.
+- Allows matching file-backed verification to be proven current; a proven content mismatch makes verification stale, while unavailable, unstable, unresolved, or legacy dependency evidence remains explicitly freshness-unverifiable.
 - Reuses the existing immutable dependency-snapshot/provenance authority and does not change solver equations, requirement comparison semantics, or project file schema.
 
 

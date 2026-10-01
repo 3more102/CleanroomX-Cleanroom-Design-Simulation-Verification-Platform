@@ -105,7 +105,7 @@ def test_finite_input_that_overflows_conversion_fails_closed() -> None:
 def test_conversion_overflow_fails_with_authority_error() -> None:
     with pytest.raises(
         EngineeringUnitConversionError,
-        match="produced a non-finite value",
+        match="non-finite base value",
     ):
         convert_engineering_value(
             1e308,

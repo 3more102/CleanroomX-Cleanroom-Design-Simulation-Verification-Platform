@@ -30,6 +30,8 @@ swallowed by discovery.
 
 Some workflows, including dossier and consistency, resolve user-supplied file references relative to the saved project directory. Treat project files and referenced engineering data as trusted local inputs and review their paths before execution.
 
+The standalone dossier and consistency CLIs reject `--output` destinations that resolve to their source manifest/input files or declared external engineering dependencies. The same identity check is repeated immediately before atomic replacement so a late alias change cannot silently convert a report publication into engineering-input replacement.
+
 Project saving uses a temporary file followed by replacement to reduce the chance of leaving a partially written project after an interrupted save.
 
 Portable project bundles are treated as untrusted archive input. Inspection rejects unsafe paths, duplicate or undeclared members, encryption, unsupported compression, integrity mismatches, and explicit resource-limit violations before extraction is published. Bundle extraction uses a private staging directory and never calls `ZipFile.extractall()`.

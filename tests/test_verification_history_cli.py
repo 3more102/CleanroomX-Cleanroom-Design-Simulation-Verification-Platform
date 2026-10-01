@@ -157,9 +157,31 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     assert record["verification"]["status"] == "pass"
     assert record["verification"]["verified"] is True
     assert record["record_sha256"] == persisted.record["record_sha256"]
+    assert record["current_context"]["state"] == "current"
+    assert record["current_context"]["current"] is True
     assert payload["source"]["stable_during_inspection"] is True
     assert len(payload["source"]["sha256"]) == 64
     json.dumps(payload, allow_nan=False)
+
+
+def test_verification_history_cli_marks_older_records_historical(tmp_path, capsys):
+    path, _ = _persist_one(tmp_path)
+    workflow = run_project_requirements_workflow(path, "room-a")
+    persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T11:00:00Z",
+    )
+
+    exit_code = verification_history_main(["list", str(path)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert [item["sequence"] for item in payload["records"]] == [1, 2]
+    assert payload["records"][0]["current_context"]["state"] == "historical"
+    assert payload["records"][0]["current_context"]["current"] is False
+    assert payload["records"][1]["current_context"]["state"] == "current"
+    assert payload["records"][1]["current_context"]["current"] is True
 
 
 def test_verification_history_cli_filters_by_analysis_id(tmp_path, capsys):
@@ -186,6 +208,8 @@ def test_verification_history_cli_shows_full_record(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["record"] == persisted.record
+    assert payload["current_context"]["state"] == "current"
+    assert payload["current_context"]["current"] is True
     assert payload["record"]["evidence"][0]["evidence_locator"] == "/result/ach"
     assert payload["record"]["verification"]["verified"] is True
 

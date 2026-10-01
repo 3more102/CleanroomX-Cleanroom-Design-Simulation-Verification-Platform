@@ -1256,6 +1256,29 @@ def analysis_external_dependency_references(
     return tuple(_external_dependency_references(kind, payload))
 
 
+def analysis_external_dependency_fingerprints(
+    kind: str,
+    payload: dict,
+    *,
+    base_dir: str | Path | None = None,
+) -> tuple[dict, ...]:
+    """Capture stable content fingerprints for declared external dependencies.
+
+    The returned records use the same stable-file authority as immutable analysis
+    execution provenance. Callers should provide the saved project's directory for
+    relative dependency paths.
+    """
+    if not isinstance(kind, str) or not kind:
+        raise ValueError("analysis kind must be a non-empty string")
+    if not isinstance(payload, dict):
+        raise TypeError("analysis dependency fingerprinting requires a JSON object")
+    base = Path(base_dir) if base_dir is not None else None
+    return tuple(
+        copy.deepcopy(item)
+        for item in _capture_external_dependencies(kind, payload, base)
+    )
+
+
 def _capture_external_dependencies(
     kind: str, payload: dict, base_dir: Path | None
 ) -> list[dict]:

@@ -159,8 +159,8 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     assert record["analysis_id"] == "room-a"
     assert record["verification"]["status"] == "pass"
     assert record["verification"]["verified"] is True
-    assert record["current_assessment"]["state"] == "current"
-    assert record["current_assessment"]["current"] is True
+    assert record["current_currency"]["state"] == "current"
+    assert record["current_currency"]["current"] is True
     assert record["record_sha256"] == persisted.record["record_sha256"]
     assert payload["source"]["stable_during_inspection"] is True
     assert len(payload["source"]["sha256"]) == 64
@@ -182,10 +182,10 @@ def test_verification_history_cli_labels_removed_analysis_records(tmp_path, caps
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert payload["records"][0]["current_assessment"]["state"] == (
+    assert payload["records"][0]["current_currency"]["state"] == (
         "not_in_current_project"
     )
-    assert payload["records"][0]["current_assessment"]["current"] is False
+    assert payload["records"][0]["current_currency"]["current"] is False
 
 
 def test_verification_history_cli_filters_by_analysis_id(tmp_path, capsys):
@@ -232,12 +232,12 @@ def test_verification_history_cli_marks_older_records_historical(tmp_path, capsy
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert [item["sequence"] for item in payload["records"]] == [1, 2]
-    assert [item["current_assessment"]["state"] for item in payload["records"]] == [
+    assert [item["current_currency"]["state"] for item in payload["records"]] == [
         "historical",
         "current",
     ]
     assert payload["records"][0]["verification"]["status"] == "pass"
-    assert payload["records"][0]["current_assessment"]["current"] is False
+    assert payload["records"][0]["current_currency"]["current"] is False
 
 
 def test_verification_history_cli_rejects_missing_sequence(tmp_path, capsys):

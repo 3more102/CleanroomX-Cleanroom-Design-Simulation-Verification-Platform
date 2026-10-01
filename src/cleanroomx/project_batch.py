@@ -156,24 +156,17 @@ def _source_revision_state(
     return project_file_revision_matches(expected, current), None
 
 
-def run_project_file(
-    path: str | Path,
+def _run_loaded_project(
+    source: Path,
+    project: ProjectDocument,
+    revision: ProjectFileRevision,
     *,
     analysis_ids: Sequence[str] | None = None,
     fail_fast: bool = False,
     cancel_requested: Callable[[], bool] | None = None,
 ) -> ProjectBatchRun:
-    """Execute project analyses against one stable in-memory project revision.
+    """Execute one already-loaded project revision without reloading source bytes."""
 
-    The project file is never modified. The source revision is checked before
-    every scheduled analysis and again after each completed/failed analysis.
-    If the source changes, no further analyses are scheduled. An optional
-    cooperative cancellation callback is checked only between analyses, never
-    from inside an active solver call.
-    """
-
-    source = Path(path).expanduser().resolve(strict=False)
-    project, revision = load_project_document_with_revision(source)
     if not revision.exists or revision.size is None or revision.sha256 is None:
         raise OSError(f"project source is not a readable regular file: {source}")
 
@@ -264,6 +257,34 @@ def run_project_file(
         cancelled=cancelled,
         cancellation_stage=cancellation_stage,
         cancellation_analysis_id=cancellation_analysis_id,
+    )
+
+
+def run_project_file(
+    path: str | Path,
+    *,
+    analysis_ids: Sequence[str] | None = None,
+    fail_fast: bool = False,
+    cancel_requested: Callable[[], bool] | None = None,
+) -> ProjectBatchRun:
+    """Execute project analyses against one stable in-memory project revision.
+
+    The project file is never modified. The source revision is checked before
+    every scheduled analysis and again after each completed/failed analysis.
+    If the source changes, no further analyses are scheduled. An optional
+    cooperative cancellation callback is checked only between analyses, never
+    from inside an active solver call.
+    """
+
+    source = Path(path).expanduser().resolve(strict=False)
+    project, revision = load_project_document_with_revision(source)
+    return _run_loaded_project(
+        source,
+        project,
+        revision,
+        analysis_ids=analysis_ids,
+        fail_fast=fail_fast,
+        cancel_requested=cancel_requested,
     )
 
 
@@ -406,23 +427,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = Path(args.project).expanduser().resolve(strict=False)
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file
             else None
         )
+        project, revision = load_project_document_with_revision(source)
         if args.output:
-            project, _revision = load_project_document_with_revision(source)
             _assert_output_is_distinct_from_source(source, args.output)
             _assert_output_is_distinct_from_dependencies(
                 project,
                 base_dir=source.parent,
                 output=args.output,
             )
-        batch = run_project_file(
+        batch = _run_loaded_project(
             source,
+            project,
+            revision,
             analysis_ids=args.analysis_ids,
             fail_fast=args.fail_fast,
             cancel_requested=(
@@ -431,17 +454,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
-            output_project, output_revision = load_project_document_with_revision(source)
-            if (
-                output_revision.size != batch.source_size_bytes
-                or output_revision.sha256 != batch.source_sha256
-            ):
-                raise ValueError(
-                    "project file changed after batch execution; report was discarded"
+            matches, check_error = _source_revision_state(source, revision)
+            if not matches:
+                detail = f": {check_error}" if check_error else ""
+                raise OSError(
+                    f"project source changed before output publication{detail}"
                 )
             _assert_output_is_distinct_from_source(source, args.output)
             _assert_output_is_distinct_from_dependencies(
-                output_project,
+                project,
                 base_dir=source.parent,
                 output=args.output,
             )

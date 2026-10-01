@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — IAPWS dew-point domain alignment — 2026-10-01
+
+- Removes the arbitrary -100 °C dew-point inversion cutoff introduced with the phase-aware psychrometric model.
+- Uses the published IAPWS R14-08(2011) ice-Ih sublimation-pressure lower validity limit of 50 K (-223.15 °C) as the fail-closed inversion boundary.
+- Adds regression coverage for an ultra-dry state whose dew point is below -100 °C but still inside the IAPWS domain, plus rejection below the IAPWS domain.
+- Changes no AirState dry-bulb operating range, unit convention, humidity-ratio equation, enthalpy equation, requirement criterion, or project schema.
+
 ## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.

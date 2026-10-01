@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — desktop requirements traceability review — 2026-10-01
+
+- Adds **Analysis → Requirements Traceability...** as a read-only view over the canonical persisted requirements registry and explicit requirement-to-analysis evidence mappings.
+- Shows canonical requirements/mappings SHA-256 identities, deterministic counts, lifecycle/applicability/scope/criteria, analysis identity/kind context, and exact result locators.
+- Reuses canonical active-mapping cross-validation and fails closed on invalid active references.
+- Preserves disabled/superseded historical mappings without silently rebinding reused analysis IDs whose current kind differs.
+- Changes no solver equations, numerical tolerances, requirement verdict semantics, persisted verification evidence, or project schema.
+
 ## Unreleased Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.

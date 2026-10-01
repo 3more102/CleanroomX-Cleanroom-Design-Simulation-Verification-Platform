@@ -225,7 +225,7 @@ jobs:
           metadata = tomllib.loads(
               Path("pyproject.toml").read_text(encoding="utf-8")
           )
-          assert metadata["project"]["version"] == "0.102.1"
+          assert metadata["project"]["version"] == "0.103.0"
           assert cleanroomx.__version__ == metadata["project"]["version"]
 
           for path in (

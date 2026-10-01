@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — file-backed verification freshness — 2026-10-01
+
+- Evolves new persisted verification records to schema v2 with exact external-dependency SHA-256 and byte-size fingerprints captured from the immutable execution snapshot.
+- Preserves legacy schema-v1 verification records and their hashes unchanged while allowing later v2 records to continue the same integrity chain.
+- Allows matching file-backed verification to be reported as current when present dependency bytes match the persisted fingerprints; changed content is reported stale and unavailable/unstable dependencies remain unverifiable.
+- Reuses the existing stable dependency fingerprint authority and does not change solver equations, numerical tolerances, requirement verdict semantics, or historical v1 evidence.
+
 ## Unreleased Release 3 — desktop project requirements verification — 2026-10-01
 
 - Adds **Analysis → Verify Project Requirements** for read-only execution of the canonical saved-project requirements workflow.

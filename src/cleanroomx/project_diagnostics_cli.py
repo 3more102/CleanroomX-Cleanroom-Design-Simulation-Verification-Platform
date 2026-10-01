@@ -113,16 +113,34 @@ def _assert_output_is_distinct_from_dependencies(
                 )
 
 
+def _assert_project_output_is_safe(
+    project,
+    *,
+    source: Path,
+    output: str | Path,
+) -> None:
+    """Reject a report destination that aliases project engineering inputs.
+
+    Call immediately before publication as well as before expensive work so a
+    pathname identity change cannot bypass the protected-output boundary.
+    """
+    _assert_output_is_distinct_from_source(source, output)
+    _assert_output_is_distinct_from_dependencies(
+        project,
+        base_dir=source.parent,
+        output=output,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source = Path(args.project).expanduser().resolve(strict=False)
     try:
         project, revision_before = load_project_document_with_revision(source)
         if args.output:
-            _assert_output_is_distinct_from_source(source, args.output)
-            _assert_output_is_distinct_from_dependencies(
+            _assert_project_output_is_safe(
                 project,
-                base_dir=source.parent,
+                source=source,
                 output=args.output,
             )
         result = analyze_project_diagnostics(project, base_dir=source.parent)
@@ -145,7 +163,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             else markdown_project_diagnostics_report(result)
         )
         if args.output:
-            atomic_write_text(args.output, text)
+            _assert_project_output_is_safe(
+                project,
+                source=source,
+                output=args.output,
+            )
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=lambda: _assert_project_output_is_safe(
+                    project,
+                    source=source,
+                    output=args.output,
+                ),
+            )
         else:
             sys.stdout.write(text)
         return project_diagnostics_exit_code(result)

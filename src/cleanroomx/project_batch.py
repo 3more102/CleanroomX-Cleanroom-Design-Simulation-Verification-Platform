@@ -453,19 +453,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
-            matches, check_error = _source_revision_state(source, revision)
-            if not matches:
-                detail = f": {check_error}" if check_error else ""
-                raise OSError(
-                    f"project source changed before output publication{detail}"
+            def assert_publication_preconditions() -> None:
+                matches, check_error = _source_revision_state(source, revision)
+                if not matches:
+                    detail = f": {check_error}" if check_error else ""
+                    raise OSError(
+                        f"project source changed before output publication{detail}"
+                    )
+                _assert_output_is_distinct_from_source(source, args.output)
+                _assert_output_is_distinct_from_dependencies(
+                    project,
+                    base_dir=source.parent,
+                    output=args.output,
                 )
-            _assert_output_is_distinct_from_source(source, args.output)
-            _assert_output_is_distinct_from_dependencies(
-                project,
-                base_dir=source.parent,
-                output=args.output,
+
+            assert_publication_preconditions()
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=assert_publication_preconditions,
             )
-            atomic_write_text(args.output, text)
         else:
             sys.stdout.write(text)
         return project_batch_exit_code(batch)

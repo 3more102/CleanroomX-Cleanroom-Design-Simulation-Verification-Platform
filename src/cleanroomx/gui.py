@@ -61,7 +61,10 @@ from .project_bundle import (
     export_project_bundle,
     extract_project_bundle,
 )
-from .project_diagnostics_cli import _assert_project_output_is_safe
+from .project_diagnostics_cli import (
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
+)
 from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
@@ -3376,9 +3379,10 @@ class CleanroomXApp:
                 raise RuntimeError(
                     "project file changed during dossier generation; export was discarded"
                 )
-            _assert_project_output_is_safe(
+            _assert_project_publication_safe(
                 self.project,
                 source=self.project_path,
+                revision=revision_before,
                 output=path,
             )
         except Exception as exc:
@@ -3394,9 +3398,10 @@ class CleanroomXApp:
             path,
             content,
             label=label,
-            before_replace=lambda: _assert_project_output_is_safe(
+            before_replace=lambda: _assert_project_publication_safe(
                 self.project,
                 source=self.project_path,
+                revision=revision_before,
                 output=path,
             ),
         ):

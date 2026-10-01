@@ -599,3 +599,30 @@ def test_project_verify_status_all_accepts_current_verified_configured_set(
         "all_verified_pass": True,
         "accepted": True,
     }
+
+
+def test_project_verify_status_all_rejects_stale_retained_pass(tmp_path, capsys):
+    path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        _project(),
+    )
+    assert verify_cli.main(["persist", str(path), "room-a"]) == 0
+    capsys.readouterr()
+
+    project = load_project_document(path)
+    project.analyses[0].input["supply_airflow_m3_h"] += 1.0
+    save_project_document(path, project)
+
+    exit_code = verify_cli.main(["status", str(path), "--all"])
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert exit_code == 1
+    assert payload["currency"]["summary"]["stale_count"] == 1
+    assert payload["gate"]["configured_analysis_count"] == 1
+    assert payload["gate"]["accepted_analysis_ids"] == []
+    assert payload["gate"]["rejected_analysis_ids"] == ["room-a"]
+    assert payload["gate"]["all_current"] is False
+    assert payload["gate"]["all_verified_pass"] is True
+    assert payload["gate"]["accepted"] is False

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
+
+from .cli_output import CLIOutputError, write_cli_output
 import json
 
-from .project import atomic_write_text
 from .loop_network_io import load_looped_flow_network
 from .variable_friction_loop import solve_variable_friction_looped_network
 from .variable_friction_loop_report import (
@@ -89,7 +91,15 @@ def main() -> int:
         else markdown_variable_friction_loop_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        try:
+            write_cli_output(
+                args.output,
+                text,
+                protected_inputs=(args.network,),
+            )
+        except CLIOutputError as exc:
+            print(f"cleanroomx-loop-friction: error: {exc}", file=sys.stderr)
+            return 1
     else:
         print(text)
     return 0

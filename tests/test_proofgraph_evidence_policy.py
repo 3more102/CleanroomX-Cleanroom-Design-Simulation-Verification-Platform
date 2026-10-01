@@ -88,6 +88,8 @@ def test_single_claim_is_selected_without_modifying_graph() -> None:
     )
     payload = report.to_dict()
 
+    assert payload["decision_scope"] == "assessment_only"
+    assert payload["changes_canonical_verification"] is False
     assert payload["has_conflicts"] is False
     assert payload["resolutions"][0]["status"] == "single"
     assert payload["resolutions"][0]["selected_evidence_id"] == "design-a"

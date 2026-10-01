@@ -32,6 +32,7 @@ from cleanroomx.project_verification_persistence import (
 )
 from cleanroomx.verification_run_history import (
     VERIFICATION_RUN_HISTORY_METADATA_KEY,
+    VerificationRunHistoryIntegrityError,
     append_project_verification_run_record,
     validate_project_verification_run_history,
     verification_run_history_records,
@@ -158,6 +159,13 @@ def test_persisted_verification_run_preserves_canonical_engineering_evidence(tmp
     assert persisted.record["evidence"][0]["evidence_locator"] == "/result/ach"
     assert persisted.record["verification"]["verified"] is True
     assert persisted.record["verification"]["status"] == "pass"
+    assert persisted.record["proofgraphs"] == sorted(
+        list(workflow.proofgraphs),
+        key=lambda document: document["graph_sha256"],
+    )
+    assert [
+        document["graph_sha256"] for document in persisted.record["proofgraphs"]
+    ] == persisted.record["proofgraph_sha256"]
     assert persisted.record["external_dependencies"] == []
     assert persisted.record["verification_identity_sha256"]
     assert persisted.record["record_sha256"]
@@ -196,6 +204,7 @@ def test_project_loader_accepts_legacy_verification_record_without_dependency_fi
         "record_sha256",
         "verification_identity_sha256",
         "external_dependencies",
+        "proofgraphs",
     }
     body = {
         key: copy.deepcopy(value)
@@ -216,6 +225,7 @@ def test_project_loader_accepts_legacy_verification_record_without_dependency_fi
 
     assert len(records) == 1
     assert "external_dependencies" not in records[0]
+    assert "proofgraphs" not in records[0]
     assert records[0]["verification_identity_sha256"] == (
         legacy_record["verification_identity_sha256"]
     )
@@ -335,6 +345,54 @@ def test_project_loader_rejects_tampered_persisted_verification(tmp_path):
         match="invalid project verification run history",
     ):
         load_project_document(path)
+
+
+def test_project_loader_rejects_tampered_persisted_proofgraph(tmp_path):
+    path = save_project_document(
+        tmp_path / "verified.cleanroomx.json",
+        _project(),
+    )
+    workflow = run_project_requirements_workflow(path, "room-a")
+    persist_project_requirements_workflow_run(
+        path,
+        workflow,
+        completed_at_utc="2026-10-01T07:30:00Z",
+    )
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    history = raw["project"]["metadata"][VERIFICATION_RUN_HISTORY_METADATA_KEY]
+    history["records"][0]["proofgraphs"][0]["id"] = "tampered-graph"
+    path.write_text(
+        json.dumps(raw, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ProjectFormatError,
+        match="invalid project verification run history",
+    ):
+        load_project_document(path)
+
+
+def test_persistence_rejects_latest_record_larger_than_history_budget(tmp_path):
+    path = save_project_document(
+        tmp_path / "verified.cleanroomx.json",
+        _project(),
+    )
+    workflow = run_project_requirements_workflow(path, "room-a")
+
+    with pytest.raises(
+        VerificationRunHistoryIntegrityError,
+        match="exceeds max_bytes",
+    ):
+        persist_project_requirements_workflow_run(
+            path,
+            workflow,
+            history_max_bytes=256,
+        )
+
+    loaded = load_project_document(path)
+    assert VERIFICATION_RUN_HISTORY_METADATA_KEY not in loaded.metadata
 
 
 def test_persisted_record_timestamp_does_not_define_engineering_identity(tmp_path):

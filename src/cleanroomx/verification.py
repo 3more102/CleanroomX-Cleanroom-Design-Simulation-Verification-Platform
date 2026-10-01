@@ -61,9 +61,19 @@ class VerificationReport:
         )
 
     @property
-    def passed(self) -> bool:
-        """Compatibility boolean: true when no configured check failed."""
+    def no_failures_detected(self) -> bool:
+        """True when no configured check recorded a failure."""
         return all(item.status != "fail" for item in self.findings)
+
+    @property
+    def verified(self) -> bool:
+        """True only for a complete verification in which every finding passes."""
+        return self.complete and self.status == "pass"
+
+    @property
+    def passed(self) -> bool:
+        """Compatibility alias for no_failures_detected."""
+        return self.no_failures_detected
 
     def to_dict(self) -> dict:
         return {
@@ -72,6 +82,8 @@ class VerificationReport:
             "ach": self.ach,
             "status": self.status,
             "complete": self.complete,
+            "verified": self.verified,
+            "no_failures_detected": self.no_failures_detected,
             "passed": self.passed,
             "findings": [asdict(item) for item in self.findings],
         }

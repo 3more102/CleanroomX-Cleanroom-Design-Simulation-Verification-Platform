@@ -4,7 +4,8 @@
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.
 - Reuses the canonical project/dependency path-identity guard already used by other project-facing operator surfaces.
-- Revalidates source revision and protected output identities immediately before atomic publication, closing the post-analysis publication race.\n- Adds focused regressions for direct source overwrite, same-file alias overwrite, external dependency overwrite, single-revision guard/execution binding, and pre-publication mutation.
+- Revalidates source revision and protected output identities immediately before atomic publication, closing the post-analysis publication race.
+- Adds focused regressions for direct source overwrite, same-file alias overwrite, external dependency overwrite, single-revision guard/execution binding, and pre-publication mutation.
 - Changes no solver equation, numerical tolerance, analysis input, project schema, project-batch schema, or execution-order semantics.
 
 

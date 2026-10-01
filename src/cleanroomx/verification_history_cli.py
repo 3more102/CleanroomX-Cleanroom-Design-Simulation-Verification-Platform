@@ -16,6 +16,7 @@ from .verification_run_history import (
     validate_project_verification_run_history,
     verification_run_history_records,
 )
+from .verification_currency import assess_project_verification_currency
 
 
 VERIFICATION_HISTORY_INSPECTION_SCHEMA = "cleanroomx.verification-history-inspection"
@@ -97,13 +98,14 @@ def _load_stable_project(path: Path):
     project, revision_before = load_project_document_with_revision(path)
     history_summary = validate_project_verification_run_history(project.metadata)
     records = verification_run_history_records(project.metadata)
+    currency = assess_project_verification_currency(project)
     revision_after = capture_project_file_revision(path)
     if not project_file_revision_matches(revision_before, revision_after):
         raise RuntimeError(
             "project file changed during verification-history inspection; "
             "inspection result was discarded"
         )
-    return project, revision_after, history_summary, records
+    return project, revision_after, history_summary, records, currency
 
 
 def _source_payload(path: Path, revision) -> dict[str, Any]:
@@ -132,7 +134,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source = Path(args.project).expanduser().resolve(strict=False)
     try:
-        project, revision, history_summary, records = _load_stable_project(source)
+        project, revision, history_summary, records, currency = _load_stable_project(source)
         if args.command == "list":
             selected = records
             if args.analysis_id is not None:
@@ -151,6 +153,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "analysis_count": len(project.analyses),
                     },
                     "history": history_summary,
+                    "currency": currency,
                     "selection": {
                         "analysis_id": args.analysis_id,
                         "record_count": len(selected),
@@ -180,6 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "analysis_count": len(project.analyses),
                 },
                 "history": history_summary,
+                "currency": currency,
                 "record": copy.deepcopy(record),
             }
         )

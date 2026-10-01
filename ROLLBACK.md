@@ -77,3 +77,9 @@ merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
+
+## v0.103.0 Release 3 closure anchor
+
+The Release 3 functional baseline is built on current-main `3b6db4093df79523159fe1b623fa99851900bc02` after the ProofGraph evidence-precedence and CI-runtime hardening merges, plus the final project-batch protected-output/single-loaded-revision hardening in the v0.103.0 release candidate. The immutable `v0.103.0` publisher is permitted to create the tag only when the triggering CI commit is still the exact current `main` head and the release identity files agree on 0.103.0.
+
+Preserve all published v0.100.0, v0.101.0, v0.102.0, and v0.102.1 tags. Roll back Release 3 by normal revert/restack plus CI; never move an immutable release tag or edit retained engineering evidence in place.

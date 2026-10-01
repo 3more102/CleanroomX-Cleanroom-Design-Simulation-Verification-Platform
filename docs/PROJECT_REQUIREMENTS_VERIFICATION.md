@@ -23,11 +23,15 @@ Each evidence binding carries:
 - value and unit;
 - source and source revision;
 - originating calculation when available;
+- exact source/result locator when available;
 - project revision when available;
 - declared evidence kinds;
 - freshness state.
 
-Evidence freshness defaults to `unknown`, not `current`.
+Evidence freshness defaults to `unknown`, not `current`. The immutable-analysis
+binding workflow derives freshness from project revision identity and verified
+analysis-run dependency provenance instead of accepting a caller-supplied
+`current` assertion.
 
 ## Comparison semantics
 

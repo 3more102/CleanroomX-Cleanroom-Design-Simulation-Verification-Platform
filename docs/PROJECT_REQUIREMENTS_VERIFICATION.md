@@ -85,8 +85,9 @@ not both approved and applicable, if the subject is invalid, or if two authority
 decisions target the same binding.
 
 Authority does not delete or rewrite competing evidence. The selected
-`evidence_id` drives the comparison, while `evidence_ids` keeps every candidate
-in deterministic order and `evidence_authority` records the explicit decision.
+`evidence_id` drives the comparison and remains the finding's `evidence_ids`
+member, while `candidate_evidence_ids` keeps every competing candidate in
+deterministic order and `evidence_authority` records the explicit decision.
 The complete authority document receives its own SHA-256 and participates in the
 verification SHA-256. Omitting authority preserves the previous fail-closed
 ambiguous-binding behavior and result shape.

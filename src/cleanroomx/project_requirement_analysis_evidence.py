@@ -4,7 +4,12 @@ import copy
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from .application import verify_analysis_run_bundle
+from .application import (
+    AnalysisRun,
+    analysis_run_external_dependencies_current,
+    analysis_run_matches_input,
+    verify_analysis_run_bundle,
+)
 from .project_requirement_verification import (
     RequirementEvidence,
     verify_project_requirements,
@@ -116,21 +121,45 @@ def _extract_result_value(
     return copy.deepcopy(current)
 
 
+def _analysis_run_from_verified_bundle(
+    run_bundle: dict[str, Any],
+) -> AnalysisRun:
+    return AnalysisRun(
+        kind=run_bundle["kind"],
+        title=run_bundle["title"],
+        status=run_bundle["status"],
+        result=run_bundle["result"],
+        markdown=run_bundle["markdown"],
+        diagnostics=run_bundle["diagnostics"],
+        plot=run_bundle["plot"],
+        input_snapshot=run_bundle["input_snapshot"],
+    )
+
+
 def _derived_freshness(
+    run: AnalysisRun,
     *,
-    source_project_revision: str,
-    current_project_revision: str | None,
-    external_dependencies_stable: Any,
+    current_analysis_input: dict[str, Any] | None,
+    base_dir: str | None,
 ) -> str:
-    if current_project_revision is None:
+    if current_analysis_input is None:
         return "unknown"
-    if current_project_revision != source_project_revision:
+    if not isinstance(current_analysis_input, dict):
+        raise AnalysisRequirementEvidenceError(
+            "current_analysis_input must be a JSON object or null"
+        )
+    if not analysis_run_matches_input(
+        run,
+        run.kind,
+        current_analysis_input,
+    ):
         return "stale"
-    if external_dependencies_stable is True:
-        return "current"
-    if external_dependencies_stable is False:
+    if not analysis_run_external_dependencies_current(
+        run,
+        base_dir=base_dir,
+    ):
         return "stale"
-    return "unknown"
+    return "current"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -185,7 +214,8 @@ def bind_analysis_run_requirement_evidence(
     mappings: Iterable[AnalysisRequirementEvidenceMapping],
     *,
     source_project_revision: str,
-    current_project_revision: str | None,
+    current_analysis_input: dict[str, Any] | None,
+    base_dir: str | None = None,
 ) -> tuple[RequirementEvidence, ...]:
     """Bind verified immutable analysis output to explicit project requirements.
 
@@ -195,11 +225,6 @@ def bind_analysis_run_requirement_evidence(
     source_revision = _sha256(
         source_project_revision,
         "source_project_revision",
-    )
-    current_revision = (
-        None
-        if current_project_revision is None
-        else _sha256(current_project_revision, "current_project_revision")
     )
     if not isinstance(run_bundle, dict):
         raise AnalysisRequirementEvidenceError(
@@ -226,12 +251,11 @@ def bind_analysis_run_requirement_evidence(
             "analysis requirement evidence mappings contain duplicate ids"
         )
 
+    run = _analysis_run_from_verified_bundle(run_bundle)
     freshness = _derived_freshness(
-        source_project_revision=source_revision,
-        current_project_revision=current_revision,
-        external_dependencies_stable=verified.get(
-            "external_dependencies_stable"
-        ),
+        run,
+        current_analysis_input=current_analysis_input,
+        base_dir=base_dir,
     )
     analysis_kind = _nonempty(
         verified.get("analysis_kind"),
@@ -278,13 +302,15 @@ def verify_project_requirements_from_analysis_run(
     mappings: Iterable[AnalysisRequirementEvidenceMapping],
     *,
     source_project_revision: str,
-    current_project_revision: str | None,
+    current_analysis_input: dict[str, Any] | None,
+    base_dir: str | None = None,
 ) -> dict[str, Any]:
     """Bind one verified analysis run and evaluate through the canonical verifier."""
     bindings = bind_analysis_run_requirement_evidence(
         run_bundle,
         mappings,
         source_project_revision=source_project_revision,
-        current_project_revision=current_project_revision,
+        current_analysis_input=current_analysis_input,
+        base_dir=base_dir,
     )
     return verify_project_requirements(requirements, bindings)

@@ -27,6 +27,7 @@ The list output is strict JSON and contains:
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
 - compact per-record verification status;
+- explicit per-record `current_context` that labels older retained records `historical`, the applicable latest record with its canonical current/stale/unverifiable state, and removed-analysis records `not_in_current_project`;
 - fail-closed verification-currency assessment against the current project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
@@ -42,7 +43,8 @@ cleanroomx-verification-history show project.cleanroomx.json --sequence 12
 
 This returns the complete canonical persisted record, including exact evidence
 locators, canonical findings, ProofGraph identities, runtime/code provenance, and
-the chained record hash.
+the chained record hash. A separate top-level `current_context` contextualizes
+that selected record without changing the persisted record JSON.
 
 ## Stable-read boundary
 

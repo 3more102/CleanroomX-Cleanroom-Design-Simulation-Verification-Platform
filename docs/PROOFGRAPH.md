@@ -184,11 +184,13 @@ parallel evidence representation:
    design analyses;
 2. emit DesignEvidence and ProvenanceRecord data from IFC semantic bindings,
    including dimension_source, GlobalId, storey, placement, and source digest;
-3. add explicit evidence precedence/conflict policies without deleting history;
+3. extend the explicit requirement-evidence authority/conflict policy into persisted project configuration where needed, while retaining every competing evidence record;
 4. expose requirement -> evidence -> verdict drill-down in the desktop
    Compliance / Assurance area;
 5. add commissioning and operational adapters only after their source identity,
    freshness, and uncertainty contracts are explicit.
+
+The canonical project requirements verifier now has the first explicit conflict-resolution slice: when multiple evidence records target one requirement/entity, it remains invalid by default, but a caller may provide an auditable authority decision naming the exact selected evidence and rationale. Every candidate remains in the verification input and the authority decision is hash-bound to the result; ProofGraph projection therefore consumes a resolved canonical verdict rather than inventing its own precedence rule.
 
 ProofGraph does not itself establish regulatory approval, cleanroom
 certification, commissioning acceptance, or completeness of an external

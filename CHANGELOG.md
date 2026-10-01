@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — external plugin trust gate — 2026-10-01
+
+- Disables external analysis-plugin loading by default until an operator explicitly selects `trusted` or `allowlist` mode.
+- Adds canonical distribution-name allowlisting with optional exact `NAME==VERSION` pins and rejects denied plugins before `entry_point.load()`.
+- Fails closed on malformed policy, missing distribution identity, and version-pin mismatch while exposing the effective policy through application-registry diagnostics.
+- Changes no solver equations, engineering tolerances, project schema, persisted evidence format, or plugin API v1 contract.
+
 ## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
 
 - Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.

@@ -57,6 +57,14 @@ Numeric requirement verification uses the centralized CleanroomX engineering-uni
 authority. Conversion occurs only when both unit spellings are explicitly
 registered and belong to the same engineering dimension.
 
+The non-SI factors follow NIST SI conversion guidance. In particular,
+`inH2O` and `mmH2O` use the NIST **conventional** water-column values
+(249.0889 Pa/inH2O and 9.80665 Pa/mmH2O), not a temperature-specific fluid
+column. The `Btu/h` token means **International Table Btu per hour**;
+thermochemical or other historical Btu definitions are intentionally not aliased.
+
+Reference: NIST SP 811, Appendix B conversion factors and footnotes.
+
 The initial canonical registry covers cleanroom/HVAC requirement families for:
 
 - pressure;

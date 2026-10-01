@@ -11,6 +11,7 @@ from cleanroomx.project import (
     project_from_dict,
 )
 from cleanroomx.project_requirement_evidence_mappings import (
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
@@ -117,7 +118,11 @@ def _mapping(
 def _registry(*mappings: dict, evidence_authority=None):
     payload = {
         "schema": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
-        "schema_version": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
+        "schema_version": (
+            PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+            if evidence_authority
+            else PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+        ),
         "mappings": list(mappings),
     }
     if evidence_authority is not None:
@@ -226,6 +231,54 @@ def test_mapping_registry_allows_ambiguity_only_with_explicit_authority() -> Non
     assert registry.to_dict()["evidence_authority"][0]["decision_reference"] == (
         "DEC-REQ-AUTH"
     )
+
+
+def test_mapping_registry_versions_authority_without_rewriting_legacy_shape() -> None:
+    legacy = project_requirement_evidence_mappings_from_dict(
+        _registry(_mapping())
+    ).to_dict()
+    authoritative = project_requirement_evidence_mappings_from_dict(
+        _registry(
+            _mapping(mapping_id="MAP-A"),
+            _mapping(mapping_id="MAP-B"),
+            evidence_authority=[_authority(evidence_id="MAP-A")],
+        )
+    ).to_dict()
+
+    assert legacy["schema_version"] == PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+    assert "evidence_authority" not in legacy
+    assert authoritative["schema_version"] == (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
+    assert authoritative["evidence_authority"][0]["evidence_id"] == "MAP-A"
+
+
+def test_mapping_registry_rejects_authority_field_under_legacy_schema() -> None:
+    payload = _registry(
+        _mapping(mapping_id="MAP-A"),
+        _mapping(mapping_id="MAP-B"),
+        evidence_authority=[_authority(evidence_id="MAP-A")],
+    )
+    payload["schema_version"] = PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+
+    with pytest.raises(
+        ProjectRequirementEvidenceMappingsFormatError,
+        match="evidence_authority requires schema_version",
+    ):
+        project_requirement_evidence_mappings_from_dict(payload)
+
+
+def test_mapping_registry_rejects_authority_schema_without_authority() -> None:
+    payload = _registry(_mapping())
+    payload["schema_version"] = (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
+
+    with pytest.raises(
+        ProjectRequirementEvidenceMappingsFormatError,
+        match="requires non-empty evidence_authority",
+    ):
+        project_requirement_evidence_mappings_from_dict(payload)
 
 
 def test_mapping_registry_rejects_authority_selecting_noncandidate() -> None:

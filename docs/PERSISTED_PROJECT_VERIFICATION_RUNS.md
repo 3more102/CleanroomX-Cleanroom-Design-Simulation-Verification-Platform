@@ -35,6 +35,7 @@ Every verification record preserves:
 - full canonical verification output, findings and completeness state;
 - canonical verification SHA-256;
 - ProofGraph SHA-256 identity for each projected graph;
+- the full canonical ProofGraph documents for new records, validated against those identities;
 - project-native workflow SHA-256;
 - verifier module, qualified function name and verifier-source SHA-256;
 - CleanroomX version;
@@ -68,9 +69,17 @@ Those values form a bounded chained ledger. They detect accidental mutation,
 corruption and history discontinuity, but they are not digital signatures.
 Anyone with permission to rewrite the project file can recompute hashes.
 
-Retention is bounded by record count and serialized bytes. When older records
-are pruned, the last removed record hash is retained as the history anchor so
-the surviving chain remains internally verifiable.
+Retention is bounded by record count and serialized bytes. New retained
+ProofGraph payloads count toward the same byte budget. Older records are pruned
+first; if the newest record alone exceeds the configured byte budget, persistence
+fails closed instead of silently violating the configured limit. When older
+records are pruned, the last removed record hash is retained as the history
+anchor so the surviving chain remains internally verifiable.
+
+Legacy schema-v1 records that contain only `proofgraph_sha256` remain readable.
+When a new record contains `proofgraphs`, every document is reparsed through
+the canonical ProofGraph loader, must be canonical, unique and sorted by
+`graph_sha256`, and must exactly match the persisted digest list.
 
 ## Guarded persistence
 

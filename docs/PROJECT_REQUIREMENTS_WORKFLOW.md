@@ -39,7 +39,9 @@ The workflow:
 11. derives evidence freshness from the exact analysis input and external
     dependencies;
 12. invokes the existing canonical project requirements verifier;
-13. projects the canonical findings and verdicts into the existing ProofGraph
+13. retains the complete canonical requirements snapshot, including its
+    self-verifying SHA-256, as part of the workflow evidence boundary;
+14. projects the canonical findings and verdicts into the existing ProofGraph
     adapter.
 
 ## Fail-closed behavior
@@ -54,7 +56,19 @@ No project verification result is issued when:
 - the project source changes between the loaded revision and analysis start;
 - the project source changes during the analysis;
 - the immutable analysis run is not bound to the loaded project SHA-256;
-- run-bundle integrity validation fails.
+- run-bundle integrity validation fails;
+- a ProofGraph verification run declares requirements/evidence/verification
+  identities that disagree with the canonical workflow;
+- ProofGraph source-finding metadata disagrees with the canonical verification
+  findings for that requirement set;
+- ProofGraph evidence or evidence-source projection disagrees with the exact
+  bound workflow evidence;
+- the retained canonical requirements snapshot does not reproduce
+  `requirements_sha256`;
+- a ProofGraph RequirementSet differs from the exact projection of that
+  retained requirements snapshot, including set identity/title/source/version
+  or requirement criteria metadata such as description, applicability,
+  verification method, assumptions, and notes.
 
 A missing mapped result field is not converted into PASS. It flows through the
 existing evidence binding as missing evidence and the canonical verifier reports
@@ -75,6 +89,16 @@ Each workflow result exposes a deterministic `workflow_sha256` derived from:
 
 The source path is reported for usability but is intentionally not part of the
 engineering identity.
+
+The component verifier does not rely on those digests alone. Workflow schema
+version 2 retains the canonical normalized requirements document, reparses it
+through the first-class requirements authority, recomputes canonical
+verification from that authority plus the retained evidence, and compares every
+ProofGraph RequirementSet with the exact canonical projection. The verifier also
+checks the cross-artifact links between the canonical verification, bound
+evidence, and ProofGraph projection. Recomputing both a ProofGraph digest and the outer workflow
+digest after changing ProofGraph metadata or evidence therefore does not make the
+modified projection acceptable.
 
 ## Authority boundaries
 

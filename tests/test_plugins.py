@@ -321,6 +321,56 @@ def test_plugin_trust_allowlist_normalizes_distribution_name_and_exact_version()
     ]
 
 
+def test_plugin_trust_allowlist_rejects_non_allowlisted_distribution_before_import():
+    point = _FakeEntryPoint(
+        "not-allowed",
+        "pkg.not_allowed:registration",
+        _plugin("not_allowed"),
+        distribution=_FakeDistribution("pkg-not-allowed", "1.0"),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_TRUST_MODE_ENV: "allowlist",
+            PLUGIN_ALLOWLIST_ENV: "pkg-approved",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_calls == 0
+    assert "is not present in the configured allowlist" in discovery.issues[0].error
+
+
+def test_plugin_trust_allowlist_rejects_missing_pinned_version_before_import():
+    point = _FakeEntryPoint(
+        "missing-version",
+        "pkg.missing_version:registration",
+        _plugin("missing_version"),
+        distribution=_FakeDistribution("pkg-versioned", None),
+    )
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_TRUST_MODE_ENV: "allowlist",
+            PLUGIN_ALLOWLIST_ENV: "pkg-versioned==1.0",
+        }
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_calls == 0
+    assert "installed version metadata is unavailable" in discovery.issues[0].error
+
+
 def test_plugin_trust_allowlist_rejects_version_mismatch_before_import():
     point = _FakeEntryPoint(
         "wrong-version",
@@ -395,7 +445,15 @@ def test_invalid_plugin_trust_mode_fails_closed_before_import():
     assert "configuration error" in discovery.issues[0].error
 
 
-def test_malformed_plugin_allowlist_fails_closed_before_import():
+@pytest.mark.parametrize(
+    "allowlist",
+    [
+        "pkg-malformed==",
+        "pkg-malformed===1.0",
+        "pkg-malformed==1.0=extra",
+    ],
+)
+def test_malformed_plugin_allowlist_fails_closed_before_import(allowlist):
     point = _FakeEntryPoint(
         "malformed",
         "pkg.malformed:registration",
@@ -405,7 +463,7 @@ def test_malformed_plugin_allowlist_fails_closed_before_import():
     policy = plugin_trust_policy_from_environment(
         {
             PLUGIN_TRUST_MODE_ENV: "allowlist",
-            PLUGIN_ALLOWLIST_ENV: "pkg-malformed==",
+            PLUGIN_ALLOWLIST_ENV: allowlist,
         }
     )
 

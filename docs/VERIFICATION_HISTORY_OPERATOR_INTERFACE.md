@@ -26,8 +26,9 @@ The list output is strict JSON and contains:
 
 - project source SHA-256 and byte size;
 - verification ledger record count, sequence range, anchor, and head hash;
-- compact per-record verification status;
-- fail-closed verification-currency assessment against the current project configuration and retained dependency fingerprints;
+- compact per-record immutable verification status;
+- per-record `currency_context` that labels the latest retained record with its current fail-closed assessment, older records as `historical`, and removed analyses as `not_in_current_project`;
+- fail-closed project verification-currency assessment against the current project configuration and retained dependency fingerprints;
 - canonical requirements, mappings, verification, workflow, engineering-identity,
   and record SHA-256 values.
 
@@ -42,7 +43,10 @@ cleanroomx-verification-history show project.cleanroomx.json --sequence 12
 
 This returns the complete canonical persisted record, including exact evidence
 locators, canonical findings, ProofGraph identities, runtime/code provenance, and
-the chained record hash.
+the chained record hash. The persisted record remains unchanged; a separate
+`record_currency_context` reports whether that exact retained record is the latest
+current/stale/unverifiable record, an older `historical` record, or belongs to an
+analysis that is `not_in_current_project`.
 
 ## Stable-read boundary
 
@@ -52,7 +56,9 @@ file revision before and after inspection and emits nothing if the file changes
 during the operation.
 
 The command is read-only. It does not rewrite the project, recompute historical
-verdicts, or silently bind old evidence to current project state.
+verdicts, or silently bind old evidence to current project state. Historical PASS
+or FAIL remains immutable evidence; present currency is emitted beside it as
+separate context.
 
 ## Verification currency
 

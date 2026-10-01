@@ -2,10 +2,71 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Any
+from pathlib import Path
+from typing import Any, Iterable
 
+from .persistence import atomic_write_text
 from .strict_json import StrictJSONError
 
+
+
+class CLIOutputError(RuntimeError):
+    """Raised when a CLI report cannot be published safely."""
+
+
+def _paths_alias(first: str | Path, second: str | Path) -> bool:
+    left = Path(first).expanduser()
+    right = Path(second).expanduser()
+    try:
+        if left.resolve(strict=False) == right.resolve(strict=False):
+            return True
+    except (OSError, RuntimeError) as exc:
+        raise CLIOutputError("could not resolve CLI input/output paths") from exc
+    try:
+        if left.exists() and right.exists():
+            return left.samefile(right)
+    except OSError as exc:
+        raise CLIOutputError("could not compare CLI input/output paths") from exc
+    return False
+
+
+def assert_output_path_distinct_from_inputs(
+    output: str | Path,
+    protected_inputs: Iterable[str | Path],
+) -> None:
+    """Fail closed when a CLI output aliases any source engineering input."""
+    for protected in protected_inputs:
+        if _paths_alias(protected, output):
+            source = Path(protected).expanduser().resolve(strict=False)
+            raise CLIOutputError(
+                f"output path must be different from protected input: {source}"
+            )
+
+
+def write_cli_output(
+    output: str | Path,
+    text: str,
+    *,
+    protected_inputs: Iterable[str | Path] = (),
+) -> Path:
+    """Atomically publish CLI output without replacing any protected input.
+
+    The identity check runs both before the temporary write and immediately
+    before the final replace so path/hardlink changes during analysis or output
+    preparation fail closed.
+    """
+    protected = tuple(protected_inputs)
+    assert_output_path_distinct_from_inputs(output, protected)
+
+    def recheck() -> None:
+        assert_output_path_distinct_from_inputs(output, protected)
+
+    try:
+        return atomic_write_text(output, text, before_replace=recheck)
+    except CLIOutputError:
+        raise
+    except OSError as exc:
+        raise CLIOutputError(f"could not write CLI output {output}: {exc}") from exc
 
 def _clone_cli_json_value(
     value: Any,

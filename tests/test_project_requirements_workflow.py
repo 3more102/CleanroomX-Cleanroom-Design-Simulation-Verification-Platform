@@ -456,3 +456,27 @@ def test_workflow_verifier_rejects_resealed_proofgraph_source_findings(tmp_path)
         match="source findings disagree with canonical verification",
     ):
         verify_project_requirements_workflow_run(result)
+
+def test_workflow_verifier_accepts_retained_evidence_for_unapproved_requirement(tmp_path):
+    project = _project()
+    requirement = project.metadata[PROJECT_REQUIREMENTS_METADATA_KEY]["sets"][0][
+        "requirements"
+    ][0]
+    requirement["status"] = "draft"
+    path = save_project_document(
+        tmp_path / "workflow-draft.cleanroomx.json",
+        project,
+    )
+
+    result = run_project_requirements_workflow(path, "room-a")
+
+    assert result.verification["findings"][0]["state"] == "incomplete"
+    assert result.verification["findings"][0]["evidence_ids"] == []
+    assert [item["id"] for item in result.proofgraphs[0]["evidence"]] == [
+        "MAP-ACH"
+    ]
+    assert result.proofgraphs[0]["findings"][0]["evidence_ids"] == []
+
+    verified = verify_project_requirements_workflow_run(result)
+    assert verified["workflow_sha256"] == result.workflow_sha256
+

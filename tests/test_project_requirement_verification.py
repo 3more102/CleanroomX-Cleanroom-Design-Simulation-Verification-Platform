@@ -209,6 +209,34 @@ def test_unit_mismatch_is_invalid_without_implicit_conversion() -> None:
     assert "no implicit conversion" in result["findings"][0]["explanation"]
 
 
+def test_compatible_rate_unit_is_converted_before_comparison() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(unit="1/h", minimum=20.0)),
+        [_evidence(value=20.0 / 3600.0, unit="1/s")],
+    )
+
+    assert result["status"] == "pass"
+    assert result["verified"] is True
+    finding = result["findings"][0]
+    assert finding["state"] == "pass"
+    assert finding["actual"] == pytest.approx(20.0)
+    assert finding["delta"] == pytest.approx(0.0)
+    assert "canonical engineering unit authority" in finding["explanation"]
+
+
+def test_convertible_unit_can_still_fail_the_requirement() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(unit="1/h", minimum=20.0)),
+        [_evidence(value=19.0 / 3600.0, unit="1/s")],
+    )
+
+    assert result["status"] == "fail"
+    finding = result["findings"][0]
+    assert finding["state"] == "fail"
+    assert finding["actual"] == pytest.approx(19.0)
+    assert finding["delta"] == pytest.approx(-1.0)
+
+
 def test_missing_required_evidence_kind_is_incomplete() -> None:
     result = verify_project_requirements(
         _registry(

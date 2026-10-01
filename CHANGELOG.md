@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — verification-history CLI record currency — 2026-10-01
+
+- Upgrades the read-only verification-history inspection schema to version 2 and adds explicit `current_currency` context beside every compact retained record.
+- Returns `record_currency` beside the complete persisted record from `show`, keeping immutable historical evidence separate from present-project applicability.
+- Labels older retained records `historical` and removed-analysis records `not_in_current_project`; only each current analysis's latest retained record receives canonical current/stale/dependency-freshness-unverifiable assessment.
+- Reuses a fail-closed record-context helper in the canonical verification-currency module without changing solver equations, requirement verdicts, persisted ledger hashes, or project schema.
+
 ## Unreleased Release 3 — persisted verification status gate — 2026-10-01
 
 - Adds `cleanroomx-project-verify status <project> <analysis-id>` for read-only CI/release gating on retained canonical verification evidence.

@@ -431,9 +431,13 @@ def test_project_verify_status_all_accepts_current_verified_project(tmp_path, ca
     assert payload["currency"]["summary"]["current_count"] == 1
     assert payload["gate"] == {
         "accepted": True,
+        "accepted_analysis_count": 1,
+        "accepted_analysis_ids": ["room-a"],
         "all_current": True,
         "all_verified_pass": True,
         "configured_analysis_count": 1,
+        "rejected_analysis_count": 0,
+        "rejected_analysis_ids": [],
     }
 
 
@@ -489,9 +493,13 @@ def test_project_verify_status_all_rejects_vacuous_unconfigured_project(
     assert payload["currency"]["summary"]["not_configured_count"] == 1
     assert payload["gate"] == {
         "accepted": False,
+        "accepted_analysis_count": 0,
+        "accepted_analysis_ids": [],
         "all_current": False,
         "all_verified_pass": False,
         "configured_analysis_count": 0,
+        "rejected_analysis_count": 0,
+        "rejected_analysis_ids": [],
     }
 
 
@@ -499,14 +507,17 @@ def test_project_verify_status_all_requires_all_configured_rows_to_pass():
     currency = {
         "analyses": [
             {
+                "analysis_id": "room-a",
                 "state": "current",
                 "latest_record": {"verified": True},
             },
             {
+                "analysis_id": "room-b",
                 "state": "current",
                 "latest_record": {"verified": False},
             },
             {
+                "analysis_id": "room-c",
                 "state": "not_configured",
                 "latest_record": None,
             },
@@ -517,9 +528,13 @@ def test_project_verify_status_all_requires_all_configured_rows_to_pass():
 
     assert gate == {
         "accepted": False,
+        "accepted_analysis_count": 1,
+        "accepted_analysis_ids": ["room-a"],
         "all_current": True,
         "all_verified_pass": False,
         "configured_analysis_count": 2,
+        "rejected_analysis_count": 1,
+        "rejected_analysis_ids": ["room-b"],
     }
 
 
@@ -576,6 +591,10 @@ def test_project_verify_status_all_accepts_current_verified_configured_set(
     assert payload["currency"]["summary"]["not_configured_count"] == 1
     assert payload["gate"] == {
         "configured_analysis_count": 1,
+        "accepted_analysis_count": 1,
+        "rejected_analysis_count": 0,
+        "accepted_analysis_ids": ["room-a"],
+        "rejected_analysis_ids": [],
         "all_current": True,
         "all_verified_pass": True,
         "accepted": True,

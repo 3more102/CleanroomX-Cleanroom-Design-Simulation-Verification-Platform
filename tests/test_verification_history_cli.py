@@ -146,6 +146,7 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["schema"] == VERIFICATION_HISTORY_INSPECTION_SCHEMA
+    assert payload["schema_version"] == 2
     assert payload["history"]["record_count"] == 1
     assert payload["selection"] == {
         "analysis_id": None,

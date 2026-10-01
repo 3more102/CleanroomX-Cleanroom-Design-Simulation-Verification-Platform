@@ -26,7 +26,18 @@ def test_affine_temperature_conversion_is_supported_without_rounding() -> None:
     assert convert_engineering_value(273.15, "K", "C") == pytest.approx(0.0)
 
 
-@pytest.mark.parametrize("unit", ["psi", "cfm", "ACH", "degC"])
+def test_registered_engineering_aliases_are_supported_exactly() -> None:
+    assert convert_engineering_value(1.0, "psi", "Pa") == pytest.approx(
+        6894.757293168
+    )
+    assert convert_engineering_value(1.0, "cfm", "m3/s") == pytest.approx(
+        0.0004719474432
+    )
+    assert convert_engineering_value(20.0, "ACH", "1/h") == pytest.approx(20.0)
+    assert convert_engineering_value(20.0, "degC", "K") == pytest.approx(293.15)
+
+
+@pytest.mark.parametrize("unit", ["PSI", "CFM", "ach", "degc"])
 def test_unknown_aliases_fail_closed(unit: str) -> None:
     with pytest.raises(EngineeringUnitConversionError, match="unsupported"):
         convert_engineering_value(1.0, unit, "Pa")

@@ -374,14 +374,16 @@ def proofgraphs_from_project_requirements_analysis_run(
     mappings: Iterable[AnalysisRequirementEvidenceMapping],
     *,
     source_project_revision: str,
-    current_project_revision: str | None,
+    current_analysis_input: dict[str, Any] | None,
+    base_dir: str | None = None,
 ) -> tuple[ProofGraph, ...]:
     """Bind one immutable analysis run and project it into canonical ProofGraphs."""
     bindings = bind_analysis_run_requirement_evidence(
         run_bundle,
         mappings,
         source_project_revision=source_project_revision,
-        current_project_revision=current_project_revision,
+        current_analysis_input=current_analysis_input,
+        base_dir=base_dir,
     )
     return proofgraphs_from_project_requirements_verification(
         requirements,

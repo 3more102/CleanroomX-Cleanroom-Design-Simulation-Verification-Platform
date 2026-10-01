@@ -1,6 +1,6 @@
 ---
-revision: 2.1
-stable: v0.102.1
+revision: 2.2
+stable: v0.103.0
 baseline: Stable release baseline; development-preview features explicitly labeled
 date: 1 October 2026
 ---
@@ -254,7 +254,7 @@ A typical structure is:
 {
   "schema": "cleanroomx.project",
   "schema_version": 1,
-  "application_version": "0.102.1",
+  "application_version": "0.103.0",
   "project": {
     "name": "Facility A - Cleanroom Upgrade",
     "metadata": {}

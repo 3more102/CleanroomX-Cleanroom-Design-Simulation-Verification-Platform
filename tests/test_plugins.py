@@ -6,10 +6,14 @@ import pytest
 
 import cleanroomx.application as application
 from cleanroomx.plugins import (
+    PLUGIN_ALLOWLIST_ENV,
     PLUGIN_API_VERSION,
+    PLUGIN_TRUST_MODE_ENV,
     AnalysisPlugin,
     PluginOrigin,
+    PluginTrustPolicy,
     discover_analysis_plugins,
+    plugin_trust_policy_from_environment,
 )
 
 
@@ -34,8 +38,10 @@ class _FakeEntryPoint:
         self._loaded = loaded
         self.dist = distribution
         self._load_error = load_error
+        self.load_calls = 0
 
     def load(self):
+        self.load_calls += 1
         if self._load_error is not None:
             raise self._load_error
         return self._loaded
@@ -252,6 +258,146 @@ def test_plugin_discovery_disables_all_duplicate_plugin_keys():
     assert discovery.plugins == ()
     assert len(discovery.issues) == 2
     assert all("all contenders disabled" in issue.error for issue in discovery.issues)
+
+
+def test_plugin_trust_policy_disabled_blocks_before_import():
+    point = _FakeEntryPoint(
+        "blocked",
+        "pkg.blocked:registration",
+        _plugin("blocked_plugin"),
+        distribution=_FakeDistribution("cleanroomx-blocked", "1.0"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=PluginTrustPolicy(mode="disabled"),
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_calls == 0
+    assert len(discovery.issues) == 1
+    assert "disabled by operator policy" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_allowlist_normalizes_distribution_and_pins_version():
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_TRUST_MODE_ENV: "allowlist",
+            PLUGIN_ALLOWLIST_ENV: "CleanroomX.Example==2.4.1",
+        }
+    )
+    point = _FakeEntryPoint(
+        "example",
+        "cleanroomx_example:registration",
+        _plugin("example_plugin"),
+        distribution=_FakeDistribution("cleanroomx_example", "2.4.1"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert [item.plugin.key for item in discovery.plugins] == ["example_plugin"]
+    assert discovery.issues == ()
+    assert point.load_calls == 1
+    assert discovery.policy.to_dict() == {
+        "mode": "allowlist",
+        "allowlist": [
+            {
+                "distribution_name": "cleanroomx-example",
+                "distribution_version": "2.4.1",
+            }
+        ],
+        "configuration_error": None,
+    }
+
+
+def test_plugin_trust_policy_version_mismatch_blocks_before_import():
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_TRUST_MODE_ENV: "allowlist",
+            PLUGIN_ALLOWLIST_ENV: "cleanroomx-example==2.4.1",
+        }
+    )
+    point = _FakeEntryPoint(
+        "example",
+        "cleanroomx_example:registration",
+        _plugin("example_plugin"),
+        distribution=_FakeDistribution("cleanroomx-example", "2.4.0"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_calls == 0
+    assert "does not match required version" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_allowlist_requires_distribution_identity_before_import():
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_TRUST_MODE_ENV: "allowlist",
+            PLUGIN_ALLOWLIST_ENV: "cleanroomx-example",
+        }
+    )
+    point = _FakeEntryPoint(
+        "example",
+        "cleanroomx_example:registration",
+        _plugin("example_plugin"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert discovery.plugins == ()
+    assert point.load_calls == 0
+    assert "requires an installed distribution identity" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_invalid_environment_fails_closed_before_import():
+    policy = plugin_trust_policy_from_environment(
+        {
+            PLUGIN_TRUST_MODE_ENV: "allowlist",
+            PLUGIN_ALLOWLIST_ENV: "cleanroomx-example==",
+        }
+    )
+    point = _FakeEntryPoint(
+        "example",
+        "cleanroomx_example:registration",
+        _plugin("example_plugin"),
+        distribution=_FakeDistribution("cleanroomx-example", "1.0"),
+    )
+
+    discovery = discover_analysis_plugins(
+        set(),
+        entry_points=[point],
+        trust_policy=policy,
+    )
+
+    assert policy.configuration_error is not None
+    assert discovery.plugins == ()
+    assert point.load_calls == 0
+    assert "invalid external plugin trust configuration" in discovery.issues[0].error
+
+
+def test_plugin_trust_policy_invalid_mode_fails_closed():
+    policy = plugin_trust_policy_from_environment(
+        {PLUGIN_TRUST_MODE_ENV: "sometimes"}
+    )
+
+    assert policy.mode == "invalid"
+    assert policy.configuration_error is not None
+    assert PLUGIN_TRUST_MODE_ENV in policy.configuration_error
 
 
 def test_plugin_analysis_runs_through_shared_application_pipeline(monkeypatch):

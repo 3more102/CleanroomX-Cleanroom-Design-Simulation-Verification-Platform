@@ -230,17 +230,26 @@ def _analysis_currency(
                 ),
             }
 
+    if dependencies:
+        current_explanation = (
+            "The latest retained verification matches the current analysis input, "
+            "requirements, mappings, and active mapping identities, and every "
+            "retained external dependency fingerprint matches the current file content."
+        )
+    else:
+        current_explanation = (
+            "The latest retained verification matches the current analysis input, "
+            "requirements, mappings, and active mapping identities, and this "
+            "analysis declares no file-backed external engineering dependencies."
+        )
+
     return {
         **base,
         "latest_record": record_summary,
         "state": _CURRENT,
         "current": True,
         "complete": True,
-        "explanation": (
-            "The latest retained verification matches the current analysis input, "
-            "requirements, mappings, and active mapping identities, and this "
-            "analysis declares no file-backed external engineering dependencies."
-        ),
+        "explanation": current_explanation,
     }
 
 

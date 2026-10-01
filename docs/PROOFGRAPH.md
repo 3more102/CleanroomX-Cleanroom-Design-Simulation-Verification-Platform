@@ -97,6 +97,39 @@ Each evidence record can retain:
 Confidence is optional. ProofGraph does not manufacture a confidence percentage
 when none exists in the underlying engineering evidence.
 
+## Evidence precedence and conflict assessment
+
+`assess_evidence_precedence` evaluates competing ProofGraph evidence claims
+without mutating the graph or deleting historical evidence. Callers supply an
+explicit `EvidencePrecedencePolicy` whose evidence-kind and source orders are
+strongest-first.
+
+Claims are grouped by subject reference and engineering property. A uniquely
+highest-ranked claim is selected while every lower-ranked claim remains retained
+and visible in the report. Equally ranked claims with identical value and unit
+remain coequal. Equally ranked claims that disagree in value or unit produce an
+explicit `conflict` with no selected claim.
+
+The assessment deliberately performs no unit conversion, timestamp-based
+freshness inference, confidence weighting, source guessing, or solver
+recomputation. Unlisted kinds and sources rank after explicitly listed entries.
+This makes precedence a caller-owned engineering policy rather than a hidden
+ProofGraph assumption.
+
+The deterministic report schema is
+`cleanroomx.proofgraph-evidence-precedence` version 1 and includes the complete
+candidate set, preferred set, shadowed evidence IDs, conflict state, and the
+selected evidence ID when one assessment-preferred claim exists. The report
+declares `decision_scope=assessment_only` and
+`changes_canonical_verification=false`.
+
+This layer is not a second requirements-verification authority. A
+`selected_evidence_id` is only the preferred claim inside this read-only
+assessment; it does not authorize a requirement/entity binding, rewrite a
+ComplianceFinding or ComplianceVerdict, or change canonical project verification.
+Any evidence authority used to issue a project requirement verdict remains an
+explicit input to the canonical project requirements verifier.
+
 ## Compliance states
 
 ProofGraph v1 uses six explicit verdict states:
@@ -175,22 +208,29 @@ proofgraph_from_dict performs strict schema parsing:
 
 The model remains pure Python with no GUI dependency.
 
-## Next integration slices
+## Remaining integration slices
 
-The next high-value work should build on this model rather than create another
-parallel evidence representation:
+The shared ProofGraph model now includes calculation and IFC design bridges,
+commissioning evidence adapters, explicit canonical requirement-evidence
+authority, retained verification history, cross-artifact integrity checks,
+project traceability, desktop requirement/evidence/verdict drill-down, and the
+read-only precedence/conflict assessment described above.
 
-1. emit CalculationEvidence from existing pressure, airflow, ACH, and spatial
-   design analyses;
-2. emit DesignEvidence and ProvenanceRecord data from IFC semantic bindings,
-   including dimension_source, GlobalId, storey, placement, and source digest;
-3. extend the explicit requirement-evidence authority/conflict policy into persisted project configuration where needed, while retaining every competing evidence record;
-4. expose requirement -> evidence -> verdict drill-down in the desktop
-   Compliance / Assurance area;
-5. add commissioning and operational adapters only after their source identity,
-   freshness, and uncertainty contracts are explicit.
+Remaining high-value work should stay on this representation rather than create
+a parallel evidence model:
 
-The canonical project requirements verifier now has the first explicit conflict-resolution slice: when multiple evidence records target one requirement/entity, it remains invalid by default, but a caller may provide an auditable authority decision naming the exact selected evidence, authority source/issuer, decision reference, decision revision, and rationale. Every candidate remains in the verification input and the complete authority decision is hash-bound to the result; ProofGraph projection therefore consumes a resolved canonical verdict rather than inventing its own precedence rule.
+1. add operational-evidence adapters only when source identity, freshness, and
+   uncertainty contracts are explicit;
+2. persist a precedence policy in project configuration only when a workflow
+   truly requires reusable project-owned assessment policy. Until then,
+   precedence remains an explicit caller-owned input and does not alter canonical
+   verification.
+
+The canonical project requirements verifier remains the verdict authority: when
+multiple evidence records target one requirement/entity, ambiguity fails closed
+unless an explicit auditable authority decision names the selected evidence and
+its provenance. The ProofGraph precedence report is assessment-only and cannot
+replace that verifier authority.
 
 ProofGraph does not itself establish regulatory approval, cleanroom
 certification, commissioning acceptance, or completeness of an external

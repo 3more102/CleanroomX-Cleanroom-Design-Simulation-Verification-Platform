@@ -420,7 +420,9 @@ Each configured qualification measurement becomes CommissioningEvidence retainin
 the observed nominal value, complete absolute-uncertainty interval, unit, source
 identity, revision, and measurement date when supplied. The conservative interval
 used by the canonical workflow is retained separately as CalculationEvidence with
-an explicit upstream dependency on the measured value.
+an explicit upstream dependency on the measured value. The corresponding
+ProofGraph requirement criterion names `qualification_interval`, matching the
+calculation evidence that actually drives the canonical conservative comparison.
 
 Pressure-cascade checks retain both measured pressure inputs as commissioning
 evidence and the canonical signed differential-pressure interval as calculation

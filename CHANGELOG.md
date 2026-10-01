@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — verification currency explanation integrity — 2026-10-01
+
+- Corrects the canonical `current` explanation for file-backed verification so it states that retained dependency fingerprints were rechecked and match current file content.
+- Preserves the existing no-dependency explanation for inline analyses.
+- Adds regression coverage preventing human-readable currency explanations from contradicting the machine-readable dependency state.
+- Changes no solver equations, verification verdicts, persisted records, project schema, or currency state classification.
+
+
 ## Unreleased Release 3 — desktop verification history currency context — 2026-10-01
 
 - Separates immutable historical verification status from present verification currency in **Analysis → Verification History...**.

@@ -66,7 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     status_parser.add_argument("project", help="CleanroomX project file")
-    status_parser.add_argument("analysis_id", help="Stable project analysis id")
+    status_parser.add_argument(
+        "analysis_id",
+        nargs="?",
+        help=(
+            "Stable project analysis id. Omit it to gate all analyses with active "
+            "requirement-evidence mappings."
+        ),
+    )
     return parser
 
 
@@ -88,13 +95,22 @@ def _verification_exit_code(workflow: ProjectRequirementsWorkflowRun) -> int:
     return 0 if verification.get("verified") is True else 1
 
 
-def _status_exit_code(assessment: dict[str, Any]) -> int:
+def _status_gate(assessment: dict[str, Any]) -> dict[str, bool]:
     latest_record = assessment.get("latest_record")
     verified_pass = (
         isinstance(latest_record, dict)
         and latest_record.get("verified") is True
     )
-    return 0 if assessment.get("state") == "current" and verified_pass else 1
+    current = assessment.get("state") == "current"
+    return {
+        "current": current,
+        "verified_pass": verified_pass,
+        "accepted": current and verified_pass,
+    }
+
+
+def _status_exit_code(assessment: dict[str, Any]) -> int:
+    return 0 if _status_gate(assessment)["accepted"] else 1
 
 
 def _status_payload(
@@ -103,12 +119,6 @@ def _status_payload(
     revision,
     assessment: dict[str, Any],
 ) -> dict[str, Any]:
-    latest_record = assessment.get("latest_record")
-    verified_pass = (
-        isinstance(latest_record, dict)
-        and latest_record.get("verified") is True
-    )
-    current = assessment.get("state") == "current"
     return {
         "schema": "cleanroomx.project-verification-status",
         "schema_version": 1,
@@ -123,10 +133,54 @@ def _status_payload(
             "analysis_id": assessment["analysis_id"],
         },
         "currency": assessment,
+        "gate": _status_gate(assessment),
+    }
+
+
+def _aggregate_status_payload(
+    source: Path,
+    project,
+    revision,
+    currency: dict[str, Any],
+) -> dict[str, Any]:
+    configured = [
+        item
+        for item in currency["analyses"]
+        if item.get("state") != "not_configured"
+    ]
+    accepted_ids: list[str] = []
+    rejected_ids: list[str] = []
+    for assessment in configured:
+        target = (
+            accepted_ids
+            if _status_gate(assessment)["accepted"]
+            else rejected_ids
+        )
+        target.append(assessment["analysis_id"])
+
+    accepted = bool(configured) and not rejected_ids
+    return {
+        "schema": "cleanroomx.project-verification-status-aggregate",
+        "schema_version": 1,
+        "source": {
+            "path": str(source),
+            "size_bytes": revision.size,
+            "sha256": revision.sha256,
+            "stable_during_inspection": True,
+        },
+        "project": {
+            "name": project.name,
+            "analysis_count": len(project.analyses),
+        },
+        "currency": currency,
         "gate": {
-            "current": current,
-            "verified_pass": verified_pass,
-            "accepted": current and verified_pass,
+            "configured_analysis_count": len(configured),
+            "accepted_analysis_count": len(accepted_ids),
+            "rejected_analysis_count": len(rejected_ids),
+            "accepted_analysis_ids": accepted_ids,
+            "rejected_analysis_ids": rejected_ids,
+            "all_configured_analyses_current_verified_pass": accepted,
+            "accepted": accepted,
         },
     }
 
@@ -167,6 +221,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 project,
                 base_dir=source.parent,
             )
+            revision_after = capture_project_file_revision(source)
+            if not project_file_revision_matches(revision_before, revision_after):
+                raise RuntimeError(
+                    "project changed during verification-status inspection; "
+                    "status result was discarded"
+                )
+
+            if args.analysis_id is None:
+                payload = _aggregate_status_payload(
+                    source,
+                    project,
+                    revision_after,
+                    currency,
+                )
+                sys.stdout.write(_strict_json_text(payload))
+                return 0 if payload["gate"]["accepted"] else 1
+
             assessment = next(
                 (
                     item
@@ -178,12 +249,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             if assessment is None:
                 raise ValueError(
                     f"analysis {args.analysis_id!r} is not present in the current project"
-                )
-            revision_after = capture_project_file_revision(source)
-            if not project_file_revision_matches(revision_before, revision_after):
-                raise RuntimeError(
-                    "project changed during verification-status inspection; "
-                    "status result was discarded"
                 )
             sys.stdout.write(
                 _strict_json_text(

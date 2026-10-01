@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — project batch protected-output hardening — 2026-10-01
+
+- Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.
+- Reuses the canonical project/dependency path-identity guard already used by other project-facing operator surfaces.
+- Adds focused regressions for direct source overwrite, same-file alias overwrite, and external dependency overwrite.
+- Changes no solver equation, numerical tolerance, analysis input, project schema, project-batch schema, or execution-order semantics.
+
 ## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01
 
 - Adds an explicit strongest-first evidence-kind/source precedence policy over existing ProofGraph evidence without mutating or deleting historical records.

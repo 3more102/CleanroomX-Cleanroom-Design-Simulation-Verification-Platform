@@ -46,8 +46,8 @@ jobs:
               echo "Immutable tag ${TAG} already exists at ${existing_sha}, not ${TARGET_SHA}." >&2
               exit 1
             fi
-            echo "publish=false" >> "${GITHUB_OUTPUT}"
-            echo "Immutable release tag ${TAG} already exists at the exact successful current-main SHA."
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
+            echo "Immutable release tag ${TAG} already exists at the exact successful current-main SHA; release publication will be verified or resumed."
             exit 0
           fi
 
@@ -80,8 +80,18 @@ jobs:
             exit 1
           fi
 
-          git tag "${TAG}" "${TARGET_SHA}"
-          git push origin "refs/tags/${TAG}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            existing_sha="$(git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $1}')"
+            test "${existing_sha}" = "${TARGET_SHA}"
+          else
+            git tag "${TAG}" "${TARGET_SHA}"
+            git push origin "refs/tags/${TAG}"
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG} already exists at the verified immutable tag."
+            exit 0
+          fi
 
           cat > /tmp/release-notes.md <<'EOF'
           CleanroomX v0.103.0 is Release 3: the requirements-to-evidence and protected-publication closure on top of the v0.102.1 spatial-production baseline.

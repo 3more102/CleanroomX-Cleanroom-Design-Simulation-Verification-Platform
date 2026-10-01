@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
+import pytest
+
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
@@ -27,6 +29,7 @@ from cleanroomx.project_verification_persistence import (
 from cleanroomx.verification_currency import (
     VERIFICATION_CURRENCY_SCHEMA,
     assess_project_verification_currency,
+    verification_history_record_currency_context,
 )
 
 
@@ -366,3 +369,48 @@ def test_project_diagnostics_warn_when_persisted_verification_is_stale(tmp_path)
     assert issue["severity"] == "warning"
     assert "analysis_input_changed" in issue["details"]["mismatch_reasons"]
     assert result["verification_currency"]["summary"]["stale_count"] == 1
+
+
+
+def test_verification_history_record_currency_context_is_record_specific():
+    assessment = {
+        "analysis_id": "room-a",
+        "state": "current",
+        "current": True,
+        "complete": True,
+        "mismatch_reasons": [],
+        "latest_record": {"sequence": 2},
+        "explanation": "Current verification matches the project.",
+    }
+
+    historical = verification_history_record_currency_context(
+        {"analysis_id": "room-a", "sequence": 1},
+        assessment,
+    )
+    assert historical["state"] == "historical"
+    assert historical["current"] is False
+
+    latest = verification_history_record_currency_context(
+        {"analysis_id": "room-a", "sequence": 2},
+        assessment,
+    )
+    assert latest == assessment
+    assert latest is not assessment
+
+    orphaned = verification_history_record_currency_context(
+        {"analysis_id": "removed-analysis", "sequence": 7},
+        None,
+    )
+    assert orphaned["state"] == "not_in_current_project"
+    assert orphaned["current"] is False
+
+
+def test_verification_history_record_currency_context_rejects_identity_mismatch():
+    with pytest.raises(ValueError, match="analysis id does not match"):
+        verification_history_record_currency_context(
+            {"analysis_id": "room-a", "sequence": 1},
+            {
+                "analysis_id": "room-b",
+                "latest_record": {"sequence": 1},
+            },
+        )

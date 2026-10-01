@@ -62,8 +62,8 @@ from .project_bundle import (
     extract_project_bundle,
 )
 from .project_diagnostics_cli import (
-    _assert_output_is_distinct_from_dependencies,
-    _assert_output_is_distinct_from_source,
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
 )
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -3347,10 +3347,9 @@ class CleanroomXApp:
             return
 
         try:
-            _assert_output_is_distinct_from_source(self.project_path, path)
-            _assert_output_is_distinct_from_dependencies(
+            _assert_project_output_is_safe(
                 self.project,
-                base_dir=self.project_path.parent,
+                source=self.project_path,
                 output=path,
             )
             dossier = build_project_engineering_dossier(
@@ -3380,6 +3379,12 @@ class CleanroomXApp:
                 raise RuntimeError(
                     "project file changed during dossier generation; export was discarded"
                 )
+            _assert_project_publication_safe(
+                self.project,
+                source=self.project_path,
+                revision=revision_before,
+                output=path,
+            )
         except Exception as exc:
             self.status_var.set("Project dossier export failed")
             messagebox.showerror(
@@ -3389,7 +3394,17 @@ class CleanroomXApp:
             )
             return
 
-        if not self._write_export_file(path, content, label=label):
+        if not self._write_export_file(
+            path,
+            content,
+            label=label,
+            before_replace=lambda: _assert_project_publication_safe(
+                self.project,
+                source=self.project_path,
+                revision=revision_before,
+                output=path,
+            ),
+        ):
             return
         messagebox.showinfo(
             "Project dossier exported",
@@ -3812,10 +3827,24 @@ class CleanroomXApp:
         self.status_var.set(f"Imported {source_path.name}")
         self._update_title()
 
-    def _write_export_file(self, path: str, content: str, *, label: str) -> bool:
+    def _write_export_file(
+        self,
+        path: str,
+        content: str,
+        *,
+        label: str,
+        before_replace=None,
+    ) -> bool:
         target = Path(path)
         try:
-            atomic_write_text(target, content)
+            if before_replace is None:
+                atomic_write_text(target, content)
+            else:
+                atomic_write_text(
+                    target,
+                    content,
+                    before_replace=before_replace,
+                )
         except Exception as exc:
             self.status_var.set(f"{label} export failed")
             messagebox.showerror(

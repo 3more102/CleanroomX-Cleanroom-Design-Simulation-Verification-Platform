@@ -2061,3 +2061,76 @@ def test_gui_verification_history_empty_is_reported(monkeypatch):
             "No persisted project requirements verification records exist yet.",
         )
     ]
+
+def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_boundary(
+    monkeypatch,
+    tmp_path,
+):
+    class Status:
+        def __init__(self):
+            self.value = ""
+
+        def set(self, value):
+            self.value = value
+
+    project_path = save_project_document(
+        tmp_path / "project.cleanroomx.json",
+        ProjectDocument(name="GUI source revision race"),
+    )
+    revision = capture_project_file_revision(project_path)
+    destination = tmp_path / "project.dossier.json"
+    destination.write_text("previous-valid-report\n", encoding="utf-8")
+
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app._running = False
+    app.project = load_project_document(project_path)
+    app.project_path = project_path
+    app._project_file_revision = revision
+    app.status_var = Status()
+    app._editor_analysis = lambda: None
+    app._sync_metadata = lambda: None
+    app._has_unsaved_changes = lambda: False
+    real_guard = gui_module._assert_project_publication_safe
+    guard_calls = 0
+
+    def race_guard(project, *, source, revision, output):
+        nonlocal guard_calls
+        guard_calls += 1
+        if guard_calls == 2:
+            project_path.write_text(
+                project_path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        real_guard(
+            project,
+            source=source,
+            revision=revision,
+            output=output,
+        )
+
+    errors = []
+    monkeypatch.setattr(
+        gui_module,
+        "_assert_project_publication_safe",
+        race_guard,
+    )
+    monkeypatch.setattr(
+        gui_module.filedialog,
+        "asksaveasfilename",
+        lambda **kwargs: str(destination),
+    )
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showerror",
+        lambda title, message, **kwargs: errors.append((title, message)),
+    )
+
+    app.export_project_engineering_dossier()
+
+    assert guard_calls == 2
+    assert destination.read_text(encoding="utf-8") == "previous-valid-report\n"
+    assert errors
+    assert errors[-1][0] == "Project dossier export failed"
+    assert "project source changed before report publication" in errors[-1][1]
+

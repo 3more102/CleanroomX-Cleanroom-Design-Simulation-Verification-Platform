@@ -194,7 +194,7 @@ def plugin_trust_policy_from_environment(
     """Build a fail-closed external-plugin policy from process environment."""
 
     source = os.environ if environ is None else environ
-    raw_mode = source.get(PLUGIN_MODE_ENV, "trusted")
+    raw_mode = source.get(PLUGIN_MODE_ENV, "disabled")
     raw_allowlist = source.get(PLUGIN_ALLOWLIST_ENV, "")
     try:
         if not isinstance(raw_allowlist, str):

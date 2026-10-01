@@ -271,6 +271,11 @@ def verification_history_record_currency_context(
             ),
         }
 
+    if current_assessment.get("analysis_id") != record.get("analysis_id"):
+        raise ValueError(
+            "verification currency assessment analysis does not match retained record"
+        )
+
     latest_record = current_assessment.get("latest_record")
     if (
         not isinstance(latest_record, dict)

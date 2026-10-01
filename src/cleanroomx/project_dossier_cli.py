@@ -13,8 +13,8 @@ from .project import (
     project_file_revision_matches,
 )
 from .project_diagnostics_cli import (
-    _assert_output_is_distinct_from_dependencies,
-    _assert_output_is_distinct_from_source,
+    _assert_project_output_is_safe,
+    _assert_project_publication_safe,
 )
 from .project_dossier import (
     build_project_engineering_dossier,
@@ -51,10 +51,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         project, revision_before = load_project_document_with_revision(source)
         if args.output:
-            _assert_output_is_distinct_from_source(source, args.output)
-            _assert_output_is_distinct_from_dependencies(
+            _assert_project_output_is_safe(
                 project,
-                base_dir=source.parent,
+                source=source,
                 output=args.output,
             )
 
@@ -83,7 +82,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         if args.output:
-            atomic_write_text(args.output, text)
+            _assert_project_publication_safe(
+                project,
+                source=source,
+                revision=revision_before,
+                output=args.output,
+                output_guard=_assert_project_output_is_safe,
+            )
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=lambda: _assert_project_publication_safe(
+                    project,
+                    source=source,
+                    revision=revision_before,
+                    output=args.output,
+                    output_guard=_assert_project_output_is_safe,
+                ),
+            )
         else:
             sys.stdout.write(text)
         return 0

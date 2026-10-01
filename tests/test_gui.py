@@ -15,6 +15,17 @@ from cleanroomx.project import (
     load_project_document,
     save_project_document,
 )
+from cleanroomx.project_requirement_evidence_mappings import (
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
+    ProjectRequirementEvidenceMapping,
+    ProjectRequirementEvidenceMappings,
+)
+from cleanroomx.project_requirements import (
+    PROJECT_REQUIREMENTS_METADATA_KEY,
+    ProjectRequirement,
+    ProjectRequirementSet,
+    ProjectRequirements,
+)
 from cleanroomx.run_history import (
     RUN_HISTORY_METADATA_KEY,
     append_run_history_record,
@@ -49,6 +60,173 @@ def test_flatten_json_preserves_paths_and_units():
     rows = flatten_json({"room": {"supply_airflow_m3_h": 1200.0, "enabled": True}})
     assert ("$.room.supply_airflow_m3_h", "1200.0", "m³/h") in rows
     assert ("$.room.enabled", "true", "") in rows
+
+
+def _requirements_traceability_project() -> ProjectDocument:
+    requirement = ProjectRequirement(
+        id="req-ach",
+        title="Minimum air changes",
+        description="Project-owned minimum ACH acceptance criterion.",
+        discipline="HVAC",
+        category="air_change_rate",
+        source="Project Design Basis",
+        source_revision="R1",
+        unit="1/h",
+        minimum=15.0,
+        applicability="applicable",
+        scope=("room-a",),
+        verification_method="analysis",
+        required_evidence=("analysis_result",),
+        status="approved",
+    )
+    requirements = ProjectRequirements(
+        sets=(
+            ProjectRequirementSet(
+                id="set-hvac",
+                title="HVAC requirements",
+                source="Project Design Basis",
+                source_revision="R1",
+                requirements=(requirement,),
+            ),
+        )
+    )
+    mappings = ProjectRequirementEvidenceMappings(
+        mappings=(
+            ProjectRequirementEvidenceMapping(
+                id="map-ach",
+                requirement_id="req-ach",
+                analysis_id="analysis-room-a",
+                expected_analysis_kind="room_verification",
+                subject_ref="room-a",
+                property_name="air_changes_per_hour",
+                result_path=("metrics", "air_changes_per_hour"),
+                unit="1/h",
+                evidence_kinds=("analysis_result",),
+                status="active",
+            ),
+        )
+    )
+    return ProjectDocument(
+        name="Traceability",
+        analyses=[
+            AnalysisDocument(
+                id="analysis-room-a",
+                name="Room A verification",
+                kind="room_verification",
+                input={},
+            )
+        ],
+        active_analysis_id="analysis-room-a",
+        metadata={
+            PROJECT_REQUIREMENTS_METADATA_KEY: requirements.to_dict(),
+            PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY: mappings.to_dict(),
+        },
+    )
+
+
+def test_project_requirement_traceability_snapshot_resolves_canonical_registries():
+    project = _requirements_traceability_project()
+
+    snapshot = gui_module.project_requirement_traceability_snapshot(project)
+
+    assert snapshot["requirement_set_count"] == 1
+    assert snapshot["requirement_count"] == 1
+    assert snapshot["mapping_count"] == 1
+    assert snapshot["active_mapping_count"] == 1
+    assert snapshot["active_mapped_requirement_count"] == 1
+    assert snapshot["requirements_sha256"] == project.metadata[
+        PROJECT_REQUIREMENTS_METADATA_KEY
+    ]["requirements_sha256"]
+    assert snapshot["mappings_sha256"] == project.metadata[
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    ]["mappings_sha256"]
+
+    requirement = snapshot["requirements"][0]
+    assert requirement["id"] == "req-ach"
+    assert requirement["status"] == "approved"
+    assert requirement["scope"] == ["room-a"]
+    assert requirement["criterion"] == "minimum=15, unit=1/h"
+
+    mapping = snapshot["mappings"][0]
+    assert mapping["requirement_title"] == "Minimum air changes"
+    assert mapping["analysis_name"] == "Room A verification"
+    assert mapping["reference_state"] == "resolved"
+    assert mapping["result_path"] == ["metrics", "air_changes_per_hour"]
+
+
+def test_traceability_does_not_rebind_historical_mapping_to_wrong_analysis_kind():
+    project = _requirements_traceability_project()
+    historical_mappings = ProjectRequirementEvidenceMappings(
+        mappings=(
+            ProjectRequirementEvidenceMapping(
+                id="map-ach",
+                requirement_id="req-ach",
+                analysis_id="analysis-room-a",
+                expected_analysis_kind="pressure_cascade",
+                subject_ref="room-a",
+                property_name="air_changes_per_hour",
+                result_path=("metrics", "air_changes_per_hour"),
+                unit="1/h",
+                evidence_kinds=("analysis_result",),
+                status="superseded",
+            ),
+        )
+    )
+    project.metadata[PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY] = (
+        historical_mappings.to_dict()
+    )
+
+    snapshot = gui_module.project_requirement_traceability_snapshot(project)
+
+    mapping = snapshot["mappings"][0]
+    assert mapping["reference_state"] == "historical_reference"
+    assert mapping["analysis_name"] == "analysis-room-a"
+    assert mapping["detail"]["analysis_reference_state"] == "kind_mismatch"
+    assert mapping["detail"]["resolved_analysis"] is None
+    assert mapping["detail"]["current_analysis_candidate"] == {
+        "id": "analysis-room-a",
+        "name": "Room A verification",
+        "kind": "room_verification",
+    }
+
+
+def test_gui_requirements_traceability_opens_canonical_snapshot(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = _requirements_traceability_project()
+
+    captured = []
+    monkeypatch.setattr(
+        gui_module,
+        "RequirementsTraceabilityDialog",
+        lambda parent, snapshot: captured.append((parent, snapshot)),
+    )
+
+    assert app.show_requirements_traceability() is True
+    assert captured[0][0] is app.root
+    assert captured[0][1]["requirement_count"] == 1
+    assert captured[0][1]["active_mapping_count"] == 1
+
+
+def test_gui_requirements_traceability_reports_empty_project(monkeypatch):
+    app = CleanroomXApp.__new__(CleanroomXApp)
+    app.root = object()
+    app.project = ProjectDocument(name="No requirements")
+
+    infos = []
+    monkeypatch.setattr(
+        gui_module.messagebox,
+        "showinfo",
+        lambda title, message, **kwargs: infos.append((title, message)),
+    )
+
+    assert app.show_requirements_traceability() is False
+    assert infos == [
+        (
+            "Project Requirements Traceability",
+            "No persisted project requirements or evidence mappings exist yet.",
+        )
+    ]
 
 
 def test_commit_editor_updates_loaded_analysis_even_if_selection_has_moved():

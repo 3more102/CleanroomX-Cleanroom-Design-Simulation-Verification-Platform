@@ -69,6 +69,17 @@ from .project_dossier import (
     build_project_engineering_dossier,
     markdown_project_engineering_dossier,
 )
+from .project_requirement_evidence_mappings import (
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
+    ProjectRequirementEvidenceMappingsFormatError,
+    project_requirement_evidence_mappings_from_dict,
+    validate_project_requirement_evidence_mappings,
+)
+from .project_requirements import (
+    PROJECT_REQUIREMENTS_METADATA_KEY,
+    ProjectRequirementsFormatError,
+    project_requirements_from_dict,
+)
 from .project_requirements_workflow import run_project_requirements_workflow
 from .project_verification_persistence import (
     persist_project_requirements_workflow_run,
@@ -166,6 +177,189 @@ def verification_history_record_currency_context(
             ),
         }
     return copy.deepcopy(current_assessment)
+
+
+def _requirement_criterion_text(requirement) -> str:
+    parts: list[str] = []
+    if requirement.target is not None:
+        parts.append(
+            "target="
+            + json.dumps(
+                requirement.target,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        )
+    if requirement.minimum is not None:
+        parts.append(f"minimum={requirement.minimum:g}")
+    if requirement.maximum is not None:
+        parts.append(f"maximum={requirement.maximum:g}")
+    if requirement.tolerance is not None:
+        parts.append(f"tolerance={requirement.tolerance:g}")
+    if requirement.unit is not None:
+        parts.append(f"unit={requirement.unit}")
+    return ", ".join(parts) if parts else "no explicit acceptance criterion"
+
+
+def project_requirement_traceability_snapshot(
+    project: ProjectDocument,
+) -> dict:
+    """Build a read-only desktop view from the canonical persisted registries."""
+    metadata = project.metadata
+
+    requirements_registry = None
+    raw_requirements = metadata.get(PROJECT_REQUIREMENTS_METADATA_KEY)
+    if raw_requirements is not None:
+        requirements_registry = project_requirements_from_dict(raw_requirements)
+
+    mappings_registry = None
+    raw_mappings = metadata.get(
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    )
+    if raw_mappings is not None:
+        mappings_registry = project_requirement_evidence_mappings_from_dict(
+            raw_mappings
+        )
+        validate_project_requirement_evidence_mappings(
+            metadata,
+            project.analyses,
+        )
+
+    requirement_rows: list[dict] = []
+    requirement_by_id = {}
+    if requirements_registry is not None:
+        for requirement_set in requirements_registry.sets:
+            for requirement in requirement_set.requirements:
+                requirement_by_id[requirement.id] = requirement
+                requirement_rows.append(
+                    {
+                        "id": requirement.id,
+                        "title": requirement.title,
+                        "set_id": requirement_set.id,
+                        "set_title": requirement_set.title,
+                        "status": requirement.status,
+                        "applicability": requirement.applicability,
+                        "scope": list(requirement.scope),
+                        "criterion": _requirement_criterion_text(requirement),
+                        "source": requirement.source,
+                        "source_revision": requirement.source_revision,
+                        "detail": {
+                            "requirement_set": {
+                                "id": requirement_set.id,
+                                "title": requirement_set.title,
+                                "description": requirement_set.description,
+                                "source": requirement_set.source,
+                                "source_revision": requirement_set.source_revision,
+                            },
+                            "requirement": requirement.to_dict(),
+                        },
+                    }
+                )
+
+    analysis_by_id = {analysis.id: analysis for analysis in project.analyses}
+    mapping_rows: list[dict] = []
+    if mappings_registry is not None:
+        for mapping in mappings_registry.mappings:
+            requirement = requirement_by_id.get(mapping.requirement_id)
+            analysis = analysis_by_id.get(mapping.analysis_id)
+            if analysis is None:
+                analysis_reference_state = "missing"
+            elif analysis.kind != mapping.expected_analysis_kind:
+                analysis_reference_state = "kind_mismatch"
+            else:
+                analysis_reference_state = "resolved"
+            reference_state = (
+                "resolved"
+                if (
+                    requirement is not None
+                    and analysis_reference_state == "resolved"
+                )
+                else "historical_reference"
+            )
+            mapping_rows.append(
+                {
+                    "id": mapping.id,
+                    "requirement_id": mapping.requirement_id,
+                    "requirement_title": (
+                        requirement.title
+                        if requirement is not None
+                        else mapping.requirement_id
+                    ),
+                    "analysis_id": mapping.analysis_id,
+                    "analysis_name": (
+                        analysis.name
+                        if analysis_reference_state == "resolved"
+                        else mapping.analysis_id
+                    ),
+                    "expected_analysis_kind": mapping.expected_analysis_kind,
+                    "subject_ref": mapping.subject_ref,
+                    "property_name": mapping.property_name,
+                    "result_path": list(mapping.result_path),
+                    "status": mapping.status,
+                    "reference_state": reference_state,
+                    "detail": {
+                        "mapping": mapping.to_dict(),
+                        "reference_state": reference_state,
+                        "analysis_reference_state": analysis_reference_state,
+                        "resolved_requirement": (
+                            requirement.to_dict()
+                            if requirement is not None
+                            else None
+                        ),
+                        "resolved_analysis": (
+                            {
+                                "id": analysis.id,
+                                "name": analysis.name,
+                                "kind": analysis.kind,
+                            }
+                            if analysis_reference_state == "resolved"
+                            else None
+                        ),
+                        "current_analysis_candidate": (
+                            {
+                                "id": analysis.id,
+                                "name": analysis.name,
+                                "kind": analysis.kind,
+                            }
+                            if analysis is not None
+                            else None
+                        ),
+                    },
+                }
+            )
+
+    active_mapping_count = sum(
+        1 for item in mapping_rows if item["status"] == "active"
+    )
+    mapped_requirement_ids = {
+        item["requirement_id"]
+        for item in mapping_rows
+        if item["status"] == "active"
+    }
+    return {
+        "requirements_sha256": (
+            requirements_registry.sha256
+            if requirements_registry is not None
+            else None
+        ),
+        "mappings_sha256": (
+            mappings_registry.sha256
+            if mappings_registry is not None
+            else None
+        ),
+        "requirement_set_count": (
+            len(requirements_registry.sets)
+            if requirements_registry is not None
+            else 0
+        ),
+        "requirement_count": len(requirement_rows),
+        "mapping_count": len(mapping_rows),
+        "active_mapping_count": active_mapping_count,
+        "active_mapped_requirement_count": len(mapped_requirement_ids),
+        "requirements": requirement_rows,
+        "mappings": mapping_rows,
+    }
 
 
 def flatten_json(value, path: str = "$") -> list[tuple[str, str, str]]:
@@ -523,6 +717,221 @@ class VerificationHistoryDialog(tk.Toplevel):
         self.detail.configure(state="disabled")
 
 
+class RequirementsTraceabilityDialog(tk.Toplevel):
+    """Read-only project requirements and evidence-routing inspection."""
+
+    def __init__(self, parent: tk.Misc, snapshot: dict):
+        super().__init__(parent)
+        self.title("Project Requirements Traceability")
+        self.geometry("1480x760")
+        self.minsize(1080, 580)
+        self.transient(parent)
+        self._details: dict[str, dict] = {}
+
+        ttk.Label(
+            self,
+            text=(
+                f"Requirement sets: {snapshot['requirement_set_count']} · "
+                f"Requirements: {snapshot['requirement_count']} · "
+                f"Mappings: {snapshot['mapping_count']} "
+                f"({snapshot['active_mapping_count']} active) · "
+                f"Actively mapped requirements: "
+                f"{snapshot['active_mapped_requirement_count']}"
+            ),
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(anchor="w", padx=10, pady=(10, 3))
+
+        ttk.Label(
+            self,
+            text=(
+                "Requirements SHA-256: "
+                f"{snapshot.get('requirements_sha256') or 'not configured'}\n"
+                "Mappings SHA-256: "
+                f"{snapshot.get('mappings_sha256') or 'not configured'}"
+            ),
+            wraplength=1420,
+        ).pack(anchor="w", padx=10, pady=(0, 6))
+
+        ttk.Label(
+            self,
+            text=(
+                "Read-only canonical project data. This view does not infer "
+                "requirements, change acceptance criteria, or rewrite mappings."
+            ),
+        ).pack(anchor="w", padx=10, pady=(0, 6))
+
+        body = ttk.Panedwindow(self, orient="vertical")
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        tree_frame = ttk.Frame(body)
+        detail_frame = ttk.Frame(body)
+        body.add(tree_frame, weight=2)
+        body.add(detail_frame, weight=2)
+
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=("type", "title", "status", "scope", "analysis", "criterion"),
+            show="tree headings",
+        )
+        self.tree.heading("#0", text="ID")
+        self.tree.heading("type", text="Type")
+        self.tree.heading("title", text="Requirement / property")
+        self.tree.heading("status", text="Status")
+        self.tree.heading("scope", text="Scope / subject")
+        self.tree.heading("analysis", text="Analysis")
+        self.tree.heading("criterion", text="Criterion / result path")
+        self.tree.column("#0", width=190)
+        self.tree.column("type", width=110, stretch=False)
+        self.tree.column("title", width=260)
+        self.tree.column("status", width=150, stretch=False)
+        self.tree.column("scope", width=175)
+        self.tree.column("analysis", width=240)
+        self.tree.column("criterion", width=360)
+
+        tree_scroll = ttk.Scrollbar(
+            tree_frame,
+            orient="vertical",
+            command=self.tree.yview,
+        )
+        self.tree.configure(yscrollcommand=tree_scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        tree_scroll.pack(side="right", fill="y")
+
+        requirements_root = "traceability:requirements"
+        mappings_root = "traceability:mappings"
+        self.tree.insert(
+            "",
+            "end",
+            iid=requirements_root,
+            text="Requirements",
+            values=(
+                "Registry",
+                f"{snapshot['requirement_count']} requirement(s)",
+                "",
+                "",
+                "",
+                "",
+            ),
+            open=True,
+        )
+        self._details[requirements_root] = {
+            "requirements_sha256": snapshot.get("requirements_sha256"),
+            "requirement_set_count": snapshot["requirement_set_count"],
+            "requirement_count": snapshot["requirement_count"],
+        }
+        for item in snapshot["requirements"]:
+            iid = f"requirement:{item['id']}"
+            scope_text = ", ".join(item["scope"]) if item["scope"] else "project"
+            self.tree.insert(
+                requirements_root,
+                "end",
+                iid=iid,
+                text=item["id"],
+                values=(
+                    "Requirement",
+                    item["title"],
+                    f"{item['status']} / {item['applicability']}",
+                    scope_text,
+                    "",
+                    item["criterion"],
+                ),
+            )
+            self._details[iid] = item["detail"]
+
+        self.tree.insert(
+            "",
+            "end",
+            iid=mappings_root,
+            text="Evidence mappings",
+            values=(
+                "Registry",
+                f"{snapshot['mapping_count']} mapping(s)",
+                f"{snapshot['active_mapping_count']} active",
+                "",
+                "",
+                "",
+            ),
+            open=True,
+        )
+        self._details[mappings_root] = {
+            "mappings_sha256": snapshot.get("mappings_sha256"),
+            "mapping_count": snapshot["mapping_count"],
+            "active_mapping_count": snapshot["active_mapping_count"],
+            "active_mapped_requirement_count": snapshot[
+                "active_mapped_requirement_count"
+            ],
+        }
+        for item in snapshot["mappings"]:
+            iid = f"mapping:{item['id']}"
+            subject = item["subject_ref"] or "project"
+            analysis_text = (
+                f"{item['analysis_name']} [{item['analysis_id']}]"
+                if item["analysis_name"] != item["analysis_id"]
+                else item["analysis_id"]
+            )
+            result_path = json.dumps(
+                item["result_path"],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            self.tree.insert(
+                mappings_root,
+                "end",
+                iid=iid,
+                text=item["id"],
+                values=(
+                    "Mapping",
+                    f"{item['requirement_title']} → {item['property_name']}",
+                    f"{item['status']} / {item['reference_state']}",
+                    subject,
+                    analysis_text,
+                    result_path,
+                ),
+            )
+            self._details[iid] = item["detail"]
+
+        self.detail = tk.Text(detail_frame, wrap="none")
+        detail_scroll = ttk.Scrollbar(
+            detail_frame,
+            orient="vertical",
+            command=self.detail.yview,
+        )
+        self.detail.configure(yscrollcommand=detail_scroll.set)
+        self.detail.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+        self.detail.configure(state="disabled")
+
+        self.tree.bind("<<TreeviewSelect>>", self._show_selected)
+        first_requirement = self.tree.get_children(requirements_root)
+        first_mapping = self.tree.get_children(mappings_root)
+        initial = (
+            first_requirement[0]
+            if first_requirement
+            else first_mapping[0]
+            if first_mapping
+            else requirements_root
+        )
+        self.tree.selection_set(initial)
+        self.tree.focus(initial)
+        self._show_selected()
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(buttons, text="Close", command=self.destroy).pack(side="right")
+
+    def _show_selected(self, event=None) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        detail = self._details.get(selection[0], {})
+        self.detail.configure(state="normal")
+        self.detail.delete("1.0", "end")
+        self.detail.insert(
+            "1.0",
+            json.dumps(detail, indent=2, sort_keys=True, ensure_ascii=False),
+        )
+        self.detail.configure(state="disabled")
+
+
 class IfcReimportPlanDialog(tk.Toplevel):
     """Read-only review of the deterministic IFC re-import plan."""
 
@@ -728,6 +1137,10 @@ class CleanroomXApp:
         analysis_menu.add_command(label="Abandon Current Run", command=self.cancel_run)
         analysis_menu.add_separator()
         analysis_menu.add_command(label="Run History...", command=self.show_run_history)
+        analysis_menu.add_command(
+            label="Requirements Traceability...",
+            command=self.show_requirements_traceability,
+        )
         analysis_menu.add_command(
             label="Verify Project Requirements",
             command=self.run_project_requirements_verification,
@@ -1329,6 +1742,35 @@ class CleanroomXApp:
             self.project,
             base_dir=self._base_dir(),
         )
+        return True
+
+    def show_requirements_traceability(self) -> bool:
+        try:
+            snapshot = project_requirement_traceability_snapshot(self.project)
+        except (
+            ProjectRequirementsFormatError,
+            ProjectRequirementEvidenceMappingsFormatError,
+        ) as exc:
+            self.status_var.set("Project requirements traceability is invalid")
+            messagebox.showerror(
+                "Requirements traceability invalid",
+                str(exc),
+                parent=self.root,
+            )
+            return False
+
+        if (
+            snapshot["requirement_count"] == 0
+            and snapshot["mapping_count"] == 0
+        ):
+            messagebox.showinfo(
+                "Project Requirements Traceability",
+                "No persisted project requirements or evidence mappings exist yet.",
+                parent=self.root,
+            )
+            return False
+
+        RequirementsTraceabilityDialog(self.root, snapshot)
         return True
 
     def _project_verification_target(

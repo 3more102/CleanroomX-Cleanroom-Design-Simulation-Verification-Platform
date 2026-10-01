@@ -31,6 +31,7 @@ from .project_requirements import (
     project_requirements_from_dict,
 )
 from .proofgraph_io import proofgraph_from_dict
+from .proofgraph_models import EVIDENCE_KINDS
 from .proofgraph_project_requirements import (
     proofgraphs_from_project_requirements_verification,
 )
@@ -307,6 +308,180 @@ def run_project_requirements_workflow(
         workflow_sha256=workflow_sha256,
     )
 
+def _source_finding_projection(finding: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "requirement_id": finding.get("requirement_id"),
+        "subject_ref": finding.get("subject_ref"),
+        "state": finding.get("state"),
+        "status": finding.get("status"),
+        "included": finding.get("included"),
+        "evidence_ids": copy.deepcopy(finding.get("evidence_ids", [])),
+    }
+
+
+def _source_finding_sort_key(finding: dict[str, Any]) -> tuple[str, str]:
+    requirement_id = finding.get("requirement_id")
+    subject_ref = finding.get("subject_ref")
+    return (
+        "" if requirement_id is None else str(requirement_id),
+        "" if subject_ref is None else str(subject_ref),
+    )
+
+
+def _expected_proofgraph_evidence(
+    evidence: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    source_identity = _canonical_sha256(
+        {
+            "source": evidence.get("source"),
+            "source_revision": evidence.get("source_revision"),
+        }
+    )
+    source_id = f"source:project-requirements:{source_identity}"
+    kinds = evidence.get("evidence_kinds")
+    expected_kind = "declared"
+    if (
+        isinstance(kinds, list)
+        and len(kinds) == 1
+        and kinds[0] in EVIDENCE_KINDS
+    ):
+        expected_kind = kinds[0]
+    expected_source = {
+        "id": source_id,
+        "kind": "project_requirement_evidence",
+        "reference": evidence.get("source"),
+        "revision": evidence.get("source_revision"),
+    }
+    expected_evidence = {
+        "id": evidence.get("id"),
+        "kind": expected_kind,
+        "property_name": evidence.get("property_name"),
+        "value": copy.deepcopy(evidence.get("value")),
+        "unit": evidence.get("unit"),
+        "source_id": source_id,
+        "version": evidence.get("project_revision")
+        or evidence.get("source_revision"),
+        "timestamp": None,
+        "project_id": None,
+        "subject_ref": evidence.get("subject_ref"),
+        "provenance": [
+            {
+                "id": f"provenance:project-requirements:{evidence.get('id')}",
+                "source_id": source_id,
+                "origin": evidence.get("evidence_locator")
+                or evidence.get("property_name"),
+                "upstream_evidence_ids": [],
+                "ifc_global_id": None,
+                "cleanroomx_entity_id": evidence.get("subject_ref"),
+                "originating_file": None,
+                "originating_calculation": evidence.get("calculation_source"),
+                "method": "project_requirement_verification_binding",
+            }
+        ],
+        "confidence": None,
+    }
+    return expected_source, expected_evidence
+
+
+def _verify_workflow_proofgraph_projection(
+    graph,
+    *,
+    evidence_by_id: dict[str, dict[str, Any]],
+    verification: dict[str, Any],
+    requirements_sha256: str,
+    evidence_sha256: str,
+    verification_sha256: str,
+) -> None:
+    if len(graph.verification_runs) != 1:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph must contain exactly one project-requirements verification run"
+        )
+    run = graph.verification_runs[0]
+    metadata = run.metadata
+    expected_metadata = {
+        "adapter": "project_requirements_verification",
+        "project_verification_status": verification.get("status"),
+        "project_verification_complete": verification.get("complete"),
+        "project_verified": verification.get("verified"),
+        "project_no_failures_detected": verification.get(
+            "no_failures_detected"
+        ),
+        "requirements_sha256": requirements_sha256,
+        "evidence_sha256": evidence_sha256,
+        "verification_sha256": verification_sha256,
+    }
+    for key, expected in expected_metadata.items():
+        if metadata.get(key) != expected:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph metadata {key!r} disagrees with canonical verification"
+            )
+
+    graph_requirement_ids = {
+        requirement.id for requirement in graph.requirement_set.requirements
+    }
+    canonical_findings = verification.get("findings")
+    if not isinstance(canonical_findings, list):
+        raise ProjectRequirementsWorkflowError(
+            "workflow canonical verification findings must be a list"
+        )
+    expected_source_findings = sorted(
+        (
+            _source_finding_projection(finding)
+            for finding in canonical_findings
+            if (
+                isinstance(finding, dict)
+                and finding.get("requirement_id") in graph_requirement_ids
+            )
+        ),
+        key=_source_finding_sort_key,
+    )
+    actual_source_findings = metadata.get("source_findings")
+    if not isinstance(actual_source_findings, list):
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph source-findings metadata is missing"
+        )
+    normalized_actual_findings = sorted(
+        (
+            _source_finding_projection(finding)
+            for finding in actual_source_findings
+            if isinstance(finding, dict)
+        ),
+        key=_source_finding_sort_key,
+    )
+    if (
+        len(normalized_actual_findings) != len(actual_source_findings)
+        or normalized_actual_findings != expected_source_findings
+    ):
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph source findings disagree with canonical verification"
+        )
+
+    expected_sources: dict[str, dict[str, Any]] = {}
+    expected_evidence: dict[str, dict[str, Any]] = {}
+    for item in graph.evidence:
+        bound = evidence_by_id.get(item.id)
+        if bound is None:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph evidence {item.id!r} is not present in workflow evidence"
+            )
+        source, projected = _expected_proofgraph_evidence(bound)
+        expected_sources[source["id"]] = source
+        expected_evidence[item.id] = projected
+        if item.to_dict() != projected:
+            raise ProjectRequirementsWorkflowError(
+                f"workflow ProofGraph evidence {item.id!r} disagrees with bound workflow evidence"
+            )
+
+    actual_sources = {
+        source.id: source.to_dict()
+        for source in graph.evidence_sources
+    }
+    if actual_sources != expected_sources:
+        raise ProjectRequirementsWorkflowError(
+            "workflow ProofGraph evidence sources disagree with bound workflow evidence"
+        )
+
+
 def verify_project_requirements_workflow_run(
     workflow: ProjectRequirementsWorkflowRun,
 ) -> dict[str, Any]:
@@ -402,6 +577,14 @@ def verify_project_requirements_workflow_run(
         raise ProjectRequirementsWorkflowError(
             "workflow evidence identities do not match active persisted mapping identities"
         )
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise ProjectRequirementsWorkflowError(
+            "workflow evidence contains duplicate identities"
+        )
+    evidence_by_id = {
+        evidence["id"]: evidence
+        for evidence in evidence_documents
+    }
 
     proofgraph_sha256: list[str] = []
     for document in workflow.proofgraphs:
@@ -415,6 +598,14 @@ def verify_project_requirements_workflow_run(
             raise ProjectRequirementsWorkflowError(
                 f"workflow ProofGraph integrity validation failed: {exc}"
             ) from exc
+        _verify_workflow_proofgraph_projection(
+            graph,
+            evidence_by_id=evidence_by_id,
+            verification=verification,
+            requirements_sha256=workflow.requirements_sha256,
+            evidence_sha256=evidence_sha256,
+            verification_sha256=verification_sha256,
+        )
         proofgraph_sha256.append(graph.to_dict()["graph_sha256"])
 
     identity = {

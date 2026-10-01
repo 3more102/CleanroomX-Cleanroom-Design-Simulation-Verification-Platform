@@ -3,7 +3,8 @@
 ## Unreleased Release 3 — record-level verification history currency context — 2026-10-01
 
 - Adds canonical per-record current-project context for retained verification evidence without rewriting immutable historical records.
-- Exposes that context through `cleanroomx-verification-history list/show`, labeling older records `historical` and removed analyses `not_in_current_project`.
+- Upgrades `cleanroomx-verification-history` inspection output to schema version 2, exposing `current_currency` for listed rows and sibling `record_currency` for `show`.
+- Labels older records `historical` and removed analyses `not_in_current_project`.
 - Reuses the same canonical helper in the desktop verification-history view so CLI and GUI cannot drift in current-versus-historical semantics.
 - Keeps solver equations, requirement verdicts, dependency fingerprinting, project schema, and persisted verification records unchanged.
 

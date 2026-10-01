@@ -175,14 +175,18 @@ def _validate_external_dependencies(value: Any) -> None:
             "size_bytes_before",
             "size_bytes_after",
             "execution_snapshot_size_bytes",
-            "mtime_ns_before",
-            "mtime_ns_after",
         ):
             field_value = item[field_name]
             if type(field_value) is not int or field_value < 0:
                 raise VerificationRunHistoryIntegrityError(
                     f"verification_run.external_dependencies[{index}].{field_name} "
                     "must be a non-negative integer"
+                )
+        for field_name in ("mtime_ns_before", "mtime_ns_after"):
+            if type(item[field_name]) is not int:
+                raise VerificationRunHistoryIntegrityError(
+                    f"verification_run.external_dependencies[{index}].{field_name} "
+                    "must be an integer"
                 )
         if item["stable_during_run"] is not True:
             raise VerificationRunHistoryIntegrityError(

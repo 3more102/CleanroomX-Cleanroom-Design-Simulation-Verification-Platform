@@ -22,24 +22,11 @@ numerical tolerances, acceptance semantics, or project schema version.
 
 ## Prior release evidence
 
-# CleanroomX v0.103.0 Release 3 Test Evidence
+# CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline
 
-Validation date: 2026-10-01
-## Release 3 final closure baseline
-
-- Canonical Release 3 closure: PR **#707**.
-- Exact tested engineering head: `875408729ec3587d96f4c86f77b14de80b6548be`.
-- PR CI run id `36875375370`: **success**.
-- Complete suite: **1662 passed, 4 skipped** on Python **3.11**, **3.12**, and **3.13**.
-- Windows PowerShell/CMD launcher smoke: **success**.
-- Clean-wheel installation, installed CLI checks, Python 3.13 performance evidence, and Tk/Xvfb desktop smoke: **success**.
-- Release 3 focused coverage includes first-class requirements, explicit evidence mappings, canonical verification, verification currency/history, ProofGraph cross-artifact integrity, unit conversion, traceability, and external-plugin trust gating.
-- The v0.103.0 release-identity commit is metadata/publishing-only and must pass the same repository CI on current `main`; the publisher refuses to tag a stale successful SHA.
-
-No solver equation, numerical tolerance, project schema version, unit convention, or engineering acceptance criterion is intentionally changed by the release-identity closure.
-
+Validation date: 2026-09-25
 
 ## v0.102.1 final spatial production baseline
 

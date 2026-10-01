@@ -11,11 +11,11 @@ from typing import Callable, Sequence
 from . import __version__
 from .application import run_analysis
 from .markdown import markdown_text
+from .persistence import atomic_write_text
 from .project import (
     AnalysisDocument,
     ProjectDocument,
     ProjectFileRevision,
-    atomic_write_text,
     capture_project_file_revision,
     load_project_document_with_revision,
     project_file_revision_matches,
@@ -154,6 +154,25 @@ def _source_revision_state(
     except OSError as exc:
         return False, str(exc)
     return project_file_revision_matches(expected, current), None
+
+
+def _assert_output_publication_safe(
+    source: Path,
+    project: ProjectDocument,
+    revision: ProjectFileRevision,
+    output: str | Path,
+) -> None:
+    """Revalidate source revision and protected output identities before commit."""
+    matches, check_error = _source_revision_state(source, revision)
+    if not matches:
+        detail = f": {check_error}" if check_error else ""
+        raise OSError(f"project source changed before output publication{detail}")
+    _assert_output_is_distinct_from_source(source, output)
+    _assert_output_is_distinct_from_dependencies(
+        project,
+        base_dir=source.parent,
+        output=output,
+    )
 
 
 def _run_loaded_project(
@@ -426,8 +445,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    source = Path(args.project).expanduser().resolve(strict=False)
     try:
+        source = Path(args.project).expanduser().resolve(strict=False)
         cancel_file = (
             Path(args.cancel_file).expanduser().resolve(strict=False)
             if args.cancel_file
@@ -453,7 +472,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         text = _serialize_output(batch, args.output_format)
         if args.output:
-            atomic_write_text(args.output, text)
+            _assert_output_publication_safe(
+                source,
+                project,
+                revision,
+                args.output,
+            )
+            atomic_write_text(
+                args.output,
+                text,
+                before_replace=lambda: _assert_output_publication_safe(
+                    source,
+                    project,
+                    revision,
+                    args.output,
+                ),
+            )
         else:
             sys.stdout.write(text)
         return project_batch_exit_code(batch)

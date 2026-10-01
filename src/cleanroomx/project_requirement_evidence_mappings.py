@@ -6,6 +6,7 @@ import hashlib
 import json
 from typing import Any, Iterable
 
+from .project_requirement_verification import RequirementEvidenceAuthority
 from .project_requirements import (
     PROJECT_REQUIREMENTS_METADATA_KEY,
     ProjectRequirementsFormatError,
@@ -209,6 +210,9 @@ class ProjectRequirementEvidenceMappings:
     mappings: tuple[ProjectRequirementEvidenceMapping, ...] = field(
         default_factory=tuple
     )
+    evidence_authority: tuple[RequirementEvidenceAuthority, ...] = field(
+        default_factory=tuple
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.mappings, tuple):
@@ -221,33 +225,115 @@ class ProjectRequirementEvidenceMappings:
                 "requirement_evidence_mappings.mappings must contain "
                 "ProjectRequirementEvidenceMapping values"
             )
+        if not isinstance(self.evidence_authority, tuple):
+            object.__setattr__(
+                self,
+                "evidence_authority",
+                tuple(self.evidence_authority),
+            )
+        if not all(
+            isinstance(item, RequirementEvidenceAuthority)
+            for item in self.evidence_authority
+        ):
+            raise ProjectRequirementEvidenceMappingsFormatError(
+                "requirement_evidence_mappings.evidence_authority must contain "
+                "RequirementEvidenceAuthority values"
+            )
+
         ids = [item.id for item in self.mappings]
         if len(ids) != len(set(ids)):
             raise ProjectRequirementEvidenceMappingsFormatError(
                 "requirement evidence mapping ids must be unique across the project"
             )
-        active_targets = [
-            (item.requirement_id, item.subject_ref)
-            for item in self.mappings
-            if item.status == "active"
-        ]
-        if len(active_targets) != len(set(active_targets)):
-            raise ProjectRequirementEvidenceMappingsFormatError(
-                "active requirement evidence mappings must not create ambiguous "
-                "requirement/subject bindings"
-            )
+
+        authority_by_binding: dict[
+            tuple[str, str | None], RequirementEvidenceAuthority
+        ] = {}
+        for authority in self.evidence_authority:
+            key = (authority.requirement_id, authority.subject_ref)
+            if key in authority_by_binding:
+                raise ProjectRequirementEvidenceMappingsFormatError(
+                    "multiple evidence authority records target the same "
+                    "requirement/subject binding"
+                )
+            authority_by_binding[key] = authority
+
+        active_by_binding: dict[
+            tuple[str, str | None], list[ProjectRequirementEvidenceMapping]
+        ] = {}
+        for mapping in self.mappings:
+            if mapping.status == "active":
+                active_by_binding.setdefault(
+                    (mapping.requirement_id, mapping.subject_ref),
+                    [],
+                ).append(mapping)
+
+        for key, active in active_by_binding.items():
+            authority = authority_by_binding.get(key)
+            if len(active) < 2:
+                if authority is not None:
+                    raise ProjectRequirementEvidenceMappingsFormatError(
+                        "evidence authority must resolve an ambiguous active "
+                        "requirement/subject binding"
+                    )
+                continue
+            analysis_ids = {item.analysis_id for item in active}
+            if len(analysis_ids) != 1:
+                raise ProjectRequirementEvidenceMappingsFormatError(
+                    "ambiguous active requirement evidence mappings for one "
+                    "requirement/subject must belong to the same analysis"
+                )
+            if authority is None:
+                raise ProjectRequirementEvidenceMappingsFormatError(
+                    "active requirement evidence mappings must not create an "
+                    "ambiguous requirement/subject binding without explicit "
+                    "evidence authority"
+                )
+            candidate_ids = {item.id for item in active}
+            if authority.evidence_id not in candidate_ids:
+                raise ProjectRequirementEvidenceMappingsFormatError(
+                    f"authoritative evidence {authority.evidence_id!r} is not an "
+                    "active mapping for its requirement/subject binding"
+                )
+
+        for key in authority_by_binding:
+            if len(active_by_binding.get(key, ())) < 2:
+                raise ProjectRequirementEvidenceMappingsFormatError(
+                    "evidence authority must resolve an ambiguous active "
+                    "requirement/subject binding"
+                )
+
         object.__setattr__(
             self,
             "mappings",
             tuple(sorted(self.mappings, key=lambda item: item.id)),
         )
+        object.__setattr__(
+            self,
+            "evidence_authority",
+            tuple(
+                sorted(
+                    self.evidence_authority,
+                    key=lambda item: (
+                        item.requirement_id,
+                        "" if item.subject_ref is None else item.subject_ref,
+                        item.evidence_id,
+                    ),
+                )
+            ),
+        )
 
     def body_dict(self) -> dict[str, Any]:
-        return {
+        body = {
             "schema": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
             "schema_version": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
             "mappings": [item.to_dict() for item in self.mappings],
         }
+        if self.evidence_authority:
+            body["evidence_authority"] = [
+                item.to_dict() for item in self.evidence_authority
+            ]
+        return body
 
     @property
     def sha256(self) -> str:
@@ -271,6 +357,22 @@ class ProjectRequirementEvidenceMappings:
             for item in self.mappings
             if item.analysis_id == normalized
             and (not active_only or item.status == "active")
+        )
+
+    def authority_for_analysis(
+        self,
+        analysis_id: str,
+    ) -> tuple[RequirementEvidenceAuthority, ...]:
+        normalized = _nonempty(analysis_id, "analysis_id")
+        bindings = {
+            (item.requirement_id, item.subject_ref)
+            for item in self.mappings
+            if item.analysis_id == normalized and item.status == "active"
+        }
+        return tuple(
+            item
+            for item in self.evidence_authority
+            if (item.requirement_id, item.subject_ref) in bindings
         )
 
 
@@ -320,6 +422,43 @@ def _mapping_from_dict(
     )
 
 
+def _authority_from_dict(
+    data: Any,
+    field_name: str,
+) -> RequirementEvidenceAuthority:
+    if not isinstance(data, dict):
+        raise ProjectRequirementEvidenceMappingsFormatError(
+            f"{field_name} must be an object"
+        )
+    _reject_unknown(
+        data,
+        {
+            "requirement_id",
+            "subject_ref",
+            "evidence_id",
+            "authority_source",
+            "decision_reference",
+            "decision_revision",
+            "rationale",
+        },
+        field_name,
+    )
+    try:
+        return RequirementEvidenceAuthority(
+            requirement_id=data.get("requirement_id"),
+            subject_ref=data.get("subject_ref"),
+            evidence_id=data.get("evidence_id"),
+            authority_source=data.get("authority_source"),
+            decision_reference=data.get("decision_reference"),
+            decision_revision=data.get("decision_revision"),
+            rationale=data.get("rationale"),
+        )
+    except ValueError as exc:
+        raise ProjectRequirementEvidenceMappingsFormatError(
+            f"{field_name} is invalid: {exc}"
+        ) from exc
+
+
 def project_requirement_evidence_mappings_from_dict(
     data: Any,
 ) -> ProjectRequirementEvidenceMappings:
@@ -333,6 +472,7 @@ def project_requirement_evidence_mappings_from_dict(
             "schema",
             "schema_version",
             "mappings",
+            "evidence_authority",
             "mappings_sha256",
         },
         "requirement_evidence_mappings",
@@ -358,6 +498,11 @@ def project_requirement_evidence_mappings_from_dict(
         raise ProjectRequirementEvidenceMappingsFormatError(
             "requirement_evidence_mappings.mappings must be an array"
         )
+    raw_authority = data.get("evidence_authority", [])
+    if not isinstance(raw_authority, list):
+        raise ProjectRequirementEvidenceMappingsFormatError(
+            "requirement_evidence_mappings.evidence_authority must be an array"
+        )
     registry = ProjectRequirementEvidenceMappings(
         mappings=tuple(
             _mapping_from_dict(
@@ -365,7 +510,14 @@ def project_requirement_evidence_mappings_from_dict(
                 f"requirement_evidence_mappings.mappings[{index}]",
             )
             for index, item in enumerate(raw_mappings)
-        )
+        ),
+        evidence_authority=tuple(
+            _authority_from_dict(
+                item,
+                f"requirement_evidence_mappings.evidence_authority[{index}]",
+            )
+            for index, item in enumerate(raw_authority)
+        ),
     )
     supplied_digest = data.get("mappings_sha256")
     if supplied_digest is not None:
@@ -471,4 +623,30 @@ def validate_project_requirement_evidence_mappings(
             raise ProjectRequirementEvidenceMappingsFormatError(
                 f"active mapping {mapping.id!r} must not assign subject_ref to a "
                 "project-scoped requirement"
+            )
+
+    for authority in registry.evidence_authority:
+        requirement = requirement_by_id.get(authority.requirement_id)
+        if requirement is None:
+            raise ProjectRequirementEvidenceMappingsFormatError(
+                "evidence authority references unknown requirement "
+                f"{authority.requirement_id!r}"
+            )
+        if (
+            requirement.status != "approved"
+            or requirement.applicability != "applicable"
+        ):
+            raise ProjectRequirementEvidenceMappingsFormatError(
+                "evidence authority may target only approved, applicable requirements"
+            )
+        if requirement.scope:
+            if authority.subject_ref not in requirement.scope:
+                raise ProjectRequirementEvidenceMappingsFormatError(
+                    f"evidence authority subject {authority.subject_ref!r} is outside "
+                    f"requirement {requirement.id!r} scope"
+                )
+        elif authority.subject_ref is not None:
+            raise ProjectRequirementEvidenceMappingsFormatError(
+                f"evidence authority supplies subject {authority.subject_ref!r} for "
+                f"project-scope requirement {requirement.id!r}"
             )

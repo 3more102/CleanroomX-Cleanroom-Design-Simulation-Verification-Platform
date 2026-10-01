@@ -16,11 +16,14 @@ from .verification_run_history import (
     validate_project_verification_run_history,
     verification_run_history_records,
 )
-from .verification_currency import assess_project_verification_currency
+from .verification_currency import (
+    assess_project_verification_currency,
+    verification_history_record_currency_context,
+)
 
 
 VERIFICATION_HISTORY_INSPECTION_SCHEMA = "cleanroomx.verification-history-inspection"
-VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION = 1
+VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION = 2
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,7 +72,11 @@ def _strict_json_clone(value: Any) -> Any:
     )
 
 
-def _compact_record(record: dict[str, Any]) -> dict[str, Any]:
+def _compact_record(
+    record: dict[str, Any],
+    *,
+    current_assessment: dict[str, Any] | None,
+) -> dict[str, Any]:
     verification = record["verification"]
     return {
         "sequence": record["sequence"],
@@ -91,6 +98,10 @@ def _compact_record(record: dict[str, Any]) -> dict[str, Any]:
         "workflow_sha256": record["workflow_sha256"],
         "verification_identity_sha256": record["verification_identity_sha256"],
         "record_sha256": record["record_sha256"],
+        "current_project_context": verification_history_record_currency_context(
+            record,
+            current_assessment,
+        ),
     }
 
 
@@ -108,7 +119,18 @@ def _load_stable_project(path: Path):
             "project file changed during verification-history inspection; "
             "inspection result was discarded"
         )
-    return project, revision_after, history_summary, records, currency
+    currency_by_analysis = {
+        item["analysis_id"]: item
+        for item in currency["analyses"]
+    }
+    return (
+        project,
+        revision_after,
+        history_summary,
+        records,
+        currency,
+        currency_by_analysis,
+    )
 
 
 def _source_payload(path: Path, revision) -> dict[str, Any]:
@@ -137,7 +159,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     source = Path(args.project).expanduser().resolve(strict=False)
     try:
-        project, revision, history_summary, records, currency = _load_stable_project(source)
+        (
+            project,
+            revision,
+            history_summary,
+            records,
+            currency,
+            currency_by_analysis,
+        ) = _load_stable_project(source)
         if args.command == "list":
             selected = records
             if args.analysis_id is not None:
@@ -161,7 +190,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "analysis_id": args.analysis_id,
                         "record_count": len(selected),
                     },
-                    "records": [_compact_record(record) for record in selected],
+                    "records": [
+                        _compact_record(
+                            record,
+                            current_assessment=currency_by_analysis.get(
+                                record["analysis_id"]
+                            ),
+                        )
+                        for record in selected
+                    ],
                 }
             )
             return 0
@@ -187,6 +224,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 },
                 "history": history_summary,
                 "currency": currency,
+                "current_project_context": (
+                    verification_history_record_currency_context(
+                        record,
+                        currency_by_analysis.get(record["analysis_id"]),
+                    )
+                ),
                 "record": copy.deepcopy(record),
             }
         )

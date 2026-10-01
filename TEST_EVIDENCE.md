@@ -12,7 +12,7 @@ Validation date: 2026-10-01
   - Python 3.13 complete suite: **1662 passed, 4 skipped**
   - Windows PowerShell/CMD launcher smoke: **success**
 
-Release 3 subsequently added the merged ProofGraph evidence-precedence/conflict assessment and CI Node-24 hardening, and the final release candidate includes project-batch protected-output hardening plus the v0.103.0 package/runtime/demo identity. The final release commit is not identified by a pre-written SHA: it is the successful CI SHA that is still the exact current `main` commit when the guarded publisher runs.
+Release 3 subsequently added the merged ProofGraph evidence-precedence/conflict assessment and CI Node-24 hardening. The v0.103.0 candidate further consolidates persisted explicit evidence-authority decisions and project-batch protected-output hardening that binds validation and execution to one loaded project revision and re-checks the source/output identities immediately before publication, plus the synchronized v0.103.0 package/runtime/demo identity. The PR #707 result above is a verified functional baseline only; it is not exact-head verification for these subsequent changes. The final release commit is not identified by a pre-written SHA: it is the successful CI SHA that is still the exact current `main` commit when the guarded publisher runs.
 
 The release-identity closure changes no solver equation, numerical tolerance, requirement criterion, project schema version, or historical verification verdict semantic.
 

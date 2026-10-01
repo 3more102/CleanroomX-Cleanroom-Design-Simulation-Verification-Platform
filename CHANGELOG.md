@@ -1,5 +1,7 @@
 # Changelog
 
+## v0.103.0 — Release 3 — 2026-10-01
+
 ## v0.103.0 Release 3 production closure — 2026-10-01
 
 - Promotes the completed Release 3 trust, verification, traceability, operator-safety, and project-publication hardening line to package/runtime version **0.103.0** while retaining project schema version 1.

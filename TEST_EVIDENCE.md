@@ -1,3 +1,28 @@
+# CleanroomX v0.103.0 Release 3 Test Evidence
+
+Validation date: 2026-10-01
+
+## Final release gate
+
+CleanroomX v0.103.0 is publishable only from a successful **current-main** CI SHA. The immutable publisher rechecks that the triggering CI SHA still equals `main` before creating the tag or GitHub Release; stale successful runs do not publish.
+
+The exact release candidate is required to pass:
+
+- the complete pytest suite on Python **3.11, 3.12, and 3.13**;
+- focused Release 3 requirements, evidence-mapping, canonical verification, ProofGraph, persistence, traceability, and verification-currency regressions;
+- project-batch protected-output and atomic-publication race regressions;
+- clean wheel build/install plus installed application and CLI smoke checks;
+- Python 3.13 Tk/Xvfb desktop smoke and spatial-editing GUI checks;
+- Windows PowerShell and CMD checkout-launcher smoke.
+
+Release 3 adds explicit persisted requirement-evidence authority, deterministic authority propagation into canonical verification/ProofGraph/history/traceability, and final project-batch publication hardening while retaining the established engineering/numerical compatibility boundary.
+
+The immutable `v0.103.0` tag, once published by the gated workflow, is the authoritative exact release commit.
+
+---
+
+## Historical v0.102.1 evidence
+
 # CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
 
 Validation date: 2026-10-01

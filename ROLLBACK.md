@@ -80,3 +80,9 @@ authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 ## v0.103.0 Release 3 production closure anchor
 
 The authoritative v0.103.0 release commit is the immutable `v0.103.0` tag created only after successful CI for the exact current `main` SHA. PR #731 is the final integration/release path; its exact head must pass the full supported-Python CI matrix and Windows launcher smoke before merge. Roll back with a Git revert followed by the full CI gate. Never move `v0.103.0`, `v0.102.1`, or any earlier release tag.
+
+## v0.103.0 Release 3 anchor
+
+The v0.103.0 publisher creates an immutable tag only from a successful CI SHA that still equals current `main`. After publication, that tag is the authoritative Release 3 rollback anchor. Do not move or rewrite the tag.
+
+To roll back from Release 3, prefer a normal revert on `main` followed by the same CI gates. When a full release rollback is required, deploy the immutable `v0.102.1` tag (or another explicitly selected earlier immutable tag) and regenerate derived reports from preserved source inputs. Persisted projects remain top-level project-schema v1; Release 3 evidence-authority metadata uses its own versioned sub-schema and is validated fail-closed by older/unsupported readers rather than silently reinterpreted.

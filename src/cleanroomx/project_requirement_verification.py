@@ -630,7 +630,7 @@ def verify_project_requirements(
                     item for item in bound if item.id == authority.evidence_id
                 )
                 finding = _evaluate(requirement, subject_ref, selected)
-                finding["evidence_ids"] = [item.id for item in bound]
+                finding["candidate_evidence_ids"] = [item.id for item in bound]
                 finding["evidence_authority"] = authority.to_dict()
                 findings.append(finding)
                 continue

@@ -43,24 +43,30 @@ The evidence source revision is the verified analysis-run bundle SHA-256.
 
 ## Freshness
 
-The caller supplies the project content SHA-256 that was the source revision for
-the run and, when available, the current project content SHA-256.
+The caller supplies the current canonical input of the analysis and, for
+file-backed analyses, the project/base directory used to resolve those external
+references. The source project SHA-256 is retained as provenance, not used as a
+coarse freshness switch.
 
-Freshness is derived as follows:
+Freshness is derived through the same Release 2 guards used by the desktop
+application:
 
-- matching source/current project revisions plus stable external dependencies -> `current`;
-- changed project revision -> `stale`;
-- unstable external dependencies -> `stale`;
-- current project revision unavailable -> `unknown`.
+- exact current analysis input hash matches the immutable run input and every
+  external dependency still matches its recorded content digest -> `current`;
+- analysis input changed -> `stale`;
+- an external dependency changed, disappeared, or cannot be proven current ->
+  `stale`;
+- current analysis input unavailable -> `unknown`.
 
-The caller does not supply a free-form freshness label in this workflow.
+This avoids invalidating engineering evidence merely because unrelated project
+metadata or audit/run history was saved after the analysis. The caller does not
+supply a free-form freshness label in this workflow.
 
-Both project revision values must be lowercase SHA-256 identities.
-
-The source project revision should come from a trusted CleanroomX project
-revision boundary such as the project file revision captured for execution. The
-analysis-run bundle itself does not independently prove which project file
-revision launched it, so callers must not invent this value.
+The source project revision must be a lowercase SHA-256 identity and should come
+from a trusted CleanroomX project revision boundary captured for execution. It is
+retained so the evidence can answer which project revision produced the run.
+The analysis-run bundle itself does not independently prove that association, so
+callers must not invent the source project SHA-256.
 
 ## Exact provenance
 
@@ -83,9 +89,9 @@ immutable analysis result.
 This integration never converts these cases into PASS:
 
 - run-bundle integrity failure;
-- changed project revision;
-- unstable external dependency;
-- unknown current project revision;
+- changed analysis input;
+- changed, unavailable, or unverifiable external dependency;
+- unavailable current analysis input;
 - missing result path;
 - non-scalar mapped result;
 - missing required evidence kind;

@@ -345,3 +345,16 @@ def test_traceability_cli_rechecks_output_identity_before_publication(
     assert guard_calls == 2
     assert output.read_text(encoding="utf-8") == "previous-valid-report\n"
 
+def test_traceability_cli_reports_project_path_resolution_errors(monkeypatch, capsys):
+    def fail_resolve(self, strict=False):
+        raise OSError("cannot resolve project path")
+
+    monkeypatch.setattr(traceability_cli.Path, "resolve", fail_resolve)
+
+    exit_code = traceability_cli.main(["broken.cleanroomx.json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "cannot resolve project path" in captured.err
+

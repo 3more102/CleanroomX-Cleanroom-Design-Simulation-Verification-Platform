@@ -9,7 +9,7 @@ from typing import Any, Iterable
 
 from .engineering_units import (
     EngineeringUnitConversionError,
-    convert_engineering_value,
+    engineering_unit_conversion,
 )
 from .project_requirements import ProjectRequirement, ProjectRequirements
 from .verification import aggregate_verification_status
@@ -344,6 +344,7 @@ def _evaluate(
         )
 
     actual_for_comparison = evidence.value
+    unit_conversion = None
     unit_converted = False
     if evidence.unit != requirement.unit:
         if evidence.unit is None or requirement.unit is None:
@@ -358,11 +359,12 @@ def _evaluate(
                 evidence=evidence,
             )
         try:
-            actual_for_comparison = convert_engineering_value(
+            unit_conversion = engineering_unit_conversion(
                 evidence.value,
                 evidence.unit,
                 requirement.unit,
             )
+            actual_for_comparison = unit_conversion.output_value
         except EngineeringUnitConversionError as exc:
             return _unresolved(
                 requirement,
@@ -468,6 +470,14 @@ def _evaluate(
             ),
         }
     )
+    if unit_conversion is not None:
+        finding.update(
+            {
+                "evidence_actual": copy.deepcopy(evidence.value),
+                "evidence_unit": evidence.unit,
+                "unit_conversion": unit_conversion.to_dict(),
+            }
+        )
     return finding
 
 

@@ -3,6 +3,13 @@ from __future__ import annotations
 import math
 
 
+# KSC-STD-Z-0017 Rev A section 7.4.1 identifies circular-pipe laminar
+# flow at Re < 2000 and the Colebrook turbulent region at Re > 4000.
+# Automatic resolution therefore fails closed between those regimes.
+LAMINAR_REYNOLDS_LIMIT = 2000.0
+TURBULENT_REYNOLDS_LIMIT = 4000.0
+
+
 def _positive(value: float, field_name: str) -> float:
     value = float(value)
     if not math.isfinite(value) or value <= 0:
@@ -40,9 +47,10 @@ def colebrook_darcy_friction_factor(
     relative_roughness = _nonnegative(
         relative_roughness, "relative_roughness"
     )
-    if reynolds < 2300:
+    if reynolds <= TURBULENT_REYNOLDS_LIMIT:
         raise ValueError(
-            "Colebrook friction factor requires Reynolds number >= 2300"
+            "Colebrook friction factor is applied only for turbulent "
+            "Reynolds number > 4000"
         )
     if relative_roughness >= 1:
         raise ValueError("relative_roughness must be < 1")
@@ -97,7 +105,7 @@ def resolve_darcy_friction_factor(
         raise ValueError("absolute_roughness_m must be smaller than hydraulic diameter")
 
     relative_roughness = roughness / hydraulic_diameter
-    if reynolds < 2300:
+    if reynolds < LAMINAR_REYNOLDS_LIMIT:
         if not circular_geometry:
             raise ValueError(
                 "automatic laminar friction is supported only for circular ducts; "
@@ -105,6 +113,12 @@ def resolve_darcy_friction_factor(
             )
         friction_factor = 64.0 / reynolds
         method = "laminar_64_over_re"
+    elif reynolds <= TURBULENT_REYNOLDS_LIMIT:
+        raise ValueError(
+            "automatic Darcy friction is indeterminate in the transition region "
+            "2000 <= Re <= 4000; provide an explicit friction_factor or a "
+            "project-qualified transition correlation"
+        )
     else:
         friction_factor = colebrook_darcy_friction_factor(
             reynolds, relative_roughness

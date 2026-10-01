@@ -42,6 +42,17 @@ CleanroomX includes engineering workflows for:
 - versioned compliance rule-pack evidence checks with explicit source/reference traceability and SHA-256 binding for both criteria and supplied evidence revisions.
 - design-assurance matrix composition across canonical design consistency, optional explicit pressure-design consistency, and versioned compliance evidence, with tamper-evident component/traceability digests.
 
+#### Strict verification automation
+
+Room and project verification expose both legacy no-failure semantics and strict completed-verification semantics. The default CLI exit code remains backward compatible: exit code 0 means no configured check recorded a failure, even if some evidence is still `not_checked`. For CI, release gates, or engineering automation that must reject incomplete evidence, use:
+
+```bash
+cleanroomx verify examples/basic_room.json --require-verified
+cleanroomx verify-project examples/facility_project.json --require-verified
+```
+
+With `--require-verified`, exit code 0 requires `verified: true`; `pass_with_unchecked`, `not_checked`, and `fail` return exit code 2. The JSON result is unchanged and still includes `status`, `complete`, `verified`, `no_failures_detected`, and the backward-compatible `passed` field.
+
 ### Spatial ↔ engineering synchronization
 
 Spatial and engineering data remain deliberately separated.

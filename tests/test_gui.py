@@ -1859,6 +1859,14 @@ def test_gui_project_requirements_verification_persists_adverse_evidence(
     assert "Adverse/incomplete verification persisted" in app.status_var.value
 
 
+def test_gui_uses_canonical_verification_history_currency_context():
+    from cleanroomx.verification_currency import (
+        verification_history_record_currency_context as canonical_context,
+    )
+
+    assert gui_module.verification_history_record_currency_context is canonical_context
+
+
 def test_verification_history_currency_context_applies_only_to_latest_record():
     latest_record = {
         "sequence": 9,

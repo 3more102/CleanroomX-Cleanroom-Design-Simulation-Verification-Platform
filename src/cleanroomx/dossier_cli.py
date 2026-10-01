@@ -9,6 +9,7 @@ from .strict_json import StrictJSONError, load_strict_json
 from .application import (
     ExternalDependencyChangedError,
     ExternalDependencySnapshotError,
+    analysis_external_dependency_references,
     run_analysis,
 )
 
@@ -28,11 +29,21 @@ def main() -> int:
     args = build_parser().parse_args()
     manifest_path = Path(args.manifest)
     payload = load_strict_json(manifest_path)
+    base_dir = manifest_path.resolve().parent
+    protected_inputs: list[Path] = [manifest_path]
+    for _field, declared_path in analysis_external_dependency_references(
+        "dossier",
+        payload,
+    ):
+        dependency = Path(declared_path)
+        protected_inputs.append(
+            dependency if dependency.is_absolute() else base_dir / dependency
+        )
     try:
         run = run_analysis(
             "dossier",
             payload,
-            base_dir=manifest_path.resolve().parent,
+            base_dir=base_dir,
         )
     except (ExternalDependencyChangedError, ExternalDependencySnapshotError) as exc:
         print(f"cleanroomx-dossier: {exc}", file=sys.stderr)
@@ -53,7 +64,7 @@ def main() -> int:
             write_cli_output(
                 args.output,
                 text,
-                protected_inputs=(args.manifest,),
+                protected_inputs=protected_inputs,
             )
         except CLIOutputError as exc:
             print(f"cleanroomx-dossier: error: {exc}", file=sys.stderr)

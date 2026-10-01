@@ -4,7 +4,8 @@
 
 - Protects `cleanroomx-project-run --output` from replacing the source project, same-file aliases such as hardlinks, or declared file-backed engineering dependencies.
 - Reuses the canonical project/dependency path-identity guard already used by other project-facing operator surfaces.
-- Adds focused regressions for direct source overwrite, same-file alias overwrite, and external dependency overwrite.
+- Revalidates the exact executed project revision and protected dependency set immediately before report publication, closing the pre-run/output-write TOCTOU window.
+- Adds focused regressions for direct source overwrite, same-file alias overwrite, external dependency overwrite, and dependency-set changes between the initial guard and execution.
 - Changes no solver equation, numerical tolerance, analysis input, project schema, project-batch schema, or execution-order semantics.
 
 ## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01

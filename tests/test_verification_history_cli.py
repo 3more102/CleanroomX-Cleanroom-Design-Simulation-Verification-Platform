@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 
+import cleanroomx.verification_history_cli as verification_history_cli
+
 from cleanroomx.project import (
     AnalysisDocument,
     ProjectDocument,
@@ -238,6 +240,23 @@ def test_verification_history_cli_marks_older_records_historical(tmp_path, capsy
     ]
     assert payload["records"][0]["verification"]["status"] == "pass"
     assert payload["records"][0]["current_assessment"]["current"] is False
+
+
+def test_verification_history_cli_reports_project_path_resolution_errors(
+    monkeypatch,
+    capsys,
+):
+    def fail_resolve(self, strict=False):
+        raise OSError("cannot resolve project path")
+
+    monkeypatch.setattr(verification_history_cli.Path, "resolve", fail_resolve)
+
+    exit_code = verification_history_main(["list", "broken.cleanroomx.json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "cannot resolve project path" in captured.err
 
 
 def test_verification_history_cli_rejects_missing_sequence(tmp_path, capsys):

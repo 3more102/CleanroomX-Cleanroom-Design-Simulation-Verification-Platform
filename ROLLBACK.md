@@ -77,3 +77,6 @@ merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
+## v0.103.0 Release 3 production closure anchor
+
+The authoritative v0.103.0 release commit is the immutable `v0.103.0` tag created only after successful CI for the exact current `main` SHA. PR #731 is the final integration/release path; its exact head must pass the full supported-Python CI matrix and Windows launcher smoke before merge. Roll back with a Git revert followed by the full CI gate. Never move `v0.103.0`, `v0.102.1`, or any earlier release tag.

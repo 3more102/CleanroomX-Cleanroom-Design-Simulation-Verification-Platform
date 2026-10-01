@@ -913,21 +913,18 @@ def test_export_writer_uses_atomic_write_and_reports_failure(monkeypatch, tmp_pa
     target = tmp_path / "result.json"
     calls = []
 
-    def record_atomic_write(path, content, *, before_replace=None):
-        calls.append((Path(path), content, before_replace))
-
     monkeypatch.setattr(
         gui_module,
         "atomic_write_text",
-        record_atomic_write,
+        lambda path, content: calls.append((Path(path), content)),
     )
     assert app._write_export_file(str(target), "payload", label="Result") is True
-    assert calls == [(target, "payload", None)]
+    assert calls == [(target, "payload")]
     assert "Exported result" in app.status_var.value
 
     captured = {}
 
-    def fail_write(path, content, *, before_replace=None):
+    def fail_write(path, content):
         raise OSError("disk full")
 
     monkeypatch.setattr(gui_module, "atomic_write_text", fail_write)
@@ -2065,7 +2062,7 @@ def test_gui_verification_history_empty_is_reported(monkeypatch):
         )
     ]
 
-def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
+def test_gui_project_dossier_export_rechecks_source_revision_at_atomic_replace_boundary(
     monkeypatch,
     tmp_path,
 ):
@@ -2078,7 +2075,7 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
 
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",
-        ProjectDocument(name="GUI output identity race"),
+        ProjectDocument(name="GUI source revision race"),
     )
     revision = capture_project_file_revision(project_path)
     destination = tmp_path / "project.dossier.json"
@@ -2094,25 +2091,28 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
     app._editor_analysis = lambda: None
     app._sync_metadata = lambda: None
     app._has_unsaved_changes = lambda: False
-    writes = []
-    app._write_export_file = (
-        lambda path, content, *, label: writes.append((path, content, label)) or True
-    )
-
-    real_guard = gui_module._assert_project_output_is_safe
+    real_guard = gui_module._assert_project_publication_safe
     guard_calls = 0
 
-    def race_guard(project, *, source, output):
+    def race_guard(project, *, source, revision, output):
         nonlocal guard_calls
         guard_calls += 1
         if guard_calls == 2:
-            raise ValueError("output path identity changed before publication")
-        real_guard(project, source=source, output=output)
+            project_path.write_text(
+                project_path.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+        real_guard(
+            project,
+            source=source,
+            revision=revision,
+            output=output,
+        )
 
     errors = []
     monkeypatch.setattr(
         gui_module,
-        "_assert_project_output_is_safe",
+        "_assert_project_publication_safe",
         race_guard,
     )
     monkeypatch.setattr(
@@ -2129,9 +2129,8 @@ def test_gui_project_dossier_export_rechecks_output_identity_before_publication(
     app.export_project_engineering_dossier()
 
     assert guard_calls == 2
-    assert writes == []
     assert destination.read_text(encoding="utf-8") == "previous-valid-report\n"
     assert errors
     assert errors[-1][0] == "Project dossier export failed"
-    assert "identity changed" in errors[-1][1]
+    assert "project source changed before report publication" in errors[-1][1]
 

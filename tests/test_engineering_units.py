@@ -76,6 +76,14 @@ def test_air_change_rate_aliases_do_not_expand_into_generic_frequency() -> None:
     assert "Hz" not in supported_engineering_units()
 
 
+def test_bare_c_is_not_an_accepted_celsius_alias() -> None:
+    with pytest.raises(
+        EngineeringUnitConversionError,
+        match="unsupported source engineering unit",
+    ):
+        convert_engineering_value(20.0, source_unit="C", target_unit="degF")
+
+
 def test_unknown_or_incompatible_units_fail_closed() -> None:
     with pytest.raises(
         EngineeringUnitConversionError,

@@ -113,12 +113,12 @@ def test_plugin_discovery_is_deterministic_and_retains_distribution_identity():
     assert alpha.origin.distribution_version == "1.4"
 
 
-def test_plugin_trust_policy_defaults_to_trusted():
+def test_plugin_trust_policy_defaults_to_disabled():
     policy = plugin_trust_policy_from_environment({})
 
-    assert policy == PluginTrustPolicy(mode="trusted")
+    assert policy == PluginTrustPolicy(mode="disabled")
     assert policy.to_dict() == {
-        "mode": "trusted",
+        "mode": "disabled",
         "valid": True,
         "allowlist": [],
         "error": None,

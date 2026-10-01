@@ -8,7 +8,13 @@ import pytest
 import cleanroomx.gui as gui_module
 from cleanroomx.application import run_analysis
 from cleanroomx.gui import CleanroomXApp, _strict_json_loads, flatten_json, main, unit_hint
-from cleanroomx.project import AnalysisDocument, ProjectDocument, load_project_document
+from cleanroomx.project import (
+    AnalysisDocument,
+    ProjectDocument,
+    capture_project_file_revision,
+    load_project_document,
+    save_project_document,
+)
 from cleanroomx.run_history import (
     RUN_HISTORY_METADATA_KEY,
     append_run_history_record,

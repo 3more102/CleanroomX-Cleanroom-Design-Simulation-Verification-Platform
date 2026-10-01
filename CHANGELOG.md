@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased Release 3 — canonical per-record verification currency context — 2026-10-01
+
+- Moves retained-record current/historical/not-in-current-project context into the canonical verification-currency module instead of keeping that rule inside the desktop UI.
+- Adds explicit per-record `current_context` to verification-history CLI list output and a separate top-level context for `show` while leaving the persisted record JSON unchanged.
+- Reuses the same canonical context helper in the desktop history dialog and adds regression coverage for current, historical, and removed-analysis records.
+
+
 ## Unreleased Release 3 — truthful current dependency currency explanation — 2026-10-01
 
 - Corrects the canonical verification-currency explanation for file-backed analyses whose persisted dependency fingerprints still match current content.

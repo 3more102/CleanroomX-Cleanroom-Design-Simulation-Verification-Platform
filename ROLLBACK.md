@@ -79,10 +79,10 @@ authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
 ## v0.103.0 Release 3 production closure anchor
 
-The pre-release current-main anchor is `3b6db4093df79523159fe1b623fa99851900bc02`
-(PR #711 merged after its exact-head CI passed). The final release candidate also
-includes the project-batch protected-output hardening carried on top of that
-anchor.
+The pre-release validated `main` anchor is `a1499f59bbbd5f6d16fb9934218e60fe3c5fc669`.
+The final v0.103.0 candidate layers the persisted evidence-authority registry,
+atomic protected-output publication rechecks, fail-closed transitional
+Darcy-friction handling, and release identity/publication on that baseline.
 
 Publish `v0.103.0` only from successful CI for the exact current-main SHA.
 The published tag is the authoritative release commit and must never be moved.

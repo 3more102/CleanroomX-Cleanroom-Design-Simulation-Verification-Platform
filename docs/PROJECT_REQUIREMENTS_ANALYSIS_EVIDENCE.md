@@ -63,10 +63,15 @@ metadata or audit/run history was saved after the analysis. The caller does not
 supply a free-form freshness label in this workflow.
 
 The source project revision must be a lowercase SHA-256 identity and should come
-from a trusted CleanroomX project revision boundary captured for execution. It is
-retained so the evidence can answer which project revision produced the run.
-The analysis-run bundle itself does not independently prove that association, so
-callers must not invent the source project SHA-256.
+from a trusted CleanroomX project revision boundary captured for execution. It is retained so the evidence can answer which project revision produced the run.
+
+Project-bound execution paths, including the deterministic project batch runner,
+now write the exact source project SHA-256 into application execution provenance.
+Because that provenance sits inside the integrity-checked analysis-run bundle,
+the evidence binder treats the embedded revision as authoritative and rejects a
+conflicting caller-supplied revision. Legacy or direct unbound runs remain
+supported only when the caller supplies a revision from a trusted CleanroomX
+project execution/revision boundary.
 
 ## Exact provenance
 

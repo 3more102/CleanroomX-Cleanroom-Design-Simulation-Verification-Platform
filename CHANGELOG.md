@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased Release 3 — desktop requirement evidence drill-down — 2026-10-01
+
+- Adds a structured read-only **Requirement Evidence** view inside **Analysis → Verification History...**.
+- Projects each retained canonical finding as requirement → bound evidence → historical verdict without recomputing the verdict against current project state.
+- Shows subject scope, explicit criterion, retained actual value/unit, evidence freshness, source, and exact result locator while preserving the complete canonical record in a separate tab.
+- Uses the already integrity-validated persisted verification record and changes no solver equation, acceptance criterion, persisted verification schema, historical verdict, or project schema.
+
+## Unreleased Release 3 — verification-history current-context hardening — 2026-10-01
+
+- Reuses the canonical verification-currency record-context helper in the desktop Verification History surface instead of maintaining duplicate GUI logic.
+- Validates retained-record and current-assessment input types and requires a non-empty stable analysis identity before projecting current context.
+- Extends focused regressions for historical/latest/orphaned record context, defensive-copy behavior, malformed inputs, and identity mismatch.
+- Changes no solver equation, numerical tolerance, requirement criterion, persisted verification record, ledger hash, dependency fingerprint, CLI schema, or project schema.
+
 ## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
 
 - Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.

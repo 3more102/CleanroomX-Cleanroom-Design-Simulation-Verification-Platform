@@ -1,6 +1,38 @@
 CLEANROOMX RELEASE VALIDATION
 =============================
 
+Release: CleanroomX v0.103.0
+Validation date: 2026-10-01
+
+FINAL RELEASE POLICY
+PR #731 is the final Release 3 integration/release candidate.
+PASS is valid only for the exact PR head that completes CI successfully on
+Python 3.11 / 3.12 / 3.13 plus Windows launcher smoke.
+After merge, v0.103.0 publication is allowed only from successful CI for the
+exact current main SHA. Stale successful runs are not publication authority.
+
+HISTORICAL RELEASE 3 BASELINE
+PR #707 exact tested head:
+875408729ec3587d96f4c86f77b14de80b6548be
+CI run id: 36875375370
+conclusion SUCCESS
+Python 3.11 complete suite: 1662 passed, 4 skipped
+Python 3.12 complete suite: 1662 passed, 4 skipped
+Python 3.13 complete suite: 1662 passed, 4 skipped
+Windows PowerShell/CMD launcher smoke: SUCCESS
+This baseline is historical and does not replace the final exact-head gate.
+
+ENGINEERING BOUNDARY
+No solver equation, numerical tolerance, engineering unit-conversion rule,
+requirement acceptance criterion, historical verification record, or project
+schema version is intentionally changed by the v0.103.0 release promotion.
+
+HISTORICAL VALIDATION BASELINES
+===============================
+
+CLEANROOMX RELEASE VALIDATION
+=============================
+
 Release: CleanroomX v0.102.1
 Validation date: 2026-09-25
 

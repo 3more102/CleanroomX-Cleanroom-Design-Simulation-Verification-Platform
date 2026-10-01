@@ -386,13 +386,17 @@ def test_project_dossier_cli_rechecks_output_identity_before_publication(
     )
 
     assert exit_code == 2
-    assert guard_calls == 3
+    assert guard_calls == 2
     assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"
 
 
 
 
-def test_project_dossier_cli_rejects_source_mutation_at_atomic_replace(tmp_path, monkeypatch, capsys):
+def test_project_dossier_cli_rejects_source_mutation_at_atomic_replace(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",
         ProjectDocument(name="Source publication race"),

@@ -348,7 +348,11 @@ def test_traceability_cli_rechecks_output_identity_before_publication(
 
 
 
-def test_traceability_cli_rejects_source_mutation_at_atomic_replace(tmp_path, monkeypatch, capsys):
+def test_traceability_cli_rejects_source_mutation_at_atomic_replace(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",
         _project(),

@@ -447,7 +447,11 @@ def test_project_verify_run_rechecks_output_identity_before_publication(
 
 
 
-def test_project_verify_run_rejects_source_mutation_at_atomic_replace(tmp_path, monkeypatch, capsys):
+def test_project_verify_run_rejects_source_mutation_at_atomic_replace(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",
         _project(),
@@ -475,7 +479,9 @@ def test_project_verify_run_rejects_source_mutation_at_atomic_replace(tmp_path, 
         mutate_source_after_staging,
     )
 
-    exit_code = verify_cli.main(["run", str(project_path), "room-a", "--output", str(output_path)])
+    exit_code = verify_cli.main(
+        ["run", str(project_path), "room-a", "--output", str(output_path)]
+    )
 
     assert exit_code == 2
     assert output_path.read_text(encoding="utf-8") == "previous-valid-report\n"

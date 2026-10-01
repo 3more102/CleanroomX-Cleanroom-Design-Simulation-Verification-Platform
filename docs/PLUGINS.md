@@ -78,6 +78,40 @@ reports disabled plugins. If a project references an unavailable plugin
 analysis, project loading fails closed with an actionable error rather than
 silently substituting a different workflow.
 
+## Installed plugin trust policy
+
+CleanroomX can apply an operator-controlled trust gate before an installed
+analysis entry point is imported. The policy is selected with
+`CLEANROOMX_PLUGIN_MODE`:
+
+- `disabled` is the default and blocks every external analysis entry point before import;
+- `trusted` is an explicit compatibility opt-in that preserves the historical installed-plugin behavior;
+- `allowlist` imports only distributions named by
+  `CLEANROOMX_PLUGIN_ALLOWLIST`.
+
+The allowlist is a comma-separated set of distribution names with optional exact
+version pins, for example:
+
+```text
+CLEANROOMX_PLUGIN_MODE=allowlist
+CLEANROOMX_PLUGIN_ALLOWLIST=cleanroomx-example,approved-hvac-plugin==2.4.1
+```
+
+Distribution names are matched case-insensitively, and runs of `-`, `_`, and
+`.` are treated as equivalent separators. A malformed mode or allowlist, a
+missing distribution identity, a non-allowlisted distribution, a missing version
+required by a pin, or a version mismatch fails closed for that external entry
+point. A denied entry point is rejected before CleanroomX calls
+`entry_point.load()`.
+
+The effective policy is included in application-registry diagnostics, including
+`cleanroomx-gui --check`, so automation and operators can see the mode,
+allowlist, validity, and configuration error when present.
+
+This gate controls whether CleanroomX imports a discovered plugin through its
+analysis entry point. It is not a sandbox, package-signature verifier, publisher
+authentication system, or proof that an allowed package is safe.
+
 ## Execution boundary
 
 Registered plugin analyses use the normal CleanroomX application execution path:

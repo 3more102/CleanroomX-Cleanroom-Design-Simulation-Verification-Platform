@@ -22,6 +22,30 @@
 - Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
 - Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
 
+## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
+
+- Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.
+- Bumps the project-requirements workflow output to schema v2 and retains the complete canonical normalized requirements snapshot so its SHA-256 and full RequirementSet projection can be re-verified instead of trusting a lossy graph projection.
+- Recomputes canonical verification from the retained requirements authority plus canonical bound evidence, and rejects resealed ProofGraphs whose RequirementSet metadata or requirement criteria differ from that authority.
+- Verifies ProofGraph source-finding metadata against the canonical verification findings for the graph's requirement set.
+- Verifies projected ProofGraph evidence and evidence sources against the exact bound workflow evidence, including value, unit, source revision, project revision, subject, locator provenance, calculation source, and evidence kind.
+- Adds regressions that deliberately reseal both `graph_sha256` and `workflow_sha256` after tampering, proving cross-artifact inconsistencies still fail closed.
+- Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
+
+## Unreleased Release 3 — external plugin trust gate — 2026-10-01
+
+- Adds operator-controlled `trusted`, `disabled`, and `allowlist` modes for installed analysis plugins, with external plugins disabled by default until an operator explicitly opts in.
+- Applies deny decisions before `entry_point.load()`, so blocked external plugins are not imported through the CleanroomX plugin entry point.
+- Supports canonicalized distribution-name allowlisting with optional exact version pins and fails closed on invalid configuration, missing distribution identity, or pin mismatch.
+- Exposes the effective trust policy in application-registry diagnostics while preserving plugin API v1, built-in analyses, solver equations, engineering tolerances, and project schema.
+
+## Unreleased Release 3 — retained canonical ProofGraph verification evidence — 2026-10-01
+
+- New persisted project-verification records retain the complete canonical ProofGraph documents alongside their existing SHA-256 identities.
+- Ledger validation reparses each retained graph, requires canonical serialization, unique digest ordering, and exact agreement with `proofgraph_sha256`; legacy hash-only schema-v1 records remain readable.
+- The configured verification-history byte budget now fails closed when the newest record alone exceeds it instead of silently retaining an oversized record.
+- No solver equation, requirement comparison, ProofGraph verdict rule, or historical verification identity semantic is changed.
+
 ## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
 
 - Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.

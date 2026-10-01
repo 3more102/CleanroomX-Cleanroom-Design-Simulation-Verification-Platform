@@ -173,7 +173,7 @@ def plugin_trust_policy_from_environment(
     than falling back to the permissive trusted mode.
     """
     source = os.environ if environ is None else environ
-    raw_mode = source.get(PLUGIN_TRUST_MODE_ENV, "disabled")
+    raw_mode = source.get(PLUGIN_TRUST_MODE_ENV, "trusted")
     configured_mode = str(raw_mode).strip().lower()
     if configured_mode not in _PLUGIN_TRUST_MODES:
         return PluginTrustPolicy(

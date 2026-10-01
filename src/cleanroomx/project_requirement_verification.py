@@ -431,12 +431,12 @@ def _evaluate(
             "explanation": (
                 (
                     "Current evidence satisfies the explicit requirement criterion "
-                    "after canonical unit conversion."
+                    "after conversion by the canonical engineering unit authority."
                 )
                 if passed and conversion_details is not None
                 else (
                     "Current evidence does not satisfy the explicit requirement "
-                    "criterion after canonical unit conversion."
+                    "criterion after conversion by the canonical engineering unit authority."
                 )
                 if conversion_details is not None
                 else (

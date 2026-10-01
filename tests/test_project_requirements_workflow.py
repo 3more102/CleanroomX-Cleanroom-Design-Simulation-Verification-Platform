@@ -480,3 +480,53 @@ def test_workflow_verifier_accepts_retained_evidence_for_unapproved_requirement(
     verified = verify_project_requirements_workflow_run(result)
     assert verified["workflow_sha256"] == result.workflow_sha256
 
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_finding_projection(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["findings"][0]["status"] = "fail"
+    result.proofgraphs[0]["verdicts"][0]["status"] = "fail"
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="finding .* disagrees with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_extra_proofgraph_nodes(tmp_path):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    graph = result.proofgraphs[0]
+
+    extra_check = copy.deepcopy(graph["checks"][0])
+    extra_check["id"] = "check:project-requirement:unexpected"
+    graph["checks"].append(extra_check)
+
+    extra_finding = copy.deepcopy(graph["findings"][0])
+    extra_finding["id"] = "finding:project-requirement:unexpected"
+    extra_finding["check_id"] = extra_check["id"]
+    graph["findings"].append(extra_finding)
+
+    extra_verdict = copy.deepcopy(graph["verdicts"][0])
+    extra_verdict["id"] = "verdict:project-requirement:unexpected"
+    extra_verdict["finding_ids"] = [extra_finding["id"]]
+    graph["verdicts"].append(extra_verdict)
+
+    graph["verification_runs"][0]["check_ids"].append(extra_check["id"])
+    graph["verification_runs"][0]["verdict_ids"].append(extra_verdict["id"])
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="checks disagree with canonical verification projection",
+    ):
+        verify_project_requirements_workflow_run(result)

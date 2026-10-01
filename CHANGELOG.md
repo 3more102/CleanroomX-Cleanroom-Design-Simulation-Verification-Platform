@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased Release 3 — persisted project evidence authority — 2026-10-01
+
+- Extends the canonical `project.metadata.requirement_evidence_mappings` registry with optional explicit evidence-authority decisions that select one already-mapped evidence identity for an otherwise ambiguous requirement/subject binding.
+- Keeps ambiguity fail-closed: multiple active mappings for one binding are accepted only when they belong to the same analysis and a validated authority decision selects one active mapping; unnecessary, duplicate, cross-analysis, unknown, or out-of-scope decisions are rejected.
+- Carries the same authority decision through project-native execution, canonical verification replay, ProofGraph projection, guarded verification-history persistence, and read-only requirements traceability.
+- Retains every candidate evidence record while the canonical finding and ProofGraph check use only the explicitly selected mapping; authority provenance remains hash-bound by both the mapping-registry digest and canonical verification digest.
+- Preserves the previous registry/result shape and digest when no authority decision is configured and changes no solver equation, engineering unit conversion, requirement criterion, or project schema version.
+
 ## Unreleased Release 3 — ProofGraph evidence precedence and conflict policy — 2026-10-01
 
 - Adds an explicit strongest-first evidence-kind/source precedence policy over existing ProofGraph evidence without mutating or deleting historical records.

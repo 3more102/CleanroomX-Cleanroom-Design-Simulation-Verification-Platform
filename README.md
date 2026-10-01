@@ -1,12 +1,12 @@
 # CleanroomX
 
 [![CI](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.102.1-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+[![Release](https://img.shields.io/badge/release-v0.103.0-blue)](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 
 **CleanroomX** is an engineering platform for cleanroom **design, simulation, verification, spatial planning, HVAC analysis, and auditable numerical evidence**.
 
-The current stable release is **v0.102.1**.
+The current stable release is **v0.103.0**.
 
 ## What CleanroomX provides
 
@@ -155,17 +155,19 @@ Other installed CLIs cover HVAC, qualification, duct flow, loop networks, fan/ne
 
 ## Validation
 
-The **v0.102.1** release closure was validated across Python **3.11 / 3.12 / 3.13**.
+The **v0.103.0 Release 3** functional baseline was validated on **2026-10-01** across Python **3.11 / 3.12 / 3.13**.
 
 Recorded release evidence includes:
 
-- **1008 passing tests** on each supported Python version for the final deterministic-spatial-drag release gate;
-- Windows PowerShell and CMD launcher smoke tests;
-- clean wheel build/install checks;
-- installed Tk GUI smoke testing;
-- synchronized 2D/3D spatial regression coverage;
-- autosave completion-race regression coverage;
-- solver/provenance compatibility gates.
+- PR **#707** exact tested head `875408729ec3587d96f4c86f77b14de80b6548be`;
+- GitHub Actions CI **#2229** / run id `36875375370`: **success**;
+- complete suite: **1662 passed, 4 skipped** on each supported Python version;
+- focused Release 3 requirements/verification gate: **143 passed** on each supported Python version;
+- Windows PowerShell and CMD checkout-launcher smoke: **success**;
+- clean wheel build/install and installed CLI checks, including `cleanroomx-project-traceability`;
+- Python 3.13 performance evidence and installed Tk/Xvfb GUI smoke: **PASS**.
+
+The v0.103.0 publisher is fail-closed: it publishes only after successful CI for a SHA that still equals current `main`.
 
 The exact release evidence is preserved in:
 
@@ -198,4 +200,4 @@ It does **not**, by itself, establish cleanroom certification, CFD validation, c
 
 ## Release
 
-**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.102.1)
+**Latest stable:** [CleanroomX v0.102.1](https://github.com/3more102/CleanroomX-Cleanroom-Design-Simulation-Verification-Platform/releases/tag/v0.103.0)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output
 from .damper_study import solve_loop_damper_study
 from .damper_study_io import load_loop_damper_study
 from .damper_study_report import markdown_loop_damper_study_report
@@ -35,7 +35,11 @@ def main() -> int:
         else markdown_loop_damper_study_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.study,),
+        )
     else:
         print(text)
     return 0

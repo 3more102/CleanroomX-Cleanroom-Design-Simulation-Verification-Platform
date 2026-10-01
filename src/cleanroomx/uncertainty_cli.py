@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output
 from .uncertainty import analyze_room_uncertainty
 from .uncertainty_io import load_uncertain_room
 from .uncertainty_report import markdown_uncertainty_report
@@ -29,7 +29,11 @@ def main() -> int:
         else markdown_uncertainty_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.room,),
+        )
     else:
         print(text)
 

@@ -371,7 +371,6 @@ def test_project_diagnostics_warn_when_persisted_verification_is_stale(tmp_path)
     assert result["verification_currency"]["summary"]["stale_count"] == 1
 
 
-
 def test_verification_history_record_currency_context_is_record_specific():
     assessment = {
         "analysis_id": "room-a",

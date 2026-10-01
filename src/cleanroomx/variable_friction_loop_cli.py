@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output
 from .loop_network_io import load_looped_flow_network
 from .variable_friction_loop import solve_variable_friction_looped_network
 from .variable_friction_loop_report import (
@@ -89,7 +89,11 @@ def main() -> int:
         else markdown_variable_friction_loop_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.network,),
+        )
     else:
         print(text)
     return 0

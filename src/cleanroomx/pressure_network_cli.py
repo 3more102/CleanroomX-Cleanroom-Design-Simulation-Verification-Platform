@@ -6,7 +6,7 @@ import json
 from .pressure_network import solve_room_pressure_network
 from .pressure_network_io import load_pressure_network
 from .pressure_network_report import markdown_pressure_network_report
-from .project import atomic_write_text
+from .cli_output import atomic_write_cli_output
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,7 +59,11 @@ def main() -> int:
         else markdown_pressure_network_report(result)
     )
     if args.output:
-        atomic_write_text(args.output, text)
+        atomic_write_cli_output(
+            args.output,
+            text,
+            protected_inputs=(args.network,),
+        )
     else:
         print(text)
     return 0

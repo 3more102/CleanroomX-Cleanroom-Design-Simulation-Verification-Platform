@@ -83,3 +83,15 @@ The next project-native orchestration layer can consume this persisted registry
 to construct the already-existing immutable analysis -> evidence -> canonical
 verification -> ProofGraph path without requiring callers to assemble transient
 mapping objects manually.
+
+
+## Desktop traceability review
+
+The desktop **Analysis → Requirements Traceability...** view also exposes the
+persisted mapping registry. Active mappings are cross-validated against the
+current project before display. Each mapping shows its requirement, subject,
+analysis identity, lifecycle status, engineering property, and exact result path.
+
+Disabled and superseded mappings can remain as historical traceability even when
+their original requirement or analysis is no longer active; the desktop labels
+those unresolved references as historical rather than rebinding them.

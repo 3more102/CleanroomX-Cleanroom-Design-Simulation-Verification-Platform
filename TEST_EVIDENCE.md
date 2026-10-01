@@ -1,3 +1,28 @@
+# CleanroomX v0.103.0 Release 3 Production Closure Test Evidence
+
+## Final release gate
+
+Candidate date: 2026-10-01
+
+The v0.103.0 candidate combines the merged Release 3 code line, the Node 24 CI
+hardening on current main, the final project-batch protected-output guard, and
+release-identity/publication changes.
+
+Required merge evidence for the exact candidate head:
+
+- complete suite passes on Python 3.11, 3.12, and 3.13;
+- focused Release 3 requirements/verification gate passes;
+- clean-wheel install and installed CLI/GUI smoke checks pass;
+- Windows PowerShell/CMD launcher smoke passes;
+- package, runtime, demos, and CI version identity all report 0.103.0.
+
+The successful exact-head GitHub Actions run is the authoritative evidence for
+the merged release commit. The publisher additionally requires that successful
+commit to still be the exact current main SHA before creating the immutable
+v0.103.0 tag and GitHub Release.
+
+## Historical v0.102.1 and earlier evidence
+
 # CleanroomX v0.102.1 Final Spatial Production Closure Test Evidence
 
 ## Verified final baseline

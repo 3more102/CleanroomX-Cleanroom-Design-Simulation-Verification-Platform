@@ -96,7 +96,7 @@ def plugin_trust_policy_from_environment(
 ) -> PluginTrustPolicy:
     env = os.environ if environment is None else environment
     raw_mode = env.get(PLUGIN_TRUST_MODE_ENV)
-    mode = "trusted" if raw_mode is None else raw_mode.strip().lower()
+    mode = "disabled" if raw_mode is None else raw_mode.strip().lower()
 
     if mode not in _PLUGIN_TRUST_MODES:
         return PluginTrustPolicy(

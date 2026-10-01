@@ -78,6 +78,34 @@ def test_qualification_measurement_maps_to_commissioning_and_calculation_evidenc
     assert any(item["revision"] == "R1" for item in document["evidence_sources"])
 
 
+def test_qualification_blank_optional_provenance_date_is_omitted() -> None:
+    provenance = Provenance(
+        source_type="measurement",
+        source_name="Qualification record",
+        reference="Q-001",
+        revision="R1",
+        date="",
+    )
+    spec = QualificationUncertaintySpec(
+        "Blank provenance date",
+        measurements=(
+            MeasurementCheck(
+                "Room differential pressure",
+                UncertainValue(14.0, "Pa", 1.0, provenance),
+                QualificationRequirement("minimum", 10.0, "Pa"),
+            ),
+        ),
+    )
+
+    document = proofgraph_from_qualification_uncertainty(spec).to_dict()
+
+    commissioning = next(
+        item for item in document["evidence"] if item["kind"] == "commissioning"
+    )
+    assert commissioning["timestamp"] is None
+    assert document["verdicts"][0]["status"] == "pass"
+
+
 def test_qualification_missing_measurement_provenance_fails_closed_to_unknown() -> None:
     spec = QualificationUncertaintySpec(
         "Traceability gap",

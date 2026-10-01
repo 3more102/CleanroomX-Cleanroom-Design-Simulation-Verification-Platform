@@ -473,6 +473,13 @@ def verify_project_requirements(
                 f"evidence authority references unknown requirement "
                 f"{item.requirement_id!r}"
             )
+        if (
+            requirement.status != "approved"
+            or requirement.applicability != "applicable"
+        ):
+            raise ValueError(
+                "evidence authority may target only approved, applicable requirements"
+            )
         if requirement.scope:
             if item.subject_ref not in requirement.scope:
                 raise ValueError(

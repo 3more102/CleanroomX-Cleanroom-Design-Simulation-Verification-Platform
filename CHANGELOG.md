@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — persisted requirement evidence mappings — 2026-10-01
+
+- Adds a strict, versioned project-owned requirement-to-analysis evidence mapping registry under `project.metadata.requirement_evidence_mappings`.
+- Persists explicit requirement ID, analysis ID, expected analysis kind, subject/entity scope, engineering property, exact result path, unit, evidence labels, lifecycle status, and notes without inferring solver semantics.
+- Canonicalizes mappings deterministically and binds normalized content to `mappings_sha256`.
+- Rejects duplicate IDs, ambiguous active requirement/subject bindings, malformed result paths, unknown fields, digest tampering, missing active requirement/analysis targets, analysis-kind mismatches, and invalid scope bindings.
+- Integrates mapping normalization and cross-reference validation into the canonical project load/save boundary while preserving disabled/superseded historical references.
+- Does not add a second requirements verifier, unit-conversion path, standards criteria, or compliance claim.
+
+
 ## Unreleased Release 3 — immutable analysis evidence binding — 2026-10-01
 
 - Connects integrity-verified immutable CleanroomX analysis-run bundles to the canonical project requirements verifier through explicit result mappings.

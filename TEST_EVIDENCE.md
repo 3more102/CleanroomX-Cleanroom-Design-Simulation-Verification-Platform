@@ -4,8 +4,10 @@
 
 Candidate date: 2026-10-01
 
-The v0.103.0 candidate combines the merged Release 3 code line, the Node 24 CI
-hardening on current main, the final project-batch protected-output guard, and
+The v0.103.0 candidate combines the merged Release 3 code line and Node 24 CI
+hardening with the final persisted evidence-authority registry, atomic
+protected-output rechecks across project-facing batch/report publishers,
+fail-closed transitional Darcy-friction regime handling, and synchronized
 release-identity/publication changes.
 
 Required merge evidence for the exact candidate head:
@@ -15,6 +17,9 @@ Required merge evidence for the exact candidate head:
 - clean-wheel install and installed CLI/GUI smoke checks pass;
 - Windows PowerShell/CMD launcher smoke passes;
 - package, runtime, demos, and CI version identity all report 0.103.0.
+- persisted evidence-authority legacy/v2 compatibility and fail-closed ambiguity regressions pass;
+- batch/report atomic-replacement race regressions preserve protected source/dependency files and existing valid outputs;
+- automatic friction boundary regressions pass for Re < 2000, 2000 <= Re <= 4000 fail-closed behavior, and Re > 4000 Colebrook behavior.
 
 The successful exact-head GitHub Actions run is the authoritative evidence for
 the merged release commit. The publisher additionally requires that successful

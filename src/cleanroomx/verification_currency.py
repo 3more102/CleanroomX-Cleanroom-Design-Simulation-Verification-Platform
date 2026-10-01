@@ -258,7 +258,7 @@ def verification_history_record_currency_context(
     record: dict[str, Any],
     current_assessment: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Project current verification currency onto one immutable history record."""
+    """Attach present-project currency context to immutable history evidence."""
     if current_assessment is None:
         return {
             "state": "not_in_current_project",

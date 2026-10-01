@@ -43,9 +43,14 @@ def test_subfreezing_saturated_air_dew_point_matches_dry_bulb() -> None:
     assert dew_point_c(state) == pytest.approx(-20.0, abs=1e-9)
 
 
-def test_ultradry_state_fails_when_dew_point_leaves_supported_inversion() -> None:
+def test_ultradry_state_uses_full_iapws_sublimation_domain() -> None:
     state = AirState(60.0, 1e-12, 101.325)
-    with pytest.raises(ValueError, match="below -100 C"):
+    assert dew_point_c(state) == pytest.approx(-153.668, abs=0.002)
+
+
+def test_dew_point_fails_below_iapws_sublimation_domain() -> None:
+    state = AirState(60.0, 1e-43, 101.325)
+    with pytest.raises(ValueError, match="50 K / -223.15 C"):
         dew_point_c(state)
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable
 
 from .application import (
@@ -140,7 +141,7 @@ def _derived_freshness(
     run: AnalysisRun,
     *,
     current_analysis_input: dict[str, Any] | None,
-    base_dir: str | None,
+    base_dir: str | Path | None,
 ) -> str:
     if current_analysis_input is None:
         return "unknown"
@@ -215,7 +216,7 @@ def bind_analysis_run_requirement_evidence(
     *,
     source_project_revision: str,
     current_analysis_input: dict[str, Any] | None,
-    base_dir: str | None = None,
+    base_dir: str | Path | None = None,
 ) -> tuple[RequirementEvidence, ...]:
     """Bind verified immutable analysis output to explicit project requirements.
 
@@ -303,7 +304,7 @@ def verify_project_requirements_from_analysis_run(
     *,
     source_project_revision: str,
     current_analysis_input: dict[str, Any] | None,
-    base_dir: str | None = None,
+    base_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Bind one verified analysis run and evaluate through the canonical verifier."""
     bindings = bind_analysis_run_requirement_evidence(

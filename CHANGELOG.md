@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased Release 3 — workflow ProofGraph cross-artifact integrity — 2026-10-01
+
+- Cross-checks each project-requirements ProofGraph verification run against the canonical workflow requirements, evidence, and verification digests and status.
+- Bumps the project-requirements workflow output to schema v2 and retains the complete canonical normalized requirements snapshot so its SHA-256 and full RequirementSet projection can be re-verified instead of trusting a lossy graph projection.
+- Recomputes canonical verification from the retained requirements authority plus canonical bound evidence, and rejects resealed ProofGraphs whose RequirementSet metadata or requirement criteria differ from that authority.
+- Verifies ProofGraph source-finding metadata against the canonical verification findings for the graph's requirement set.
+- Verifies projected ProofGraph evidence and evidence sources against the exact bound workflow evidence, including value, unit, source revision, project revision, subject, locator provenance, calculation source, and evidence kind.
+- Adds regressions that deliberately reseal both `graph_sha256` and `workflow_sha256` after tampering, proving cross-artifact inconsistencies still fail closed.
+- Changes no solver equations, numerical tolerances, requirement comparison semantics, persisted project schema, or verification verdict rules.
+
 ## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
 
 - Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.

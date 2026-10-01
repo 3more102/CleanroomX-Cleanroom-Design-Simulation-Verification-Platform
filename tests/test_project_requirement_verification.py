@@ -221,6 +221,10 @@ def test_compatible_rate_unit_is_converted_before_comparison() -> None:
     assert finding["state"] == "pass"
     assert finding["actual"] == pytest.approx(20.0)
     assert finding["delta"] == pytest.approx(0.0)
+    assert finding["evidence_actual"] == pytest.approx(20.0 / 3600.0)
+    assert finding["evidence_unit"] == "1/s"
+    assert finding["unit_conversion"]["family"] == "inverse_time_rate"
+    assert finding["unit_conversion"]["target_canonical_unit"] == "1/h"
     assert "canonical engineering unit authority" in finding["explanation"]
 
 
@@ -235,6 +239,76 @@ def test_convertible_unit_can_still_fail_the_requirement() -> None:
     assert finding["state"] == "fail"
     assert finding["actual"] == pytest.approx(19.0)
     assert finding["delta"] == pytest.approx(-1.0)
+
+
+def test_pressure_conversion_preserves_raw_evidence_provenance() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(unit="Pa", minimum=1000.0)),
+        [_evidence(value=1.0, unit="kPa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["actual"] == pytest.approx(1000.0)
+    assert finding["evidence_actual"] == 1.0
+    assert finding["evidence_unit"] == "kPa"
+    assert finding["unit"] == "Pa"
+    assert finding["unit_conversion"]["source_canonical_unit"] == "kPa"
+    assert finding["unit_conversion"]["target_canonical_unit"] == "Pa"
+    assert finding["unit_conversion"]["scale"] == pytest.approx(1000.0)
+
+
+def test_temperature_conversion_is_applied_before_requirement_tolerance() -> None:
+    result = verify_project_requirements(
+        _registry(
+            _requirement(
+                target=20.0,
+                minimum=None,
+                tolerance=0.01,
+                unit="degC",
+            )
+        ),
+        [_evidence(value=68.0, unit="degF")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["actual"] == pytest.approx(20.0, abs=1e-12)
+    assert finding["delta"] == pytest.approx(0.0, abs=1e-12)
+    assert finding["unit_conversion"]["family"] == "temperature"
+    assert finding["unit_conversion"]["offset"] != 0.0
+
+
+def test_named_unit_to_unitless_requirement_fails_closed() -> None:
+    result = verify_project_requirements(
+        _registry(
+            _requirement(
+                target=20.0,
+                minimum=None,
+                unit=None,
+            )
+        ),
+        [_evidence(value=20.0, unit="Pa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is False
+    assert finding["state"] == "invalid"
+    assert "one side is unitless" in finding["explanation"]
+
+
+def test_exact_unit_comparison_keeps_legacy_finding_shape() -> None:
+    result = verify_project_requirements(
+        _registry(_requirement(unit="Pa", minimum=1000.0)),
+        [_evidence(value=1000.0, unit="Pa")],
+    )
+
+    finding = result["findings"][0]
+    assert result["verified"] is True
+    assert finding["actual"] == 1000.0
+    assert "evidence_actual" not in finding
+    assert "evidence_unit" not in finding
+    assert "unit_conversion" not in finding
 
 
 def test_missing_required_evidence_kind_is_incomplete() -> None:

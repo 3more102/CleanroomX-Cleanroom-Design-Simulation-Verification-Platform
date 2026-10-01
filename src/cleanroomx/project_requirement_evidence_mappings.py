@@ -19,6 +19,13 @@ PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA = (
     "cleanroomx.project-requirement-evidence-mappings"
 )
 PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION = 1
+PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION = 2
+SUPPORTED_PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSIONS = frozenset(
+    {
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION,
+    }
+)
 MAPPING_STATUSES = frozenset({"active", "disabled", "superseded"})
 
 
@@ -324,9 +331,14 @@ class ProjectRequirementEvidenceMappings:
         )
 
     def body_dict(self) -> dict[str, Any]:
+        schema_version = (
+            PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+            if self.evidence_authority
+            else PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+        )
         body = {
             "schema": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
-            "schema_version": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
+            "schema_version": schema_version,
             "mappings": [item.to_dict() for item in self.mappings],
         }
         if self.evidence_authority:
@@ -487,11 +499,16 @@ def project_requirement_evidence_mappings_from_dict(
         raise ProjectRequirementEvidenceMappingsFormatError(
             "requirement_evidence_mappings.schema_version must be an integer"
         )
-    if version != PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION:
+    if version not in SUPPORTED_PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSIONS:
+        supported = ", ".join(
+            str(item)
+            for item in sorted(
+                SUPPORTED_PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSIONS
+            )
+        )
         raise ProjectRequirementEvidenceMappingsFormatError(
             "unsupported project requirement evidence mappings schema version "
-            f"{version}; expected "
-            f"{PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION}"
+            f"{version}; supported versions: {supported}"
         )
     raw_mappings = data.get("mappings", [])
     if not isinstance(raw_mappings, list):
@@ -502,6 +519,23 @@ def project_requirement_evidence_mappings_from_dict(
     if not isinstance(raw_authority, list):
         raise ProjectRequirementEvidenceMappingsFormatError(
             "requirement_evidence_mappings.evidence_authority must be an array"
+        )
+    if (
+        version == PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+        and "evidence_authority" in data
+    ):
+        raise ProjectRequirementEvidenceMappingsFormatError(
+            "requirement_evidence_mappings.evidence_authority requires "
+            f"schema_version {PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION}"
+        )
+    if (
+        version == PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+        and not raw_authority
+    ):
+        raise ProjectRequirementEvidenceMappingsFormatError(
+            "requirement evidence mappings schema version "
+            f"{PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION} "
+            "requires non-empty evidence_authority"
         )
     registry = ProjectRequirementEvidenceMappings(
         mappings=tuple(

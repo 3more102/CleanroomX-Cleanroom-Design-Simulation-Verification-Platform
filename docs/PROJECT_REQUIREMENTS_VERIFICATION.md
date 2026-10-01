@@ -95,7 +95,7 @@ A PASS requires all of the following:
 
 - requirement lifecycle status is explicitly `approved`;
 - requirement applicability is explicitly `applicable`;
-- exactly one authoritative evidence binding exists for the requirement/entity;
+- either exactly one evidence binding exists for the requirement/entity, or an explicit evidence-authority decision selects one candidate from an otherwise ambiguous binding;
 - evidence freshness is explicitly `current`;
 - every `required_evidence` kind is present;
 - evidence units either match exactly or have an explicit compatible canonical conversion;
@@ -103,6 +103,23 @@ A PASS requires all of the following:
 
 The engine never chooses silently between multiple evidence values for one
 requirement/entity binding. Ambiguity is `invalid`.
+
+An optional `RequirementEvidenceAuthority` decision can resolve that ambiguity
+only by naming the exact requirement/entity binding, one already-bound evidence
+ID, a non-empty rationale, and stable decision provenance: authority source/issuer,
+decision reference, and decision revision. The decision is rejected if the binding is not
+actually ambiguous, if the selected evidence is absent, if the requirement is
+not both approved and applicable, if the subject is invalid, or if two authority
+decisions target the same binding.
+
+Authority does not delete or rewrite competing evidence. The selected
+`evidence_id` drives the comparison and remains the finding's `evidence_ids`
+member, while `candidate_evidence_ids` keeps every competing candidate in
+deterministic order and `evidence_authority` records the explicit decision.
+The complete authority document, including its source, reference, revision, selection,
+and rationale, receives its own SHA-256 and participates in the verification SHA-256.
+Omitting authority preserves the previous fail-closed
+ambiguous-binding behavior and result shape.
 
 Stale evidence is surfaced as `stale` and is not used to issue PASS or FAIL.
 Unknown freshness and missing required evidence are `incomplete`.

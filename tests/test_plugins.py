@@ -445,7 +445,15 @@ def test_invalid_plugin_trust_mode_fails_closed_before_import():
     assert "configuration error" in discovery.issues[0].error
 
 
-def test_malformed_plugin_allowlist_fails_closed_before_import():
+@pytest.mark.parametrize(
+    "allowlist",
+    [
+        "pkg-malformed==",
+        "pkg-malformed===1.0",
+        "pkg-malformed==1.0=extra",
+    ],
+)
+def test_malformed_plugin_allowlist_fails_closed_before_import(allowlist):
     point = _FakeEntryPoint(
         "malformed",
         "pkg.malformed:registration",
@@ -455,7 +463,7 @@ def test_malformed_plugin_allowlist_fails_closed_before_import():
     policy = plugin_trust_policy_from_environment(
         {
             PLUGIN_TRUST_MODE_ENV: "allowlist",
-            PLUGIN_ALLOWLIST_ENV: "pkg-malformed==",
+            PLUGIN_ALLOWLIST_ENV: allowlist,
         }
     )
 

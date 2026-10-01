@@ -1,18 +1,27 @@
 # Changelog
 
-## Unreleased Release 3 — qualification uncertainty ProofGraph — 2026-10-01
+## Unreleased Release 3 — project requirements traceability CLI — 2026-10-01
 
-- Adds a direct ProofGraph adapter for the canonical qualification-uncertainty workflow without duplicating interval calculations or decision semantics.
-- Represents measured qualification inputs as commissioning evidence and canonical conservative intervals/differential-pressure intervals as calculation evidence with explicit upstream lineage.
-- Preserves canonical PASS/FAIL/INDETERMINATE only when the measurements needed by the check carry source provenance; missing provenance fails closed to UNKNOWN while retaining the numerical result in verification-run metadata.
-- Adds deterministic round-trip regression coverage and changes no configured limits, solver equations, project schema, or certification claims.
+- Adds `cleanroomx-project-traceability` as a read-only JSON/Markdown operator and automation surface over canonical persisted project requirements and requirement-to-analysis evidence mappings.
+- Reuses the canonical registry parsers and active-mapping cross-validation; retained disabled/superseded references remain historical and are not silently rebound when analysis identity or kind no longer matches.
+- Binds every report to one stable saved-project revision and protects both the project source and declared file-backed engineering dependencies from output overwrite.
+- Changes no solver equation, numerical tolerance, requirement acceptance criterion, verification verdict, persisted registry, or project schema.
 
-## Unreleased Release 3 — cooperative project batch cancellation — 2026-10-01
+## Unreleased Release 3 — explicit evidence authority — 2026-10-01
 
-- Adds cooperative cancellation to `cleanroomx.project_batch.run_project_file()` through an optional caller callback checked only between analyses.
-- Adds `cleanroomx-project-run --cancel-file PATH` so external automation can request a clean stop by creating a sentinel file without interrupting an active solver call.
-- Records cancellation state, boundary, and associated analysis id in schema-v2 strict-JSON and Markdown batch reports; exit code 4 distinguishes clean cancellation when no execution error or source-integrity failure takes precedence.
-- Preserves deterministic project order, exact source-revision checks, completed-run provenance, solver behavior, engineering tolerances, and project schema.
+- Adds an opt-in, fail-closed authority decision for requirement/entity bindings that contain multiple competing evidence records; the default remains invalid ambiguity with no silent selection.
+- Requires the exact requirement ID, subject, selected already-bound evidence ID, authority source/issuer, decision reference, decision revision, and a non-empty rationale; stale, mismatched, duplicate, provenance-incomplete, or unnecessary authority decisions are rejected.
+- Retains every competing evidence record in the canonical evidence collection and finding candidate list while evaluating only the explicitly selected authority.
+- Hash-binds the normalized authority document, including decision identity/provenance, to the verification result without changing legacy result shape or digest when no authority policy is supplied.
+- Adds deterministic ordering, PASS/FAIL selection, stale-policy rejection, duplicate-policy rejection, and compatibility regression coverage without changing solver equations, units, tolerances, or requirement acceptance semantics.
+
+## Unreleased Release 3 — canonical requirement unit conversion — 2026-10-01
+
+- Adds a centralized, dependency-free engineering-unit authority for requirement verification with explicit dimensional families and deterministic conversion provenance.
+- Converts compatible numeric evidence into the persisted requirement unit before equality/minimum/maximum/range comparison, including affine temperature conversion.
+- Retains raw evidence value/unit alongside converted findings and records the exact source/target canonical units, scale, offset, and engineering dimension used.
+- Fails closed for unsupported unit spellings, incompatible dimensions, named-unit versus unitless mismatches, and non-numeric criteria with differing units.
+- Preserves the legacy exact-unit finding shape and changes no solver equations, requirement criteria, persisted project schema, or historical verification records.
 
 ## Unreleased Release 3 — CI and installed operator-surface gate — 2026-10-01
 

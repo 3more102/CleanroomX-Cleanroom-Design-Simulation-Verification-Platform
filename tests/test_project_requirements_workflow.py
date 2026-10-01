@@ -301,6 +301,36 @@ def test_project_native_workflow_rejects_project_change_during_execution(
     ):
         run_project_requirements_workflow(path, "room-a")
 
+def _reseal_workflow_after_proofgraph_edit(workflow) -> None:
+    document = workflow.proofgraphs[0]
+    document.pop("graph_sha256", None)
+    rebuilt = workflow_module.proofgraph_from_dict(
+        copy.deepcopy(document)
+    ).to_dict()
+    document.clear()
+    document.update(rebuilt)
+
+    verified_run = verify_analysis_run_bundle(workflow.run_bundle)
+    identity = {
+        "source_revision": workflow.source_revision,
+        "analysis_id": workflow.analysis_id,
+        "analysis_kind": workflow.analysis_kind,
+        "requirements_sha256": workflow.requirements_sha256,
+        "mappings_sha256": workflow.mappings_sha256,
+        "mapping_ids": list(workflow.mapping_ids),
+        "run_bundle_sha256": verified_run["bundle_sha256"],
+        "verification_sha256": workflow.verification["verification_sha256"],
+        "proofgraph_sha256": [
+            item["graph_sha256"] for item in workflow.proofgraphs
+        ],
+    }
+    object.__setattr__(
+        workflow,
+        "workflow_sha256",
+        workflow_module._canonical_sha256(identity),
+    )
+
+
 def test_project_native_workflow_component_verifier_rejects_tampered_evidence(
     tmp_path,
 ):
@@ -314,6 +344,62 @@ def test_project_native_workflow_component_verifier_rejects_tampered_evidence(
     with pytest.raises(
         ProjectRequirementsWorkflowError,
         match="evidence digest disagrees",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_verification_metadata(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["verification_runs"][0]["metadata"][
+        "verification_sha256"
+    ] = "0" * 64
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="workflow ProofGraph verification metadata disagrees with canonical verification",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_evidence_projection(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["evidence"][0]["value"] = 999.0
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="workflow ProofGraph evidence projection disagrees with bound workflow evidence",
+    ):
+        verify_project_requirements_workflow_run(result)
+
+
+def test_workflow_verifier_rejects_resealed_proofgraph_finding_projection(
+    tmp_path,
+):
+    path = save_project_document(
+        tmp_path / "workflow.cleanroomx.json",
+        _project(),
+    )
+    result = run_project_requirements_workflow(path, "room-a")
+    result.proofgraphs[0]["findings"][0]["actual"] = 999.0
+    _reseal_workflow_after_proofgraph_edit(result)
+
+    with pytest.raises(
+        ProjectRequirementsWorkflowError,
+        match="workflow ProofGraph findings disagree with canonical verification",
     ):
         verify_project_requirements_workflow_run(result)
 

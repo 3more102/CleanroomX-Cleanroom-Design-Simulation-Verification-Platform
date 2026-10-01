@@ -54,7 +54,13 @@ No project verification result is issued when:
 - the project source changes between the loaded revision and analysis start;
 - the project source changes during the analysis;
 - the immutable analysis run is not bound to the loaded project SHA-256;
-- run-bundle integrity validation fails.
+- run-bundle integrity validation fails;
+- a ProofGraph verification run declares requirements/evidence/verification
+  identities that disagree with the canonical workflow;
+- ProofGraph source-finding metadata disagrees with the canonical verification
+  findings for that requirement set;
+- ProofGraph evidence or evidence-source projection disagrees with the exact
+  bound workflow evidence.
 
 A missing mapped result field is not converted into PASS. It flows through the
 existing evidence binding as missing evidence and the canonical verifier reports
@@ -75,6 +81,12 @@ Each workflow result exposes a deterministic `workflow_sha256` derived from:
 
 The source path is reported for usability but is intentionally not part of the
 engineering identity.
+
+The component verifier does not rely on those digests alone. It also checks the
+cross-artifact links between the canonical verification, bound evidence, and
+ProofGraph projection. Recomputing both a ProofGraph digest and the outer workflow
+digest after changing ProofGraph metadata or evidence therefore does not make the
+modified projection acceptable.
 
 ## Authority boundaries
 

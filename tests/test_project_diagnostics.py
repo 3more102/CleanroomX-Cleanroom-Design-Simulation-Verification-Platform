@@ -298,6 +298,29 @@ def test_project_diagnostics_report_escapes_markdown():
     assert "Plant \\| &lt;A&gt;" in markdown
 
 
+def test_project_diagnostics_markdown_surfaces_current_verification_currency():
+    project = ProjectDocument(
+        name="Currency report",
+        analyses=[
+            AnalysisDocument(
+                id="room-1",
+                name="Room verification",
+                kind="room_verification",
+                input=_room_payload(),
+            )
+        ],
+        active_analysis_id="room-1",
+    )
+
+    result = analyze_project_diagnostics(project)
+    markdown = markdown_project_diagnostics_report(result)
+
+    assert "## Current verification currency" in markdown
+    assert "- Not configured: **1**" in markdown
+    assert "| Room verification | not\\_configured | no | yes | — | — |" in markdown
+    assert "Historical verification status above remains immutable evidence." in markdown
+
+
 def test_project_diagnostics_cli_writes_revision_bound_strict_json(tmp_path):
     project_path = save_project_document(
         tmp_path / "project.cleanroomx.json",

@@ -23,7 +23,7 @@ from .verification_currency import (
 
 
 VERIFICATION_HISTORY_INSPECTION_SCHEMA = "cleanroomx.verification-history-inspection"
-VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION = 1
+VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION = 2
 
 
 def build_parser() -> argparse.ArgumentParser:

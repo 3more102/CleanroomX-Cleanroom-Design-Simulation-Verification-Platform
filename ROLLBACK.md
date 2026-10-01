@@ -77,3 +77,12 @@ merged as `89eaf6b1548ca0748dd72431eecc101bddec9af9`). All seven pull-request CI
 only from a successful current-main CI commit; the published tag is the
 authoritative exact release commit. Do not move v0.102.0 or any earlier tag.
 
+## v0.103.0 Release 3 anchor
+
+The authoritative v0.103.0 rollback anchor is the immutable `v0.103.0` tag created by
+`.github/workflows/publish-v0103-release.yml`. The publisher runs only after a
+successful `CI` workflow on `main`, verifies that the successful CI SHA is still
+the current `main` SHA, verifies the v0.103.0 package/runtime/demo identity, and
+then creates the tag and GitHub Release. Preserve that tag. Roll back Release 3
+through a normal Git revert and the full CI matrix rather than moving release
+history.

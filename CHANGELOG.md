@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.103.0 Release 3 — fail-closed transitional Darcy friction — 2026-10-01
+
+- Restricts automatic circular laminar friction to `Re < 2000` and automatic Colebrook friction to `Re > 4000`.
+- Fails closed for `2000 <= Re <= 4000` rather than silently treating transitional flow as fully turbulent or inventing an interpolation; explicit project-qualified Darcy factors remain supported.
+- Adds exact-boundary regressions and aligns duct/variable-friction documentation with NASA KSC-STD-Z-0017 Rev A section 7.4.1.
+
 ## v0.103.0 Release 3 — protected report publication identity recheck — 2026-10-01
 
 - Rechecks project-source and declared file-backed dependency path identity immediately before publishing project diagnostics, engineering dossier, requirements traceability, and canonical verification artifacts.

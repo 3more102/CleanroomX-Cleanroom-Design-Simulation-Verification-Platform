@@ -11,6 +11,7 @@ from cleanroomx.project import (
     project_from_dict,
 )
 from cleanroomx.project_requirement_evidence_mappings import (
+    PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
     PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
@@ -114,11 +115,30 @@ def _mapping(
     }
 
 
-def _registry(*mappings: dict):
-    return {
+def _registry(*mappings: dict, evidence_authority=None):
+    payload = {
         "schema": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA,
-        "schema_version": PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION,
+        "schema_version": (
+            PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+            if evidence_authority
+            else PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+        ),
         "mappings": list(mappings),
+    }
+    if evidence_authority is not None:
+        payload["evidence_authority"] = list(evidence_authority)
+    return payload
+
+
+def _authority(*, evidence_id: str = "MAP-B") -> dict:
+    return {
+        "requirement_id": "REQ-ACH",
+        "subject_ref": "ROOM-A",
+        "evidence_id": evidence_id,
+        "authority_source": "Project verification authority",
+        "decision_reference": "DEC-REQ-AUTH",
+        "decision_revision": "Rev 1",
+        "rationale": "Approved calculation evidence selection.",
     }
 
 
@@ -195,6 +215,100 @@ def test_mapping_registry_rejects_ambiguous_active_requirement_subject() -> None
         )
 
 
+def test_mapping_registry_allows_ambiguity_only_with_explicit_authority() -> None:
+    registry = project_requirement_evidence_mappings_from_dict(
+        _registry(
+            _mapping(mapping_id="MAP-B"),
+            _mapping(mapping_id="MAP-A"),
+            evidence_authority=[_authority(evidence_id="MAP-B")],
+        )
+    )
+
+    assert [item.id for item in registry.mappings] == ["MAP-A", "MAP-B"]
+    assert len(registry.evidence_authority) == 1
+    assert registry.evidence_authority[0].evidence_id == "MAP-B"
+    assert registry.authority_for_analysis("room-a") == registry.evidence_authority
+    assert registry.to_dict()["evidence_authority"][0]["decision_reference"] == (
+        "DEC-REQ-AUTH"
+    )
+
+
+def test_mapping_registry_versions_authority_without_rewriting_legacy_shape() -> None:
+    legacy = project_requirement_evidence_mappings_from_dict(
+        _registry(_mapping())
+    ).to_dict()
+    authoritative = project_requirement_evidence_mappings_from_dict(
+        _registry(
+            _mapping(mapping_id="MAP-A"),
+            _mapping(mapping_id="MAP-B"),
+            evidence_authority=[_authority(evidence_id="MAP-A")],
+        )
+    ).to_dict()
+
+    assert legacy["schema_version"] == PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+    assert "evidence_authority" not in legacy
+    assert authoritative["schema_version"] == (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
+    assert authoritative["evidence_authority"][0]["evidence_id"] == "MAP-A"
+
+
+def test_mapping_registry_rejects_authority_field_under_legacy_schema() -> None:
+    payload = _registry(
+        _mapping(mapping_id="MAP-A"),
+        _mapping(mapping_id="MAP-B"),
+        evidence_authority=[_authority(evidence_id="MAP-A")],
+    )
+    payload["schema_version"] = PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_SCHEMA_VERSION
+
+    with pytest.raises(
+        ProjectRequirementEvidenceMappingsFormatError,
+        match="evidence_authority requires schema_version",
+    ):
+        project_requirement_evidence_mappings_from_dict(payload)
+
+
+def test_mapping_registry_rejects_authority_schema_without_authority() -> None:
+    payload = _registry(_mapping())
+    payload["schema_version"] = (
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_AUTHORITY_SCHEMA_VERSION
+    )
+
+    with pytest.raises(
+        ProjectRequirementEvidenceMappingsFormatError,
+        match="requires non-empty evidence_authority",
+    ):
+        project_requirement_evidence_mappings_from_dict(payload)
+
+
+def test_mapping_registry_rejects_authority_selecting_noncandidate() -> None:
+    with pytest.raises(
+        ProjectRequirementEvidenceMappingsFormatError,
+        match="is not an active mapping",
+    ):
+        project_requirement_evidence_mappings_from_dict(
+            _registry(
+                _mapping(mapping_id="MAP-A"),
+                _mapping(mapping_id="MAP-B"),
+                evidence_authority=[_authority(evidence_id="MAP-MISSING")],
+            )
+        )
+
+
+def test_mapping_registry_rejects_cross_analysis_ambiguity_even_with_authority() -> None:
+    with pytest.raises(
+        ProjectRequirementEvidenceMappingsFormatError,
+        match="must belong to the same analysis",
+    ):
+        project_requirement_evidence_mappings_from_dict(
+            _registry(
+                _mapping(mapping_id="MAP-A", analysis_id="room-a"),
+                _mapping(mapping_id="MAP-B", analysis_id="room-b"),
+                evidence_authority=[_authority(evidence_id="MAP-A")],
+            )
+        )
+
+
 @pytest.mark.parametrize(
     "result_path",
     [
@@ -209,6 +323,29 @@ def test_mapping_registry_rejects_invalid_result_paths(result_path) -> None:
         project_requirement_evidence_mappings_from_dict(
             _registry(_mapping(result_path=result_path))
         )
+
+
+def test_project_round_trip_preserves_explicit_evidence_authority() -> None:
+    project = _project(
+        {
+            "requirements": _requirements().to_dict(),
+            PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY: _registry(
+                _mapping(mapping_id="MAP-A"),
+                _mapping(mapping_id="MAP-B"),
+                evidence_authority=[_authority(evidence_id="MAP-B")],
+            ),
+        }
+    )
+
+    serialized = project.to_dict()
+    loaded = project_from_dict(copy.deepcopy(serialized))
+    mapping_metadata = loaded.metadata[
+        PROJECT_REQUIREMENT_EVIDENCE_MAPPINGS_METADATA_KEY
+    ]
+    registry = project_requirement_evidence_mappings_from_dict(mapping_metadata)
+
+    assert registry.evidence_authority[0].evidence_id == "MAP-B"
+    assert mapping_metadata["mappings_sha256"] == registry.sha256
 
 
 def test_project_round_trip_normalizes_and_preserves_mapping_registry() -> None:

@@ -26,6 +26,7 @@ from cleanroomx.project_verification_persistence import (
 )
 from cleanroomx.verification_history_cli import (
     VERIFICATION_HISTORY_INSPECTION_SCHEMA,
+    VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION,
     main as verification_history_main,
 )
 
@@ -146,6 +147,8 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["schema"] == VERIFICATION_HISTORY_INSPECTION_SCHEMA
+    assert payload["schema_version"] == VERIFICATION_HISTORY_INSPECTION_SCHEMA_VERSION
+    assert payload["schema_version"] == 2
     assert payload["history"]["record_count"] == 1
     assert payload["selection"] == {
         "analysis_id": None,
@@ -156,12 +159,29 @@ def test_verification_history_cli_lists_compact_persisted_evidence(tmp_path, cap
     assert record["analysis_id"] == "room-a"
     assert record["verification"]["status"] == "pass"
     assert record["verification"]["verified"] is True
-    assert record["currency_context"]["state"] == "current"
-    assert record["currency_context"]["current"] is True
+    assert record["current_currency"]["state"] == "current"
+    assert record["current_currency"]["current"] is True
     assert record["record_sha256"] == persisted.record["record_sha256"]
     assert payload["source"]["stable_during_inspection"] is True
     assert len(payload["source"]["sha256"]) == 64
     json.dumps(payload, allow_nan=False)
+
+
+def test_verification_history_cli_labels_removed_analysis_records(tmp_path, capsys):
+    path, _ = _persist_one(tmp_path)
+    project = load_project_document(path)
+    project.analyses = []
+    project.active_analysis_id = None
+    save_project_document(path, project)
+
+    exit_code = verification_history_main(["list", str(path)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["records"][0]["current_currency"]["state"] == (
+        "not_in_current_project"
+    )
+    assert payload["records"][0]["current_currency"]["current"] is False
 
 
 def test_verification_history_cli_filters_by_analysis_id(tmp_path, capsys):
@@ -190,8 +210,8 @@ def test_verification_history_cli_shows_full_record(tmp_path, capsys):
     assert payload["record"] == persisted.record
     assert payload["record"]["evidence"][0]["evidence_locator"] == "/result/ach"
     assert payload["record"]["verification"]["verified"] is True
-    assert payload["record_currency_context"]["state"] == "current"
-    assert payload["record_currency_context"]["current"] is True
+    assert payload["record_currency"]["state"] == "current"
+    assert payload["record_currency"]["current"] is True
 
 
 def test_verification_history_cli_marks_older_records_historical(tmp_path, capsys):
@@ -208,12 +228,12 @@ def test_verification_history_cli_marks_older_records_historical(tmp_path, capsy
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert [item["sequence"] for item in payload["records"]] == [1, 2]
-    assert [item["currency_context"]["state"] for item in payload["records"]] == [
+    assert [item["current_currency"]["state"] for item in payload["records"]] == [
         "historical",
         "current",
     ]
     assert payload["records"][0]["verification"]["status"] == "pass"
-    assert payload["records"][0]["currency_context"]["current"] is False
+    assert payload["records"][0]["current_currency"]["current"] is False
 
 
 def test_verification_history_cli_rejects_missing_sequence(tmp_path, capsys):

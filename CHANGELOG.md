@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased Release 3 — canonical engineering unit conversion authority — 2026-10-01
+
+- Adds one centralized, dependency-free engineering-unit authority for requirement verification with explicit semantic families and deterministic registered spellings.
+- Converts compatible numeric evidence into the persisted requirement unit before equality/minimum/maximum/range comparison, including affine Celsius/Fahrenheit/Kelvin conversion.
+- Covers cleanroom/HVAC pressure, volumetric flow, inverse-time rate/ACH, temperature, length/area/volume, velocity, power, mass-flow, and humidity-ratio families while keeping frequency (`Hz`) semantically separate from ACH/rate evidence.
+- Retains raw evidence value/unit and records canonical source/target units, family, scale, offset, input, and output on converted findings.
+- Fails closed for unknown spellings, named-unit versus unitless mismatches, cross-family conversions, and non-numeric criteria with differing units.
+- Preserves exact-unit finding shape and changes no solver equations, requirement criteria, project schema, historical verification records, dependency fingerprints, or ProofGraph identities.
+
 ## Unreleased Release 3 — diagnostics verification currency context — 2026-10-01
 
 - Adds an explicit **Current verification currency** section to project-diagnostics Markdown output.

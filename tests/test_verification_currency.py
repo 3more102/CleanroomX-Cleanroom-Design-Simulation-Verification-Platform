@@ -314,6 +314,31 @@ def test_verification_currency_fails_closed_for_matching_file_backed_verificatio
     assert item["mismatch_reasons"] == []
     assert result["summary"]["dependency_freshness_unverifiable_count"] == 1
 
+    current = assess_project_verification_currency(
+        loaded,
+        base_dir=tmp_path,
+    )
+    current_item = current["analyses"][0]
+    assert current_item["state"] == "current"
+    assert current_item["current"] is True
+    assert current_item["mismatch_reasons"] == []
+    assert current_item["latest_record"]["record_schema_version"] == 2
+    assert current_item["latest_record"]["external_dependency_count"] == 2
+    assert current["summary"]["current_count"] == 1
+    assert current["summary"]["dependency_freshness_unverifiable_count"] == 0
+
+    dependency = tmp_path / "facility_project.json"
+    dependency.write_bytes(dependency.read_bytes() + b"\n")
+    stale = assess_project_verification_currency(
+        loaded,
+        base_dir=tmp_path,
+    )
+    stale_item = stale["analyses"][0]
+    assert stale_item["state"] == "stale"
+    assert stale_item["current"] is False
+    assert stale_item["mismatch_reasons"] == ["external_dependency_changed"]
+    assert stale["summary"]["stale_count"] == 1
+
 
 def test_project_diagnostics_warn_when_persisted_verification_is_stale(tmp_path):
     path = _persisted(tmp_path)

@@ -86,3 +86,19 @@ The existing project requirements verifier remains the only comparison
 authority. The existing immutable run verifier remains the run-integrity
 authority, and the existing ProofGraph adapter remains a projection of canonical
 verification output.
+
+
+## Operator CLI
+
+The canonical workflow is available without custom Python integration:
+
+```text
+cleanroomx-project-verify run project.cleanroomx.json <analysis-id>
+cleanroomx-project-verify run project.cleanroomx.json <analysis-id> --output workflow.json
+cleanroomx-project-verify persist project.cleanroomx.json <analysis-id>
+```
+
+The `run` form does not mutate the project. The `persist` form executes the same
+workflow and then passes it through the guarded project verification persistence
+boundary. See `PROJECT_VERIFICATION_OPERATOR_CLI.md` for exit-code and
+publication semantics.
